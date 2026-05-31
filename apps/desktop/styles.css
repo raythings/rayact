@@ -1,0 +1,133 @@
+/* Rayact demo stylesheet */
+
+.root {
+    width: 800px;
+    height: 600px;
+    background-color: #141428;
+    flex-direction: column;
+    padding: 20px;
+    gap: 16px;
+}
+
+.header {
+    height: 48px;
+    background-color: #1e1e3c;
+    border-radius: 8px;
+    flex-direction: row;
+    align-items: center;
+    padding: 12px;
+}
+
+.header-title {
+    flex-grow: 1;
+    font-size: 20px;
+    color: #e0e0ff;
+}
+
+.content {
+    flex-grow: 1;
+    flex-direction: row;
+    gap: 16px;
+}
+
+.sidebar {
+    width: 200px;
+    background-color: #1e1e3c;
+    border-radius: 8px;
+    flex-direction: column;
+    padding: 12px;
+    gap: 8px;
+}
+
+.nav-item {
+    height: 44px;
+    background-color: #2d2d5a;
+    border-radius: 6px;
+    flex-direction: row;
+    align-items: center;
+    padding: 12px;
+}
+
+.nav-label {
+    font-size: 14px;
+    color: #c0c0e8;
+}
+
+.main {
+    flex-grow: 1;
+    background-color: #181832;
+    border-radius: 8px;
+    flex-direction: column;
+    padding: 20px;
+    gap: 16px;
+    align-items: center;
+    justify-content: center;
+}
+
+.hero-text {
+    font-size: 28px;
+    color: #ffffff;
+}
+
+.sub-text {
+    font-size: 14px;
+    color: #8888aa;
+}
+
+.footer {
+    height: 4px;
+    background-color: #6432c8;
+    border-radius: 2px;
+}
+
+/* Button styles supplied via native createButton — these show
+   how CSS properties transfer to raym3 ButtonProps */
+.primary-button {
+    width: 160px;
+    height: 44px;
+    background-color: #6432c8;
+    border-radius: 22px;
+}
+
+.active-nav-item {
+    background-color: #3d3d7a;
+    border-color: #6432c8;
+    border-width: 1px;
+}
+
+.dev-root {
+    flex-grow: 1;
+    background-color: #111827;
+    padding: 28px;
+    gap: 18px;
+}
+
+.dev-title {
+    color: #ffffff;
+    font-size: 28px;
+}
+
+.dev-copy {
+    color: #cbd5e1;
+    font-size: 16px;
+}
+
+.dev-actions {
+    flex-direction: row;
+    gap: 12px;
+    align-items: center;
+}
+
+.dev-button {
+    background-color: #2563eb;
+    border-radius: 10px;
+    padding-top: 12px;
+    padding-right: 16px;
+    padding-bottom: 12px;
+    padding-left: 16px;
+}
+
+.dev-hint {
+    color: #93c5fd;
+    font-size: 14px;
+}

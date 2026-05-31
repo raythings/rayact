@@ -1,0 +1,27 @@
+{
+  "name": "@rayact/quickjs",
+  "version": "0.1.0",
+  "description": "QuickJS runtime integration for rayact",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@rayact/shared": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "typescript": "^5.8.3"
+  },
+  "keywords": [
+    "quickjs",
+    "runtime",
+    "javascript",
+    "bridge"
+  ],
+  "license": "MIT"
+}

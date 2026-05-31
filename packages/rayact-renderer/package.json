@@ -1,0 +1,28 @@
+{
+  "name": "@rayact/renderer",
+  "version": "0.1.0",
+  "description": "Raylib graphics backend for rayact",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@rayact/core": "0.1.0",
+    "@rayact/runtime": "0.1.0",
+    "@rayact/shared": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "typescript": "^5.8.3"
+  },
+  "keywords": [
+    "raylib",
+    "graphics",
+    "backend"
+  ],
+  "license": "MIT"
+}

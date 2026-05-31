@@ -1,0 +1,28 @@
+{
+  "name": "@rayact/react",
+  "version": "0.1.0",
+  "description": "React adapter for the Rayact host runtime",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@rayact/runtime": "0.1.0",
+    "react": "^18.3.1",
+    "react-reconciler": "^0.29.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.29",
+    "@types/react-reconciler": "^0.28.9",
+    "typescript": "^5.8.3"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0 || ^18.3.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,34 @@
+{
+  "name": "@rayact/core",
+  "version": "0.1.0",
+  "description": "Core React renderer for rayact",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@rayact/react": "0.1.0",
+    "@rayact/shared": "0.1.0",
+    "react": "^18.2.0",
+    "react-reconciler": "^0.29.2"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.47",
+    "@types/react-reconciler": "^0.28.9",
+    "typescript": "^5.8.3"
+  },
+  "keywords": [
+    "react",
+    "renderer",
+    "reconciler"
+  ],
+  "license": "MIT"
+}
