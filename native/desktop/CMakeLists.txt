@@ -187,6 +187,9 @@ include_directories(${TS_TYPESCRIPT_DIR})
 
 # Source files
 set(SOURCES
+    color_parse.cpp
+    theme_bridge.cpp
+    system_appearance.cpp
     main.cpp
     quickjs_bridge.cpp
     raylib_bridge.cpp
@@ -197,6 +200,7 @@ set(SOURCES
     window_manager.cpp
     worker_js.cpp
     worker_wasm.cpp
+    worker_native.cpp
     workers.cpp
     net.cpp
     utils/TypeStripper.cpp
@@ -204,6 +208,15 @@ set(SOURCES
     ${TS_TYPESCRIPT_SOURCES}
     ${CSSPARSER_SOURCES}
 )
+
+file(GLOB_RECURSE RAYACT_APP_NATIVE_WORKERS
+    "${CMAKE_SOURCE_DIR}/native/workers/*/*.cpp"
+    "${CMAKE_SOURCE_DIR}/apps/*/native/workers/*/*.cpp"
+)
+if(RAYACT_APP_NATIVE_WORKERS)
+    list(APPEND SOURCES ${RAYACT_APP_NATIVE_WORKERS})
+    message(STATUS "Rayact native workers: ${RAYACT_APP_NATIVE_WORKERS}")
+endif()
 
 # Executable
 add_executable(rayact_desktop ${SOURCES})
@@ -252,8 +265,10 @@ if(PLATFORM_MACOS)
     find_library(IOKIT_FRAMEWORK IOKit REQUIRED)
     find_library(COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
     find_library(OPENGL_FRAMEWORK OpenGL REQUIRED)
+    find_library(APPKIT_FRAMEWORK AppKit REQUIRED)
     target_link_libraries(rayact_desktop
         ${COCOA_FRAMEWORK}
+        ${APPKIT_FRAMEWORK}
         ${IOKIT_FRAMEWORK}
         ${COREFOUNDATION_FRAMEWORK}
         ${OPENGL_FRAMEWORK}

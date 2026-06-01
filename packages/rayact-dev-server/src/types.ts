@@ -22,3 +22,14 @@ export interface DebugMessage {
   type: string;
   payload?: unknown;
 }
+
+export interface RayactManifestAsset {
+  id: string;
+  name: string;
+  type: string;
+  hash: string;
+  size: number;
+  outputName: string;
+  kind: 'asset' | 'worker';
+  url: string;
+}

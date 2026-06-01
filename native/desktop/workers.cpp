@@ -1,6 +1,7 @@
 #include "workers.hpp"
 #include "worker_js.hpp"
 #include "worker_wasm.hpp"
+#include "worker_native.hpp"
 #include "worker_queue.hpp"
 #include "raym3_bridge.hpp"
 
@@ -75,16 +76,38 @@ static void pushInputEvent(int workerId, const char* json) {
 
 // ── JS bindings ──────────────────────────────────────────────────────────────
 
-// spawnWorker(filePath, initialData) → workerId
+static std::string jsStringProp(JSContext* ctx, JSValue obj, const char* key) {
+    JSValue value = JS_GetPropertyStr(ctx, obj, key);
+    std::string result;
+    if (!JS_IsUndefined(value) && !JS_IsNull(value)) {
+        const char* str = JS_ToCString(ctx, value);
+        if (str) { result = str; JS_FreeCString(ctx, str); }
+    }
+    JS_FreeValue(ctx, value);
+    return result;
+}
+
+// spawnWorker(filePath | { type, path, name }, initialData) → workerId
 static JSValue JS_spawnWorker(JSContext* ctx, JSValue,
                                int argc, JSValueConst* argv) {
-    if (argc < 1 || !JS_IsString(argv[0]))
-        return JS_ThrowTypeError(ctx, "spawnWorker: first arg must be a file path string");
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "spawnWorker: expected worker path or descriptor");
 
-    const char* fp = JS_ToCString(ctx, argv[0]);
-    if (!fp) return JS_UNDEFINED;
-    std::string filePath(fp);
-    JS_FreeCString(ctx, fp);
+    std::string filePath;
+    std::string workerType;
+    std::string nativeName;
+    if (JS_IsString(argv[0])) {
+        const char* fp = JS_ToCString(ctx, argv[0]);
+        if (!fp) return JS_UNDEFINED;
+        filePath = fp;
+        JS_FreeCString(ctx, fp);
+    } else if (JS_IsObject(argv[0])) {
+        workerType = jsStringProp(ctx, argv[0], "type");
+        filePath = jsStringProp(ctx, argv[0], "path");
+        nativeName = jsStringProp(ctx, argv[0], "name");
+    } else {
+        return JS_ThrowTypeError(ctx, "spawnWorker: first arg must be a file path string or descriptor");
+    }
 
     std::string initJSON = "null";
     if (argc >= 2 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1])) {
@@ -95,6 +118,24 @@ static JSValue JS_spawnWorker(JSContext* ctx, JSValue,
             if (s) { initJSON = std::string(s, len); JS_FreeCString(ctx, s); }
             JS_FreeValue(ctx, j);
         } else { JS_FreeValue(ctx, j); }
+    }
+
+    if (workerType == "native") {
+        if (nativeName.empty()) nativeName = filePath;
+        if (nativeName.empty())
+            return JS_ThrowTypeError(ctx, "spawnWorker: native workers require a name");
+        if (!hasNativeWorker(nativeName))
+            return JS_ThrowTypeError(ctx, "spawnWorker: unknown native worker '%s'", nativeName.c_str());
+
+        int id = g_nextWorkerId.fetch_add(1);
+        auto entry = std::make_shared<WorkerEntry>();
+        entry->workerId = id;
+        {
+            std::lock_guard<std::mutex> lk(g_workerMtx);
+            g_workers[id] = entry;
+        }
+        spawnNativeWorker(id, std::move(nativeName), std::move(initJSON), entry);
+        return JS_NewInt32(ctx, id);
     }
 
     std::string ext = fileExtension(filePath);

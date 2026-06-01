@@ -10,5 +10,8 @@ void registerJSStdlib(JSContext* ctx);
 // then drains the QuickJS promise/microtask job queue.
 void tickJSTimers(JSContext* ctx);
 
+// Fire queued requestAnimationFrame callbacks once per frame.
+void tickAnimationFrames(JSContext* ctx);
+
 // Free all pending timer callbacks. Call before JS_FreeContext.
 void cleanupJSStdlib(JSContext* ctx);

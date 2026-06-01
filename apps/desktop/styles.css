@@ -1,9 +1,8 @@
-/* Rayact demo stylesheet */
+/* Rayact demo stylesheet — layout in base rules; colors follow effective theme via @media */
 
 .root {
     width: 800px;
     height: 600px;
-    background-color: #141428;
     flex-direction: column;
     padding: 20px;
     gap: 16px;
@@ -11,7 +10,6 @@
 
 .header {
     height: 48px;
-    background-color: #1e1e3c;
     border-radius: 8px;
     flex-direction: row;
     align-items: center;
@@ -21,7 +19,6 @@
 .header-title {
     flex-grow: 1;
     font-size: 20px;
-    color: #e0e0ff;
 }
 
 .content {
@@ -32,7 +29,6 @@
 
 .sidebar {
     width: 200px;
-    background-color: #1e1e3c;
     border-radius: 8px;
     flex-direction: column;
     padding: 12px;
@@ -41,7 +37,6 @@
 
 .nav-item {
     height: 44px;
-    background-color: #2d2d5a;
     border-radius: 6px;
     flex-direction: row;
     align-items: center;
@@ -50,12 +45,10 @@
 
 .nav-label {
     font-size: 14px;
-    color: #c0c0e8;
 }
 
 .main {
     flex-grow: 1;
-    background-color: #181832;
     border-radius: 8px;
     flex-direction: column;
     padding: 20px;
@@ -66,49 +59,38 @@
 
 .hero-text {
     font-size: 28px;
-    color: #ffffff;
 }
 
 .sub-text {
     font-size: 14px;
-    color: #8888aa;
 }
 
 .footer {
     height: 4px;
-    background-color: #6432c8;
     border-radius: 2px;
 }
 
-/* Button styles supplied via native createButton — these show
-   how CSS properties transfer to raym3 ButtonProps */
 .primary-button {
     width: 160px;
     height: 44px;
-    background-color: #6432c8;
     border-radius: 22px;
 }
 
 .active-nav-item {
-    background-color: #3d3d7a;
-    border-color: #6432c8;
     border-width: 1px;
 }
 
 .dev-root {
     flex-grow: 1;
-    background-color: #111827;
     padding: 28px;
     gap: 18px;
 }
 
 .dev-title {
-    color: #ffffff;
     font-size: 28px;
 }
 
 .dev-copy {
-    color: #cbd5e1;
     font-size: 16px;
 }
 
@@ -119,7 +101,6 @@
 }
 
 .dev-button {
-    background-color: #2563eb;
     border-radius: 10px;
     padding-top: 12px;
     padding-right: 16px;
@@ -128,6 +109,362 @@
 }
 
 .dev-hint {
-    color: #93c5fd;
     font-size: 14px;
+}
+
+.qa-root {
+    flex-grow: 1;
+}
+
+.qa-shell {
+    flex-grow: 1;
+    padding: 24px;
+    flex-direction: row;
+    gap: 18px;
+}
+
+.qa-content {
+    flex-grow: 1;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.qa-app-bar {
+    min-height: 104px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0px 14px 32px rgba(0, 0, 0, 0.32);
+}
+
+.qa-title-block {
+    flex-grow: 1;
+    gap: 8px;
+}
+
+.qa-title {
+    font-size: 28px;
+}
+
+.qa-copy {
+    font-size: 15px;
+}
+
+.qa-spinner {
+    width: 48px;
+    height: 48px;
+}
+
+.qa-badge {
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+}
+
+.qa-icon-button {
+    width: 40px;
+    height: 40px;
+    border-radius: 20px;
+}
+
+.qa-main {
+    flex-grow: 1;
+    flex-direction: row;
+    gap: 18px;
+    position: relative;
+}
+
+.qa-rail {
+    align-self: stretch;
+}
+
+.qa-rail-menu {
+    width: 56px;
+    height: 56px;
+    border-radius: 28px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+}
+
+.qa-rail-menu-open {
+    width: 240px;
+    max-width: 240px;
+    min-width: 240px;
+    justify-content: flex-start;
+    align-self: flex-start;
+    padding-left: 36px;
+}
+
+.qa-panel {
+    border-radius: 8px;
+    backdrop-filter: blur(14px);
+    box-shadow: 0px 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.qa-scroll {
+    width: 250px;
+    padding: 16px;
+}
+
+.qa-card {
+    flex-grow: 1;
+    padding: 16px;
+    gap: 9px;
+}
+
+.qa-section-title {
+    font-size: 16px;
+}
+
+.qa-list {
+    gap: 10px;
+}
+
+.qa-list-row {
+    min-height: 42px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 6px;
+}
+
+.qa-list-index {
+    width: 26px;
+    font-size: 14px;
+}
+
+.qa-list-text {
+    flex-grow: 1;
+    font-size: 14px;
+}
+
+.qa-status {
+    font-size: 13px;
+}
+
+.qa-divider {
+    height: 1px;
+}
+
+.qa-search {
+    height: 42px;
+    border-radius: 21px;
+}
+
+.qa-chip-row {
+    flex-direction: row;
+    gap: 8px;
+    align-items: center;
+}
+
+.qa-chip {
+    height: 32px;
+    min-width: 72px;
+    padding-left: 12px;
+    padding-right: 12px;
+    border-radius: 8px;
+}
+
+.qa-control-grid {
+    flex-direction: row;
+    gap: 10px;
+    align-items: center;
+}
+
+.qa-control-row {
+    min-width: 105px;
+    height: 48px;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+}
+
+.qa-check {
+    width: 48px;
+    height: 48px;
+}
+
+.qa-switch {
+    width: 52px;
+    height: 32px;
+}
+
+.qa-radio {
+    width: 48px;
+    height: 48px;
+}
+
+.qa-segment {
+    height: 34px;
+    min-width: 72px;
+    border-radius: 17px;
+}
+
+.qa-progress {
+    height: 4px;
+    min-width: 180px;
+}
+
+.qa-slider {
+    height: 44px;
+    min-width: 240px;
+}
+
+.qa-input {
+    height: 44px;
+    padding-left: 12px;
+    padding-right: 12px;
+    border-radius: 6px;
+}
+
+.qa-actions {
+    flex-direction: row;
+    gap: 10px;
+    align-items: center;
+}
+
+.qa-button {
+    min-width: 116px;
+    height: 42px;
+    padding-left: 14px;
+    padding-right: 14px;
+    border-radius: 8px;
+}
+
+.qa-extended-fab {
+    min-width: 104px;
+    height: 42px;
+    border-radius: 16px;
+}
+
+.qa-fab {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+}
+
+.qa-nav-bar {
+    height: 80px;
+    min-height: 80px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+}
+
+.qa-modal {
+    padding: 32px;
+    align-items: center;
+    justify-content: center;
+}
+
+.qa-modal-card {
+    width: 360px;
+    padding: 18px;
+    gap: 12px;
+    border-radius: 8px;
+}
+
+.qa-modal-title {
+    font-size: 20px;
+}
+
+.qa-modal-copy {
+    font-size: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+    .root { background-color: #141428; }
+    .header { background-color: #1e1e3c; }
+    .header-title { color: #e0e0ff; }
+    .sidebar { background-color: #1e1e3c; }
+    .nav-item { background-color: #2d2d5a; }
+    .nav-label { color: #c0c0e8; }
+    .main { background-color: #181832; }
+    .hero-text { color: #ffffff; }
+    .sub-text { color: #8888aa; }
+    .footer { background-color: #6432c8; }
+    .primary-button { background-color: #6432c8; }
+    .active-nav-item { background-color: #3d3d7a; border-color: #6432c8; }
+    .dev-root { background-color: #111827; }
+    .dev-title { color: #ffffff; }
+    .dev-copy { color: #cbd5e1; }
+    .dev-button { background-color: #2563eb; }
+    .dev-hint { color: #93c5fd; }
+
+    .qa-root { background: linear-gradient(135deg, #101723 0%, #182235 52%, #14251f 100%); }
+    .qa-app-bar { background-color: #1d2738; border: 1px solid #314155; }
+    .qa-title { color: #f8fafc; }
+    .qa-copy { color: #cbd5e1; }
+    .qa-badge { background-color: #dc2626; }
+    .qa-icon-button { background-color: #334155; color: #e2e8f0; }
+    .qa-panel { border: 1px solid #334155; background-color: #141c2a; }
+    .qa-section-title { color: #e2e8f0; }
+    .qa-list-row { background-color: #233047; border: 1px solid #40516a; }
+    .qa-list-index { color: #86efac; }
+    .qa-list-text { color: #dbeafe; }
+    .qa-status { color: #cbd5e1; }
+    .qa-divider { background-color: #475569; }
+    .qa-search { background-color: #263245; color: #e2e8f0; }
+    .qa-chip { background-color: #111827; border: 1px solid #64748b; color: #e2e8f0; }
+    .qa-segment { background-color: #172033; border: 1px solid #64748b; color: #e2e8f0; }
+    .qa-input { color: #f8fafc; background-color: #0f172a; border: 1px solid #38bdf8; }
+    .qa-button { background-color: #0ea5e9; color: #ffffff; }
+    .qa-button-secondary { background-color: #16a34a; }
+    .qa-extended-fab { background-color: #facc15; color: #1f2937; }
+    .qa-fab { background-color: #fde68a; color: #1f2937; }
+    .qa-modal { background-color: rgba(15, 23, 42, 0.72); }
+    .qa-modal-card { background-color: #182235; border: 1px solid #64748b; }
+    .qa-modal-title { color: #ffffff; }
+    .qa-modal-copy { color: #cbd5e1; }
+}
+
+@media (prefers-color-scheme: light) {
+    .root { background-color: #f5f5fb; }
+    .header { background-color: #ffffff; }
+    .header-title { color: #1c1b1f; }
+    .sidebar { background-color: #ffffff; }
+    .nav-item { background-color: #ece6f0; }
+    .nav-label { color: #49454f; }
+    .main { background-color: #fef7ff; }
+    .hero-text { color: #1c1b1f; }
+    .sub-text { color: #49454f; }
+    .footer { background-color: #6750a4; }
+    .primary-button { background-color: #6750a4; }
+    .active-nav-item { background-color: #e8def8; border-color: #6750a4; }
+    .dev-root { background-color: #fef7ff; }
+    .dev-title { color: #1c1b1f; }
+    .dev-copy { color: #49454f; }
+    .dev-button { background-color: #2563eb; }
+    .dev-hint { color: #2563eb; }
+
+    .qa-root { background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 52%, #ecfdf5 100%); }
+    .qa-app-bar { background-color: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0px 14px 32px rgba(15, 23, 42, 0.08); }
+    .qa-title { color: #0f172a; }
+    .qa-copy { color: #475569; }
+    .qa-badge { background-color: #dc2626; }
+    .qa-icon-button { background-color: #e2e8f0; color: #334155; }
+    .qa-panel { border: 1px solid #cbd5e1; background-color: #ffffff; box-shadow: 0px 10px 28px rgba(15, 23, 42, 0.08); }
+    .qa-section-title { color: #1e293b; }
+    .qa-list-row { background-color: #f1f5f9; border: 1px solid #cbd5e1; }
+    .qa-list-index { color: #16a34a; }
+    .qa-list-text { color: #1e3a8a; }
+    .qa-status { color: #475569; }
+    .qa-divider { background-color: #cbd5e1; }
+    .qa-search { background-color: #f1f5f9; color: #0f172a; }
+    .qa-chip { background-color: #ffffff; border: 1px solid #94a3b8; color: #334155; }
+    .qa-segment { background-color: #f8fafc; border: 1px solid #94a3b8; color: #334155; }
+    .qa-input { color: #0f172a; background-color: #ffffff; border: 1px solid #0ea5e9; }
+    .qa-button { background-color: #0284c7; color: #ffffff; }
+    .qa-button-secondary { background-color: #15803d; }
+    .qa-extended-fab { background-color: #ca8a04; color: #1f2937; }
+    .qa-fab { background-color: #fde047; color: #1f2937; }
+    .qa-modal { background-color: rgba(15, 23, 42, 0.32); }
+    .qa-modal-card { background-color: #ffffff; border: 1px solid #cbd5e1; }
+    .qa-modal-title { color: #0f172a; }
+    .qa-modal-copy { color: #475569; }
 }

@@ -1,9 +1,10 @@
 import http from 'node:http';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { WebSocketServer } from 'ws';
 import chokidar from 'chokidar';
-import { bundleRayactApp } from './bundler.js';
+import { buildRayactBundle, type RayactBuildOutput } from './bundler.js';
 import type { DebugMessage, RayactDevServer, RayactDevServerOptions } from './types.js';
 
 function sendJson(response: http.ServerResponse, status: number, body: unknown): void {
@@ -15,6 +16,15 @@ function sendJson(response: http.ServerResponse, status: number, body: unknown):
 }
 
 function sendText(response: http.ServerResponse, status: number, body: string, type = 'text/plain; charset=utf-8'): void {
+  response.writeHead(status, {
+    'content-type': type,
+    'access-control-allow-origin': '*',
+    'cache-control': 'no-store'
+  });
+  response.end(body);
+}
+
+function sendBuffer(response: http.ServerResponse, status: number, body: Buffer, type: string): void {
   response.writeHead(status, {
     'content-type': type,
     'access-control-allow-origin': '*',
@@ -50,15 +60,15 @@ function normalizeOptions(options: RayactDevServerOptions): Required<RayactDevSe
 
 export async function startRayactDevServer(rawOptions: RayactDevServerOptions): Promise<RayactDevServer> {
   const options = normalizeOptions(rawOptions);
-  let lastBundle = '';
+  let lastBuild: RayactBuildOutput | null = null;
   let lastBundleError: Error | null = null;
   let revision = 1;
 
   const buildBundle = async () => {
     try {
-      lastBundle = await bundleRayactApp(options);
+      lastBuild = await buildRayactBundle({ ...options, mode: 'development' });
       lastBundleError = null;
-      return lastBundle;
+      return lastBuild.code;
     } catch (error) {
       lastBundleError = error instanceof Error ? error : new Error(String(error));
       throw lastBundleError;
@@ -83,14 +93,44 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
 
     if (requestUrl.pathname === '/rayact/manifest.json') {
       const baseUrl = `http://${publicHost(options.host)}:${options.port}`;
+      const assets = (lastBuild?.assets ?? []).map(asset => ({
+        id: asset.id,
+        name: asset.name,
+        type: asset.type,
+        hash: asset.hash,
+        size: asset.size,
+        outputName: asset.outputName,
+        kind: asset.kind,
+        url: `${baseUrl}/rayact/assets/${encodeURIComponent(asset.id)}/${encodeURIComponent(asset.name)}`
+      }));
       sendJson(response, 200, {
         entry: options.entry,
         platform: options.platform,
         mode: 'development',
         revision,
         bundleUrl: `${baseUrl}/rayact/bundle`,
-        websocketUrl: `${baseUrl.replace(/^http/, 'ws')}/rayact/debugger`
+        websocketUrl: `${baseUrl.replace(/^http/, 'ws')}/rayact/debugger`,
+        assets
       });
+      return;
+    }
+
+    if (requestUrl.pathname.startsWith('/rayact/assets/')) {
+      const [, , , encodedId] = requestUrl.pathname.split('/');
+      const id = encodedId ? decodeURIComponent(encodedId) : '';
+      const asset = lastBuild?.assets.find(item => item.id === id);
+      if (!asset) {
+        sendJson(response, 404, { error: 'Asset not found' });
+        return;
+      }
+      const sourcePath = path.isAbsolute(asset.sourcePath)
+        ? asset.sourcePath
+        : path.resolve(options.root, asset.sourcePath);
+      try {
+        sendBuffer(response, 200, await fs.promises.readFile(sourcePath), asset.type);
+      } catch (error) {
+        sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) });
+      }
       return;
     }
 

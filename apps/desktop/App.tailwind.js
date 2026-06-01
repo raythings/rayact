@@ -3,6 +3,31 @@
 initRaylib(900, 650, "Rayact - Tailwind CSS");
 importCSS('./apps/desktop/tailwind.css');
 
+// ─── theme ────────────────────────────────────────────────────────────────────
+
+let themePreference = 'system';
+
+function readIsDark() {
+    if (typeof __rayactGetColorScheme === 'function') return __rayactGetColorScheme().isDark;
+    return false;
+}
+
+function setTheme(mode) {
+    themePreference = mode;
+    if (typeof __rayactSetColorScheme === 'function') __rayactSetColorScheme(mode);
+}
+
+function cycleTheme() {
+    const order = ['system', 'dark', 'light'];
+    const idx = order.indexOf(themePreference);
+    setTheme(order[(idx + 1) % order.length]);
+}
+
+function themeToggleLabel() {
+    if (themePreference === 'system') return 'System';
+    return readIsDark() ? 'Dark' : 'Light';
+}
+
 // ─── navigation ───────────────────────────────────────────────────────────────
 
 const pageRoots = {};
@@ -14,16 +39,19 @@ function navigate(page) {
 // ─── shared shell ─────────────────────────────────────────────────────────────
 
 function buildHeader() {
-    const header = createView({ className: 'flex flex-row items-center bg-slate-800 px-6 py-4 border-b border-slate-700' });
-    appendChild(header, createText("rayact", { className: 'text-xl font-bold text-indigo-400' }));
+    const header = createView({ className: 'flex flex-row items-center bg-slate-100 dark:bg-slate-800 px-6 py-4 border-b border-slate-200 dark:border-slate-700' });
+    appendChild(header, createText("rayact", { className: 'text-xl font-bold text-indigo-600 dark:text-indigo-400' }));
     appendChild(header, createView({ className: 'flex-1' }));
-    appendChild(header, createText("Docs", { className: 'text-sm text-slate-400 px-3' }));
-    appendChild(header, createText("GitHub", { className: 'text-sm text-slate-400 px-3' }));
+    const themeBtn = createButton(themeToggleLabel(), { className: 'text-sm text-slate-600 dark:text-slate-300 px-3 py-1 rounded-lg bg-slate-200 dark:bg-slate-700' });
+    setOnPress(themeBtn, function() { cycleTheme(); setText(themeBtn, themeToggleLabel()); });
+    appendChild(header, themeBtn);
+    appendChild(header, createText("Docs", { className: 'text-sm text-slate-500 dark:text-slate-400 px-3' }));
+    appendChild(header, createText("GitHub", { className: 'text-sm text-slate-500 dark:text-slate-400 px-3' }));
     return header;
 }
 
 function buildSidebar(activePage) {
-    const sidebar = createView({ className: 'flex flex-col bg-slate-800 w-48 py-4 gap-1' });
+    const sidebar = createView({ className: 'flex flex-col bg-slate-100 dark:bg-slate-800 w-48 py-4 gap-1 border-r border-slate-200 dark:border-slate-700' });
     const items = [
         { id: 'dashboard',  label: 'Dashboard' },
         { id: 'components', label: 'Components' },
@@ -39,7 +67,7 @@ function buildSidebar(activePage) {
                 : 'flex flex-row items-center px-4 py-2 mx-2 rounded-lg',
         });
         appendChild(row, createText(item.label, {
-            className: isActive ? 'text-white text-sm font-medium' : 'text-slate-400 text-sm',
+            className: isActive ? 'text-white text-sm font-medium' : 'text-slate-600 dark:text-slate-400 text-sm',
         }));
         appendChild(sidebar, row);
         const pageId = item.id;
@@ -49,7 +77,7 @@ function buildSidebar(activePage) {
 }
 
 function buildShell(activePage, buildContent) {
-    const root = createView({ className: 'flex flex-col bg-slate-900', width: 900, height: 650 });
+    const root = createView({ className: 'flex flex-col bg-slate-50 dark:bg-slate-900', width: 900, height: 650 });
     appendChild(root, buildHeader());
     const body = createView({ className: 'flex flex-row flex-1' });
     appendChild(body, buildSidebar(activePage));
@@ -94,7 +122,7 @@ pageRoots['dashboard'] = buildShell('dashboard', function(main) {
 // ─── components ───────────────────────────────────────────────────────────────
 
 pageRoots['components'] = buildShell('components', function(main) {
-    appendChild(main, createText("Components", { className: 'text-3xl font-bold text-white' }));
+    appendChild(main, createText("Components", { className: 'text-3xl font-bold text-slate-900 dark:text-white' }));
 
     // Buttons
     const btnCard = createView({ className: 'flex flex-col bg-slate-800 rounded-xl p-6 gap-4 border border-slate-700' });
@@ -137,12 +165,12 @@ pageRoots['components'] = buildShell('components', function(main) {
 // ─── settings ─────────────────────────────────────────────────────────────────
 
 pageRoots['settings'] = buildShell('settings', function(main) {
-    appendChild(main, createText("Settings", { className: 'text-3xl font-bold text-white' }));
+    appendChild(main, createText("Settings", { className: 'text-3xl font-bold text-slate-900 dark:text-white' }));
 
     const panel = createView({ className: 'flex flex-col bg-slate-800 rounded-xl border border-slate-700 overflow-hidden' });
     const rows = [
         { label: 'Notifications', sub: 'Receive desktop alerts',  active: true  },
-        { label: 'Dark mode',     sub: 'Use dark color scheme',    active: true  },
+        { label: 'Dark mode',     sub: 'Use dark color scheme',    themeToggle: true  },
         { label: 'Auto-save',     sub: 'Save changes automatically', active: false },
         { label: 'Analytics',     sub: 'Share usage data',         active: false },
     ];
@@ -155,8 +183,8 @@ pageRoots['settings'] = buildShell('settings', function(main) {
         appendChild(labelGroup, createText(r.sub,   { className: 'text-sm text-slate-400' }));
         appendChild(row, labelGroup);
 
-        let active = r.active;
-        const THUMB_TRAVEL = 20; // 44 - 20 - 2*padding(2)
+        let active = r.themeToggle ? readIsDark() : r.active;
+        const THUMB_TRAVEL = 20;
         const ANIM_MS = 180;
 
         const track = createView({
@@ -179,7 +207,12 @@ pageRoots['settings'] = buildShell('settings', function(main) {
 
         let animTimer = null;
         setOnPress(track, function() {
-            active = !active;
+            if (r.themeToggle) {
+                active = !readIsDark();
+                setTheme(active ? 'dark' : 'light');
+            } else {
+                active = !active;
+            }
             const fromMargin = active ? 0 : THUMB_TRAVEL;
             const toMargin   = active ? THUMB_TRAVEL : 0;
             const startMs = performance.now();

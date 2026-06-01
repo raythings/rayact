@@ -1,4 +1,55 @@
-export type HostNodeType = 'root' | 'view' | 'text' | 'button' | 'image' | 'icon';
+export type HostNodeType =
+  | 'root'
+  | 'view'
+  | 'text'
+  | 'button'
+  | 'image'
+  | 'icon'
+  | 'textInput'
+  | 'scrollView'
+  | 'modal'
+  | 'safeArea'
+  | 'statusBar'
+  | 'activityIndicator'
+  | 'avoidKeyboard'
+  | 'appBar'
+  | 'badge'
+  | 'banner'
+  | 'bottomAppBar'
+  | 'bottomSheet'
+  | 'dataTable'
+  | 'dockedToolbar'
+  | 'floatingToolbar'
+  | 'buttonGroup'
+  | 'card'
+  | 'carousel'
+  | 'checkbox'
+  | 'chip'
+  | 'datePicker'
+  | 'dialog'
+  | 'divider'
+  | 'extendedFab'
+  | 'fab'
+  | 'fabMenu'
+  | 'iconButton'
+  | 'loadingIndicator'
+  | 'menu'
+  | 'navigationBar'
+  | 'navigationBarItem'
+  | 'navigationDrawer'
+  | 'navigationRail'
+  | 'progressIndicator'
+  | 'radioButton'
+  | 'searchBar'
+  | 'segmentedButton'
+  | 'sideSheet'
+  | 'slider'
+  | 'snackbar'
+  | 'splitButton'
+  | 'switch'
+  | 'tabs'
+  | 'toolbar'
+  | 'tooltip';
 
 export type HostNodeId = number;
 
@@ -7,7 +58,29 @@ export interface HostNode {
   type: HostNodeType;
 }
 
-export type HostEventName = 'press' | 'click';
+export type HostEventName = 'press' | 'click' | 'changeText' | 'changeValue' | 'scroll' | 'requestClose';
+
+export interface RayactAsset {
+  id: string;
+  name: string;
+  type: string;
+  hash: string;
+  size: number;
+  outputName?: string;
+  kind?: 'asset' | 'worker';
+  url(): string;
+  bytes(): Promise<Uint8Array>;
+}
+
+export interface RayactAssetMetadata {
+  id: string;
+  name: string;
+  type: string;
+  hash: string;
+  size: number;
+  outputName?: string;
+  kind?: 'asset' | 'worker';
+}
 
 export interface HostBridge {
   createNode(type: HostNodeType, props?: Record<string, unknown>): HostNode;
@@ -45,21 +118,46 @@ export interface RayactGlobal {
   createView?: (props?: Record<string, unknown>) => number;
   createText?: (text: string, props?: Record<string, unknown>) => number;
   createButton?: (label: string, props?: Record<string, unknown>) => number;
-  createImage?: (src: string, props?: Record<string, unknown>) => number | null;
-  createIcon?: (name: string, size?: number, color?: number, props?: Record<string, unknown>) => number;
+  createImage?: (src: string | RayactAsset, props?: Record<string, unknown>) => number | null;
+  createIcon?: (name: string, size?: number, color?: number | string, props?: Record<string, unknown>, variant?: string) => number;
+  createTextInput?: (value: string, props?: Record<string, unknown>) => number;
+  createScrollView?: (props?: Record<string, unknown>) => number;
+  createModal?: (props?: Record<string, unknown>) => number;
+  createSafeArea?: (props?: Record<string, unknown>) => number;
+  createStatusBar?: (props?: Record<string, unknown>) => number;
+  createActivityIndicator?: (props?: Record<string, unknown>) => number;
+  createAvoidKeyboard?: (props?: Record<string, unknown>) => number;
+  createMaterialComponent?: (component: string, props?: Record<string, unknown>) => number;
+  setMaterialComponentProps?: (nodeId: number, props: Record<string, unknown>) => void;
   appendChild?: (parentId: number, childId: number) => void;
   removeChild?: (parentId: number, childId: number) => void;
   insertBefore?: (parentId: number, childId: number, beforeChildId: number) => void;
   setRootNode?: (nodeId: number | null) => void;
   setStyle?: (nodeId: number, props: Record<string, unknown>) => void;
   setText?: (nodeId: number, text: string) => void;
+  setValue?: (nodeId: number, value: string) => void;
   setOnPress?: (nodeId: number, handler?: (() => void) | null) => void;
+  setOnChangeText?: (nodeId: number, handler?: ((value: string) => void) | null) => void;
+  setOnChangeValue?: (nodeId: number, handler?: ((value: number) => void) | null) => void;
+  setOnScroll?: (nodeId: number, handler?: ((event: unknown) => void) | null) => void;
+  setOnRequestClose?: (nodeId: number, handler?: (() => void) | null) => void;
   disposeNode?: (nodeId: number) => void;
   clearRootNode?: () => void;
+  resolveAssetUrl?: (asset: RayactAssetMetadata) => string;
+  resolveAssetPath?: (asset: RayactAssetMetadata) => string;
+  readAssetBytes?: (asset: RayactAssetMetadata) => Uint8Array | ArrayBuffer | number[];
+  spawnWorker?: (path: string | RayactAsset | Record<string, unknown>, initialData?: unknown) => number;
   fetch?: (url: string) => Promise<{ text(): Promise<string> }>;
   eval?: (source: string) => unknown;
   WebSocket?: new (url: string) => WebSocketLike;
   console?: Console;
+  __RAYACT_DEV_SERVER__?: string;
+  __RAYACT_RELEASE_ASSET_BASE__?: string;
+  __RAYACT_ASSETS__?: Record<string, RayactAssetMetadata>;
+  __rayactRawSpawnWorker?: (path: string | RayactAsset | Record<string, unknown>, initialData?: unknown) => number;
+  __rayactGetColorScheme?: () => Record<string, number | boolean> & { isDark: boolean };
+  __rayactSetColorScheme?: (mode: 'dark' | 'light', seed?: number) => void;
+  onColorSchemeChange?: (isDark: boolean) => void;
 }
 
 export interface WebSocketLike {
@@ -78,4 +176,5 @@ export interface DevServerManifest {
   mode: 'development';
   bundleUrl: string;
   websocketUrl: string;
+  assets?: Array<RayactAssetMetadata & { url?: string }>;
 }

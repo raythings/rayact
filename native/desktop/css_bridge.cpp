@@ -1,10 +1,12 @@
 #include "css_bridge.hpp"
+#include "color_parse.hpp"
 
 #include "cssparser/CSSDeNest.h"
 #include "cssparser/CSSParser.h"
 #include "cssparser/CSSUtils.h"
 
-#include <raym3/fonts/FontManager.h>
+#include <raym3/styles/Stylesheet.h>
+#include <raym3/styles/Theme.h>
 
 #include <algorithm>
 #include <cctype>
@@ -19,7 +21,7 @@
 
 // ─── globals ──────────────────────────────────────────────────────────────────
 
-CSSStyleMap g_stylesheet;
+using CSSPropMap = raym3::CSSPropMap;
 
 // ─── string helpers ───────────────────────────────────────────────────────────
 
@@ -89,64 +91,7 @@ static float extractVarFallback(const std::string& s) {
 }
 
 static uint32_t parseColor(const std::string& raw) {
-    std::string v = toLower(trimStr(raw));
-    if (v.empty()) return 0x000000FF;
-
-    if (v[0] == '#') {
-        std::string hex = v.substr(1);
-        if (hex.size() == 3) hex = {hex[0],hex[0],hex[1],hex[1],hex[2],hex[2]};
-        if (hex.size() == 4) hex = {hex[0],hex[0],hex[1],hex[1],hex[2],hex[2],hex[3],hex[3]};
-        try {
-            unsigned long n = std::stoul(hex, nullptr, 16);
-            if (hex.size() == 6) return (uint32_t)((n << 8) | 0xFF);
-            if (hex.size() == 8) return (uint32_t)n;
-        } catch (...) {}
-        return 0x000000FF;
-    }
-
-    if (v.rfind("rgb", 0) == 0) {
-        size_t lp = v.find('('), rp = v.rfind(')');
-        if (lp != std::string::npos && rp != std::string::npos && rp > lp) {
-            std::string inner = v.substr(lp + 1, rp - lp - 1);
-            uint32_t r = 0, g = 0, b = 0, a = 255;
-
-            size_t slashPos = inner.find('/');
-            std::string colorPart = slashPos != std::string::npos ? inner.substr(0, slashPos) : inner;
-            bool isModern = (colorPart.find(',') == std::string::npos);
-
-            if (isModern) {
-                // Modern: rgb(15 23 42 / alpha) — space-separated, / for alpha
-                auto ch = splitTrim(trimStr(colorPart), ' ');
-                try { if (ch.size() > 0) r = (uint32_t)std::stoi(ch[0]); } catch (...) {}
-                try { if (ch.size() > 1) g = (uint32_t)std::stoi(ch[1]); } catch (...) {}
-                try { if (ch.size() > 2) b = (uint32_t)std::stoi(ch[2]); } catch (...) {}
-                if (slashPos != std::string::npos) {
-                    float af = extractVarFallback(trimStr(inner.substr(slashPos + 1)));
-                    a = (uint32_t)(af * 255.0f);
-                }
-            } else {
-                // Legacy: rgb(r, g, b) / rgba(r, g, b, a)
-                auto parts = splitTrim(inner, ',');
-                try { if (parts.size() > 0) r = (uint32_t)std::stoi(parts[0]); } catch (...) {}
-                try { if (parts.size() > 1) g = (uint32_t)std::stoi(parts[1]); } catch (...) {}
-                try { if (parts.size() > 2) b = (uint32_t)std::stoi(parts[2]); } catch (...) {}
-                try { if (parts.size() > 3) a = (uint32_t)(std::stof(parts[3]) * 255.0f); } catch (...) {}
-            }
-            return (r << 24) | (g << 16) | (b << 8) | a;
-        }
-    }
-
-    static const std::map<std::string, uint32_t> named = {
-        {"transparent",0x00000000},{"white",0xFFFFFFFF},{"black",0x000000FF},
-        {"red",0xFF0000FF},{"green",0x008000FF},{"blue",0x0000FFFF},
-        {"yellow",0xFFFF00FF},{"cyan",0x00FFFFFF},{"magenta",0xFF00FFFF},
-        {"gray",0x808080FF},{"grey",0x808080FF},{"silver",0xC0C0C0FF},
-        {"orange",0xFFA500FF},{"purple",0x800080FF},{"pink",0xFFC0CBFF},
-        {"navy",0x000080FF},{"teal",0x008080FF},{"lime",0x00FF00FF},
-        {"coral",0xFF7F50FF},{"gold",0xFFD700FF},{"indigo",0x4B0082FF},
-    };
-    auto it = named.find(v);
-    return it != named.end() ? it->second : 0x000000FF;
+    return ParseCssColor(raw);
 }
 
 static std::vector<float> parseEdgeShorthand(const std::string& v) {
@@ -189,6 +134,33 @@ static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& props) {
         // ── color properties ─────────────────────────────────────────────
         if (prop == "background-color" || prop == "border-color" || prop == "state-layer-color") {
             JS_SetPropertyStr(ctx, obj, camelCase(prop).c_str(), JS_NewFloat64(ctx, parseColor(val)));
+            continue;
+        }
+
+        if (prop == "background") {
+            std::string lower = toLower(val);
+            if (lower.find("linear-gradient(") != std::string::npos) {
+                JS_SetPropertyStr(ctx, obj, "backgroundGradientCss", JS_NewString(ctx, val.c_str()));
+            } else {
+                JS_SetPropertyStr(ctx, obj, "backgroundColor", JS_NewFloat64(ctx, parseColor(val)));
+            }
+            continue;
+        }
+
+        if (prop == "backdrop-filter" || prop == "-webkit-backdrop-filter") {
+            JS_SetPropertyStr(ctx, obj, "backdropFilterCss", JS_NewString(ctx, val.c_str()));
+            continue;
+        }
+
+        if (prop == "box-shadow") {
+            JS_SetPropertyStr(ctx, obj, "boxShadowCss", JS_NewString(ctx, val.c_str()));
+            continue;
+        }
+
+        if (prop == "border") {
+            auto parts = splitTrim(val, ' ');
+            if (!parts.empty()) JS_SetPropertyStr(ctx, obj, "borderWidth", JS_NewFloat64(ctx, parseLength(parts[0])));
+            if (!parts.empty()) JS_SetPropertyStr(ctx, obj, "borderColor", JS_NewFloat64(ctx, parseColor(parts.back())));
             continue;
         }
 
@@ -428,7 +400,7 @@ static void processImport(const std::string& importVal, const std::string& baseP
     // Local CSS @import — already handled by JS importCSS, ignore here
 }
 
-// ─── CSS parser → g_stylesheet ────────────────────────────────────────────────
+// ─── CSS parser → raym3::Stylesheet ───────────────────────────────────────────
 
 static void parseCSSIntoStylesheet(const std::string& css,
                                     const std::string& basePath) {
@@ -442,6 +414,18 @@ static void parseCSSIntoStylesheet(const std::string& css,
     std::string fontFaceFamily, fontFaceSrc;
     std::string curSelector, curProp;
     CSSPropMap curProps;
+    std::vector<raym3::MediaMatch> mediaStack;
+
+    auto inRuleContext = [&]() {
+        if (inFontFace) return false;
+        if (atDepth == 0) return true;
+        return !mediaStack.empty() && mediaStack.back() != raym3::MediaMatch::None;
+    };
+
+    auto currentMedia = [&]() -> raym3::MediaMatch {
+        if (mediaStack.empty()) return raym3::MediaMatch::None;
+        return mediaStack.back();
+    };
 
     CSSParser::token tok = parser.get_next_token();
     while (tok.type != CSSParser::CSS_END) {
@@ -449,17 +433,25 @@ static void parseCSSIntoStylesheet(const std::string& css,
             case CSSParser::IMPORT:
                 processImport(tok.data, basePath);
                 break;
-            case CSSParser::AT_START:
+            case CSSParser::AT_START: {
                 atDepth++;
-                if (toLower(trimStr(tok.data)) == "font-face") {
+                std::string header = toLower(trimStr(tok.data));
+                if (header == "font-face") {
                     inFontFace = true;
                     fontFaceFamily.clear();
                     fontFaceSrc.clear();
+                    mediaStack.push_back(raym3::MediaMatch::None);
+                } else if (header.rfind("@media", 0) == 0) {
+                    mediaStack.push_back(raym3::Stylesheet::ParseMediaHeader(tok.data));
+                } else {
+                    mediaStack.push_back(raym3::MediaMatch::None);
                 }
                 break;
+            }
             case CSSParser::AT_END:
                 if (atDepth > 0) {
                     atDepth--;
+                    if (!mediaStack.empty()) mediaStack.pop_back();
                     if (inFontFace && atDepth == 0) {
                         processFontFace(fontFaceFamily, fontFaceSrc, basePath);
                         inFontFace = false;
@@ -467,12 +459,16 @@ static void parseCSSIntoStylesheet(const std::string& css,
                 }
                 break;
             case CSSParser::SEL_START:
-                if (atDepth == 0) { curSelector = tok.data; curProps.clear(); curProp.clear(); }
+                if (inRuleContext()) {
+                    curSelector = tok.data;
+                    curProps.clear();
+                    curProp.clear();
+                }
                 break;
             case CSSParser::PROPERTY:
                 if (inFontFace) {
                     curProp = toLower(trimStr(tok.data));
-                } else if (atDepth == 0) {
+                } else if (inRuleContext()) {
                     curProp = toLower(trimStr(tok.data));
                     if (curProp.rfind("--", 0) == 0) curProp.clear();
                 }
@@ -489,18 +485,17 @@ static void parseCSSIntoStylesheet(const std::string& css,
                         fontFaceSrc = val;
                     }
                     curProp.clear();
-                } else if (atDepth == 0 && !curProp.empty()) {
+                } else if (inRuleContext() && !curProp.empty()) {
                     curProps[curProp] = trimStr(tok.data);
                     curProp.clear();
                 }
                 break;
             case CSSParser::SEL_END:
-                if (atDepth == 0 && !curSelector.empty()) {
-                    for (auto& sel : splitTrim(curSelector, ',')) {
-                        auto& dst = g_stylesheet[sel];
-                        for (auto& [k, v] : curProps) dst[k] = v;
-                    }
-                    curSelector.clear(); curProps.clear(); curProp.clear();
+                if (inRuleContext() && !curSelector.empty()) {
+                    raym3::Stylesheet::Global().AddRule(curSelector, curProps, currentMedia());
+                    curSelector.clear();
+                    curProps.clear();
+                    curProp.clear();
                 }
                 break;
             default: break;
@@ -512,18 +507,8 @@ static void parseCSSIntoStylesheet(const std::string& css,
 // ─── class name resolution ────────────────────────────────────────────────────
 
 JSValue resolveClassNames(JSContext* ctx, const std::string& classNames) {
-    // Merge prop maps for each class in order (later class overrides earlier)
-    CSSPropMap merged;
-    for (auto& name : splitTrim(classNames, ' ')) {
-        // Try with dot prefix first, then without
-        for (auto& key : {"." + name, name}) {
-            auto it = g_stylesheet.find(key);
-            if (it != g_stylesheet.end()) {
-                for (auto& [k, v] : it->second) merged[k] = v;
-                break;  // found, don't double-apply
-            }
-        }
-    }
+    CSSPropMap merged = raym3::Stylesheet::Global().ResolveClasses(
+        classNames, raym3::Theme::IsDarkMode());
     return buildStyleObject(ctx, merged);
 }
 
@@ -563,12 +548,13 @@ JSValue JS_importCSS(JSContext* ctx, JSValue /*this_val*/,
     std::string basePath = std::filesystem::path(path).parent_path().string();
     if (basePath.empty()) basePath = ".";
     parseCSSIntoStylesheet(content, basePath);
-    printf("CSS loaded: %s (%zu rules)\n", path.c_str(), g_stylesheet.size());
+    printf("CSS loaded: %s (%zu selectors)\n", path.c_str(),
+           raym3::Stylesheet::Global().SelectorCount());
     return JS_UNDEFINED;
 }
 
 // ─── lifecycle ────────────────────────────────────────────────────────────────
 
 void cleanupCSSBridge(JSContext* /*ctx*/) {
-    g_stylesheet.clear();
+    raym3::Stylesheet::Global().Clear();
 }

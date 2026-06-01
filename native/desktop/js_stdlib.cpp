@@ -238,6 +238,43 @@ static JSValue JS_clearInterval(JSContext* ctx, JSValue, int argc, JSValueConst*
     return JS_UNDEFINED;
 }
 
+// ─── requestAnimationFrame ───────────────────────────────────────────────────
+
+static std::vector<JSValue> s_rafQueue;
+static int s_nextRafId = 1;
+
+static JSValue JS_requestAnimationFrame(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1 || !JS_IsFunction(ctx, argv[0]))
+        return JS_ThrowTypeError(ctx, "requestAnimationFrame: expected function");
+    s_rafQueue.push_back(JS_DupValue(ctx, argv[0]));
+    return JS_NewInt32(ctx, s_nextRafId++);
+}
+
+static JSValue JS_cancelAnimationFrame(JSContext* ctx, JSValue, int, JSValueConst*) {
+    return JS_UNDEFINED;
+}
+
+void tickAnimationFrames(JSContext* ctx) {
+    if (s_rafQueue.empty()) return;
+    std::vector<JSValue> callbacks;
+    callbacks.swap(s_rafQueue);
+    double ts = nowMs();
+    JSValue tsVal = JS_NewFloat64(ctx, ts);
+    for (JSValue cb : callbacks) {
+        JSValue result = JS_Call(ctx, cb, JS_UNDEFINED, 1, &tsVal);
+        if (JS_IsException(result)) {
+            JSValue exc = JS_GetException(ctx);
+            const char* s = JS_ToCString(ctx, exc);
+            fprintf(stderr, "\033[31m[raf error] %s\033[0m\n", s ? s : "(unknown)");
+            JS_FreeCString(ctx, s);
+            JS_FreeValue(ctx, exc);
+        }
+        JS_FreeValue(ctx, result);
+        JS_FreeValue(ctx, cb);
+    }
+    JS_FreeValue(ctx, tsVal);
+}
+
 // ─── performance ─────────────────────────────────────────────────────────────
 
 static JSValue JS_perfNow(JSContext* ctx, JSValue, int, JSValueConst*) {
@@ -278,6 +315,118 @@ static JSValue JS_structuredClone(JSContext* ctx, JSValue, int argc, JSValueCons
     JS_FreeCString(ctx, str);
     JS_FreeValue(ctx, j);
     return clone;
+}
+
+// ─── TextEncoder / TextDecoder ───────────────────────────────────────────────
+
+static void installTextEncoding(JSContext* ctx) {
+    static const char* kTextEncodingPolyfill = R"JS(
+(function() {
+  if (typeof globalThis.TextDecoder === 'undefined') {
+    globalThis.TextDecoder = class TextDecoder {
+      constructor(label) {
+        const encoding = String(label || 'utf-8').toLowerCase();
+        if (encoding !== 'utf-8' && encoding !== 'utf8') {
+          throw new RangeError('Only utf-8 TextDecoder is supported');
+        }
+        this.encoding = 'utf-8';
+        this.fatal = false;
+        this.ignoreBOM = false;
+      }
+
+      decode(input) {
+        if (input == null) return '';
+        let bytes;
+        if (input instanceof ArrayBuffer) {
+          bytes = new Uint8Array(input);
+        } else if (ArrayBuffer.isView(input)) {
+          bytes = new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+        } else {
+          bytes = new Uint8Array(input);
+        }
+
+        let out = '';
+        for (let i = 0; i < bytes.length;) {
+          const first = bytes[i++];
+          let cp = 0xfffd;
+          if (first < 0x80) {
+            cp = first;
+          } else if ((first & 0xe0) === 0xc0 && i < bytes.length) {
+            cp = ((first & 0x1f) << 6) | (bytes[i++] & 0x3f);
+          } else if ((first & 0xf0) === 0xe0 && i + 1 < bytes.length) {
+            cp = ((first & 0x0f) << 12) | ((bytes[i++] & 0x3f) << 6) | (bytes[i++] & 0x3f);
+          } else if ((first & 0xf8) === 0xf0 && i + 2 < bytes.length) {
+            cp = ((first & 0x07) << 18) | ((bytes[i++] & 0x3f) << 12) |
+                 ((bytes[i++] & 0x3f) << 6) | (bytes[i++] & 0x3f);
+          }
+
+          if (cp <= 0xffff) {
+            out += String.fromCharCode(cp);
+          } else {
+            cp -= 0x10000;
+            out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff));
+          }
+        }
+        return out;
+      }
+    };
+  }
+
+  if (typeof globalThis.TextEncoder === 'undefined') {
+    globalThis.TextEncoder = class TextEncoder {
+      constructor() {
+        this.encoding = 'utf-8';
+      }
+
+      encode(input) {
+        const str = String(input || '');
+        const bytes = [];
+        for (let i = 0; i < str.length; i++) {
+          let cp = str.charCodeAt(i);
+          if (cp >= 0xd800 && cp <= 0xdbff && i + 1 < str.length) {
+            const next = str.charCodeAt(i + 1);
+            if (next >= 0xdc00 && next <= 0xdfff) {
+              cp = 0x10000 + ((cp - 0xd800) << 10) + (next - 0xdc00);
+              i++;
+            }
+          }
+
+          if (cp < 0x80) {
+            bytes.push(cp);
+          } else if (cp < 0x800) {
+            bytes.push(0xc0 | (cp >> 6), 0x80 | (cp & 0x3f));
+          } else if (cp < 0x10000) {
+            bytes.push(0xe0 | (cp >> 12), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
+          } else {
+            bytes.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3f),
+                       0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
+          }
+        }
+        return new Uint8Array(bytes);
+      }
+
+      encodeInto(input, destination) {
+        const encoded = this.encode(input);
+        const written = Math.min(encoded.length, destination.length);
+        for (let i = 0; i < written; i++) destination[i] = encoded[i];
+        return { read: String(input || '').length, written };
+      }
+    };
+  }
+})();
+)JS";
+
+    JSValue result = JS_Eval(ctx, kTextEncodingPolyfill, strlen(kTextEncodingPolyfill),
+                             "<text-encoding-polyfill>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(result)) {
+        JSValue exc = JS_GetException(ctx);
+        const char* message = JS_ToCString(ctx, exc);
+        fprintf(stderr, "[stdlib] failed to install TextEncoder/TextDecoder: %s\n",
+                message ? message : "(unknown)");
+        JS_FreeCString(ctx, message);
+        JS_FreeValue(ctx, exc);
+    }
+    JS_FreeValue(ctx, result);
 }
 
 // ─── tick ────────────────────────────────────────────────────────────────────
@@ -371,6 +520,11 @@ void registerJSStdlib(JSContext* ctx) {
     JS_SetPropertyStr(ctx, global, "clearInterval",
         JS_NewCFunction(ctx, JS_clearInterval,"clearInterval",1));
 
+    JS_SetPropertyStr(ctx, global, "requestAnimationFrame",
+        JS_NewCFunction(ctx, JS_requestAnimationFrame, "requestAnimationFrame", 1));
+    JS_SetPropertyStr(ctx, global, "cancelAnimationFrame",
+        JS_NewCFunction(ctx, JS_cancelAnimationFrame, "cancelAnimationFrame", 1));
+
     // performance
     JSValue perf = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, perf, "now",
@@ -384,6 +538,8 @@ void registerJSStdlib(JSContext* ctx) {
     // structuredClone
     JS_SetPropertyStr(ctx, global, "structuredClone",
         JS_NewCFunction(ctx, JS_structuredClone, "structuredClone", 1));
+
+    installTextEncoding(ctx);
 
     // globalThis self-reference
     JS_SetPropertyStr(ctx, global, "globalThis", JS_DupValue(ctx, global));

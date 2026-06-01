@@ -1,0 +1,1 @@
+Rayact asset smoke file. Imported from src/assets and read as Uint8Array.

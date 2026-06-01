@@ -1,21 +1,94 @@
 import type React from 'react';
+import ReactNS from 'react';
 import { getDefaultRuntime } from '@rayact/runtime';
 import { createHostContainer, RayactReconciler } from './reconciler';
+import { RayactThemeProvider } from './theme/RayactThemeProvider';
 import type { RayactContainer, RayactRoot } from './types';
 
 export type {
   BaseProps,
+  ActivityIndicatorProps,
+  BadgeProps,
   ButtonProps,
+  ColorValue,
   IconProps,
   ImageProps,
+  ListProps,
+  MaterialComponentProps,
+  ModalProps,
   RayactContainer,
   RayactRoot,
+  ScrollViewProps,
+  SearchBarProps,
+  StatusBarProps,
+  Style,
+  StyleProp,
+  TextInputProps,
   TextProps
 } from './types';
 
-export { Button, Icon, Image, Text, View } from './components';
+export {
+  ActivityIndicator,
+  AppBar,
+  AvoidKeyboard,
+  Badge,
+  Banner,
+  BottomAppBar,
+  BottomSheet,
+  Button,
+  ButtonGroup,
+  Card,
+  Carousel,
+  Checkbox,
+  Chip,
+  DataTable,
+  DatePicker,
+  Dialog,
+  DockedToolbar,
+  Divider,
+  FloatingToolbar,
+  ExtendedFab,
+  Fab,
+  FabMenu,
+  Icon,
+  IconButton,
+  Image,
+  List,
+  LoadingIndicator,
+  Menu,
+  Modal,
+  NavigationBar,
+  NavigationBarItem,
+  NavigationDrawer,
+  NavigationRail,
+  ProgressIndicator,
+  RadioButton,
+  SafeArea,
+  ScrollView,
+  SearchBar,
+  SegmentedButton,
+  SideSheet,
+  Slider,
+  Snackbar,
+  SplitButton,
+  StatusBar,
+  Switch,
+  Tabs,
+  Text,
+  TextInput,
+  Toolbar,
+  Tooltip,
+  View
+} from './components';
 export { RayactReconciler };
 export { createRuntime, getDefaultRuntime } from '@rayact/runtime';
+export { useTheme, withTheme } from './theme/theming';
+export { useColorScheme, useColorSchemePreference, setColorSchemePreference, cycleColorSchemePreference } from './theme/colorSchemeStore';
+export type { ColorSchemePreference } from './theme/colorSchemeStore';
+export { RayactThemeProvider } from './theme/RayactThemeProvider';
+export type { RayactTheme } from './theme/tokens';
+export { useAnimatedValue, easeInOutCubic } from './anim/useAnimatedValue';
+export { useSpring } from './anim/useSpring';
 
 interface StoredRoot {
   container: RayactContainer;
@@ -104,6 +177,8 @@ export function render(element: React.ReactNode): RayactRoot {
     return getOrCreateRoot();
   }
   const root = getOrCreateRoot();
-  root.render(element);
+  root.render(
+    ReactNS.createElement(RayactThemeProvider, null, element)
+  );
   return root;
 }

@@ -5,17 +5,28 @@ export type {
   HostNode,
   HostNodeId,
   HostNodeType,
+  RayactAsset,
+  RayactAssetMetadata,
   RayactDevClient,
   RayactGlobal,
   RayactRuntime,
   RayactRuntimeOptions
 } from './types';
 
+export {
+  createAsset,
+  installAssetAwareSpawnWorker,
+  isRayactAsset,
+  readAssetBytes,
+  resolveAssetUrl,
+  resolveWorkerSpecifier
+} from './assets';
 export { createBridge } from './bridge';
 export { createDevClient, installConsoleForwarding } from './devClient';
 
 import { createBridge } from './bridge';
 import { createDevClient, installConsoleForwarding } from './devClient';
+import { installAssetAwareSpawnWorker } from './assets';
 import type { RayactGlobal, RayactRuntime, RayactRuntimeOptions } from './types';
 
 function getGlobal(options?: RayactRuntimeOptions): RayactGlobal {
@@ -42,6 +53,8 @@ export function createRuntime(options: RayactRuntimeOptions = {}): RayactRuntime
     installConsoleForwarding(devClient, globalObject);
     devClient.connect();
   }
+
+  installAssetAwareSpawnWorker(globalObject);
 
   return {
     bridge,

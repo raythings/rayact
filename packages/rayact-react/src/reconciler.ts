@@ -1,4 +1,4 @@
-import type { HostBridge, HostNodeType } from '@rayact/runtime';
+import type { HostBridge, HostEventName, HostNodeType } from '@rayact/runtime';
 import { getDefaultRuntime } from '@rayact/runtime';
 import ReactReconcilerModule from 'react-reconciler';
 import * as ReconcilerConstants from 'react-reconciler/constants';
@@ -13,12 +13,67 @@ const ReactReconciler = ReactReconcilerModule as unknown as (config: Record<stri
 
 type Child = RayactHostInstance | RayactTextInstance;
 
-const eventProps = ['onPress', 'onClick'] as const;
+const eventProps = ['onPress', 'onClick', 'onChangeText', 'onValueChange', 'onScroll', 'onRequestClose'] as const;
+
+const hostNodeTypes = new Set<string>([
+  'root',
+  'view',
+  'text',
+  'button',
+  'image',
+  'icon',
+  'textInput',
+  'scrollView',
+  'modal',
+  'safeArea',
+  'statusBar',
+  'activityIndicator',
+  'avoidKeyboard',
+  'appBar',
+  'badge',
+  'banner',
+  'bottomAppBar',
+  'bottomSheet',
+  'dataTable',
+  'dockedToolbar',
+  'floatingToolbar',
+  'buttonGroup',
+  'card',
+  'carousel',
+  'checkbox',
+  'chip',
+  'datePicker',
+  'dialog',
+  'divider',
+  'extendedFab',
+  'fab',
+  'fabMenu',
+  'iconButton',
+  'loadingIndicator',
+  'menu',
+  'navigationBar',
+  'navigationBarItem',
+  'navigationDrawer',
+  'navigationRail',
+  'progressIndicator',
+  'radioButton',
+  'searchBar',
+  'segmentedButton',
+  'sideSheet',
+  'slider',
+  'snackbar',
+  'splitButton',
+  'switch',
+  'tabs',
+  'toolbar',
+  'tooltip'
+]);
 
 function normalizeType(type: RayactElementType | string): HostNodeType {
-  const normalized = String(type).toLowerCase().replace(/^rayact-/, '');
-  if (normalized === 'root' || normalized === 'view' || normalized === 'text' || normalized === 'button' || normalized === 'image' || normalized === 'icon') {
-    return normalized;
+  const raw = String(type).replace(/^rayact-/, '');
+  const normalized = raw.toLowerCase().replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+  if (hostNodeTypes.has(normalized)) {
+    return normalized as HostNodeType;
   }
   throw new Error(`Unknown Rayact element type: ${type}`);
 }
@@ -49,7 +104,7 @@ function attachEvents(instance: RayactHostInstance, props: Record<string, unknow
   for (const prop of eventProps) {
     const handler = props[prop];
     if (typeof handler === 'function') {
-      bridge.setEventHandler(instance.node, prop === 'onClick' ? 'click' : 'press', handler as () => void);
+      bridge.setEventHandler(instance.node, eventNameForProp(prop), handler as () => void);
     }
   }
 }
@@ -59,9 +114,18 @@ function updateEvents(instance: RayactHostInstance, oldProps: Record<string, unk
   for (const prop of eventProps) {
     if (oldProps[prop] !== newProps[prop]) {
       const handler = newProps[prop];
-      bridge.setEventHandler(instance.node, prop === 'onClick' ? 'click' : 'press', typeof handler === 'function' ? handler as () => void : null);
+      bridge.setEventHandler(instance.node, eventNameForProp(prop), typeof handler === 'function' ? handler as () => void : null);
     }
   }
+}
+
+function eventNameForProp(prop: typeof eventProps[number]): HostEventName {
+  if (prop === 'onClick') return 'click';
+  if (prop === 'onChangeText') return 'changeText';
+  if (prop === 'onValueChange') return 'changeValue';
+  if (prop === 'onScroll') return 'scroll';
+  if (prop === 'onRequestClose') return 'requestClose';
+  return 'press';
 }
 
 function appendChild(parent: RayactHostInstance | RayactContainer, child: Child): void {

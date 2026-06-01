@@ -1,11 +1,12 @@
 #include "raylib_bridge.hpp"
+#include "theme_bridge.hpp"
+#include "system_appearance.hpp"
 #include "platform.hpp"
 #include "quickjs_bridge.hpp"
 #include "raym3_bridge.hpp"
 #include "css_bridge.hpp"
 #include "js_stdlib.hpp"
 #include "workers.hpp"
-#include "net.hpp"
 #include "net.hpp"
 #include "utils/TypeStripper.h"
 #include "utils/ScriptValidator.h"
@@ -17,6 +18,7 @@ extern "C" {
 
 #include <raym3/raym3.h>
 #include <raym3/v2/Renderer.h>
+#include <raym3/styles/Theme.h>
 #include <curl/curl.h>
 
 #include <cstdio>
@@ -27,6 +29,7 @@ extern "C" {
 #include <sstream>
 #include <vector>
 #include <string>
+#include <filesystem>
 
 // Forward declarations
 static JSValue JS_initRaylib(JSContext*, JSValue, int, JSValueConst*);
@@ -46,11 +49,15 @@ static JSValue JS_clearNavigationStack(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_registerScreen(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_getCurrentScreen(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_printNavigationStatus(JSContext*, JSValue, int, JSValueConst*);
+static JSValue JS_resolveAssetUrl(JSContext*, JSValue, int, JSValueConst*);
+static JSValue JS_resolveAssetPath(JSContext*, JSValue, int, JSValueConst*);
+static JSValue JS_readAssetBytes(JSContext*, JSValue, int, JSValueConst*);
 
 // Global variables
 static JSRuntime* g_rt = nullptr;
 static JSContext* g_ctx = nullptr;
 static bool g_running = false;
+static std::filesystem::path g_releaseAssetBaseDir;
 
 // Default: MSAA 4x. User can override before initRaylib() via setConfigFlags().
 static unsigned int g_configFlags = FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT;
@@ -315,6 +322,24 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_createText,   "createText",   2));
     JS_SetPropertyStr(ctx, global, "createButton",
                       JS_NewCFunction(ctx, JS_createButton, "createButton", 2));
+    JS_SetPropertyStr(ctx, global, "createTextInput",
+                      JS_NewCFunction(ctx, JS_createTextInput, "createTextInput", 2));
+    JS_SetPropertyStr(ctx, global, "createScrollView",
+                      JS_NewCFunction(ctx, JS_createScrollView, "createScrollView", 1));
+    JS_SetPropertyStr(ctx, global, "createModal",
+                      JS_NewCFunction(ctx, JS_createModal, "createModal", 1));
+    JS_SetPropertyStr(ctx, global, "createSafeArea",
+                      JS_NewCFunction(ctx, JS_createSafeArea, "createSafeArea", 1));
+    JS_SetPropertyStr(ctx, global, "createStatusBar",
+                      JS_NewCFunction(ctx, JS_createStatusBar, "createStatusBar", 1));
+    JS_SetPropertyStr(ctx, global, "createActivityIndicator",
+                      JS_NewCFunction(ctx, JS_createActivityIndicator, "createActivityIndicator", 1));
+    JS_SetPropertyStr(ctx, global, "createAvoidKeyboard",
+                      JS_NewCFunction(ctx, JS_createAvoidKeyboard, "createAvoidKeyboard", 1));
+    JS_SetPropertyStr(ctx, global, "createMaterialComponent",
+                      JS_NewCFunction(ctx, JS_createMaterialComponent, "createMaterialComponent", 2));
+    JS_SetPropertyStr(ctx, global, "setMaterialComponentProps",
+                      JS_NewCFunction(ctx, JS_setMaterialComponentProps, "setMaterialComponentProps", 2));
     JS_SetPropertyStr(ctx, global, "appendChild",
                       JS_NewCFunction(ctx, JS_appendChild,  "appendChild",  2));
     JS_SetPropertyStr(ctx, global, "removeChild",
@@ -327,10 +352,20 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_clearRootNode, "clearRootNode", 0));
     JS_SetPropertyStr(ctx, global, "setOnPress",
                       JS_NewCFunction(ctx, JS_setOnPress,   "setOnPress",   2));
+    JS_SetPropertyStr(ctx, global, "setOnChangeText",
+                      JS_NewCFunction(ctx, JS_setOnChangeText, "setOnChangeText", 2));
+    JS_SetPropertyStr(ctx, global, "setOnChangeValue",
+                      JS_NewCFunction(ctx, JS_setOnChangeValue, "setOnChangeValue", 2));
+    JS_SetPropertyStr(ctx, global, "setOnScroll",
+                      JS_NewCFunction(ctx, JS_setOnScroll, "setOnScroll", 2));
+    JS_SetPropertyStr(ctx, global, "setOnRequestClose",
+                      JS_NewCFunction(ctx, JS_setOnRequestClose, "setOnRequestClose", 2));
     JS_SetPropertyStr(ctx, global, "setStyle",
                       JS_NewCFunction(ctx, JS_setStyle,     "setStyle",     2));
     JS_SetPropertyStr(ctx, global, "setText",
                       JS_NewCFunction(ctx, JS_setText,      "setText",      2));
+    JS_SetPropertyStr(ctx, global, "setValue",
+                      JS_NewCFunction(ctx, JS_setValue,     "setValue",     2));
     JS_SetPropertyStr(ctx, global, "disposeNode",
                       JS_NewCFunction(ctx, JS_disposeNode,  "disposeNode",  1));
     JS_SetPropertyStr(ctx, global, "createImage",
@@ -339,10 +374,18 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_createIcon,   "createIcon",   4));
     JS_SetPropertyStr(ctx, global, "registerFont",
                       JS_NewCFunction(ctx, JS_registerFont, "registerFont", 2));
+    JS_SetPropertyStr(ctx, global, "resolveAssetUrl",
+                      JS_NewCFunction(ctx, JS_resolveAssetUrl, "resolveAssetUrl", 1));
+    JS_SetPropertyStr(ctx, global, "resolveAssetPath",
+                      JS_NewCFunction(ctx, JS_resolveAssetPath, "resolveAssetPath", 1));
+    JS_SetPropertyStr(ctx, global, "readAssetBytes",
+                      JS_NewCFunction(ctx, JS_readAssetBytes, "readAssetBytes", 1));
 
     // CSS import bridge
     JS_SetPropertyStr(ctx, global, "importCSS",
                       JS_NewCFunction(ctx, JS_importCSS,    "importCSS",    1));
+
+    registerThemeBindings(ctx);
 
     JS_FreeValue(ctx, global);
 
@@ -376,6 +419,8 @@ static JSValue JS_initRaylib(JSContext* ctx, JSValue this_val,
     SetConfigFlags(g_configFlags);
     InitWindow(width, height, title);
     SetTargetFPS(g_targetFPS);
+
+    raym3::Theme::Initialize();
 
     printf("Initialized raylib window: %dx%d \"%s\"\n", width, height, title);
 
@@ -602,7 +647,7 @@ static void injectMaterialIcons(JSContext* ctx) {
             if (s) JS_FreeCString(ctx, s);
             JS_FreeValue(ctx, exc);
         } else {
-            printf("Material Icons loaded (%ld bytes)\n", len);
+            printf("Material Icons loaded from source (%ld bytes)\n", len);
         }
         JS_FreeValue(ctx, r);
         return;
@@ -813,6 +858,88 @@ static bool httpGet(const std::string& url, std::string& body, std::string& erro
     return true;
 }
 
+static std::string jsObjectString(JSContext* ctx, JSValue obj, const char* key) {
+    JSValue value = JS_GetPropertyStr(ctx, obj, key);
+    std::string result;
+    if (!JS_IsUndefined(value) && !JS_IsNull(value)) {
+        const char* str = JS_ToCString(ctx, value);
+        if (str) {
+            result = str;
+            JS_FreeCString(ctx, str);
+        }
+    }
+    JS_FreeValue(ctx, value);
+    return result;
+}
+
+static std::string assetUrlFromObject(JSContext* ctx, JSValue asset) {
+    std::string id = jsObjectString(ctx, asset, "id");
+    std::string name = jsObjectString(ctx, asset, "name");
+    std::string outputName = jsObjectString(ctx, asset, "outputName");
+    if (!g_devServerUrl.empty() && !id.empty()) {
+        return g_devServerUrl + "/rayact/assets/" + id + "/" + name;
+    }
+    if (!outputName.empty()) {
+        std::filesystem::path outputPath(outputName);
+        if (!g_releaseAssetBaseDir.empty() && outputPath.is_relative()) {
+            return (g_releaseAssetBaseDir / outputPath).string();
+        }
+        return outputPath.string();
+    }
+    return name;
+}
+
+static JSValue JS_resolveAssetUrl(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1 || !JS_IsObject(argv[0])) return JS_ThrowTypeError(ctx, "resolveAssetUrl: expected asset object");
+    return JS_NewString(ctx, assetUrlFromObject(ctx, argv[0]).c_str());
+}
+
+static JSValue JS_resolveAssetPath(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1 || !JS_IsObject(argv[0])) return JS_ThrowTypeError(ctx, "resolveAssetPath: expected asset object");
+    std::string url = assetUrlFromObject(ctx, argv[0]);
+    if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0) {
+        return JS_NewString(ctx, url.c_str());
+    }
+
+    std::string id = jsObjectString(ctx, argv[0], "id");
+    std::string name = jsObjectString(ctx, argv[0], "name");
+    std::filesystem::path cacheDir = std::filesystem::temp_directory_path() / "rayact-assets";
+    std::error_code ec;
+    std::filesystem::create_directories(cacheDir, ec);
+    std::filesystem::path outPath = cacheDir / (id.empty() ? name : (id + "-" + name));
+    if (!std::filesystem::exists(outPath)) {
+        std::string body;
+        std::string error;
+        if (!httpGet(url, body, error)) {
+            return JS_ThrowTypeError(ctx, "resolveAssetPath: failed to fetch asset: %s", error.c_str());
+        }
+        FILE* file = fopen(outPath.string().c_str(), "wb");
+        if (!file) return JS_ThrowTypeError(ctx, "resolveAssetPath: failed to open cache file");
+        fwrite(body.data(), 1, body.size(), file);
+        fclose(file);
+    }
+    return JS_NewString(ctx, outPath.string().c_str());
+}
+
+static JSValue JS_readAssetBytes(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1 || !JS_IsObject(argv[0])) return JS_ThrowTypeError(ctx, "readAssetBytes: expected asset object");
+    JSValue pathValue = JS_resolveAssetPath(ctx, JS_UNDEFINED, argc, argv);
+    if (JS_IsException(pathValue)) return pathValue;
+    const char* pathStr = JS_ToCString(ctx, pathValue);
+    JS_FreeValue(ctx, pathValue);
+    if (!pathStr) return JS_ThrowTypeError(ctx, "readAssetBytes: invalid asset path");
+    FILE* file = fopen(pathStr, "rb");
+    JS_FreeCString(ctx, pathStr);
+    if (!file) return JS_ThrowTypeError(ctx, "readAssetBytes: failed to open asset");
+    fseek(file, 0, SEEK_END);
+    long len = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    std::vector<uint8_t> bytes((size_t)len);
+    if (len > 0) fread(bytes.data(), 1, (size_t)len, file);
+    fclose(file);
+    return JS_NewArrayBufferCopy(ctx, bytes.data(), bytes.size());
+}
+
 static int parseJsonIntField(const std::string& json, const std::string& field) {
     std::string key = "\"" + field + "\"";
     size_t pos = json.find(key);
@@ -976,6 +1103,7 @@ void mainLoop(JSContext* ctx) {
     }
 
     raym3::Initialize();
+    initSystemAppearance(ctx);
     // Main event loop
     while (!WindowShouldClose()) {
         // Pump QJS event loop: 1ms timeout allows macOS Cocoa to process window
@@ -984,6 +1112,8 @@ void mainLoop(JSContext* ctx) {
         // without blocking. js_std_loop (infinite poll) must not be used here.
         js_std_loop_once(ctx);
         tickJSTimers(ctx);
+        tickAnimationFrames(ctx);
+        tickSystemAppearance(ctx);
         drainNetEvents(ctx);
         pollDevServer(ctx);
 
@@ -1022,18 +1152,23 @@ void mainLoop(JSContext* ctx) {
 
             {
                 Vector2 mouse = GetMousePosition();
+                float wheelY = GetMouseWheelMove();
                 bool pressed  = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
                 bool released = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
                 bool down     = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+                bool scrollDragConsumed = processRaym3ScrollInput(mouse, wheelY, pressed, down, released);
 
                 // Route hover/move/drag/down/up to any worker canvas node
                 processWorkerInputEvents(mouse.x, mouse.y, pressed, released, down);
 
                 // Standard raym3 press dispatch (fires onPress on release)
-                if (released) {
+                if (released && !scrollDragConsumed) {
                     auto hit = raym3::v2::HitTest(g_root, mouse);
                     if (hit && hit->onPress) hit->onPress();
                 }
+                if (std::getenv("RAYACT_SHOT")) { static int sf=0; ++sf; if(sf==5) SetWindowSize(1120,900);
+                    if(sf>=60){ std::function<void(const raym3::v2::NodePtr&)> sc=[&](const raym3::v2::NodePtr& n){ if(!n)return; if(n->scrollContentHeight > n->layout.height) n->scrollOffsetY = n->scrollContentHeight; for(auto&c:n->children) sc(c); }; sc(g_root); }
+                    if(sf==120) TakeScreenshot("shot.png"); if(sf==122) break; }
             }
         } else {
             // Fallback: immediate-mode shapes (backward compat)
@@ -1147,6 +1282,10 @@ int main(int argc, char** argv) {
         success = loadDevServerBundle(g_ctx, devServer);
     } else if (argc > 1 && argv[1][0] != '-') {
         jsFile = argv[1];
+        std::filesystem::path scriptPath(jsFile);
+        g_releaseAssetBaseDir = scriptPath.has_parent_path()
+            ? scriptPath.parent_path()
+            : std::filesystem::current_path();
         std::cout << "\nAttempting to load: " << jsFile << std::endl;
         success = loadJavaScriptFile(g_ctx, jsFile.c_str());
     }

@@ -1,12 +1,14 @@
-import path from 'node:path';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
 import react from '@vitejs/plugin-react';
 import type { Plugin, UserConfig } from 'vite';
-import type { OutputChunk, OutputAsset, RollupOutput } from 'rollup';
+import type { OutputAsset, OutputChunk, RollupOutput } from 'rollup';
 import { build } from 'vite';
 
-// Injected as banner before the IIFE on every bundle eval.
-// $RefreshReg$ / $RefreshSig$ must exist before transformed component code runs.
+const require = createRequire(import.meta.url);
+
 const REFRESH_BANNER = `
 var __isHotReload = !!globalThis.__RAYACT_HMR_ACTIVE__;
 globalThis.$RefreshReg$ = function(type, id) {
@@ -19,7 +21,6 @@ globalThis.$RefreshSig$ = function() {
 };
 `.trim();
 
-// Injected after the IIFE — marks env as hot and triggers React Refresh.
 const REFRESH_FOOTER = `
 globalThis.__RAYACT_HMR_ACTIVE__ = true;
 if (__isHotReload) {
@@ -30,14 +31,77 @@ if (__isHotReload) {
 }
 `.trim();
 
+export type RayactBuildMode = 'development' | 'dev-client' | 'release';
+
 export interface BundleOptions {
   root: string;
   entry: string;
   platform: string;
+  mode?: RayactBuildMode;
+  outDir?: string;
+}
+
+export interface RayactAssetRecord {
+  id: string;
+  name: string;
+  type: string;
+  hash: string;
+  size: number;
+  sourcePath: string;
+  outputName: string;
+  kind: 'asset' | 'worker';
+}
+
+export interface RayactBuildOutput {
+  code: string;
+  assets: RayactAssetRecord[];
+  entry: string;
+  platform: string;
+  mode: RayactBuildMode;
 }
 
 function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
+}
+
+function contentType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const types: Record<string, string> = {
+    '.css': 'text/css; charset=utf-8',
+    '.gif': 'image/gif',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.js': 'application/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.mjs': 'application/javascript; charset=utf-8',
+    '.otf': 'font/otf',
+    '.png': 'image/png',
+    '.svg': 'image/svg+xml',
+    '.ttf': 'font/ttf',
+    '.wasm': 'application/wasm',
+    '.webp': 'image/webp',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2'
+  };
+  return types[ext] ?? 'application/octet-stream';
+}
+
+function assetId(hash: string, filePath: string): string {
+  const cleanName = path.basename(filePath).replace(/[^A-Za-z0-9_.-]/g, '_');
+  return `${hash.slice(0, 12)}-${cleanName}`;
+}
+
+function isAssetImport(filePath: string, root: string): boolean {
+  const relative = normalizePath(path.relative(root, filePath));
+  return relative.split('/').includes('assets');
+}
+
+function isScriptOrStyle(filePath: string): boolean {
+  return /\.(?:[cm]?[jt]sx?|css|scss|sass)$/i.test(filePath);
+}
+
+function isWorkerPath(filePath: string): boolean {
+  return /\.(?:[cm]?[jt]sx?|jsc|wasm)$/i.test(filePath);
 }
 
 function resolveCssFile(id: string, importer: string | undefined, root: string): string | null {
@@ -64,12 +128,75 @@ function toNativeCssPath(filePath: string, root: string): string {
   return relative.startsWith('..') ? normalizePath(filePath) : `./${relative}`;
 }
 
-// The native host re-evaluates the whole IIFE on every hot reload. Without
-// sharing, each eval creates a fresh React + jsx-runtime, so the new app code
-// talks to a different React than the reconciler that owns the live fiber tree
-// — hook dispatch reads a null dispatcher and the screen goes black. We pin a
-// single instance of each on globalThis.__RAYACT_VENDOR__ and make every
-// `import 'react'` resolve to a thin proxy that returns that cached instance.
+function resolveFileSpecifier(specifier: string, importer: string | undefined, root: string): string | null {
+  const candidates: string[] = [];
+  if (path.isAbsolute(specifier)) {
+    candidates.push(specifier);
+  } else if (specifier.startsWith('.') || specifier.startsWith('/')) {
+    if (importer && !importer.startsWith('\0')) {
+      candidates.push(path.resolve(path.dirname(importer), specifier));
+    }
+    candidates.push(path.resolve(root, specifier));
+  } else {
+    try {
+      candidates.push(require.resolve(specifier, {
+        paths: [importer && !importer.startsWith('\0') ? path.dirname(importer) : root]
+      }));
+    } catch {
+      candidates.push(path.resolve(root, specifier));
+      candidates.push(path.resolve(root, 'node_modules', specifier));
+    }
+  }
+  return candidates.find(candidate => fs.existsSync(candidate) && fs.statSync(candidate).isFile()) ?? null;
+}
+
+class AssetRegistry {
+  private readonly records = new Map<string, RayactAssetRecord>();
+
+  constructor(private readonly root: string) {}
+
+  add(sourcePath: string, kind: 'asset' | 'worker'): RayactAssetRecord {
+    const absolute = path.resolve(sourcePath);
+    const bytes = fs.readFileSync(absolute);
+    const hash = crypto.createHash('sha256').update(bytes).digest('hex');
+    const id = assetId(hash, absolute);
+    const existing = this.records.get(id);
+    if (existing) return existing;
+    const name = path.basename(absolute);
+    const outputName = `${hash.slice(0, 16)}-${name.replace(/[^A-Za-z0-9_.-]/g, '_')}`;
+    const record: RayactAssetRecord = {
+      id,
+      name,
+      type: contentType(absolute),
+      hash,
+      size: bytes.byteLength,
+      sourcePath: normalizePath(path.relative(this.root, absolute)).startsWith('..')
+        ? normalizePath(absolute)
+        : normalizePath(path.relative(this.root, absolute)),
+      outputName,
+      kind
+    };
+    this.records.set(id, record);
+    return record;
+  }
+
+  all(): RayactAssetRecord[] {
+    return [...this.records.values()].sort((a, b) => a.id.localeCompare(b.id));
+  }
+}
+
+function assetExpression(record: RayactAssetRecord): string {
+  return `createAsset(${JSON.stringify({
+    id: record.id,
+    name: record.name,
+    type: record.type,
+    hash: record.hash,
+    size: record.size,
+    outputName: `assets/${record.outputName}`,
+    kind: record.kind
+  })})`;
+}
+
 const REACT_EXPORTS = [
   'Children', 'Component', 'Fragment', 'Profiler', 'PureComponent', 'StrictMode',
   'Suspense', 'cloneElement', 'createContext', 'createElement', 'createFactory',
@@ -87,7 +214,7 @@ interface VendorSpec {
 }
 
 const VENDOR_MODULES: Record<string, VendorSpec> = {
-  'react': { key: 'react', probe: 'createElement', exports: REACT_EXPORTS },
+  react: { key: 'react', probe: 'createElement', exports: REACT_EXPORTS },
   'react/jsx-runtime': { key: 'jsxRuntime', probe: 'jsx', exports: ['Fragment', 'jsx', 'jsxs'] },
   'react/jsx-dev-runtime': { key: 'jsxDevRuntime', probe: 'jsxDEV', exports: ['Fragment', 'jsxDEV'] }
 };
@@ -100,7 +227,6 @@ function vendorSharePlugin(): Plugin {
     async resolveId(id, importer) {
       const spec = VENDOR_MODULES[id];
       if (!spec) return null;
-      // Avoid intercepting the proxy's own re-import of the real module.
       if (importer && importer.startsWith(PREFIX)) return null;
       return `${PREFIX}${id}`;
     },
@@ -122,9 +248,9 @@ function vendorSharePlugin(): Plugin {
   };
 }
 
-// Virtual module that initializes react-refresh/runtime once in the global scope.
-// Included first in the bundle entry so it runs before any component code.
 const REFRESH_RUNTIME_SETUP_ID = 'virtual:rayact-refresh-runtime';
+const ENTRY_ID = 'virtual:rayact-entry';
+const DEV_CLIENT_ENTRY_ID = 'virtual:rayact-dev-client-entry';
 
 function rayactRefreshRuntimePlugin(): Plugin {
   return {
@@ -132,25 +258,26 @@ function rayactRefreshRuntimePlugin(): Plugin {
     enforce: 'pre',
     resolveId(id) {
       if (id === REFRESH_RUNTIME_SETUP_ID) return `\0${REFRESH_RUNTIME_SETUP_ID}`;
+      return null;
     },
     load(id) {
       if (id !== `\0${REFRESH_RUNTIME_SETUP_ID}`) return null;
-      // Idempotent: only initialize the runtime once across bundle re-evals.
       return [
         `import RefreshRuntime from 'react-refresh/runtime';`,
         `if (!globalThis.__REACT_REFRESH__) {`,
         `  RefreshRuntime.injectIntoGlobalHook(globalThis);`,
         `  globalThis.__REACT_REFRESH__ = RefreshRuntime;`,
         `}`,
-        // Re-bind $RefreshSig$ now that the runtime is definitely available.
-        `globalThis.$RefreshSig$ = function() { return RefreshRuntime.createSignatureFunctionForTransform(); };`,
+        `globalThis.$RefreshSig$ = function() { return RefreshRuntime.createSignatureFunctionForTransform(); };`
       ].join('\n');
     }
   };
 }
 
-export function rayactVitePlugin(options: BundleOptions): Plugin {
-  const resolvedEntry = normalizePath(path.resolve(options.root, options.entry));
+export function rayactVitePlugin(options: BundleOptions, registry = new AssetRegistry(path.resolve(options.root))): Plugin {
+  const root = path.resolve(options.root);
+  const resolvedEntry = normalizePath(path.resolve(root, options.entry));
+  const mode = options.mode ?? 'development';
 
   return {
     name: 'rayact-vite',
@@ -162,87 +289,199 @@ export function rayactVitePlugin(options: BundleOptions): Plugin {
         },
         resolve: {
           alias: {
-            '@rayact/react': normalizePath(path.resolve(options.root, 'packages/rayact-react/src/index.ts')),
-            '@rayact/runtime': normalizePath(path.resolve(options.root, 'packages/rayact-runtime/src/index.ts'))
+            '@rayact/react': normalizePath(path.resolve(root, 'packages/rayact-react/src/index.ts')),
+            '@rayact/runtime': normalizePath(path.resolve(root, 'packages/rayact-runtime/src/index.ts'))
           }
         }
       };
     },
     resolveId(id, importer) {
-      if (id === 'virtual:rayact-entry') return '\0virtual:rayact-entry';
-      const cssFile = resolveCssFile(id, importer, options.root);
+      if (id === ENTRY_ID) return `\0${ENTRY_ID}`;
+      if (id === DEV_CLIENT_ENTRY_ID) return `\0${DEV_CLIENT_ENTRY_ID}`;
+
+      const cssFile = resolveCssFile(id, importer, root);
       if (cssFile) return `\0rayact-css:${encodeURIComponent(cssFile)}.js`;
+
+      const file = resolveFileSpecifier(id, importer, root);
+      if (file && isAssetImport(file, root) && !isScriptOrStyle(file)) {
+        return `\0rayact-asset:${encodeURIComponent(file)}.js`;
+      }
       return null;
     },
     load(id) {
       if (id.startsWith('\0rayact-css:')) {
         const encoded = id.slice('\0rayact-css:'.length, -'.js'.length);
         const cssFile = decodeURIComponent(encoded);
-        const nativePath = toNativeCssPath(cssFile, options.root);
+        const nativePath = toNativeCssPath(cssFile, root);
         return [
           `const cssClasses = globalThis.importCSS(${JSON.stringify(nativePath)});`,
           'export default cssClasses;'
         ].join('\n');
       }
 
-      if (id !== '\0virtual:rayact-entry') return null;
-      return [
-        `globalThis.__RAYACT_ENTRY__ = ${JSON.stringify(resolvedEntry)};`,
-        // Refresh runtime must initialize before any component code runs.
-        `import ${JSON.stringify(REFRESH_RUNTIME_SETUP_ID)};`,
-        `import ${JSON.stringify(resolvedEntry)};`
-      ].join('\n');
+      if (id.startsWith('\0rayact-asset:')) {
+        const encoded = id.slice('\0rayact-asset:'.length, -'.js'.length);
+        const assetFile = decodeURIComponent(encoded);
+        const record = registry.add(assetFile, 'asset');
+        return [
+          `import { createAsset } from '@rayact/runtime';`,
+          `export default ${assetExpression(record)};`
+        ].join('\n');
+      }
+
+      if (id === `\0${DEV_CLIENT_ENTRY_ID}`) {
+        return [
+          `import { createBridge, createDevClient, installConsoleForwarding } from '@rayact/runtime';`,
+          `const serverUrl = globalThis.__RAYACT_DEV_SERVER__;`,
+          `if (!serverUrl) throw new Error('Rayact dev-client requires global __RAYACT_DEV_SERVER__');`,
+          `const bridge = createBridge(globalThis);`,
+          `const client = createDevClient({ serverUrl, bridge, global: globalThis });`,
+          `installConsoleForwarding(client, globalThis);`,
+          `client.connect();`
+        ].join('\n');
+      }
+
+      if (id !== `\0${ENTRY_ID}`) return null;
+      const imports = [
+        `globalThis.__RAYACT_ENTRY__ = ${JSON.stringify(resolvedEntry)};`
+      ];
+      if (mode === 'development') {
+        imports.push(`import ${JSON.stringify(REFRESH_RUNTIME_SETUP_ID)};`);
+      }
+      imports.push(`import ${JSON.stringify(resolvedEntry)};`);
+      return imports.join('\n');
+    },
+    async transform(source, id) {
+      if (id.startsWith('\0') || !/\.[cm]?[jt]sx?$/.test(id)) return null;
+      const workerCall = /spawnWorker\s*\(\s*(['"])([^'"]+\.(?:wasm|jsc|[cm]?[jt]sx?))\1/g;
+      let changed = false;
+      const imports = new Map<string, string>();
+      const transformed = source.replace(workerCall, (match, quote: string, specifier: string) => {
+        const file = resolveFileSpecifier(specifier, id, root);
+        if (!file || !isWorkerPath(file)) return match;
+        const record = registry.add(file, 'worker');
+        const local = `__rayactWorkerAsset${imports.size}`;
+        imports.set(local, assetExpression(record));
+        changed = true;
+        return `spawnWorker(${local}`;
+      });
+      if (!changed) return null;
+      return {
+        code: [
+          `import { createAsset } from '@rayact/runtime';`,
+          ...[...imports].map(([local, expr]) => `const ${local} = ${expr};`),
+          transformed
+        ].join('\n'),
+        map: null
+      };
     }
   };
 }
 
-export async function bundleRayactApp(options: BundleOptions): Promise<string> {
-  const result = await build({
-    root: options.root,
-    configFile: false,
-    mode: 'development',
-    logLevel: 'silent',
-    plugins: [
-      vendorSharePlugin(),
-      rayactVitePlugin(options),
-      rayactRefreshRuntimePlugin(),
-      react({
-        babel: {
-          // Force the refresh transform even in build mode (skipEnvCheck bypasses
-          // the NODE_ENV=production guard that would otherwise disable it).
-          plugins: [['react-refresh/babel', { skipEnvCheck: true }]]
-        }
-      })
-    ],
-    define: {
-      'process.env.NODE_ENV': JSON.stringify('development')
-    },
-    build: {
-      write: false,
-      minify: false,
-      sourcemap: 'inline',
-      target: 'es2020',
-      emptyOutDir: false,
-      rollupOptions: {
-        input: 'virtual:rayact-entry',
-        output: {
-          format: 'iife',
-          name: 'RayactDevBundle',
-          inlineDynamicImports: true,
-          extend: true,
-          banner: REFRESH_BANNER,
-          footer: REFRESH_FOOTER
-        }
-      }
-    }
-  });
-
+function extractCode(result: Awaited<ReturnType<typeof build>>): string {
   const rollupOutputs = (Array.isArray(result) ? result : [result]) as RollupOutput[];
   const outputs: Array<OutputChunk | OutputAsset> = rollupOutputs.flatMap(item => item.output);
   const chunk = outputs.find((output): output is OutputChunk => output.type === 'chunk');
   if (!chunk || chunk.type !== 'chunk') {
     throw new Error('Vite did not produce a JavaScript bundle');
   }
-
   return chunk.code;
+}
+
+async function runViteBuild(options: BundleOptions, registry: AssetRegistry, input: string): Promise<string> {
+  const mode = options.mode ?? 'development';
+  const isDev = mode === 'development';
+  const result = await build({
+    root: options.root,
+    configFile: false,
+    mode: isDev ? 'development' : 'production',
+    logLevel: 'silent',
+    plugins: [
+      ...(isDev ? [vendorSharePlugin()] : []),
+      rayactVitePlugin(options, registry),
+      ...(isDev ? [rayactRefreshRuntimePlugin()] : []),
+      react({
+        babel: isDev
+          ? { plugins: [['react-refresh/babel', { skipEnvCheck: true }]] }
+          : undefined
+      })
+    ],
+    define: {
+      'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production')
+    },
+    build: {
+      write: false,
+      minify: mode === 'release',
+      sourcemap: isDev ? 'inline' : true,
+      target: 'es2020',
+      emptyOutDir: false,
+      rollupOptions: {
+        input,
+        output: {
+          format: 'iife',
+          name: mode === 'dev-client' ? 'RayactDevClientBundle' : 'RayactBundle',
+          inlineDynamicImports: true,
+          extend: true,
+          banner: isDev ? REFRESH_BANNER : undefined,
+          footer: isDev ? REFRESH_FOOTER : undefined
+        }
+      }
+    }
+  });
+  return extractCode(result);
+}
+
+export async function buildRayactBundle(options: BundleOptions): Promise<RayactBuildOutput> {
+  const mode = options.mode ?? 'development';
+  const root = path.resolve(options.root);
+  const registry = new AssetRegistry(root);
+  const input = mode === 'dev-client' ? DEV_CLIENT_ENTRY_ID : ENTRY_ID;
+  const code = await runViteBuild({ ...options, root, mode }, registry, input);
+  return {
+    code,
+    assets: registry.all(),
+    entry: normalizePath(path.relative(root, path.resolve(root, options.entry))),
+    platform: options.platform,
+    mode
+  };
+}
+
+export async function bundleRayactApp(options: BundleOptions): Promise<string> {
+  return (await buildRayactBundle({ ...options, mode: options.mode ?? 'development' })).code;
+}
+
+export async function writeRayactBuild(options: BundleOptions): Promise<RayactBuildOutput> {
+  if (!options.outDir) {
+    throw new Error('writeRayactBuild requires outDir');
+  }
+  const output = await buildRayactBundle(options);
+  const outDir = path.resolve(options.outDir);
+  const assetDir = path.join(outDir, 'assets');
+  fs.mkdirSync(assetDir, { recursive: true });
+  fs.writeFileSync(path.join(outDir, output.mode === 'dev-client' ? 'dev-client.js' : 'bundle.js'), output.code);
+
+  for (const asset of output.assets) {
+    const sourcePath = path.isAbsolute(asset.sourcePath)
+      ? asset.sourcePath
+      : path.resolve(options.root, asset.sourcePath);
+    fs.copyFileSync(sourcePath, path.join(assetDir, asset.outputName));
+  }
+
+  fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({
+    entry: output.entry,
+    platform: output.platform,
+    mode: output.mode,
+    bundle: output.mode === 'dev-client' ? 'dev-client.js' : 'bundle.js',
+    assets: output.assets.map(asset => ({
+      id: asset.id,
+      name: asset.name,
+      type: asset.type,
+      hash: asset.hash,
+      size: asset.size,
+      outputName: `assets/${asset.outputName}`,
+      kind: asset.kind
+    }))
+  }, null, 2));
+
+  return output;
 }
