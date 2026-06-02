@@ -74,8 +74,13 @@ target_include_directories(qjs PUBLIC ${QUICKJS_DIR})
 set(RAYM3_FETCH_DEPS OFF CACHE BOOL "" FORCE)
 set(RAYM3_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(RAYM3_USE_YOGA ON CACHE BOOL "" FORCE)
+set(RAYM3_USE_INPUT_LAYERS 0 CACHE BOOL "" FORCE)  # raw-test: v2::Render draws immediately (no deferred RenderQueue)
 set(YOGA_DIR "${RAYM3_DIR}/build-v2-yoga2/_deps/yoga-src" CACHE PATH "" FORCE)
 add_subdirectory(${RAYM3_DIR} ${CMAKE_BINARY_DIR}/raym3 EXCLUDE_FROM_ALL)
+
+if (RAYACT_ANDROID_USE_RLVK)
+    target_compile_definitions(raym3 PUBLIC RAYLIB_USE_RLVK)
+endif()
 
 # ---------------------------------------------------------------------------
 # cssparser
@@ -109,7 +114,7 @@ set(ENGINE_SRC
 
 add_library(rayact SHARED ${ENGINE_SRC})
 target_compile_definitions(rayact PRIVATE
-    RAYACT_ANDROID ${GLES3}
+    RAYACT_ANDROID RAYACT_ANDROID_RAYM3_TEST ${GLES3}
     $<$<NOT:$<BOOL:${RAYACT_ANDROID_FULL}>>:RAYACT_NO_NET RAYACT_NO_WORKERS RAYACT_NO_TS>
 )
 target_include_directories(rayact PRIVATE

@@ -25,6 +25,8 @@ extern "C" {
 
 #include <raym3/raym3.h>
 #include <raym3/v2/Renderer.h>
+#include <raym3/v2/View.h>
+#include <raym3/v2/Style.h>
 #include <raym3/styles/Theme.h>
 #ifndef RAYACT_NO_NET
 #include <curl/curl.h>
@@ -111,6 +113,13 @@ static std::vector<Shape> g_shapes;
 static std::string g_devServerUrl;
 static int g_devRevision = 0;
 static std::chrono::steady_clock::time_point g_nextDevPoll = std::chrono::steady_clock::now();
+
+#ifdef RAYACT_ANDROID
+#include <android/log.h>
+#define RAYACT_LOG_E(...) __android_log_print(ANDROID_LOG_ERROR, "RayactEngine", __VA_ARGS__)
+#else
+#define RAYACT_LOG_E(...) do { fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while (0)
+#endif
 
 #ifdef RAYACT_ANDROID
 static void drawAndroidDiagnosticCube(int width, int height) {
@@ -1270,19 +1279,36 @@ bool engineLoadSource(const std::string& source, const std::string& name) {
     if (JS_IsException(r)) {
         JSValue e = JS_GetException(g_ctx);
         const char* s = JS_ToCString(g_ctx, e);
-        fprintf(stderr, "JavaScript error in '%s': %s\n", name.c_str(), s ? s : "(unknown)");
+        RAYACT_LOG_E("JavaScript error in '%s': %s", name.c_str(), s ? s : "(unknown)");
         if (s) JS_FreeCString(g_ctx, s);
         JS_FreeValue(g_ctx, e);
         JS_FreeValue(g_ctx, r);
         return false;
     }
     JS_FreeValue(g_ctx, r);
+    engineFlushStartupJobs();
     return true;
 }
 
+void engineFlushStartupJobs() {
+    if (!g_ctx) return;
+    for (int i = 0; i < 256; ++i) js_std_loop_once(g_ctx);
+}
+
+void enginePrepareJSThread() {
+    if (!g_rt) return;
+    JS_SetMaxStackSize(g_rt, 8 * 1024 * 1024);
+    JS_UpdateStackTop(g_rt);
+}
+
 void engineFinishLoad() {
-    // Needs a live GL context (window/surface ready) — rasterize icon atlas, GC.
     buildIconSpriteSheet();
+    // Shapes/text batching uses the font white-glyph region by default; on Vulkan
+    // Android that atlas upload can sample black — use the 1x1 default texture for
+    // solid shape fills (text still uses the font texture via DrawTextEx).
+    SetShapesTexture(
+        (Texture2D){ 1, 1, 1, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 },
+        (Rectangle){ 0.0f, 0.0f, 1.0f, 1.0f });
     JS_RunGC(g_rt);
     raym3::Initialize();
     initSystemAppearance(g_ctx);
@@ -1322,8 +1348,83 @@ void enginePumpJS() {
     }
 }
 
+// rlgl matrix stack (C linkage) — used for the Android dp content scale.
+extern "C" { void rlPushMatrix(void); void rlPopMatrix(void); void rlScalef(float, float, float); }
+
 void engineRenderFrame(int width, int height) {
     BeginDrawing();
+#if defined(RAYACT_ANDROID) && defined(RAYACT_ANDROID_RAYM3_TEST)
+    // Raw C++ raym3 v2 layout test — no JS, no RenderQueue. Isolates raym3 v2
+    // rendering on rlvk. Build raym3 with RAYM3_USE_INPUT_LAYERS=0 so v2::Render
+    // draws immediately (no deferred queue).
+    {
+        using namespace raym3::v2;
+        // Scale by density so styles are authored in dp, not raw px. On a ~3.5x
+        // device a 200dp box is 700px; layout happens in dp (logical = px/dp),
+        // then the modelview is scaled by dp so it covers the full pixel surface.
+        float dp = GetWindowScaleDPI().x;
+        if (dp < 0.5f) dp = 1.0f;
+        const float logicalW = (float)width / dp;
+        const float logicalH = (float)height / dp;
+        static NodePtr testRoot = nullptr;
+        if (!testRoot) {
+            auto box = [](Color c) {
+                ViewProps p;
+                p.style.width = 90.0f; p.style.height = 90.0f;
+                p.style.backgroundColor = c; p.style.borderRadius = 16.0f;
+                return View(p, {});
+            };
+            ViewProps rowP;
+            rowP.style.flexDirection = FlexDirection::Row;
+            rowP.style.gap = 12.0f;
+            ViewProps rootP;
+            rootP.style.flexDirection = FlexDirection::Column;
+            rootP.style.gap = 16.0f;
+            rootP.style.backgroundColor = Color{27, 42, 74, 255};
+            rootP.style.padding.all = 24.0f;
+            rootP.style.width = logicalW;
+            rootP.style.height = logicalH;
+            // Clip container: overflow:Hidden 360x220 holding an oversized child.
+            // If scissor clipping works on rlvk, the child is cut to the box.
+            ViewProps clipP;
+            clipP.style.width = 200.0f; clipP.style.height = 120.0f;
+            clipP.style.overflow = Overflow::Hidden;
+            clipP.style.backgroundColor = Color{60, 60, 80, 255};
+            ViewProps bigChildP;
+            bigChildP.style.width = 400.0f; bigChildP.style.height = 400.0f;
+            bigChildP.style.backgroundColor = Color{90, 200, 255, 255};
+            auto mkBtn = [](const char* label, raym3::ButtonVariant v) {
+                ButtonProps bp; bp.label = label; bp.variant = v;
+                bp.onPress = [label]() { TraceLog(LOG_INFO, "RAYACT: button pressed: %s", label); };
+                return Button(bp, {});
+            };
+            ViewProps btnRowP;
+            btnRowP.style.flexDirection = FlexDirection::Row;
+            btnRowP.style.gap = 16.0f;
+            testRoot = View(rootP, {
+                Text("raym3 v2 raw layout", {}),
+                View(rowP, { box(Color{233,69,96,255}), box(Color{68,204,102,255}), box(Color{255,201,74,255}) }),
+                View(btnRowP, { mkBtn("Filled", raym3::ButtonVariant::Filled), mkBtn("Outlined", raym3::ButtonVariant::Outlined), mkBtn("Tonal", raym3::ButtonVariant::Tonal) }),
+                View(clipP, { View(bigChildP, {}) }),
+            });
+        }
+        ClearBackground((Color){20, 20, 30, 255});
+        Rectangle bounds = {0, 0, logicalW, logicalH};
+        rlPushMatrix();
+        rlScalef(dp, dp, 1.0f);          // dp → px
+        UpdateLayout(testRoot, bounds);
+        Render(testRoot, bounds);
+        rlPopMatrix();
+        // Touch → press dispatch in logical (dp) coords (mouse is in px).
+        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+            Vector2 m = GetMousePosition();
+            auto hit = HitTest(testRoot, (Vector2){ m.x / dp, m.y / dp });
+            if (hit && hit->onPress) hit->onPress();
+        }
+        EndDrawing();
+        return;
+    }
+#endif
 #if defined(RAYACT_ANDROID) && defined(RAYACT_ANDROID_DIAGNOSTIC)
     // Native smoke-test screen (set -DRAYACT_ANDROID_DIAGNOSTIC to use). Bypasses raym3.
     ClearBackground((Color){20, 20, 30, 255});
@@ -1332,7 +1433,11 @@ void engineRenderFrame(int width, int height) {
     EndDrawing();
     return;
 #endif
+#if defined(RAYACT_ANDROID)
+    ClearBackground((Color){255, 0, 255, 255}); // DIAGNOSTIC: magenta — if it shows, raym3 draws produce nothing
+#else
     ClearBackground(BLACK);
+#endif
     raym3::BeginFrame();
 
     if (g_root) {

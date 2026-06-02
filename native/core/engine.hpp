@@ -32,6 +32,13 @@ bool engineLoadDevServer(const std::string& devServerUrl);
 bool engineLoadFile(const std::string& path);          // sets release asset base dir
 bool engineLoadSource(const std::string& source, const std::string& name);
 
+// Drain QuickJS jobs/microtasks after initial eval (React mounts via microtasks).
+void engineFlushStartupJobs();
+
+// QuickJS captures stack limits at runtime creation; call from the thread that
+// runs JS before the first eval/pump (Android: render thread, not UI thread).
+void enginePrepareJSThread();
+
 // After JS init has run and a window/surface exists: rasterize the icon sprite
 // sheet (needs GL) and run a GC pass. Also brings up raym3 + system appearance.
 void engineFinishLoad();

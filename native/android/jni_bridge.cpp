@@ -16,6 +16,7 @@
 #include <string>
 
 #include "../core/engine.hpp"
+#include "../desktop/raym3_bridge.hpp"
 
 extern "C" {
 #include "rcore_android_surface.h"   // RcoreAndroidSurface_* host hooks (from raylib)
@@ -37,6 +38,9 @@ void  SetTargetFPS(int fps);
 namespace {
 bool g_engineReady = false;   // engineCreate() done
 bool g_windowReady = false;   // raylib InitWindow done on the current surface
+bool g_scriptExecuted = false;
+int g_pendingScriptMode = -1; // 0 = source string, 1 = dev-server URL
+std::string g_pendingScript;
 ANativeWindow *g_window = nullptr;
 
 std::string jstr(JNIEnv *env, jstring s) {
@@ -63,15 +67,29 @@ Java_com_rayact_engine_RayactEngine_nativeCreate(JNIEnv *env, jclass, jstring da
     return JNI_TRUE;
 }
 
-// Load the application JS. mode 0 = source string, mode 1 = dev-server URL.
+// Queue application JS for load on the render thread (QuickJS is not thread-safe).
 JNIEXPORT jboolean JNICALL
 Java_com_rayact_engine_RayactEngine_nativeLoadScript(JNIEnv *env, jclass, jint mode, jstring arg) {
     if (!g_engineReady) return JNI_FALSE;
-    std::string a = jstr(env, arg);
-    bool ok = (mode == 1) ? rayact::engineLoadDevServer(a)
-                          : rayact::engineLoadSource(a, "app.js");
-    if (!ok) LOGE("nativeLoadScript(mode=%d) failed", mode);
-    return ok ? JNI_TRUE : JNI_FALSE;
+    g_pendingScript = jstr(env, arg);
+    g_pendingScriptMode = mode;
+    return JNI_TRUE;
+}
+
+static bool executePendingScript() {
+    if (g_scriptExecuted || g_pendingScriptMode < 0) return g_scriptExecuted;
+    rayact::enginePrepareJSThread();
+    bool ok = (g_pendingScriptMode == 1)
+        ? rayact::engineLoadDevServer(g_pendingScript)
+        : rayact::engineLoadSource(g_pendingScript, "app.js");
+    if (!ok) {
+        LOGE("executePendingScript(mode=%d) failed", g_pendingScriptMode);
+        return false;
+    }
+    g_scriptExecuted = true;
+    LOGI("JS loaded on render thread: nodes=%zu root=%s",
+        g_nodes.size(), g_root ? "yes" : "no");
+    return true;
 }
 
 // Surface available: bind raylib's GL context to this window. Called on the
@@ -84,11 +102,11 @@ Java_com_rayact_engine_RayactEngine_nativeSurfaceCreated(JNIEnv *env, jclass, jo
     RcoreAndroidSurface_SetDensity(density);
 
     if (!g_windowReady) {
-        // Window == screen: InitWindow(0,0) -> the platform reads the surface size.
-        SetTargetFPS(0);                 // host drives cadence via Choreographer
+        SetTargetFPS(0);
+        if (!executePendingScript()) { LOGE("Pending script load failed"); return; }
         InitWindow(0, 0, "Rayact");
         if (!IsWindowReady()) { LOGE("InitWindow failed (no GL surface)"); return; }
-        rayact::engineFinishLoad();      // icon atlas + GC + raym3 init (needs GL)
+        rayact::engineFinishLoad();
         g_windowReady = true;
         LOGI("Surface created: %dx%d", GetRenderWidth(), GetRenderHeight());
     }

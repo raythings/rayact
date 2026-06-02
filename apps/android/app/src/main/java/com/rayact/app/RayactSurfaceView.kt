@@ -52,7 +52,7 @@ class RayactSurfaceView @JvmOverloads constructor(
     private class RenderThread(
         private val surface: Surface,
         private val density: Float
-    ) : Thread("RayactRender"), Choreographer.FrameCallback {
+    ) : Thread(null, null, "RayactRender", 8L * 1024 * 1024), Choreographer.FrameCallback {
 
         @Volatile private var running = false
         private lateinit var choreographer: Choreographer
