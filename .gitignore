@@ -6,6 +6,10 @@ node_modules/
 # Build outputs
 build/
 dist/
+.gradle/
+.cxx/
+*.apk
+local.properties
 cmake-build-*/
 CMakeFiles/
 CMakeCache.txt

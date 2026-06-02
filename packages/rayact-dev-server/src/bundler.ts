@@ -290,7 +290,13 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
         resolve: {
           alias: {
             '@rayact/react': normalizePath(path.resolve(root, 'packages/rayact-react/src/index.ts')),
-            '@rayact/runtime': normalizePath(path.resolve(root, 'packages/rayact-runtime/src/index.ts'))
+            '@rayact/runtime': normalizePath(path.resolve(root, 'packages/rayact-runtime/src/index.ts')),
+            '@rayact/shared': normalizePath(path.resolve(root, 'packages/rayact-shared/src/index.ts')),
+            '@rayact/navigation': normalizePath(path.resolve(root, 'packages/rayact-navigation/src/index.tsx')),
+            // Vendored react-navigation (sibling repo) — core + routers are
+            // platform-agnostic (no react-native imports), bundled from source.
+            '@react-navigation/core': normalizePath(path.resolve(root, '../react-navigation/packages/core/src/index.tsx')),
+            '@react-navigation/routers': normalizePath(path.resolve(root, '../react-navigation/packages/routers/src/index.tsx'))
           }
         }
       };

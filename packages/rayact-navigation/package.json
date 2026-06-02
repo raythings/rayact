@@ -1,0 +1,21 @@
+{
+  "name": "@rayact/navigation",
+  "version": "0.1.0",
+  "description": "react-navigation bindings for rayact (custom navigator over @react-navigation/core)",
+  "main": "src/index.tsx",
+  "types": "src/index.tsx",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "@rayact/react": "*",
+    "@rayact/shared": "*",
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "dependencies": {
+    "@react-navigation/core": "*",
+    "@react-navigation/routers": "*"
+  },
+  "license": "MIT"
+}

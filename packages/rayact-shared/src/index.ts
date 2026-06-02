@@ -300,6 +300,19 @@ export function getTouchPoint(event: TouchEvent, identifier: number): TouchPoint
  */
 
 export function detectPlatform(): Platform {
+  // Native hosts (desktop/android) inject the authoritative platform via
+  // globalThis.__rayactPlatform at context init — prefer it over userAgent.
+  const injected = (globalThis as any).__rayactPlatform;
+  if (injected && typeof injected.os === 'string') {
+    switch (injected.os.toLowerCase()) {
+      case 'android': return Platform.ANDROID;
+      case 'ios': return Platform.IOS;
+      case 'macos': return Platform.MACOS;
+      case 'windows': return Platform.WINDOWS;
+      case 'linux': return Platform.LINUX;
+      case 'web': return Platform.WEB;
+    }
+  }
   if (typeof window !== 'undefined') {
     if (/Android/i.test(navigator.userAgent)) return Platform.ANDROID;
     if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return Platform.IOS;
@@ -316,4 +329,23 @@ export function detectPlatform(): Platform {
 
 export function isTouchDevice(): boolean {
   return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+}
+
+/**
+ * React-Native-style Platform module (merged with the Platform enum above via
+ * declaration merging, so `Platform.ANDROID` constants and `Platform.OS`
+ * coexist). Apps write `Platform.OS === Platform.ANDROID` / `Platform.select`.
+ */
+export namespace Platform {
+  /** The current platform, resolved once at module load (native injects __rayactPlatform before app JS runs). */
+  export const OS: Platform = detectPlatform();
+  /** OS version string from the native host, when available. */
+  export const Version: string =
+    ((globalThis as any).__rayactPlatform?.version as string | undefined) ?? '';
+  /** Pick a value by platform, RN-style. Falls back to `default`. */
+  export function select<T>(specifics: Partial<Record<Platform | 'native' | 'default', T>>): T | undefined {
+    if (OS in specifics) return specifics[OS];
+    if (OS !== Platform.WEB && 'native' in specifics) return specifics.native;
+    return specifics.default;
+  }
 }

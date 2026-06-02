@@ -2,14 +2,21 @@
 #include "theme_bridge.hpp"
 #include "system_appearance.hpp"
 #include "platform.hpp"
+#include "../core/engine.hpp"
 #include "quickjs_bridge.hpp"
 #include "raym3_bridge.hpp"
 #include "css_bridge.hpp"
 #include "js_stdlib.hpp"
+#ifndef RAYACT_NO_WORKERS
 #include "workers.hpp"
+#endif
+#ifndef RAYACT_NO_NET
 #include "net.hpp"
+#endif
+#ifndef RAYACT_NO_TS
 #include "utils/TypeStripper.h"
 #include "utils/ScriptValidator.h"
+#endif
 
 extern "C" {
 #include "quickjs.h"
@@ -19,12 +26,17 @@ extern "C" {
 #include <raym3/raym3.h>
 #include <raym3/v2/Renderer.h>
 #include <raym3/styles/Theme.h>
+#ifndef RAYACT_NO_NET
 #include <curl/curl.h>
+#endif
 
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
 #include <cstring>
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -99,6 +111,94 @@ static std::vector<Shape> g_shapes;
 static std::string g_devServerUrl;
 static int g_devRevision = 0;
 static std::chrono::steady_clock::time_point g_nextDevPoll = std::chrono::steady_clock::now();
+
+#ifdef RAYACT_ANDROID
+static void drawAndroidDiagnosticCube(int width, int height) {
+    const float time = static_cast<float>(GetTime());
+    struct CubeVertex3 {
+        float x;
+        float y;
+        float z;
+    };
+    struct CubeFace {
+        int i0;
+        int i1;
+        int i2;
+        int i3;
+        Color color;
+        float depth;
+    };
+
+    const float angleY = time * 0.95f;
+    const float angleX = time * 0.55f;
+    const float cubeSize = 1.25f;
+    const float half = cubeSize * 0.5f;
+    const float cameraDistance = 4.2f;
+    const float focal = 760.0f;
+    const float centerX = width * 0.5f;
+    const float centerY = height * 0.56f;
+
+    const float sinY = std::sinf(angleY);
+    const float cosY = std::cosf(angleY);
+    const float sinX = std::sinf(angleX);
+    const float cosX = std::cosf(angleX);
+
+    const std::array<CubeVertex3, 8> base = {{
+        {-half, -half, -half},
+        { half, -half, -half},
+        { half,  half, -half},
+        {-half,  half, -half},
+        {-half, -half,  half},
+        { half, -half,  half},
+        { half,  half,  half},
+        {-half,  half,  half},
+    }};
+
+    std::array<CubeVertex3, 8> rotated = {};
+    std::array<Vector2, 8> projected = {};
+    for (size_t i = 0; i < base.size(); ++i) {
+        const CubeVertex3& v = base[i];
+        const float xzX = cosY * v.x + sinY * v.z;
+        const float xzZ = -sinY * v.x + cosY * v.z;
+        const float yzY = cosX * v.y - sinX * xzZ;
+        const float yzZ = sinX * v.y + cosX * xzZ;
+
+        rotated[i] = {xzX, yzY, yzZ};
+
+        const float invZ = 1.0f / (cameraDistance - yzZ);
+        projected[i] = {
+            centerX + xzX * focal * invZ,
+            centerY + yzY * focal * invZ
+        };
+    }
+
+    std::array<CubeFace, 6> faces = {{
+        {4, 5, 6, 7, (Color){255, 210, 70, 255}, 0.0f},
+        {0, 1, 2, 3, (Color){120, 170, 255, 255}, 0.0f},
+        {0, 4, 7, 3, (Color){255, 110, 110, 255}, 0.0f},
+        {1, 5, 6, 2, (Color){90, 235, 140, 255}, 0.0f},
+        {3, 2, 6, 7, (Color){255, 150, 80, 255}, 0.0f},
+        {0, 1, 5, 4, (Color){190, 130, 255, 255}, 0.0f},
+    }};
+
+    for (CubeFace& face : faces) {
+        face.depth = (rotated[face.i0].z + rotated[face.i1].z + rotated[face.i2].z + rotated[face.i3].z) * 0.25f;
+    }
+
+    std::sort(faces.begin(), faces.end(), [](const CubeFace& a, const CubeFace& b) {
+        return a.depth < b.depth;
+    });
+
+    for (const CubeFace& face : faces) {
+        DrawTriangle(projected[face.i0], projected[face.i1], projected[face.i2], face.color);
+        DrawTriangle(projected[face.i0], projected[face.i2], projected[face.i3], face.color);
+        DrawLineV(projected[face.i0], projected[face.i1], BLACK);
+        DrawLineV(projected[face.i1], projected[face.i2], BLACK);
+        DrawLineV(projected[face.i2], projected[face.i3], BLACK);
+        DrawLineV(projected[face.i3], projected[face.i0], BLACK);
+    }
+}
+#endif
 
 // Initialize QuickJS runtime
 static JSRuntime* initRuntime() {
@@ -190,6 +290,17 @@ static void registerNativeFunctions(JSContext* ctx) {
         global = JS_GetGlobalObject(ctx);
     }
 
+    // Platform identity for JS Platform.OS (mirrors RN). JS reads
+    // globalThis.__rayactPlatform.os in detectPlatform() before userAgent.
+    {
+        JSValue platform = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, platform, "os",
+                          JS_NewString(ctx, PlatformBridge::getPlatformName()));
+        JS_SetPropertyStr(ctx, platform, "version",
+                          JS_NewString(ctx, PlatformBridge::getPlatformVersion().c_str()));
+        JS_SetPropertyStr(ctx, global, "__rayactPlatform", platform);
+    }
+
     // Window management functions
     if (g_windowManagementEnabled) {
         JS_SetPropertyStr(ctx, global, "createWindow",
@@ -208,7 +319,9 @@ static void registerNativeFunctions(JSContext* ctx) {
 
     // console, timers, performance, queueMicrotask, print, structuredClone, globalThis
     registerJSStdlib(ctx);
+#ifndef RAYACT_NO_NET
     registerNetBindings(ctx);
+#endif
 
     // Original Raylib functions
     JS_SetPropertyStr(ctx, global, "initRaylib",
@@ -389,10 +502,14 @@ static void registerNativeFunctions(JSContext* ctx) {
 
     JS_FreeValue(ctx, global);
 
+#ifndef RAYACT_NO_WORKERS
     // Worker system (spawnWorker, postToWorker, terminateWorker, drawWorkerCanvas)
     registerWorkerBindings(ctx);
+#endif
+#ifndef RAYACT_NO_NET
     // Network: fetch, EventSource, WebSocket
     registerNetBindings(ctx);
+#endif
 }
 
 // JavaScript function: initRaylib(width, height, title)
@@ -790,6 +907,11 @@ static bool loadJavaScriptFile(JSContext* ctx, const char* filename) {
     bool isTypeScript = (ext == ".ts" || ext == ".tsx");
 
     if (isTypeScript) {
+#ifdef RAYACT_NO_TS
+        // Android ships pre-stripped/bundled JS; the TS validator/stripper
+        // (tree-sitter) is not linked. Evaluate as-is.
+        (void)isTypeScript;
+#else
         std::vector<Fovea::ScriptError> errors;
         if (!Fovea::ScriptValidator::Validate(script, filename, errors)) {
             for (auto& e : errors) {
@@ -800,6 +922,7 @@ static bool loadJavaScriptFile(JSContext* ctx, const char* filename) {
         printf("TypeScript validated OK, stripping types...\n");
         script = Fovea::TypeStripper::Strip(script);
         printf("Stripped to %zu bytes\n", script.size());
+#endif
     }
 
     // Execute JavaScript
@@ -820,6 +943,7 @@ static bool loadJavaScriptFile(JSContext* ctx, const char* filename) {
     return true;
 }
 
+#ifndef RAYACT_NO_NET
 static size_t writeHttpBody(char* ptr, size_t size, size_t nmemb, void* userdata) {
     auto* body = static_cast<std::string*>(userdata);
     body->append(ptr, size * nmemb);
@@ -857,6 +981,7 @@ static bool httpGet(const std::string& url, std::string& body, std::string& erro
 
     return true;
 }
+#endif // RAYACT_NO_NET
 
 static std::string jsObjectString(JSContext* ctx, JSValue obj, const char* key) {
     JSValue value = JS_GetPropertyStr(ctx, obj, key);
@@ -908,6 +1033,9 @@ static JSValue JS_resolveAssetPath(JSContext* ctx, JSValue, int argc, JSValueCon
     std::filesystem::create_directories(cacheDir, ec);
     std::filesystem::path outPath = cacheDir / (id.empty() ? name : (id + "-" + name));
     if (!std::filesystem::exists(outPath)) {
+#ifdef RAYACT_NO_NET
+        return JS_ThrowTypeError(ctx, "resolveAssetPath: remote asset fetch needs the net subsystem (not built here)");
+#else
         std::string body;
         std::string error;
         if (!httpGet(url, body, error)) {
@@ -917,6 +1045,7 @@ static JSValue JS_resolveAssetPath(JSContext* ctx, JSValue, int argc, JSValueCon
         if (!file) return JS_ThrowTypeError(ctx, "resolveAssetPath: failed to open cache file");
         fwrite(body.data(), 1, body.size(), file);
         fclose(file);
+#endif
     }
     return JS_NewString(ctx, outPath.string().c_str());
 }
@@ -1003,6 +1132,11 @@ static void showDevErrorOverlay(JSContext* ctx, const std::string& message) {
 }
 
 static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
+#ifdef RAYACT_NO_NET
+    (void)ctx; (void)devServer;
+    fprintf(stderr, "Rayact: dev-server load needs the net subsystem (not built here)\n");
+    return false;
+#else
     printf("Connecting to Rayact dev server: %s\n", devServer.c_str());
     setGlobalString(ctx, "__RAYACT_DEV_SERVER__", devServer);
 
@@ -1041,9 +1175,14 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
     JS_FreeValue(ctx, result);
     printf("Successfully loaded Rayact dev bundle (%zu bytes)\n", bundle.size());
     return true;
+#endif // RAYACT_NO_NET
 }
 
 static void pollDevServer(JSContext* ctx) {
+#ifdef RAYACT_NO_NET
+    (void)ctx;
+    return;
+#else
     if (g_devServerUrl.empty()) return;
     auto now = std::chrono::steady_clock::now();
     if (now < g_nextDevPoll) return;
@@ -1082,6 +1221,7 @@ static void pollDevServer(JSContext* ctx) {
     JS_FreeValue(ctx, result);
     g_devRevision = revision;
     printf("Rayact dev bundle reloaded (%zu bytes)\n", bundle.size());
+#endif // RAYACT_NO_NET
 }
 
 static std::string getArgValue(int argc, char** argv, const std::string& name) {
@@ -1093,8 +1233,177 @@ static std::string getArgValue(int argc, char** argv, const std::string& name) {
     return "";
 }
 
-// Main application loop
+// ---------------------------------------------------------------------------
+// Engine API (native/core/engine.hpp). Defined here so the wrappers can see the
+// file-static helpers + globals above. Both the desktop main() and the Android
+// JNI host drive the engine through these.
+// ---------------------------------------------------------------------------
+namespace rayact {
+
+bool engineCreate() {
+    if (g_rt && g_ctx) return true;   // already created (process-singleton)
+    g_rt = initRuntime();
+    if (!g_rt) return false;
+    g_ctx = initContext(g_rt);
+    if (!g_ctx) { JS_FreeRuntime(g_rt); g_rt = nullptr; return false; }
+    registerNativeFunctions(g_ctx);
+    return true;
+}
+
+JSContext* engineContext() { return g_ctx; }
+
+bool engineLoadDevServer(const std::string& devServerUrl) {
+    return loadDevServerBundle(g_ctx, devServerUrl);
+}
+
+bool engineLoadFile(const std::string& path) {
+    std::filesystem::path scriptPath(path);
+    g_releaseAssetBaseDir = scriptPath.has_parent_path()
+        ? scriptPath.parent_path()
+        : std::filesystem::current_path();
+    return loadJavaScriptFile(g_ctx, path.c_str());
+}
+
+bool engineLoadSource(const std::string& source, const std::string& name) {
+    injectMaterialIcons(g_ctx);
+    JSValue r = JS_Eval(g_ctx, source.c_str(), source.size(), name.c_str(), JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(r)) {
+        JSValue e = JS_GetException(g_ctx);
+        const char* s = JS_ToCString(g_ctx, e);
+        fprintf(stderr, "JavaScript error in '%s': %s\n", name.c_str(), s ? s : "(unknown)");
+        if (s) JS_FreeCString(g_ctx, s);
+        JS_FreeValue(g_ctx, e);
+        JS_FreeValue(g_ctx, r);
+        return false;
+    }
+    JS_FreeValue(g_ctx, r);
+    return true;
+}
+
+void engineFinishLoad() {
+    // Needs a live GL context (window/surface ready) — rasterize icon atlas, GC.
+    buildIconSpriteSheet();
+    JS_RunGC(g_rt);
+    raym3::Initialize();
+    initSystemAppearance(g_ctx);
+}
+
+void enginePumpJS() {
+    JSContext* ctx = g_ctx;
+    // js_std_loop_once: drains pending jobs + fires expired QJS os.timers
+    // without blocking. js_std_loop (infinite poll) must not be used here.
+    js_std_loop_once(ctx);
+    tickJSTimers(ctx);
+    tickAnimationFrames(ctx);
+    tickSystemAppearance(ctx);
+    pollDevServer(ctx);
+#ifndef RAYACT_NO_NET
+    drainNetEvents(ctx);      // deliver fetch responses / SSE / WS frames
+#endif
+#ifndef RAYACT_NO_WORKERS
+    drainWorkerOutbox(ctx);   // deliver worker messages to JS (non-blocking)
+#endif
+
+    // Execute JS frame update callback if registered
+    if (!JS_IsUndefined(frameUpdateFunction)) {
+        if (!g_root) g_shapes.clear();
+        JSValue args[] = { JS_NewInt32(ctx, GetRenderWidth()), JS_NewInt32(ctx, GetRenderHeight()) };
+        JSValue result = JS_Call(ctx, frameUpdateFunction, JS_UNDEFINED, 2, args);
+        JS_FreeValue(ctx, args[0]);
+        JS_FreeValue(ctx, args[1]);
+        if (JS_IsException(result)) {
+            JSValue exception = JS_GetException(ctx);
+            const char* exceptionStr = JS_ToCString(ctx, exception);
+            fprintf(stderr, "JavaScript error in frame update: %s\n", exceptionStr);
+            JS_FreeCString(ctx, exceptionStr);
+            JS_FreeValue(ctx, exception);
+        }
+        JS_FreeValue(ctx, result);
+    }
+}
+
+void engineRenderFrame(int width, int height) {
+    BeginDrawing();
+#if defined(RAYACT_ANDROID) && defined(RAYACT_ANDROID_DIAGNOSTIC)
+    // Native smoke-test screen (set -DRAYACT_ANDROID_DIAGNOSTIC to use). Bypasses raym3.
+    ClearBackground((Color){20, 20, 30, 255});
+    drawAndroidDiagnosticCube(width, height);
+    DrawText("ROTATING CUBE SMOKE TEST", 80, 120, 52, (Color){235, 235, 245, 255});
+    EndDrawing();
+    return;
+#endif
+    ClearBackground(BLACK);
+    raym3::BeginFrame();
+
+    if (g_root) {
+        // raym3 v2 retained-mode path — render the current surface's tree.
+        Rectangle bounds = {0, 0, (float)width, (float)height};
+        raym3::v2::UpdateLayout(g_root, bounds);
+        raym3::v2::Render(g_root, bounds);
+
+        Vector2 mouse = GetMousePosition();
+        float wheelY = GetMouseWheelMove();
+        bool pressed  = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+        bool released = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
+        bool down     = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+        bool scrollDragConsumed = processRaym3ScrollInput(mouse, wheelY, pressed, down, released);
+
+#ifndef RAYACT_NO_WORKERS
+        // Route hover/move/drag/down/up to any worker canvas node
+        processWorkerInputEvents(mouse.x, mouse.y, pressed, released, down);
+#endif
+
+        // Standard raym3 press dispatch (fires onPress on release)
+        if (released && !scrollDragConsumed) {
+            auto hit = raym3::v2::HitTest(g_root, mouse);
+            if (hit && hit->onPress) hit->onPress();
+        }
+    } else {
+        // Fallback: immediate-mode shapes (backward compat)
+        for (const Shape& shape : g_shapes) {
+            Color c = {
+                (unsigned char)((shape.color >> 24) & 0xFF),
+                (unsigned char)((shape.color >> 16) & 0xFF),
+                (unsigned char)((shape.color >>  8) & 0xFF),
+                (unsigned char)( shape.color        & 0xFF)
+            };
+            switch (shape.type) {
+                case 0: DrawRectangle(shape.x, shape.y, shape.width, shape.height, c); break;
+                case 1: DrawCircle(shape.x, shape.y, shape.radius, c); break;
+                case 2: DrawLine(shape.x1, shape.y1, shape.x2, shape.y2, c); break;
+            }
+        }
+    }
+
+    raym3::EndFrame();
+    EndDrawing();
+}
+
+void engineDestroy() {
+    if (!g_ctx) return;
+    g_shapes.clear();
+#ifndef RAYACT_NO_WORKERS
+    shutdownWorkers();          // join all worker threads, unload canvas textures
+#endif
+#ifndef RAYACT_NO_NET
+    shutdownNetCtx(g_ctx);      // stop fetch/SSE/WS threads, free JS values
+#endif
+    cleanupRaym3Bridge(g_ctx);
+    cleanupCSSBridge(g_ctx);
+    cleanupJSStdlib(g_ctx);
+    JS_FreeContext(g_ctx);
+    js_std_free_handlers(g_rt);
+    JS_FreeRuntime(g_rt);
+    g_ctx = nullptr;
+    g_rt = nullptr;
+}
+
+} // namespace rayact
+
+#ifndef RAYACT_ANDROID
+// Desktop render loop: thin driver over the engine API.
 void mainLoop(JSContext* ctx) {
+    (void)ctx;
     printf("Starting main loop\n");
 
     if (!IsWindowReady()) {
@@ -1102,119 +1411,31 @@ void mainLoop(JSContext* ctx) {
         return;
     }
 
-    raym3::Initialize();
-    initSystemAppearance(ctx);
-    // Main event loop
+    // raym3::Initialize() + initSystemAppearance() were already done by
+    // rayact::engineFinishLoad() before this loop starts.
     while (!WindowShouldClose()) {
-        // Pump QJS event loop: 1ms timeout allows macOS Cocoa to process window
-        // events without blocking the 60fps render loop for more than ~1ms.
-        // js_std_loop_once: drains pending jobs + fires expired QJS os.timers
-        // without blocking. js_std_loop (infinite poll) must not be used here.
-        js_std_loop_once(ctx);
-        tickJSTimers(ctx);
-        tickAnimationFrames(ctx);
-        tickSystemAppearance(ctx);
-        drainNetEvents(ctx);
-        pollDevServer(ctx);
+        rayact::enginePumpJS();
+        rayact::engineRenderFrame(GetRenderWidth(), GetRenderHeight());
 
-        // Deliver worker messages to JS (outbox drain — non-blocking)
-        drainWorkerOutbox(ctx);
-        // Deliver network events (fetch responses, SSE messages, WS frames)
-        drainNetEvents(ctx);
-
-        // Execute JS frame update callback if registered
-        if (!JS_IsUndefined(frameUpdateFunction)) {
-            if (!g_root) g_shapes.clear();
-            JSValue args[] = { JS_NewInt32(ctx, GetRenderWidth()), JS_NewInt32(ctx, GetRenderHeight()) };
-            JSValue result = JS_Call(ctx, frameUpdateFunction, JS_UNDEFINED, 2, args);
-            JS_FreeValue(ctx, args[0]);
-            JS_FreeValue(ctx, args[1]);
-            if (JS_IsException(result)) {
-                JSValue exception = JS_GetException(ctx);
-                const char* exceptionStr = JS_ToCString(ctx, exception);
-                fprintf(stderr, "JavaScript error in frame update: %s\n", exceptionStr);
-                JS_FreeCString(ctx, exceptionStr);
-                JS_FreeValue(ctx, exception);
+        // Desktop-only scripted screenshot harness (RAYACT_SHOT).
+        if (std::getenv("RAYACT_SHOT")) {
+            static int sf = 0; ++sf;
+            if (sf == 5) SetWindowSize(1120, 900);
+            if (sf >= 60 && g_root) {
+                std::function<void(const raym3::v2::NodePtr&)> sc = [&](const raym3::v2::NodePtr& n){
+                    if (!n) return;
+                    if (n->scrollContentHeight > n->layout.height) n->scrollOffsetY = n->scrollContentHeight;
+                    for (auto& c : n->children) sc(c);
+                };
+                sc(g_root);
             }
-            JS_FreeValue(ctx, result);
+            if (sf == 120) TakeScreenshot("shot.png");
+            if (sf == 122) break;
         }
-
-        BeginDrawing();
-        ClearBackground(BLACK);
-
-        raym3::BeginFrame();
-
-        if (g_root) {
-            // raym3 v2 retained-mode path
-            Rectangle bounds = {0, 0, (float)GetRenderWidth(), (float)GetRenderHeight()};
-            raym3::v2::UpdateLayout(g_root, bounds);
-            raym3::v2::Render(g_root, bounds);
-
-            {
-                Vector2 mouse = GetMousePosition();
-                float wheelY = GetMouseWheelMove();
-                bool pressed  = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
-                bool released = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
-                bool down     = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
-                bool scrollDragConsumed = processRaym3ScrollInput(mouse, wheelY, pressed, down, released);
-
-                // Route hover/move/drag/down/up to any worker canvas node
-                processWorkerInputEvents(mouse.x, mouse.y, pressed, released, down);
-
-                // Standard raym3 press dispatch (fires onPress on release)
-                if (released && !scrollDragConsumed) {
-                    auto hit = raym3::v2::HitTest(g_root, mouse);
-                    if (hit && hit->onPress) hit->onPress();
-                }
-                if (std::getenv("RAYACT_SHOT")) { static int sf=0; ++sf; if(sf==5) SetWindowSize(1120,900);
-                    if(sf>=60){ std::function<void(const raym3::v2::NodePtr&)> sc=[&](const raym3::v2::NodePtr& n){ if(!n)return; if(n->scrollContentHeight > n->layout.height) n->scrollOffsetY = n->scrollContentHeight; for(auto&c:n->children) sc(c); }; sc(g_root); }
-                    if(sf==120) TakeScreenshot("shot.png"); if(sf==122) break; }
-            }
-        } else {
-            // Fallback: immediate-mode shapes (backward compat)
-            for (const Shape& shape : g_shapes) {
-                switch (shape.type) {
-                    case 0: {
-                        Color c = {
-                            (unsigned char)((shape.color >> 24) & 0xFF),
-                            (unsigned char)((shape.color >> 16) & 0xFF),
-                            (unsigned char)((shape.color >>  8) & 0xFF),
-                            (unsigned char)( shape.color        & 0xFF)
-                        };
-                        DrawRectangle(shape.x, shape.y, shape.width, shape.height, c);
-                        break;
-                    }
-                    case 1: {
-                        Color c = {
-                            (unsigned char)((shape.color >> 24) & 0xFF),
-                            (unsigned char)((shape.color >> 16) & 0xFF),
-                            (unsigned char)((shape.color >>  8) & 0xFF),
-                            (unsigned char)( shape.color        & 0xFF)
-                        };
-                        DrawCircle(shape.x, shape.y, shape.radius, c);
-                        break;
-                    }
-                    case 2: {
-                        Color c = {
-                            (unsigned char)((shape.color >> 24) & 0xFF),
-                            (unsigned char)((shape.color >> 16) & 0xFF),
-                            (unsigned char)((shape.color >>  8) & 0xFF),
-                            (unsigned char)( shape.color        & 0xFF)
-                        };
-                        DrawLine(shape.x1, shape.y1, shape.x2, shape.y2, c);
-                        break;
-                    }
-                }
-            }
-        }
-
-        raym3::EndFrame();
-        EndDrawing();
     }
 
     g_shapes.clear();
     raym3::Shutdown();
-
     printf("Main loop finished\n");
 }
 
@@ -1229,42 +1450,21 @@ int main(int argc, char** argv) {
 
     PlatformBridge::printPlatformInfo();
 
-    // Initialize QuickJS runtime
-    std::cout << "\n[1/3] Initializing QuickJS runtime..." << std::endl;
-    g_rt = initRuntime();
-    if (!g_rt) {
-        std::cerr << "Failed to create QuickJS runtime" << std::endl;
+    // Create the process-level engine (runtime + context + native fns).
+    std::cout << "\nInitializing Rayact engine..." << std::endl;
+    if (!rayact::engineCreate()) {
+        std::cerr << "Failed to create Rayact engine" << std::endl;
         return 1;
     }
-    std::cout << "✓ QuickJS runtime initialized successfully" << std::endl;
-
-    // Initialize QuickJS context
-    std::cout << "[2/3] Initializing QuickJS context..." << std::endl;
-    g_ctx = initContext(g_rt);
-    if (!g_ctx) {
-        std::cerr << "Failed to create QuickJS context" << std::endl;
-        JS_FreeRuntime(g_rt);
-        return 1;
-    }
-    std::cout << "✓ QuickJS context initialized successfully" << std::endl;
-
-    // Setup module loader for ES6 modules
-    // JS_SetModuleLoaderFunc(g_rt, nullptr, js_module_loader, nullptr);
-    // std::cout << "✓ ES6 module loader configured" << std::endl;
-
-    // Register native functions
-    std::cout << "[3/3] Registering native functions..." << std::endl;
-    registerNativeFunctions(g_ctx);
-    std::cout << "✓ Native functions registered" << std::endl;
+    g_ctx = rayact::engineContext();
+    std::cout << "✓ Engine initialized successfully" << std::endl;
 
     // --compile <src> [out.jsc]  — compile JS/TS to bytecode and exit
     if (argc >= 3 && std::string(argv[1]) == "--compile") {
         const char* src = argv[2];
         const char* out = argc >= 4 ? argv[3] : nullptr;
-        registerNativeFunctions(g_ctx); // needed for syntax that refs natives
         std::string result = compileJSToBytecode(g_ctx, src, out);
-        JS_FreeContext(g_ctx);
-        JS_FreeRuntime(g_rt);
+        rayact::engineDestroy();
         return result.empty() ? 1 : 0;
     }
 
@@ -1279,15 +1479,11 @@ int main(int argc, char** argv) {
     bool devMode = !devServer.empty();
 
     if (devMode) {
-        success = loadDevServerBundle(g_ctx, devServer);
+        success = rayact::engineLoadDevServer(devServer);
     } else if (argc > 1 && argv[1][0] != '-') {
         jsFile = argv[1];
-        std::filesystem::path scriptPath(jsFile);
-        g_releaseAssetBaseDir = scriptPath.has_parent_path()
-            ? scriptPath.parent_path()
-            : std::filesystem::current_path();
         std::cout << "\nAttempting to load: " << jsFile << std::endl;
-        success = loadJavaScriptFile(g_ctx, jsFile.c_str());
+        success = rayact::engineLoadFile(jsFile);
     }
 
 if (!success && !devMode) {
@@ -1330,19 +1526,13 @@ if (!success && !devMode) {
         printf("Usage: rayact_desktop [app.js]\n");
         printf("  app.js - JavaScript application to load (optional)\n");
         printf("\nIf no file is provided, a built-in demo will run.\n");
-        JS_FreeContext(g_ctx);
-        JS_FreeRuntime(g_rt);
+        rayact::engineDestroy();
         return 1;
     }
 
-    // Rasterize all icons used during JS init into a single sprite sheet texture.
-    // Must happen after JS runs (so all createIcon calls have registered their CPs)
-    // and after window is ready (so OpenGL RenderTexture is available).
-    buildIconSpriteSheet();
-
-    // Run GC before entering render loop — frees temp objects from script init
-    // (parsed AST fragments, intermediate closures, init-only allocations).
-    JS_RunGC(g_rt);
+    // Window is now ready (JS called initRaylib): rasterize icon atlas, GC,
+    // and bring up raym3 + system appearance.
+    rayact::engineFinishLoad();
 
     // Start main loop
     std::cout << "\nStarting main render loop..." << std::endl;
@@ -1350,19 +1540,11 @@ if (!success && !devMode) {
 
     // Cleanup
     std::cout << "\nCleaning up..." << std::endl;
-    g_shapes.clear();
-    shutdownWorkers();          // join all worker threads, unload canvas textures
-    shutdownNetCtx(g_ctx);      // stop fetch/SSE/WS threads, free JS values
-    cleanupRaym3Bridge(g_ctx);
-    cleanupCSSBridge(g_ctx);
-    cleanupJSStdlib(g_ctx);
-
-    JS_FreeContext(g_ctx);
-    js_std_free_handlers(g_rt);
-    JS_FreeRuntime(g_rt);
+    rayact::engineDestroy();
 
     std::cout << "========================================" << std::endl;
     std::cout << "  Rayact - Finished successfully" << std::endl;
     std::cout << "========================================" << std::endl;
     return 0;
 }
+#endif // RAYACT_ANDROID (desktop entry point: mainLoop + main)

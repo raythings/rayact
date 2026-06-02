@@ -47,5 +47,12 @@
     "mobile",
     "web"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@types/react": "^19.2.16",
+    "@types/react-reconciler": "^0.31.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-reconciler": "^0.31.0"
+  }
 }

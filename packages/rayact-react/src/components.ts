@@ -21,8 +21,9 @@ const searchIconSlotStyle = { width: 24, height: 24 };
 
 function withSearchIconSlot(node: React.ReactNode, style?: unknown): React.ReactNode {
   if (node && React.isValidElement(node) && node.type === Icon) {
-    return React.cloneElement(node as React.ReactElement<{ style?: unknown }>, {
-      style: [searchIconSlotStyle, node.props.style, style]
+    const iconNode = node as React.ReactElement<{ style?: unknown }>;
+    return React.cloneElement(iconNode, {
+      style: [searchIconSlotStyle, iconNode.props.style, style]
     });
   }
   return node;

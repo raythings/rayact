@@ -13,16 +13,16 @@
   "dependencies": {
     "@rayact/react": "0.1.0",
     "@rayact/shared": "0.1.0",
-    "react": "^18.2.0",
-    "react-reconciler": "^0.29.2"
+    "react": "^19.0.0",
+    "react-reconciler": "^0.31.0"
   },
   "peerDependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@types/react": "^18.2.47",
-    "@types/react-reconciler": "^0.28.9",
+    "@types/react": "^19.0.0",
+    "@types/react-reconciler": "^0.31.0",
     "typescript": "^5.8.3"
   },
   "keywords": [
