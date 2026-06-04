@@ -13,6 +13,7 @@ export function useSpring(target: number, options: SpringOptions = {}): number {
 
   return useAnimatedValue(target, {
     duration,
-    easing: options.easing
+    easing: options.easing,
+    onSettled: options.onSettled,
   });
 }

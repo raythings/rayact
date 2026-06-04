@@ -1,9 +1,29 @@
-import { createTheming } from '@callstack/react-theme-provider';
-import type { RayactTheme } from './tokens';
+import React from 'react';
 import { darkTheme } from './tokens';
+import type { RayactTheme } from './tokens';
 
-export const {
-  ThemeProvider,
-  useTheme,
-  withTheme
-} = createTheming<RayactTheme>(darkTheme);
+const ThemeContext = React.createContext<RayactTheme>(darkTheme);
+
+export function ThemeProvider({
+  theme,
+  children,
+}: {
+  theme: RayactTheme;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return React.createElement(ThemeContext.Provider, { value: theme }, children);
+}
+
+export function useTheme(): RayactTheme {
+  return React.useContext(ThemeContext);
+}
+
+export function withTheme<TProps extends { theme: RayactTheme }>(
+  Component: React.ComponentType<TProps>,
+) {
+  return function ThemeWrapped(props: Omit<TProps, 'theme'>): React.ReactElement {
+    const theme = useTheme();
+    return React.createElement(Component, { ...(props as TProps), theme });
+  };
+}
+

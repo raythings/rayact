@@ -90,6 +90,14 @@ export interface BaseProps {
   zIndex?: number;
   onPress?: () => void;
   onClick?: () => void;
+  /**
+   * RN-style layout callback. Receives `{ nativeEvent: { layout: { x, y, width, height } } }`.
+   * Used by the navigation transition container to size the slide/scale
+   * interpolator. Mirrors react-native's View.onLayout.
+   */
+  onLayout?: (event: {
+    nativeEvent: { layout: { x: number; y: number; width: number; height: number } };
+  }) => void;
 }
 
 export interface TextProps extends BaseProps {

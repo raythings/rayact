@@ -7,6 +7,11 @@
 #include <string>
 #include <vector>
 
+#include "raylib.h"
+
+// ─── debug: capture swallowed JS errors (timer / unhandled rejection) ─────────
+std::string g_lastJsError;
+
 // ─── timing ──────────────────────────────────────────────────────────────────
 
 static const auto s_epoch = std::chrono::steady_clock::now();
@@ -64,8 +69,8 @@ static std::string groupIndent() { return std::string(s_groupDepth * 2, ' '); }
 // ─── console methods ─────────────────────────────────────────────────────────
 
 static JSValue con_log(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
-    printf("%s%s\n", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
-    fflush(stdout);
+    std::string msg = groupIndent() + argsToStr(ctx, argc, argv);
+    TraceLog(LOG_INFO, "JS: %s", msg.c_str());
     return JS_UNDEFINED;
 }
 
@@ -465,7 +470,13 @@ void tickJSTimers(JSContext* ctx) {
         if (JS_IsException(result)) {
             JSValue exc = JS_GetException(ctx);
             const char* s = JS_ToCString(ctx, exc);
-            fprintf(stderr, "\033[31m[timer error] %s\033[0m\n", s ? s : "(unknown)");
+            std::string msg = s ? s : "(unknown)";
+            JSValue stk = JS_GetPropertyStr(ctx, exc, "stack");
+            const char* st = JS_ToCString(ctx, stk);
+            if (st) { msg += " | "; msg += st; }
+            g_lastJsError = "[timer] " + msg;
+            fprintf(stderr, "\033[31m[timer error] %s\033[0m\n", msg.c_str());
+            JS_FreeCString(ctx, st); JS_FreeValue(ctx, stk);
             JS_FreeCString(ctx, s);
             JS_FreeValue(ctx, exc);
         }
@@ -480,7 +491,22 @@ void tickJSTimers(JSContext* ctx) {
 
 // ─── registration ─────────────────────────────────────────────────────────────
 
+static void promiseRejectionTracker(JSContext* ctx, JSValueConst /*promise*/,
+                                    JSValueConst reason, bool is_handled, void* /*opaque*/) {
+    if (is_handled) return;
+    const char* s = JS_ToCString(ctx, reason);
+    std::string msg = s ? s : "(unknown)";
+    JS_FreeCString(ctx, s);
+    JSValue stk = JS_GetPropertyStr(ctx, reason, "stack");
+    const char* st = JS_ToCString(ctx, stk);
+    if (st) { msg += " | "; msg += st; }
+    JS_FreeCString(ctx, st); JS_FreeValue(ctx, stk);
+    g_lastJsError = "[rejection] " + msg;
+    fprintf(stderr, "\033[31m[unhandled rejection] %s\033[0m\n", msg.c_str());
+}
+
 void registerJSStdlib(JSContext* ctx) {
+    JS_SetHostPromiseRejectionTracker(JS_GetRuntime(ctx), promiseRejectionTracker, nullptr);
     JSValue global = JS_GetGlobalObject(ctx);
 
     // console

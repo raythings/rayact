@@ -14,7 +14,12 @@ const ReactReconciler = ReactReconcilerModule as unknown as (config: Record<stri
 
 type Child = RayactHostInstance | RayactTextInstance;
 
-const eventProps = ['onPress', 'onClick', 'onChangeText', 'onValueChange', 'onScroll', 'onRequestClose'] as const;
+// eventProps: properties consumed by the host (event callbacks) and
+// therefore stripped from the `updateNode` payload. `onLayout` is a
+// special case — the host does not currently wire a layout event back to
+// JS, but consumers may pass it; strip it from the payload so the bridge
+// doesn't try to apply it as a style/attribute.
+const eventProps = ['onPress', 'onClick', 'onChangeText', 'onValueChange', 'onScroll', 'onRequestClose', 'onLayout'] as const;
 
 const hostNodeTypes = new Set<string>([
   'root',
@@ -103,6 +108,7 @@ function syncTextContent(instance: RayactHostInstance): void {
 function attachEvents(instance: RayactHostInstance, props: Record<string, unknown>): void {
   const bridge = getDefaultRuntime().bridge;
   for (const prop of eventProps) {
+    if (prop === 'onLayout') continue;
     const handler = props[prop];
     if (typeof handler === 'function') {
       bridge.setEventHandler(instance.node, eventNameForProp(prop), handler as () => void);
@@ -113,6 +119,7 @@ function attachEvents(instance: RayactHostInstance, props: Record<string, unknow
 function updateEvents(instance: RayactHostInstance, oldProps: Record<string, unknown>, newProps: Record<string, unknown>): void {
   const bridge = getDefaultRuntime().bridge;
   for (const prop of eventProps) {
+    if (prop === 'onLayout') continue;
     if (oldProps[prop] !== newProps[prop]) {
       const handler = newProps[prop];
       bridge.setEventHandler(instance.node, eventNameForProp(prop), typeof handler === 'function' ? handler as () => void : null);
@@ -182,6 +189,9 @@ function diffProps(oldProps: Record<string, unknown>, newProps: Record<string, u
 
   for (const key of keys) {
     if (key === 'children') continue;
+    // Strip host-only / event-only props — they must not be forwarded as
+    // native style/attribute updates.
+    if ((eventProps as readonly string[]).includes(key)) continue;
     if (oldProps[key] !== newProps[key]) {
       payload[key] = newProps[key];
     }

@@ -1,0 +1,21 @@
+{
+  "name": "@rayact/crypto",
+  "version": "0.1.0",
+  "description": "crypto.getRandomValues + crypto.randomUUID polyfill for QuickJS-hosted React",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "keywords": [
+    "crypto",
+    "polyfill",
+    "quickjs"
+  ],
+  "license": "MIT"
+}

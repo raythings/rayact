@@ -89,6 +89,8 @@ export { RayactThemeProvider } from './theme/RayactThemeProvider';
 export type { RayactTheme } from './theme/tokens';
 export { useAnimatedValue, easeInOutCubic } from './anim/useAnimatedValue';
 export { useSpring } from './anim/useSpring';
+export { BackHandler, useBackHandler } from './BackHandler';
+export type { BackHandlerSubscription } from './BackHandler';
 
 interface StoredRoot {
   container: RayactContainer;
@@ -144,10 +146,21 @@ export function createRoot(container: RayactContainer = createHostContainer()): 
       RayactReconciler.updateContainer(element, fiberRoot, null, undefined);
     },
     unmount() {
-      RayactReconciler.updateContainer(null, fiberRoot, null, () => {
-        container.bridge.setRoot(null);
-        container.bridge.disposeNode(container.rootNode);
-      });
+      // Flush synchronously so the teardown (setRoot(null) + disposeNode) runs
+      // NOW, while the caller still has this root's screen bound as current.
+      // Otherwise the teardown is deferred to a microtask that runs after the
+      // caller has switched the current screen (e.g. a navigator popping back
+      // to a lower screen), and setRoot(null) would null the WRONG screen's
+      // root — blanking the screen being revealed.
+      const flush = (RayactReconciler as { flushSync?: (fn: () => void) => void }).flushSync;
+      const doUnmount = () => {
+        RayactReconciler.updateContainer(null, fiberRoot, null, () => {
+          container.bridge.setRoot(null);
+          container.bridge.disposeNode(container.rootNode);
+        });
+      };
+      if (flush) flush(doUnmount);
+      else doUnmount();
     }
   };
 

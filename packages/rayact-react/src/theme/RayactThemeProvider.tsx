@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ThemeProvider } from './theming';
 import { useColorScheme } from './colorSchemeStore';
 import { getNativeTheme, lerpTheme, type RayactTheme } from './tokens';
@@ -6,15 +6,10 @@ import { useAnimatedValue } from '../anim/useAnimatedValue';
 
 export function RayactThemeProvider({ children }: { children: React.ReactNode }): React.ReactElement {
   const isDark = useColorScheme();
-  const [, startTransition] = useTransition();
   const targetTheme = useMemo(() => getNativeTheme(isDark), [isDark]);
   const stableThemeRef = useRef(targetTheme);
   const [blend, setBlend] = useState<{ from: RayactTheme; to: RayactTheme } | null>(null);
   const progress = useAnimatedValue(blend ? 1 : 0, { duration: blend ? 350 : 0 });
-
-  useEffect(() => {
-    startTransition(() => undefined);
-  }, [isDark, startTransition]);
 
   useEffect(() => {
     if (stableThemeRef.current.dark === targetTheme.dark) {

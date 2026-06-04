@@ -25,7 +25,59 @@
 #include <regex>
 #include <cstdlib>
 
-// ─── globals ───────────────────────────────────────────────────────────────
+// ─── per-screen state ──────────────────────────────────────────────────────
+//
+// One QJS context, but N React trees (one per navigation screen). All per-node
+// state is per-screen. The bridge functions read/write the CURRENT screen's
+// state via `g_currentScreenId` — JS code calls `setCurrentScreen(id)` before
+// each screen's React mount, and the rest of the bridge transparently operates
+// on that screen's node map / press callbacks / etc.
+//
+struct ScreenState;  // forward decl (defined later with NativeControlState below)
+
+enum class NativeControlKind { Checkbox, Switch, RadioButton, Slider };
+
+struct NativeControlState {
+    NativeControlKind kind;
+    bool checked = false;
+    bool disabled = false;
+    std::string label;
+    float anim = -1.0f; // eased 0..1 toggle progress; -1 = uninitialized
+    // Slider state.
+    float value = 0.0f;
+    float minValue = 0.0f;
+    float maxValue = 1.0f;
+    float step = 0.0f;   // 0 = continuous
+    bool dragging = false;
+};
+
+// `g_nodes`, `g_root`, `g_pressCallbacks` are kept as live maps for back-compat
+// with main.cpp's render loop (which iterates `g_nodes` for hit-testing). They
+// are kept in sync with the current screen's state via SaveCurrentScreen() /
+// LoadCurrentScreen() called from setCurrentScreen.
+
+struct ScreenState {
+    std::map<int, raym3::v2::NodePtr> nodes;
+    raym3::v2::NodePtr root;
+    std::map<int, JSValue> pressCallbacks;
+    std::map<int, std::string> nodeClassNames;
+    std::map<int, JSValue> changeTextCallbacks;
+    std::map<int, JSValue> changeValueCallbacks;
+    std::map<int, JSValue> scrollCallbacks;
+    std::map<int, JSValue> requestCloseCallbacks;
+    std::map<int, NativeControlState> nativeControlStates;
+    std::map<int, raym3::v2::M3Component> materialComponentKinds;
+    int nextNodeId = 1;
+};
+
+static std::map<int, ScreenState> g_screens;
+static int g_currentScreenId = 0;     // 0 = legacy single-screen (always present)
+static int g_nextScreenId = 1;        // ids 1+ are navigation screens
+// Z-order stack: index 0 = bottom (root screen 0), back = topmost (focused).
+// Empty by default — populated when the host (Android NavigationHost) pushes.
+static std::vector<int> g_screenStack;
+
+// ─── globals (mirrors of current screen) ──────────────────────────────────
 
 std::map<int, raym3::v2::NodePtr> g_nodes;
 raym3::v2::NodePtr g_root;
@@ -33,6 +85,7 @@ std::map<int, JSValue> g_pressCallbacks;
 JSContext* g_bridge_ctx = nullptr;
 
 static std::map<int, std::string> g_nodeClassNames;
+static std::map<int, int> g_nodeParents;
 static int g_nextNodeId = 1;
 
 static void captureNodeClassName(JSContext* ctx, int id, JSValueConst styleObj) {
@@ -56,22 +109,6 @@ static std::map<int, JSValue> g_requestCloseCallbacks;
 static int g_activeScrollNodeId = -1;
 static Vector2 g_lastScrollDragMouse = {0.0f, 0.0f};
 static float g_scrollDragDistance = 0.0f;
-
-enum class NativeControlKind { Checkbox, Switch, RadioButton, Slider };
-
-struct NativeControlState {
-    NativeControlKind kind;
-    bool checked = false;
-    bool disabled = false;
-    std::string label;
-    float anim = -1.0f; // eased 0..1 toggle progress; -1 = uninitialized
-    // Slider state.
-    float value = 0.0f;
-    float minValue = 0.0f;
-    float maxValue = 1.0f;
-    float step = 0.0f;   // 0 = continuous
-    bool dragging = false;
-};
 
 static std::map<int, NativeControlState> g_nativeControlStates;
 static std::map<int, raym3::v2::M3Component> g_materialComponentKinds;
@@ -549,6 +586,20 @@ static int nodeIdFor(const raym3::v2::NodePtr& node) {
         if (candidate == node) return id;
     }
     return -1;
+}
+
+raym3::v2::NodePtr engineFindPressTarget(const raym3::v2::NodePtr& hit) {
+    int id = nodeIdFor(hit);
+    while (id > 0) {
+        auto nodeIt = g_nodes.find(id);
+        if (nodeIt != g_nodes.end() && nodeIt->second && nodeIt->second->onPress) {
+            return nodeIt->second;
+        }
+        auto parentIt = g_nodeParents.find(id);
+        if (parentIt == g_nodeParents.end()) break;
+        id = parentIt->second;
+    }
+    return nullptr;
 }
 
 static raym3::v2::NodePtr findScrollableNodeAt(const raym3::v2::NodePtr& node, Vector2 point) {
@@ -1397,6 +1448,7 @@ JSValue JS_appendChild(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     if (cit == g_nodes.end()) return JS_ThrowTypeError(ctx, "appendChild: invalid child id");
 
     appendChildPreservingNavLabel(pit->second, cit->second);
+    g_nodeParents[childId] = parentId;
     return JS_UNDEFINED;
 }
 
@@ -1413,6 +1465,7 @@ JSValue JS_removeChild(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
 
     auto& children = pit->second->children;
     children.erase(std::remove(children.begin(), children.end(), cit->second), children.end());
+    g_nodeParents.erase(childId);
     return JS_UNDEFINED;
 }
 
@@ -1438,25 +1491,39 @@ JSValue JS_insertBefore(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueC
     } else {
         children.insert(beforeIt, cit->second);
     }
+    g_nodeParents[childId] = parentId;
     return JS_UNDEFINED;
+}
+
+// writeRootThrough: every mutation of g_root is mirrored into
+// g_screens[g_currentScreenId].root. This makes the per-screen slot the
+// authoritative store: a stray clearRootNode/disposeNode for a non-current
+// screen (e.g. an async React unmount of a popped route) can no longer
+// null the live root of the currently-rendered screen.
+static inline void writeRootThrough(const raym3::v2::NodePtr& node) {
+    g_root = node;
+    if (!g_screens.count(g_currentScreenId)) {
+        g_screens[g_currentScreenId] = ScreenState{};
+    }
+    g_screens[g_currentScreenId].root = node;
 }
 
 JSValue JS_setRootNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_ThrowTypeError(ctx, "setRootNode: expected (nodeId)");
     if (JS_IsNull(argv[0]) || JS_IsUndefined(argv[0])) {
-        g_root = nullptr;
+        writeRootThrough(nullptr);
         return JS_UNDEFINED;
     }
     int id;
     JS_ToInt32(ctx, &id, argv[0]);
     auto it = g_nodes.find(id);
     if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setRootNode: invalid node id");
-    g_root = it->second;
+    writeRootThrough(it->second);
     return JS_UNDEFINED;
 }
 
 JSValue JS_clearRootNode(JSContext*, JSValue, int, JSValueConst*) {
-    g_root = nullptr;
+    writeRootThrough(nullptr);
     return JS_UNDEFINED;
 }
 
@@ -1485,6 +1552,7 @@ JSValue JS_setOnPress(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
             JSValue exc = JS_GetException(g_bridge_ctx);
             const char* s = JS_ToCString(g_bridge_ctx, exc);
             fprintf(stderr, "onPress error: %s\n", s ? s : "(unknown)");
+            TraceLog(LOG_ERROR, "RAYACT_PRESS_CALLBACK_ERROR node=%d error=%s", id, s ? s : "(unknown)");
             if (s) JS_FreeCString(g_bridge_ctx, s);
             JS_FreeValue(g_bridge_ctx, exc);
         }
@@ -1622,10 +1690,20 @@ JSValue JS_disposeNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     g_nativeControlStates.erase(id);
     g_materialComponentKinds.erase(id);
     g_nodeClassNames.erase(id);
+    g_nodeParents.erase(id);
+    for (auto it = g_nodeParents.begin(); it != g_nodeParents.end();) {
+        if (it->second == id) it = g_nodeParents.erase(it);
+        else ++it;
+    }
 
     auto it = g_nodes.find(id);
     if (it != g_nodes.end()) {
-        if (g_root == it->second) g_root = nullptr;
+        if (g_root == it->second) {
+            // Dispose of the current screen's root. Mirror the null into
+            // g_screens[g_currentScreenId].root (write-through) so the
+            // per-screen slot stays consistent with the global mirror.
+            writeRootThrough(nullptr);
+        }
         g_nodes.erase(it);
     }
     return JS_UNDEFINED;
@@ -1809,21 +1887,381 @@ JSValue JS_registerFont(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueC
     return JS_UNDEFINED;
 }
 
+// ─── screen lifecycle (multi-surface navigation) ─────────────────────────
+
+// Node maps, callbacks and the id counter are GLOBAL (shared across screens),
+// NOT per-screen. There is one QuickJS context but N React roots (one per
+// navigation screen); React 19 commits asynchronously, so a mutation for a
+// node on screen A can run while a different screen is "current". If g_nodes
+// were swapped per screen (and node ids restarted per screen), that mutation
+// would look up the id in the wrong map and fail ("removeChild: invalid parent
+// id"), or hit a colliding id on another screen. Keeping the maps global with
+// globally-unique ids makes every node op address the right node regardless of
+// the current screen. Only the render ROOT (g_root → the tree to draw) is
+// genuinely per-screen, so it is the only thing swapped here.
+static void SaveCurrentScreen() {
+    if (!g_screens.count(g_currentScreenId)) {
+        g_screens[g_currentScreenId] = ScreenState{};
+    }
+    g_screens[g_currentScreenId].root = g_root;
+    g_root = nullptr;
+}
+
+// Load a screen's render root from g_screens[id] into g_root. Counterpart of
+// SaveCurrentScreen; node maps are global so nothing else is swapped.
+static void LoadScreen(int id) {
+    if (!g_screens.count(id)) {
+        g_screens[id] = ScreenState{};
+    }
+    g_root = g_screens[id].root;
+}
+
+// Switch the "current" screen context. All subsequent bridge calls (createView,
+// setRootNode, setOnPress, …) write to this screen's state. Call this once
+// per React mount: before mounting screen N's tree, call setCurrentScreen(N);
+// after mount completes, the engine renders each visible screen in order.
+JSValue JS_setCurrentScreen(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "setCurrentScreen: expected (screenId)");
+    int id;
+    if (JS_ToInt32(ctx, &id, argv[0]) < 0) return JS_ThrowTypeError(ctx, "setCurrentScreen: invalid id");
+    if (id < 0) return JS_ThrowTypeError(ctx, "setCurrentScreen: id must be >= 0");
+    if (id == g_currentScreenId) return JS_UNDEFINED;  // no-op
+
+    SaveCurrentScreen();
+    g_currentScreenId = id;
+    LoadScreen(id);
+    return JS_UNDEFINED;
+}
+
+// ─── host API (Android multi-surface navigation) ────────────────────────
+//
+// The @rayact/navigation package, on Android, manages a stack of screens.
+// Each new route needs its own EGL surface + engine screen. The C++ engine
+// owns the engine-screen bookkeeping; the actual EGL surface (and the
+// SurfaceView that hosts it) lives in Kotlin (NavigationHost). These two
+// functions bridge JS → JNI → Kotlin so the navigator can request/release
+// surfaces without knowing the ViewGroup details.
+//
+// On desktop, the layered backend uses <View> in a single tree, so the
+// functions are no-ops (return 0). The JNI implementations live in
+// jni_bridge.cpp (Android-only). On desktop we provide weak stubs here.
+
+#if defined(RAYACT_ANDROID)
+// Android builds: link against jni_bridge.cpp, which provides these symbols.
+extern "C" {
+extern int  rayactJniRequestNewSurface();
+extern void rayactJniReleaseSurface(int surfaceId);
+extern int  rayactJniGetRootSurfaceId();
+extern void rayactJniReleaseTopSurface();
+extern void rayactJniExitApp();
+extern void rayactJniPushScreen(int surfaceId);
+extern int  rayactJniPopScreen();
+}
+#else
+// Desktop builds: weak stubs so the linker is happy. All return 0 / no-op
+// — the layered backend doesn't allocate per-route EGL surfaces.
+extern "C" {
+int  rayactJniRequestNewSurface()       { return 0; }
+void rayactJniReleaseSurface(int)        { (void)0; }
+int  rayactJniGetRootSurfaceId()         { return 0; }
+void rayactJniReleaseTopSurface()        { (void)0; }
+void rayactJniExitApp()                  { (void)0; }
+void rayactJniPushScreen(int)            { (void)0; }
+int  rayactJniPopScreen()                { return 0; }
+}
+#endif
+
+JSValue JS_rayactHostRequestNewSurface(JSContext* ctx, JSValue, int, JSValueConst*) {
+    int id = rayactJniRequestNewSurface();
+    return JS_NewInt32(ctx, id);
+}
+
+JSValue JS_rayactHostReleaseSurface(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "__rayactHostReleaseSurface: expected (id)");
+    int id;
+    if (JS_ToInt32(ctx, &id, argv[0]) < 0) return JS_ThrowTypeError(ctx, "__rayactHostReleaseSurface: invalid id");
+    rayactJniReleaseSurface(id);
+    return JS_UNDEFINED;
+}
+
+JSValue JS_rayactHostGetRootSurfaceId(JSContext* ctx, JSValue, int, JSValueConst*) {
+    int id = rayactJniGetRootSurfaceId();
+    return JS_NewInt32(ctx, id);
+}
+
+JSValue JS_rayactHostReleaseTopSurface(JSContext* ctx, JSValue, int, JSValueConst*) {
+    rayactJniReleaseTopSurface();
+    return JS_UNDEFINED;
+}
+
+// __rayactHostExitApp: JS-driven Activity finish (BackHandler.exitApp()).
+// On Android the JNI side trips a flag and the render thread schedules
+// finishActivityFromHost; on desktop this is a no-op stub.
+JSValue JS_rayactHostExitApp(JSContext*, JSValue, int, JSValueConst*) {
+    rayactJniExitApp();
+    return JS_UNDEFINED;
+}
+
+// ─── engine stack (z-order) ─────────────────────────────────────────────────
+//
+// JS-driven control over which screens the engine renders. The navigator's
+// per-route SceneView calls into these to trim the stack to the focused +
+// previous screen (so a 20-deep stack only draws 2 surfaces per frame).
+//
+// On desktop the layered backend doesn't use g_screenStack, so these are
+// harmless no-ops there.
+
+JSValue JS_rayactEnginePushScreen(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "__rayactEnginePushScreen: expected (id)");
+    int id;
+    if (JS_ToInt32(ctx, &id, argv[0]) < 0) return JS_ThrowTypeError(ctx, "__rayactEnginePushScreen: invalid id");
+    enginePushScreen(id);
+    return JS_UNDEFINED;
+}
+
+JSValue JS_rayactEnginePopScreen(JSContext* ctx, JSValue, int, JSValueConst*) {
+    bool ok = enginePopScreen();
+    return JS_NewBool(ctx, ok);
+}
+
+JSValue JS_rayactEngineSetScreenStack(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1 || !JS_IsArray(argv[0])) {
+        return JS_ThrowTypeError(ctx, "__rayactEngineSetScreenStack: expected (number[])");
+    }
+    JSValue arr = argv[0];
+    JSValue lenVal = JS_GetPropertyStr(ctx, arr, "length");
+    int64_t len = 0;
+    JS_ToInt64(ctx, &len, lenVal);
+    JS_FreeValue(ctx, lenVal);
+    if (len < 0) len = 0;
+    if (len > 1024) len = 1024; // safety cap
+    std::vector<int> ids;
+    ids.reserve((size_t)len);
+    for (int64_t i = 0; i < len; i++) {
+        JSValue el = JS_GetPropertyUint32(ctx, arr, (uint32_t)i);
+        int id = 0;
+        if (JS_ToInt32(ctx, &id, el) >= 0) ids.push_back(id);
+        JS_FreeValue(ctx, el);
+    }
+    engineSetScreenStack(ids);
+    return JS_UNDEFINED;
+}
+
+int engineCreateScreen() {
+    int id = g_nextScreenId++;
+    g_screens[id] = ScreenState{};
+    return id;
+}
+
+int engineGetCurrentScreenId() {
+    return g_currentScreenId;
+}
+
+void engineDestroyScreen(int id) {
+    if (id == 0) return;  // legacy single-screen can't be destroyed
+    auto it = g_screens.find(id);
+    if (it == g_screens.end()) return;
+    if (g_currentScreenId == id) {
+        // Fall back to the screen now on top of the stack (the caller pops
+        // before destroying), not the non-existent legacy screen 0 — otherwise
+        // g_root goes null and the revealed screen renders black.
+        SaveCurrentScreen();
+        int fallback = engineGetFocusedScreenId();
+        if (fallback == id || g_screens.find(fallback) == g_screens.end()) {
+            fallback = g_screenStack.empty() ? 0 : g_screenStack.front();
+        }
+        g_currentScreenId = fallback;
+        LoadScreen(fallback);
+    }
+    if (g_bridge_ctx) {
+        for (auto& [k, v] : it->second.pressCallbacks) JS_FreeValue(g_bridge_ctx, v);
+        for (auto& [k, v] : it->second.changeTextCallbacks) JS_FreeValue(g_bridge_ctx, v);
+        for (auto& [k, v] : it->second.changeValueCallbacks) JS_FreeValue(g_bridge_ctx, v);
+        for (auto& [k, v] : it->second.scrollCallbacks) JS_FreeValue(g_bridge_ctx, v);
+        for (auto& [k, v] : it->second.requestCloseCallbacks) JS_FreeValue(g_bridge_ctx, v);
+    }
+    g_screens.erase(it);
+}
+
+void engineBindScreenRoot(int id) {
+    auto it = g_screens.find(id);
+    if (it == g_screens.end()) return;
+    if (g_currentScreenId != id) {
+        SaveCurrentScreen();
+        g_currentScreenId = id;
+        LoadScreen(id);
+    }
+}
+
+const raym3::v2::NodePtr& engineGetScreenRoot(int id) {
+    static raym3::v2::NodePtr nullPtr;
+    auto it = g_screens.find(id);
+    if (it == g_screens.end()) return nullPtr;
+    return it->second.root;
+}
+
+void engineForEachScreen(const std::function<void(int, const raym3::v2::NodePtr&)>& fn) {
+    for (auto& [id, s] : g_screens) {
+        if (s.root) fn(id, s.root);
+    }
+}
+
+int engineGetNextScreenId() { return g_nextScreenId; }
+
+// ─── z-order stack ────────────────────────────────────────────────────────
+//
+// The host (Android NavigationHost) pushes/pops screens to manage which
+// surfaces are visible. The engine render loop iterates the stack bottom→top
+// to compose the frame; input dispatch goes only to the focused (top) screen.
+//
+// Legacy single-screen mode (g_screenStack empty) behaves exactly as before:
+// engineBindScreenRoot(0) is the only "bind" call, the legacy globals stay
+// the source of truth, and the render loop falls back to g_root.
+
+bool engineHasScreenStack() { return !g_screenStack.empty(); }
+
+int engineGetFocusedScreenId() {
+    return g_screenStack.empty() ? g_currentScreenId : g_screenStack.back();
+}
+
+void enginePushScreen(int id) {
+    if (g_screens.find(id) == g_screens.end()) return;
+    // Dedup: don't push twice.
+    for (int s : g_screenStack) if (s == id) return;
+    g_screenStack.push_back(id);
+}
+
+bool enginePopScreen() {
+    if (g_screenStack.size() <= 1) return false; // keep at least the root
+    g_screenStack.pop_back();
+    return true;
+}
+
+void engineClearScreenStack() {
+    // Reset to just the platform root screen. Desktop uses the legacy screen
+    // 0; Android's visible root is the first host-created surface.
+    g_screenStack.clear();
+    int rootId = rayactJniGetRootSurfaceId();
+    if (rootId <= 0) rootId = 0;
+    if (g_screens.count(rootId)) g_screenStack.push_back(rootId);
+}
+
+// Rebuild the z-order stack to exactly the supplied ids (in z-order,
+// bottom→top). Ids that aren't in the existing stack are pushed (only
+// if a corresponding engine screen exists). Ids in the existing stack
+// that aren't in the target are popped. The platform root is preserved at the
+// bottom regardless of the input — desktop uses 0, Android uses the host root
+// surface id.
+//
+// Called from the JS navigator (render thread, under g_engineMutex via
+// enginePumpJS), so no further synchronization is needed.
+void engineSetScreenStack(const std::vector<int>& ids) {
+    // Build a target order: [root, ...ids, root-removed]. Android's root is
+    // not screen 0 once the first SurfaceView is created, so ask the host for
+    // the concrete id and fall back to desktop's legacy root.
+    int rootId = rayactJniGetRootSurfaceId();
+    if (rootId <= 0) rootId = 0;
+
+    std::vector<int> target;
+    if (g_screens.count(rootId)) target.push_back(rootId);
+    for (int id : ids) {
+        if (id == rootId) continue;        // already at the bottom
+        if (g_screens.find(id) == g_screens.end()) continue;
+        // Avoid duplicates within the input itself.
+        bool dup = false;
+        for (int t : target) { if (t == id) { dup = true; break; } }
+        if (!dup) target.push_back(id);
+    }
+
+    // Pop anything in the current stack that's not in the target.
+    while (!g_screenStack.empty()) {
+        int top = g_screenStack.back();
+        if (std::find(target.begin(), target.end(), top) == target.end()) {
+            g_screenStack.pop_back();
+        } else {
+            break;
+        }
+    }
+    // Now the top of the current stack (if any) is a prefix of the target.
+    // Push the rest of the target in order.
+    size_t cur = 0;
+    for (int t : target) {
+        if (cur < g_screenStack.size() && g_screenStack[cur] == t) {
+            cur++;
+        } else {
+            g_screenStack.push_back(t);
+        }
+    }
+    // Trim any extras beyond target.size() (defensive — should already be done).
+    if (g_screenStack.size() > target.size()) {
+        g_screenStack.resize(target.size());
+    }
+}
+
+// Iterate visible screens in z-order (bottom→top). The legacy global g_root
+// is bound to each screen before fn() runs, so the render body can use it
+// transparently.
+//
+// The current screen's live tree is held in the global g_root (it has not
+// been flushed into g_screens[id] yet — SaveCurrentScreen only runs when
+// switching away). Use g_root for it; other screens use their saved root.
+// The defensive fallback to g_screens[id].root is a safety net for the
+// case where g_root was nulled by a stray clearRootNode without a
+// corresponding SaveCurrentScreen (shouldn't happen with the write-through
+// from setRootNode, but the fallback keeps a buggy code path from rendering
+// nothing).
+void engineForEachVisibleScreen(const std::function<void(int, const raym3::v2::NodePtr&)>& fn) {
+    if (g_screenStack.empty()) {
+        // Legacy single-screen mode: just draw g_root once.
+        fn(g_currentScreenId, g_root);
+        return;
+    }
+    for (int id : g_screenStack) {
+        if (id == g_currentScreenId) {
+            raym3::v2::NodePtr root = g_root;
+            if (!root) {
+                auto it = g_screens.find(id);
+                if (it != g_screens.end()) root = it->second.root;
+            }
+            if (root) fn(id, root);
+            continue;
+        }
+        auto it = g_screens.find(id);
+        if (it == g_screens.end()) continue;
+        if (!it->second.root) continue;
+        fn(id, it->second.root);
+    }
+}
+
 // ─── lifecycle ──────────────────────────────────────────────────────────────
 
 void cleanupRaym3Bridge(JSContext* ctx) {
+    // Free all per-screen callback JSValues before clearing the maps.
+    for (auto& [id, s] : g_screens) {
+        for (auto& [k, v] : s.pressCallbacks) JS_FreeValue(ctx, v);
+        for (auto& [k, v] : s.changeTextCallbacks) JS_FreeValue(ctx, v);
+        for (auto& [k, v] : s.changeValueCallbacks) JS_FreeValue(ctx, v);
+        for (auto& [k, v] : s.scrollCallbacks) JS_FreeValue(ctx, v);
+        for (auto& [k, v] : s.requestCloseCallbacks) JS_FreeValue(ctx, v);
+    }
     for (auto& [id, fn] : g_pressCallbacks) JS_FreeValue(ctx, fn);
     g_pressCallbacks.clear();
     g_nodes.clear();
     g_nativeControlStates.clear();
     g_materialComponentKinds.clear();
     g_nodeClassNames.clear();
+    g_changeTextCallbacks.clear();
+    g_changeValueCallbacks.clear();
+    g_scrollCallbacks.clear();
+    g_requestCloseCallbacks.clear();
+    g_screens.clear();
+    g_screenStack.clear();
     g_root = nullptr;
     g_bridge_ctx = nullptr;
     for (auto& tex : g_textures) UnloadTexture(tex);
     g_textures.clear();
     for (auto& [size, font] : g_iconFonts)
-        if (font.texture.id != 0) UnloadFont(font);
+        if (font.texture.id != 0) ::UnloadFont(font);
     g_iconFonts.clear();
     g_iconFontVer.clear();
     g_iconCPSet.clear();

@@ -4,6 +4,12 @@
   "description": "react-navigation bindings for rayact (custom navigator over @react-navigation/core)",
   "main": "src/index.tsx",
   "types": "src/index.tsx",
+  "exports": {
+    ".": "./src/index.tsx",
+    "./native": "./src/native.tsx",
+    "./stack": "./src/stack.tsx",
+    "./bottom-tabs": "./src/bottom-tabs.tsx"
+  },
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist"

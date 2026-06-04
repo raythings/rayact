@@ -1,17 +1,9 @@
-// Demo: the REAL react-navigation driving rayact, via @rayact/navigation.
-// Exercises:
-//   - engine-driven transitions (slide_from_right, fade, slide_from_bottom,
-//     scale, none) per screen via the `animation` option
-//   - JS-source-of-truth back: hardware back (Android) / no listener on
-//     desktop falls through to BackHandler.exitApp() / activity finish
-//   - app-registered BackHandler listener (the "press back again" hint)
-//   - per-screen render gating: deep stacks still only render the focused
-//     + previous surfaces (you can tap "Push 5" ten times to verify)
 import React from 'react';
 import { View, Text, render, useTheme, BackHandler } from '@rayact/react';
 import {
   NavigationContainer,
   createStackNavigator,
+  useIsFocused,
   useNavigation,
   type StackAnimation,
 } from '@rayact/navigation';
@@ -32,9 +24,10 @@ function pickAnimation(): StackAnimation {
   return ANIMATIONS[Math.floor(Math.random() * ANIMATIONS.length)].value;
 }
 
-function useBackPressToExit(windowMs = 1500): void {
+function useBackPressToExit(enabled: boolean, windowMs = 1500): void {
   const lastRef = React.useRef(0);
   React.useEffect(() => {
+    if (!enabled) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       const now = Date.now();
       if (now - lastRef.current < windowMs) {
@@ -42,18 +35,17 @@ function useBackPressToExit(windowMs = 1500): void {
         return true;
       }
       lastRef.current = now;
-      // First press: consume (don't pop / don't finish).
-      // The user sees a "press back again to exit" hint in the UI.
       return true;
     });
     return () => sub.remove();
-  }, [windowMs]);
+  }, [enabled, windowMs]);
 }
 
 function HomeScreen() {
   const nav = useNavigation<any>();
+  const isFocused = useIsFocused();
   const t = useTheme();
-  useBackPressToExit();
+  useBackPressToExit(isFocused);
   return (
     <View style={{ flex: 1, backgroundColor: t.surface, padding: 48, gap: 24, alignItems: 'flex-start' }}>
       <Text text="Home" style={{ color: t.onSurface, fontSize: 56 }} />
@@ -71,7 +63,6 @@ function HomeScreen() {
       />
       <View
         onPress={() => {
-          console.log('NAV_DEMO: push button pressed, navigating to Animated');
           nav.navigate('Animated', { from: 'Home', animation: pickAnimation() });
         }}
         style={{

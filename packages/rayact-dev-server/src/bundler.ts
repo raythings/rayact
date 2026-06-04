@@ -249,6 +249,7 @@ function vendorSharePlugin(): Plugin {
 }
 
 const REFRESH_RUNTIME_SETUP_ID = 'virtual:rayact-refresh-runtime';
+const REACT_NATIVE_VIRTUAL_ID = 'virtual:rayact-react-native';
 const ENTRY_ID = 'virtual:rayact-entry';
 const DEV_CLIENT_ENTRY_ID = 'virtual:rayact-dev-client-entry';
 
@@ -274,6 +275,33 @@ function rayactRefreshRuntimePlugin(): Plugin {
   };
 }
 
+// react-native shim: code imported from `react-native` (e.g. upstream
+// react-navigation/native's useBackButton.native.tsx does
+// `import { BackHandler } from 'react-native'`) needs to resolve to our
+// @rayact/react implementation. We don't want to ship a full react-native
+// polyfill, so we only wire the names we actually use and forward them
+// to our existing engine-side modules. New uses can be added here.
+function reactNativeShimPlugin(): Plugin {
+  return {
+    name: 'rayact-react-native-shim',
+    enforce: 'pre',
+    resolveId(id) {
+      if (id === 'react-native') return `\0${REACT_NATIVE_VIRTUAL_ID}`;
+      return null;
+    },
+    load(id) {
+      if (id !== `\0${REACT_NATIVE_VIRTUAL_ID}`) return null;
+      return [
+        // BackHandler: RN-compatible hardware-back API on rayact. See
+        // packages/rayact-react/src/BackHandler.ts. Also re-exported from
+        // @rayact/navigation so app code can import it from either place.
+        `export { BackHandler, useBackHandler } from '@rayact/react';`,
+        `export type { BackHandlerSubscription } from '@rayact/react';`
+      ].join('\n');
+    }
+  };
+}
+
 export function rayactVitePlugin(options: BundleOptions, registry = new AssetRegistry(path.resolve(options.root))): Plugin {
   const root = path.resolve(options.root);
   const resolvedEntry = normalizePath(path.resolve(root, options.entry));
@@ -288,16 +316,18 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
           __RAYACT_PLATFORM__: JSON.stringify(options.platform)
         },
         resolve: {
-          alias: {
-            '@rayact/react': normalizePath(path.resolve(root, 'packages/rayact-react/src/index.ts')),
-            '@rayact/runtime': normalizePath(path.resolve(root, 'packages/rayact-runtime/src/index.ts')),
-            '@rayact/shared': normalizePath(path.resolve(root, 'packages/rayact-shared/src/index.ts')),
-            '@rayact/navigation': normalizePath(path.resolve(root, 'packages/rayact-navigation/src/index.tsx')),
-            // Vendored react-navigation (sibling repo) — core + routers are
-            // platform-agnostic (no react-native imports), bundled from source.
-            '@react-navigation/core': normalizePath(path.resolve(root, '../react-navigation/packages/core/src/index.tsx')),
-            '@react-navigation/routers': normalizePath(path.resolve(root, '../react-navigation/packages/routers/src/index.tsx'))
-          }
+          alias: [
+            { find: /^@rayact\/react$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-react/src/index.ts')) },
+            { find: /^@rayact\/runtime$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-runtime/src/index.ts')) },
+            { find: /^@rayact\/shared$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-shared/src/index.ts')) },
+            { find: /^@rayact\/navigation$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-navigation/src/index.tsx')) },
+            { find: /^@rayact\/navigation\/native$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-navigation/src/native.tsx')) },
+            { find: /^@rayact\/navigation\/stack$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-navigation/src/stack.tsx')) },
+            { find: /^@rayact\/navigation\/bottom-tabs$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-navigation/src/bottom-tabs.tsx')) },
+            { find: /^@rayact\/crypto$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-crypto/src/index.ts')) }
+            // @react-navigation/core + routers resolve through normal node
+            // resolution (npm-installed under node_modules/@react-navigation/).
+          ]
         }
       };
     },
@@ -349,6 +379,9 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
 
       if (id !== `\0${ENTRY_ID}`) return null;
       const imports = [
+        // Polyfill first so the React reconciler (which calls crypto.getRandomValues
+        // for fiber IDs during the very first commit) finds it on globalThis.
+        `import ${JSON.stringify('@rayact/crypto')};`,
         `globalThis.__RAYACT_ENTRY__ = ${JSON.stringify(resolvedEntry)};`
       ];
       if (mode === 'development') {
@@ -402,9 +435,17 @@ async function runViteBuild(options: BundleOptions, registry: AssetRegistry, inp
     configFile: false,
     mode: isDev ? 'development' : 'production',
     logLevel: 'silent',
+    // Nanoid@3.x has an `exports` field that omits `nanoid/non-secure`, but
+    // @react-navigation/routers (used by @rayact/navigation) still imports
+    // it. Alias the subpath to the main entry — `nanoid()` is what callers
+    // need and it lives in the root export.
+    resolve: {
+      alias: [{ find: /^nanoid\/non-secure$/, replacement: 'nanoid' }]
+    },
     plugins: [
       ...(isDev ? [vendorSharePlugin()] : []),
       rayactVitePlugin(options, registry),
+      reactNativeShimPlugin(),
       ...(isDev ? [rayactRefreshRuntimePlugin()] : []),
       react({
         babel: isDev

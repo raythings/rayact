@@ -2,39 +2,81 @@ package com.rayact.app
 
 import android.content.Context
 import android.util.AttributeSet
-import android.view.Choreographer
 import android.view.MotionEvent
-import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.rayact.engine.RayactEngine
 
 /**
- * Hosts one Rayact render surface. The engine runs on a dedicated render thread;
- * a Choreographer frame callback (posted on that thread's Looper) drives one
- * nativeRenderFrame() per vsync. Touch is forwarded from the UI thread.
+ * One render surface in the Rayact multi-surface model. Each instance owns:
+ *   - one ANativeWindow + one EGL surface (allocated by the native engine)
+ *   - one engine screen (its own React tree)
+ *   - its own render thread that drives vsync frames
  *
- * In the full react-navigation native-stack model there is one of these per
- * Screen container; for now a single instance hosts the root screen.
+ * The native render loop is debounced: when multiple surfaces all call
+ * nativeRenderFrame in the same vsync, only the first call does work. The
+ * other surfaces' frames are no-ops, so multi-surface overhead is minimal.
+ *
+ * Touch events are forwarded to the engine. The engine's hit-test only
+ * dispatches to the focused (top of stack) screen, so non-focused surfaces
+ * can safely forward touches too — but in practice Android's ViewGroup z-order
+ * means only the top view sees MotionEvents.
  */
 class RayactSurfaceView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : SurfaceView(context, attrs), SurfaceHolder.Callback {
 
     private var renderThread: RenderThread? = null
+    /** Native surfaceId == engine screenId, or 0 if not yet created. */
+    var surfaceId: Int = 0
+        private set
+    /**
+     * Optional one-shot listener invoked when the native surfaceId is ready
+     * (i.e. surfaceCreated has fired and the engine has allocated a screen).
+     * Used by RayactHostRegistry.requestNewSurface to block until ready.
+     */
+    var surfaceReadyListener: ((Int) -> Unit)? = null
 
     init { holder.addCallback(this) }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
         val density = resources.displayMetrics.density
-        renderThread = RenderThread(holder.surface, density).also { it.start() }
+        val sid = RayactEngine.createSurface(holder.surface, density)
+        if (sid <= 0) {
+            android.util.Log.e("RayactSurfaceView", "createSurface failed")
+            return
+        }
+        surfaceId = sid
+        surfaceReadyListener?.invoke(sid)
+        surfaceReadyListener = null
+        renderThread = RenderThread().also { it.start() }
     }
 
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        // Native re-reads ANativeWindow_getWidth/Height on each BindWindow, so
+        // size changes are picked up automatically.
+    }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         renderThread?.quitAndWait()
         renderThread = null
+        if (surfaceId > 0) {
+            RayactEngine.destroySurface(surfaceId)
+            surfaceId = 0
+        }
+    }
+
+    /** Push this surface to the top of the focus stack. Call after addView. */
+    fun pushToFront() {
+        if (surfaceId > 0) RayactEngine.pushSurface(surfaceId)
+    }
+
+    /** Pop this surface from the focus stack if it's on top. */
+    fun popFromFront(): Boolean {
+        if (surfaceId > 0 && RayactEngine.getFocusedSurfaceId() == surfaceId) {
+            return RayactEngine.popSurface() != 0
+        }
+        return false
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -45,42 +87,45 @@ class RayactSurfaceView @JvmOverloads constructor(
         }
         val idx = event.actionIndex
         RayactEngine.nativeTouch(action, event.getPointerId(idx), event.getX(idx), event.getY(idx))
+        renderThread?.requestFrame()
         return true
     }
 
-    /** Render thread: binds the surface, then ticks every vsync via Choreographer. */
-    private class RenderThread(
-        private val surface: Surface,
-        private val density: Float
-    ) : Thread(null, null, "RayactRender", 8L * 1024 * 1024), Choreographer.FrameCallback {
+    /** Render thread: ticks every vsync via Choreographer. The native side
+     *  debounces across multiple surfaces, so extra threads are cheap. */
+    private inner class RenderThread : Thread(null, null, "RayactRender-$surfaceId", 8L * 1024 * 1024) {
 
         @Volatile private var running = false
-        private lateinit var choreographer: Choreographer
         @Volatile private var looper: android.os.Looper? = null
+        @Volatile private var handler: android.os.Handler? = null
+        private val frameRunnable = object : Runnable {
+            override fun run() {
+                if (!running) return
+                RayactEngine.nativeRenderFrame()
+                handler?.postDelayed(this, 16L)
+            }
+        }
 
         override fun run() {
             android.os.Looper.prepare()
             looper = android.os.Looper.myLooper()
-            RayactEngine.nativeSurfaceCreated(surface, density)
+            handler = android.os.Handler(android.os.Looper.myLooper()!!)
             running = true
-            choreographer = Choreographer.getInstance()
-            choreographer.postFrameCallback(this)
+            handler?.post(frameRunnable)
             android.os.Looper.loop()
-            RayactEngine.nativeSurfaceDestroyed()
         }
 
-        override fun doFrame(frameTimeNanos: Long) {
-            if (!running) return
-            RayactEngine.nativeRenderFrame()
-            choreographer.postFrameCallback(this)
+        fun requestFrame() {
+            handler?.post {
+                if (running) RayactEngine.nativeRenderFrame()
+            }
         }
 
         fun quitAndWait() {
             running = false
-            // Stop the vsync loop and quit the render Looper from its own thread.
             looper?.let { l ->
                 android.os.Handler(l).post {
-                    if (this::choreographer.isInitialized) choreographer.removeFrameCallback(this)
+                    handler?.removeCallbacks(frameRunnable)
                     l.quitSafely()
                 }
             }

@@ -3,6 +3,7 @@
 #include "system_appearance.hpp"
 #include "platform.hpp"
 #include "../core/engine.hpp"
+#include "../core/config_loader.hpp"
 #include "quickjs_bridge.hpp"
 #include "raym3_bridge.hpp"
 #include "css_bridge.hpp"
@@ -40,6 +41,7 @@ extern "C" {
 #include <array>
 #include <cmath>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <vector>
 #include <string>
@@ -113,6 +115,16 @@ static std::vector<Shape> g_shapes;
 static std::string g_devServerUrl;
 static int g_devRevision = 0;
 static std::chrono::steady_clock::time_point g_nextDevPoll = std::chrono::steady_clock::now();
+
+struct QueuedTouch {
+    bool pressed = false;
+    bool released = false;
+    bool down = false;
+    Vector2 position = {0.0f, 0.0f};
+};
+
+static std::mutex g_touchMutex;
+static QueuedTouch g_queuedTouch;
 
 #ifdef RAYACT_ANDROID
 #include <android/log.h>
@@ -206,6 +218,68 @@ static void drawAndroidDiagnosticCube(int width, int height) {
         DrawLineV(projected[face.i2], projected[face.i3], BLACK);
         DrawLineV(projected[face.i3], projected[face.i0], BLACK);
     }
+}
+#endif
+
+#if defined(RAYACT_ANDROID) && defined(RAYACT_ANDROID_3D_SMOKE)
+static void drawAndroid3DSmoke() {
+    static bool initialized = false;
+    static Shader smokeShader = { 0 };
+    static Texture2D smokeTex0 = { 0 };
+    static Texture2D smokeTex1 = { 0 };
+    static RenderTexture2D smokeTarget = { 0 };
+    static int smokeTex0Loc = -1;
+    static int smokeTex1Loc = -1;
+
+    if (!initialized) {
+        Image img0 = GenImageGradientRadial(256, 256, 0.0f, RED, MAROON);
+        Image img1 = GenImageChecked(256, 256, 32, 32, (Color){ 20, 80, 255, 255 }, (Color){ 240, 240, 255, 255 });
+        smokeTex0 = LoadTextureFromImage(img0);
+        smokeTex1 = LoadTextureFromImage(img1);
+        UnloadImage(img0);
+        UnloadImage(img1);
+        const char *vs = R"(#version 330
+in vec2 vertexPosition;
+in vec2 vertexTexCoord;
+in vec4 vertexColor;
+uniform mat4 mvp;
+out vec2 fragTexCoord;
+out vec4 fragColor;
+void main() {
+    fragTexCoord = vertexTexCoord;
+    fragColor = vertexColor;
+    gl_Position = mvp * vec4(vertexPosition, 0.0, 1.0);
+}
+)";
+        const char *fs = R"(#version 330
+in vec2 fragTexCoord;
+in vec4 fragColor;
+out vec4 finalColor;
+uniform sampler2D texture0;
+uniform sampler2D texture1;
+uniform vec4 colDiffuse;
+void main() {
+    vec4 a = texture(texture0, fragTexCoord);
+    vec4 b = texture(texture1, fragTexCoord);
+    finalColor = mix(a, b, 0.5) * colDiffuse * fragColor;
+}
+)";
+        smokeShader = LoadShaderFromMemory(vs, fs);
+        smokeTex0Loc = GetShaderLocation(smokeShader, "texture0");
+        smokeTex1Loc = GetShaderLocation(smokeShader, "texture1");
+        smokeTarget = LoadRenderTexture(640, 360);
+        initialized = true;
+    }
+
+    BeginTextureMode(smokeTarget);
+    ClearBackground(BLACK);
+    BeginShaderMode(smokeShader);
+    if (smokeTex0Loc >= 0) SetShaderValueTexture(smokeShader, smokeTex0Loc, smokeTex0);
+    if (smokeTex1Loc >= 0) SetShaderValueTexture(smokeShader, smokeTex1Loc, smokeTex1);
+    DrawRectangle(40, 40, 560, 280, WHITE);
+    EndShaderMode();
+    EndTextureMode();
+    DrawTextureRec(smokeTarget.texture, (Rectangle){ 0, 0, (float)smokeTarget.texture.width, -(float)smokeTarget.texture.height }, (Vector2){ 0, 0 }, WHITE);
 }
 #endif
 
@@ -403,6 +477,21 @@ static void registerNativeFunctions(JSContext* ctx) {
             JS_SetPropertyStr(ctx, obj, "y", JS_NewFloat64(ctx, d.y));
             return obj;
         }, "getMouseDelta", 0));
+    // Window size (in screen pixels) for the JS side. Used by the
+    // navigation transition container to size the slide/scale
+    // interpolator. On Android, ANativeWindow_getWidth/Height is read on
+    // the render thread and the values lag by one frame, but the lag is
+    // bounded and the slide is bounded to the viewport.
+    JS_SetPropertyStr(ctx, global, "getRenderWidth",
+        JS_NewCFunction(ctx, [](JSContext* captured, JSValue, int, JSValueConst*) -> JSValue {
+            (void)captured;
+            return JS_NewInt32(captured, GetRenderWidth());
+        }, "getRenderWidth", 0));
+    JS_SetPropertyStr(ctx, global, "getRenderHeight",
+        JS_NewCFunction(ctx, [](JSContext* captured, JSValue, int, JSValueConst*) -> JSValue {
+            (void)captured;
+            return JS_NewInt32(captured, GetRenderHeight());
+        }, "getRenderHeight", 0));
 
     JS_SetPropertyStr(ctx, global, "renderRect",
                       JS_NewCFunction(ctx, JS_renderRect, "renderRect", 5));
@@ -470,6 +559,61 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_insertBefore, "insertBefore", 3));
     JS_SetPropertyStr(ctx, global, "setRootNode",
                       JS_NewCFunction(ctx, JS_setRootNode,  "setRootNode",  1));
+    JS_SetPropertyStr(ctx, global, "setCurrentScreen",
+                      JS_NewCFunction(ctx, JS_setCurrentScreen, "setCurrentScreen", 1));
+    // ── host API (Android multi-surface navigation) ─────────────────────
+    // __rayactHostRequestNewSurface: ask the host (Kotlin NavigationHost)
+    //   to create a new EGL surface + engine screen. Returns the new
+    //   surfaceId (>0) or 0 on failure. On desktop, returns 0 (the layered
+    //   backend doesn't use surfaces — it stacks <View>s in one tree).
+    JS_SetPropertyStr(ctx, global, "__rayactHostRequestNewSurface",
+                      JS_NewCFunction(ctx, JS_rayactHostRequestNewSurface,
+                                      "__rayactHostRequestNewSurface", 0));
+    // __rayactHostReleaseSurface: destroy the surface/screen. The host
+    //   (NavigationHost.pop) tears down the ViewGroup child and frees the
+    //   EGL surface.
+    JS_SetPropertyStr(ctx, global, "__rayactHostReleaseSurface",
+                      JS_NewCFunction(ctx, JS_rayactHostReleaseSurface,
+                                      "__rayactHostReleaseSurface", 1));
+    // __rayactHostGetRootSurfaceId: returns the surfaceId of the root view
+    //   (the one MainActivity created with NavigationHost.installRoot).
+    //   The JS navigator uses this for the initial route, so it doesn't
+    //   allocate a redundant new surface for the first screen.
+    JS_SetPropertyStr(ctx, global, "__rayactHostGetRootSurfaceId",
+                      JS_NewCFunction(ctx, JS_rayactHostGetRootSurfaceId,
+                                      "__rayactHostGetRootSurfaceId", 0));
+    // __rayactHostReleaseTopSurface: pop the topmost surface via the host
+    //   (triggers the slide-out animation + ViewGroup remove). The
+    //   surface teardown is done by the view's own surfaceDestroyed
+    //   callback after the slide-out completes.
+    JS_SetPropertyStr(ctx, global, "__rayactHostReleaseTopSurface",
+                      JS_NewCFunction(ctx, JS_rayactHostReleaseTopSurface,
+                                      "__rayactHostReleaseTopSurface", 0));
+    // __rayactHostExitApp: JS-driven Activity finish. Wired to
+    // BackHandler.exitApp() so the system back press at the root falls
+    // through here when no listener handles it. On Android the JNI side
+    // trips a flag the render thread drains; on desktop this is a no-op.
+    JS_SetPropertyStr(ctx, global, "__rayactHostExitApp",
+                      JS_NewCFunction(ctx, JS_rayactHostExitApp,
+                                      "__rayactHostExitApp", 0));
+    // ── engine stack (z-order) — JS-driven per-screen render gating ─────
+    // The navigator's SceneView calls these to trim g_screenStack to just
+    // the focused + previous screen, so a 20-deep stack only draws 2
+    // surfaces per frame. On desktop the layered backend doesn't use
+    // g_screenStack, so these are harmless no-ops.
+    JS_SetPropertyStr(ctx, global, "__rayactEnginePushScreen",
+                      JS_NewCFunction(ctx, JS_rayactEnginePushScreen,
+                                      "__rayactEnginePushScreen", 1));
+    JS_SetPropertyStr(ctx, global, "__rayactEnginePopScreen",
+                      JS_NewCFunction(ctx, JS_rayactEnginePopScreen,
+                                      "__rayactEnginePopScreen", 0));
+    JS_SetPropertyStr(ctx, global, "__rayactEngineSetScreenStack",
+                      JS_NewCFunction(ctx, JS_rayactEngineSetScreenStack,
+                                      "__rayactEngineSetScreenStack", 1));
+    // __rayactConfig: app-wide config (background color used as the opaque
+    // card fill for transition containers, etc.). Set by engineFinishLoad.
+    JS_SetPropertyStr(ctx, global, "__rayactConfig",
+                      JS_NewObject(ctx));
     JS_SetPropertyStr(ctx, global, "clearRootNode",
                       JS_NewCFunction(ctx, JS_clearRootNode, "clearRootNode", 0));
     JS_SetPropertyStr(ctx, global, "setOnPress",
@@ -1261,6 +1405,19 @@ bool engineCreate() {
 
 JSContext* engineContext() { return g_ctx; }
 
+void engineQueueTouch(int action, int id, float x, float y) {
+    if (id != 0) return;
+    std::lock_guard<std::mutex> lock(g_touchMutex);
+    g_queuedTouch.position = {x, y};
+    if (action == 0) {
+        g_queuedTouch.pressed = true;
+        g_queuedTouch.down = true;
+    } else if (action == 1) {
+        g_queuedTouch.released = true;
+        g_queuedTouch.down = false;
+    }
+}
+
 bool engineLoadDevServer(const std::string& devServerUrl) {
     return loadDevServerBundle(g_ctx, devServerUrl);
 }
@@ -1290,6 +1447,12 @@ bool engineLoadSource(const std::string& source, const std::string& name) {
     return true;
 }
 
+bool engineLoadConfig(const char* assetsPath) {
+    return rayact::loadAppConfig(g_ctx, assetsPath), true;
+}
+
+const AppConfig& engineAppConfig() { return rayact::appConfig(); }
+
 void engineFlushStartupJobs() {
     if (!g_ctx) return;
     for (int i = 0; i < 256; ++i) js_std_loop_once(g_ctx);
@@ -1310,8 +1473,33 @@ void engineFinishLoad() {
         (Texture2D){ 1, 1, 1, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 },
         (Rectangle){ 0.0f, 0.0f, 1.0f, 1.0f });
     JS_RunGC(g_rt);
+    // Tell raym3 the host's DPI scale so it generates font textures at the
+    // actual pixel size (instead of dp size) — otherwise the host's
+    // rlScalef(dp, dp, 1) would upscale fonts ~3.5x on a 560dpi phone and
+    // text would render blurry.
+    raym3::FontManager::SetDpiScale(GetWindowScaleDPI().x);
     raym3::Initialize();
     initSystemAppearance(g_ctx);
+
+    // Expose app-wide config to JS. The transition container uses
+    // backgroundColor as the opaque card fill so the upper card fully
+    // covers the lower surface during a slide — keeps everything opaque,
+    // no transparent SurfaceView compositing required.
+    {
+        const AppConfig& cfg = rayact::appConfig();
+        uint32_t bg = (uint32_t(cfg.backgroundColor[0]) << 24)
+                    | (uint32_t(cfg.backgroundColor[1]) << 16)
+                    | (uint32_t(cfg.backgroundColor[2]) <<  8)
+                    | (uint32_t(cfg.backgroundColor[3]));
+        JSValue global = JS_GetGlobalObject(g_ctx);
+        JSValue cfgObj = JS_GetPropertyStr(g_ctx, global, "__rayactConfig");
+        if (JS_IsObject(cfgObj)) {
+            JS_SetPropertyStr(g_ctx, cfgObj, "backgroundColor",
+                              JS_NewUint32(g_ctx, bg));
+        }
+        JS_FreeValue(g_ctx, cfgObj);
+        JS_FreeValue(g_ctx, global);
+    }
 }
 
 void enginePumpJS() {
@@ -1349,122 +1537,35 @@ void enginePumpJS() {
 }
 
 // rlgl matrix stack (C linkage) — used for the Android dp content scale.
-extern "C" { void rlPushMatrix(void); void rlPopMatrix(void); void rlScalef(float, float, float); }
+extern "C" { void rlPushMatrix(void); void rlPopMatrix(void); void rlScalef(float, float, float); void rlSetLineWidth(float); }
 
-void engineRenderFrame(int width, int height) {
-    BeginDrawing();
-#if defined(RAYACT_ANDROID) && defined(RAYACT_ANDROID_RAYM3_TEST)
-    // Raw C++ raym3 v2 layout test — no JS, no RenderQueue. Isolates raym3 v2
-    // rendering on rlvk. Build raym3 with RAYM3_USE_INPUT_LAYERS=0 so v2::Render
-    // draws immediately (no deferred queue).
-    {
-        using namespace raym3::v2;
-        // Scale by density so styles are authored in dp, not raw px. On a ~3.5x
-        // device a 200dp box is 700px; layout happens in dp (logical = px/dp),
-        // then the modelview is scaled by dp so it covers the full pixel surface.
-        float dp = GetWindowScaleDPI().x;
-        if (dp < 0.5f) dp = 1.0f;
-        const float logicalW = (float)width / dp;
-        const float logicalH = (float)height / dp;
-        static NodePtr testRoot = nullptr;
-        if (!testRoot) {
-            auto box = [](Color c) {
-                ViewProps p;
-                p.style.width = 90.0f; p.style.height = 90.0f;
-                p.style.backgroundColor = c; p.style.borderRadius = 16.0f;
-                return View(p, {});
-            };
-            ViewProps rowP;
-            rowP.style.flexDirection = FlexDirection::Row;
-            rowP.style.gap = 12.0f;
-            ViewProps rootP;
-            rootP.style.flexDirection = FlexDirection::Column;
-            rootP.style.gap = 16.0f;
-            rootP.style.backgroundColor = Color{27, 42, 74, 255};
-            rootP.style.padding.all = 24.0f;
-            rootP.style.width = logicalW;
-            rootP.style.height = logicalH;
-            // Clip container: overflow:Hidden 360x220 holding an oversized child.
-            // If scissor clipping works on rlvk, the child is cut to the box.
-            ViewProps clipP;
-            clipP.style.width = 200.0f; clipP.style.height = 120.0f;
-            clipP.style.overflow = Overflow::Hidden;
-            clipP.style.backgroundColor = Color{60, 60, 80, 255};
-            ViewProps bigChildP;
-            bigChildP.style.width = 400.0f; bigChildP.style.height = 400.0f;
-            bigChildP.style.backgroundColor = Color{90, 200, 255, 255};
-            auto mkBtn = [](const char* label, raym3::ButtonVariant v) {
-                ButtonProps bp; bp.label = label; bp.variant = v;
-                bp.onPress = [label]() { TraceLog(LOG_INFO, "RAYACT: button pressed: %s", label); };
-                return Button(bp, {});
-            };
-            ViewProps btnRowP;
-            btnRowP.style.flexDirection = FlexDirection::Row;
-            btnRowP.style.gap = 16.0f;
-            testRoot = View(rootP, {
-                Text("raym3 v2 raw layout", {}),
-                View(rowP, { box(Color{233,69,96,255}), box(Color{68,204,102,255}), box(Color{255,201,74,255}) }),
-                View(btnRowP, { mkBtn("Filled", raym3::ButtonVariant::Filled), mkBtn("Outlined", raym3::ButtonVariant::Outlined), mkBtn("Tonal", raym3::ButtonVariant::Tonal) }),
-                View(clipP, { View(bigChildP, {}) }),
-            });
-        }
-        ClearBackground((Color){20, 20, 30, 255});
-        Rectangle bounds = {0, 0, logicalW, logicalH};
-        rlPushMatrix();
-        rlScalef(dp, dp, 1.0f);          // dp → px
-        UpdateLayout(testRoot, bounds);
-        Render(testRoot, bounds);
-        rlPopMatrix();
-        // Touch → press dispatch in logical (dp) coords (mouse is in px).
-        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-            Vector2 m = GetMousePosition();
-            auto hit = HitTest(testRoot, (Vector2){ m.x / dp, m.y / dp });
-            if (hit && hit->onPress) hit->onPress();
-        }
-        EndDrawing();
-        return;
-    }
-#endif
-#if defined(RAYACT_ANDROID) && defined(RAYACT_ANDROID_DIAGNOSTIC)
-    // Native smoke-test screen (set -DRAYACT_ANDROID_DIAGNOSTIC to use). Bypasses raym3.
-    ClearBackground((Color){20, 20, 30, 255});
-    drawAndroidDiagnosticCube(width, height);
-    DrawText("ROTATING CUBE SMOKE TEST", 80, 120, 52, (Color){235, 235, 245, 255});
-    EndDrawing();
-    return;
-#endif
+// Per-screen render body. Caller must have:
+//   - bound the right EGL surface (raylib BindWindow equivalent), or be running
+//     in single-surface desktop mode (default window is fine).
+//   - bound the right engine screen via engineBindScreenRoot(screenId) so
+//     g_root points at the tree to render.
+//   - called raym3::BeginFrame() (once per frame, not per screen).
+// On return, g_root is still bound to screenId (caller can move it back if it
+// wants to keep state isolated).
+//
+// Clears the surface with the app's background color (single source of truth
+// for now — per-screen backgrounds would need ScreenState.bgColor).
+static void engineRenderScreenInSurface(int screenId, int width, int height, bool dispatchInput) {
 #if defined(RAYACT_ANDROID)
-    ClearBackground((Color){255, 0, 255, 255}); // DIAGNOSTIC: magenta — if it shows, raym3 draws produce nothing
+    {
+        const AppConfig& cfg = engineAppConfig();
+        Color bg = { cfg.backgroundColor[0], cfg.backgroundColor[1],
+                     cfg.backgroundColor[2], cfg.backgroundColor[3] };
+        ClearBackground(bg);
+    }
 #else
     ClearBackground(BLACK);
 #endif
-    raym3::BeginFrame();
-
-    if (g_root) {
-        // raym3 v2 retained-mode path — render the current surface's tree.
-        Rectangle bounds = {0, 0, (float)width, (float)height};
-        raym3::v2::UpdateLayout(g_root, bounds);
-        raym3::v2::Render(g_root, bounds);
-
-        Vector2 mouse = GetMousePosition();
-        float wheelY = GetMouseWheelMove();
-        bool pressed  = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
-        bool released = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
-        bool down     = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
-        bool scrollDragConsumed = processRaym3ScrollInput(mouse, wheelY, pressed, down, released);
-
-#ifndef RAYACT_NO_WORKERS
-        // Route hover/move/drag/down/up to any worker canvas node
-        processWorkerInputEvents(mouse.x, mouse.y, pressed, released, down);
-#endif
-
-        // Standard raym3 press dispatch (fires onPress on release)
-        if (released && !scrollDragConsumed) {
-            auto hit = raym3::v2::HitTest(g_root, mouse);
-            if (hit && hit->onPress) hit->onPress();
-        }
-    } else {
-        // Fallback: immediate-mode shapes (backward compat)
+    if (!g_root) {
+        // Fallback: immediate-mode shapes (backward compat). Only the focused
+        // screen draws shapes — backgrounds behind the focused screen would
+        // cover input regions otherwise.
+        if (!dispatchInput) return;
         for (const Shape& shape : g_shapes) {
             Color c = {
                 (unsigned char)((shape.color >> 24) & 0xFF),
@@ -1478,10 +1579,130 @@ void engineRenderFrame(int width, int height) {
                 case 2: DrawLine(shape.x1, shape.y1, shape.x2, shape.y2, c); break;
             }
         }
+        return;
+    }
+    // raym3 v2 retained-mode path — render the current surface's tree.
+    // Layout is in dp (so a 200dp box is the same physical size on a 1x and
+    // 4x device); render is in px. Push dp-scale on the matrix stack so the
+    // children draw at the right physical size.
+    float dp = GetWindowScaleDPI().x;
+    if (dp < 0.5f) dp = 1.0f;
+    const float logicalW = (float)width / dp;
+    const float logicalH = (float)height / dp;
+    Rectangle bounds = {0.0f, 0.0f, logicalW, logicalH};
+    raym3::v2::UpdateLayout(g_root, bounds);
+    rlPushMatrix();
+    rlScalef(dp, dp, 1.0f);
+    raym3::v2::Render(g_root, bounds);
+    rlPopMatrix();
+
+    if (!dispatchInput) return;
+    Vector2 mouse = GetMousePosition();
+    // mouse is in screen pixels; HitTest expects logical dp coords.
+    Vector2 mouseDp = { mouse.x / dp, mouse.y / dp };
+    float wheelY = GetMouseWheelMove();
+    bool pressed  = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    bool released = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
+    bool down     = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+#if defined(RAYACT_ANDROID)
+    {
+        std::lock_guard<std::mutex> lock(g_touchMutex);
+        if (g_queuedTouch.pressed || g_queuedTouch.released || g_queuedTouch.down) {
+            mouse = g_queuedTouch.position;
+            mouseDp = { mouse.x / dp, mouse.y / dp };
+            pressed = g_queuedTouch.pressed;
+            released = g_queuedTouch.released;
+            down = g_queuedTouch.down;
+            g_queuedTouch.pressed = false;
+            g_queuedTouch.released = false;
+        }
+    }
+#endif
+    bool scrollDragConsumed = processRaym3ScrollInput(mouse, wheelY, pressed, down, released);
+
+#ifndef RAYACT_NO_WORKERS
+    // Route hover/move/drag/down/up to any worker canvas node
+    processWorkerInputEvents(mouse.x, mouse.y, pressed, released, down);
+#endif
+
+    // Standard raym3 press dispatch (fires onPress on release)
+    if (released && !scrollDragConsumed) {
+        auto hit = raym3::v2::HitTest(g_root, mouseDp);
+        auto pressTarget = engineFindPressTarget(hit);
+        if (pressTarget && pressTarget->onPress) pressTarget->onPress();
+    }
+}
+
+// Desktop legacy single-surface render frame.
+void engineRenderFrame(int width, int height) {
+    BeginDrawing();
+#if defined(RAYACT_ANDROID_3D_SMOKE)
+    ClearBackground((Color){20, 20, 30, 255});
+    drawAndroid3DSmoke();
+    EndDrawing();
+    return;
+#endif
+#if defined(RAYACT_ANDROID) && defined(RAYACT_ANDROID_DIAGNOSTIC)
+    ClearBackground((Color){20, 20, 30, 255});
+    drawAndroidDiagnosticCube(width, height);
+    DrawText("ROTATING CUBE SMOKE TEST", 80, 120, 52, (Color){235, 235, 245, 255});
+    EndDrawing();
+    return;
+#endif
+    raym3::BeginFrame();
+
+    // Multi-screen render path: iterate the visible stack bottom→top. Each
+    // screen's root is bound into the file-static g_root via engineBindScreenRoot
+    // before rendering. Input is dispatched only on the focused (top) screen.
+    // If no stack is active (legacy single-screen mode), fall through to the
+    // g_root path with input enabled. Per-surface ClearBackground is done
+    // inside engineRenderScreenInSurface.
+    if (engineHasScreenStack()) {
+        int focused = engineGetFocusedScreenId();
+        engineForEachVisibleScreen([&](int id, const raym3::v2::NodePtr&) {
+            engineBindScreenRoot(id); // moves this screen's root into g_root
+            engineRenderScreenInSurface(id, width, height, id == focused);
+        });
+    } else {
+        engineRenderScreenInSurface(engineGetCurrentScreenId(), width, height, true);
     }
 
     raym3::EndFrame();
     EndDrawing();
+}
+
+// Android multi-surface render frame. The JNI layer is responsible for
+// binding each surface's EGL window before each call and swapping it after.
+// We do the per-frame raym3 bookends here, and per-screen layout/render/
+// input dispatch.
+void engineRenderFrameAndroid(int width, int height) {
+    if (!engineHasScreenStack()) return; // legacy desktop path uses engineRenderFrame
+    // BeginDrawing/EndDrawing are the raylib frame boundaries. On the RLVK
+    // (Vulkan) backend they drive swapchain acquire + submit + present — the
+    // custom external-surface SwapScreenBuffer() is a no-op for RLVK, so
+    // without these the frame is rendered but never presented (black screen).
+    // The caller has already bound the right window (RcoreAndroidSurface_BindWindow
+    // → rlvkSetNativeWindow), so present targets the correct surface.
+    //
+    // Rendering is READ-ONLY w.r.t. screen state: g_currentScreenId and the
+    // per-screen save/load are owned exclusively by JS (setCurrentScreen). The
+    // earlier engineBindScreenRoot-per-screen approach mutated g_currentScreenId
+    // every frame, which raced the JS navigator and engineDestroyScreen and
+    // corrupted the stack on pop (current=0, roots lost). Instead we snapshot
+    // the JS-owned globals, point g_root at each screen's tree just long enough
+    // to draw it, then restore — leaving JS state byte-for-byte untouched.
+    const int savedCurrent = engineGetCurrentScreenId();
+    raym3::v2::NodePtr savedRoot = g_root; // the JS-current screen's live tree
+    BeginDrawing();
+    raym3::BeginFrame();
+    const int focused = engineGetFocusedScreenId();
+    engineForEachVisibleScreen([&](int id, const raym3::v2::NodePtr& root) {
+        g_root = (id == savedCurrent) ? savedRoot : root;
+        engineRenderScreenInSurface(id, width, height, id == focused);
+    });
+    raym3::EndFrame();
+    EndDrawing();
+    g_root = savedRoot; // restore JS-owned state untouched
 }
 
 void engineDestroy() {

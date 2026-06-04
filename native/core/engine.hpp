@@ -32,6 +32,13 @@ bool engineLoadDevServer(const std::string& devServerUrl);
 bool engineLoadFile(const std::string& path);          // sets release asset base dir
 bool engineLoadSource(const std::string& source, const std::string& name);
 
+// Load the optional app config (app.json / app.config.js / app.config.ts).
+// Idempotent. Safe to call once after engineCreate() and before
+// engineFinishLoad(). Path is the assets root (e.g. the Activity's
+// internalDataPath on Android). Defaults to black if no config found.
+bool engineLoadConfig(const char* assetsPath);
+const struct AppConfig& engineAppConfig();
+
 // Drain QuickJS jobs/microtasks after initial eval (React mounts via microtasks).
 void engineFlushStartupJobs();
 
@@ -48,8 +55,17 @@ void engineFinishLoad();
 //     and invoke the JS frame-update callback.
 //   - engineRenderFrame(w,h): draw the current surface's raym3 tree (or the
 //     legacy immediate-mode shapes) into the bound GL surface at size w x h.
+//   - engineRenderFrameAndroid(w,h): multi-surface render — caller must
+//     bind the right EGL window for each visible screen before/after each
+//     per-screen pass (raylib multi-surface EGL: RcoreAndroidSurface_BindWindow
+//     + SwapWindow). Desktop single-surface code path uses engineRenderFrame().
 void enginePumpJS();
 void engineRenderFrame(int width, int height);
+void engineRenderFrameAndroid(int width, int height);
+
+// Android SurfaceView touches arrive on the UI thread. Queue the primary
+// pointer here so the render thread can dispatch press handlers on release.
+void engineQueueTouch(int action, int id, float x, float y);
 
 // Tear down JS subsystems, context and runtime.
 void engineDestroy();

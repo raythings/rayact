@@ -205,6 +205,10 @@ set(SOURCES
     net.cpp
     utils/TypeStripper.cpp
     utils/ScriptValidator.cpp
+    # core/ provides engineAppConfig / loadAppConfig (used by main.cpp for
+    # background-color reads). Same sources are linked into the Android
+    # shared library via apps/android/app/src/main/cpp/CMakeLists.txt.
+    ../core/config_loader.cpp
     ${TS_TYPESCRIPT_SOURCES}
     ${CSSPARSER_SOURCES}
 )

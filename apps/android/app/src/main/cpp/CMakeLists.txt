@@ -14,12 +14,18 @@ set(RLVK_DIR    "${OUTER}/rlvk")
 set(QUICKJS_DIR "${OUTER}/quickjs")
 set(RAYM3_DIR   "${OUTER}/raym3")
 set(CSSPARSER_DIR "${OUTER}/cssparser/cssparser")
+set(RAYGPU_DIR   "${OUTER}/raygpu")
+set(WGVK_DIR     "${OUTER}/WGVK")
 
 # Feature scope for the first device bring-up. Networking (curl/lws/openssl),
 # workers (wasm3/native), and the TS validator (tree-sitter) are deferred — the
 # engine call sites are guarded by RAYACT_NO_NET/NO_WORKERS/NO_TS.
 option(RAYACT_ANDROID_FULL "Build net + workers + TS subsystems" OFF)
 option(RAYACT_ANDROID_USE_RLVK "Build Android with the Vulkan-backed rlvk rlgl implementation" ON)
+# 3D smoke-test scene is opt-in. Pass -DRAYACT_ANDROID_3D_SMOKE=ON at configure
+# time to re-enable the in-process probe (FBO + grid + cube + lines). Default
+# is OFF so the engine renders the real QuickJS app.js path.
+option(RAYACT_ANDROID_3D_SMOKE "Render the temporary 3D smoke test scene on Android" OFF)
 
 # Don't build/run dependency unit tests (yoga's gtest_discover_tests would try
 # to execute arm64 test binaries on the build host).
@@ -45,7 +51,14 @@ set(RAYLIB_LIBS EGL GLESv3)
 if (RAYACT_ANDROID_USE_RLVK)
     list(APPEND RAYLIB_SRC ${RLVK_DIR}/src/glad_vulkan_impl.c)
     list(APPEND RAYLIB_DEFS RAYLIB_USE_RLVK)
+    list(APPEND RAYLIB_DEFS RLVK_ENABLE_GLSLANG=1)
     list(APPEND RAYLIB_LIBS vulkan)
+    set(GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
+    set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+    set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
+    set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
+    set(BUILD_EXTERNAL OFF CACHE BOOL "" FORCE)
+    add_subdirectory(${RAYGPU_DIR}/amalgamation/glslang ${CMAKE_BINARY_DIR}/glslang EXCLUDE_FROM_ALL)
 endif()
 
 add_library(raylib STATIC ${RAYLIB_SRC})
@@ -80,6 +93,7 @@ add_subdirectory(${RAYM3_DIR} ${CMAKE_BINARY_DIR}/raym3 EXCLUDE_FROM_ALL)
 
 if (RAYACT_ANDROID_USE_RLVK)
     target_compile_definitions(raym3 PUBLIC RAYLIB_USE_RLVK)
+    target_link_libraries(raylib PUBLIC glslang glslang-default-resource-limits)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -98,6 +112,7 @@ target_include_directories(cssparser PUBLIC ${OUTER}/cssparser)
 # + Android platform/system-appearance variants + JNI bridge.
 # ---------------------------------------------------------------------------
 set(ENGINE_SRC
+    ${RAYACT}/native/core/config_loader.cpp
     ${RAYACT}/native/desktop/color_parse.cpp
     ${RAYACT}/native/desktop/theme_bridge.cpp
     ${RAYACT}/native/desktop/main.cpp
@@ -113,8 +128,17 @@ set(ENGINE_SRC
 )
 
 add_library(rayact SHARED ${ENGINE_SRC})
+if (RAYACT_ANDROID_USE_RLVK)
+    target_sources(rayact PRIVATE ${WGVK_DIR}/src/spirv_reflect.c ${RLVK_DIR}/src/rlvk_reflect.c)
+endif()
+# Real QuickJS app path: app.js (React 19 + raym3 v2 retained mode) drives
+# engineRenderFrame() via g_root. The C++ smoke tests are still available
+# behind RAYACT_ANDROID_3D_SMOKE and RAYACT_ANDROID_DIAGNOSTIC for one-off
+# validation; flip either of them back on (e.g. -DRAYACT_ANDROID_3D_SMOKE=ON)
+# to re-enable. Default is OFF so the app surface is the actual product.
 target_compile_definitions(rayact PRIVATE
-    RAYACT_ANDROID RAYACT_ANDROID_RAYM3_TEST ${GLES3}
+    RAYACT_ANDROID ${GLES3}
+    $<$<BOOL:${RAYACT_ANDROID_3D_SMOKE}>:RAYACT_ANDROID_3D_SMOKE>
     $<$<NOT:$<BOOL:${RAYACT_ANDROID_FULL}>>:RAYACT_NO_NET RAYACT_NO_WORKERS RAYACT_NO_TS>
 )
 target_include_directories(rayact PRIVATE
@@ -128,3 +152,10 @@ target_link_libraries(rayact
     raylib qjs raym3 cssparser
     ${RAYLIB_LIBS} android log m
 )
+
+if (RAYACT_ANDROID_USE_RLVK)
+    target_include_directories(raylib PUBLIC
+        ${RAYGPU_DIR}/amalgamation/glslang/glslang/Include
+        ${WGVK_DIR}/src
+    )
+endif()
