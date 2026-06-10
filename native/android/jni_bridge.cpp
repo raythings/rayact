@@ -276,8 +276,7 @@ static std::atomic<bool> g_pendingImeBlur{false};
 static std::atomic<int> g_imeNodeId{-1};
 
 void AndroidKeyboard_ShowForNode(int nodeId) {
-    if (g_imeNodeId.load() == nodeId) return;
-    int prevNode = g_imeNodeId.load();
+    const int prevNode = g_imeNodeId.load();
     g_imeNodeId.store(nodeId);
     // Called from render thread which already holds g_engineMutex — no re-lock.
     std::string value;
@@ -291,7 +290,11 @@ void AndroidKeyboard_ShowForNode(int nodeId) {
     if (!attachEnv(&env, &needDetach)) return;
     jclass cls = env->FindClass("com/rayact/engine/RayactEngineKt");
     if (cls) {
-        const char* method = prevNode >= 0 ? "switchImeFromHost" : "showSoftKeyboardFromHost";
+        // Field-to-field: switch in-place (keyboard stays visible).
+        // Cold focus or re-open after system IME dismiss: show.
+        const char* method = (prevNode >= 0 && prevNode != nodeId)
+                                 ? "switchImeFromHost"
+                                 : "showSoftKeyboardFromHost";
         const char* sig = "(ILjava/lang/String;)V";
         jmethodID m = env->GetStaticMethodID(cls, method, sig);
         if (m) {
@@ -336,6 +339,11 @@ Java_com_rayact_engine_RayactEngine_nativeSetTextInputContent(JNIEnv* env, jclas
 extern "C" JNIEXPORT void JNICALL
 Java_com_rayact_engine_RayactEngine_nativeBlurTextInput(JNIEnv*, jclass) {
     g_pendingImeBlur.store(true, std::memory_order_release);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngine_nativeImeHiddenBySystem(JNIEnv*, jclass) {
+    g_imeNodeId.store(-1, std::memory_order_release);
 }
 
 // Render thread → Kotlin: keep the IME InputConnection selection in sync with

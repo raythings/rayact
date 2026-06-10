@@ -65,7 +65,21 @@ export interface HostNode {
   type: HostNodeType;
 }
 
-export type HostEventName = 'press' | 'click' | 'changeText' | 'changeValue' | 'scroll' | 'requestClose' | 'focus' | 'blur';
+export type HostPointerEvent = { x: number; y: number };
+
+export type HostEventName =
+  | 'press'
+  | 'click'
+  | 'changeText'
+  | 'changeValue'
+  | 'scroll'
+  | 'requestClose'
+  | 'focus'
+  | 'blur'
+  | 'dragStart'
+  | 'dragMove'
+  | 'dragEnd'
+  | 'layout';
 
 export interface RayactAsset {
   id: string;
@@ -96,7 +110,11 @@ export interface HostBridge {
   removeChild(parent: HostNode, child: HostNode): void;
   insertBefore(parent: HostNode, child: HostNode, beforeChild: HostNode): void;
   setRoot(node: HostNode | null): void;
-  setEventHandler(node: HostNode, eventName: HostEventName, handler?: (() => void) | null): void;
+  setEventHandler(
+    node: HostNode,
+    eventName: HostEventName,
+    handler?: (() => void) | ((event: HostPointerEvent) => void) | null
+  ): void;
   disposeNode(node: HostNode): void;
   reload(source?: string): Promise<void> | void;
   showError?(message: string, stack?: string): void;
@@ -158,6 +176,13 @@ export interface RayactGlobal {
   setOnChangeValue?: (nodeId: number, handler?: ((value: number) => void) | null) => void;
   setOnScroll?: (nodeId: number, handler?: ((event: unknown) => void) | null) => void;
   setOnRequestClose?: (nodeId: number, handler?: (() => void) | null) => void;
+  setOnDragStart?: (nodeId: number, handler?: ((event: HostPointerEvent) => void) | null) => void;
+  setOnDragMove?: (nodeId: number, handler?: ((event: HostPointerEvent) => void) | null) => void;
+  setOnDragEnd?: (nodeId: number, handler?: ((event: HostPointerEvent) => void) | null) => void;
+  setOnLayout?: (
+    nodeId: number,
+    handler?: ((event: { nativeEvent: { layout: { x: number; y: number; width: number; height: number } } }) => void) | null
+  ) => void;
   disposeNode?: (nodeId: number) => void;
   clearRootNode?: () => void;
   resolveAssetUrl?: (asset: RayactAssetMetadata) => string;

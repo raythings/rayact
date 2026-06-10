@@ -281,6 +281,9 @@ class RayactSurfaceView @JvmOverloads constructor(
         ViewCompat.setOnApplyWindowInsetsListener(this) { _, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             reportSafeAreaInsets(insets.top, insets.right, insets.bottom, insets.left)
+            if (!windowInsets.isVisible(WindowInsetsCompat.Type.ime()) && imeNodeId >= 0) {
+                RayactEngine.nativeImeHiddenBySystem()
+            }
             windowInsets
         }
     }

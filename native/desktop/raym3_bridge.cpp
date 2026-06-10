@@ -233,6 +233,10 @@ static std::map<int, JSValue> g_focusCallbacks;
 static std::map<int, JSValue> g_blurCallbacks;
 static std::map<int, JSValue> g_scrollCallbacks;
 static std::map<int, JSValue> g_requestCloseCallbacks;
+static std::map<int, JSValue> g_dragStartCallbacks;
+static std::map<int, JSValue> g_dragMoveCallbacks;
+static std::map<int, JSValue> g_dragEndCallbacks;
+static std::map<int, JSValue> g_layoutCallbacks;
 
 static std::map<int, NativeControlState> g_nativeControlStates;
 static std::map<int, raym3::v2::M3Component> g_materialComponentKinds;
@@ -1105,6 +1109,10 @@ static void updateNativeControlState(JSContext* ctx, int id, JSValue props) {
         if (auto v = jsGetFloat(ctx, props, "max")) state.maxValue = *v;
         if (auto v = jsGetFloat(ctx, props, "step")) state.step = *v;
         // Don't clobber the in-flight value while the user is dragging.
+        if (auto nit = g_nodes.find(id); nit != g_nodes.end() && nit->second) {
+            state.dragging = nit->second->control.dragging;
+            state.draggingThumb = nit->second->control.draggingThumb;
+        }
         if (!state.dragging) {
             if (auto v = jsGetFloat(ctx, props, "value")) state.value = *v;
             if (auto v = jsGetFloat(ctx, props, "startProgress")) state.startValue = *v;
@@ -1278,23 +1286,67 @@ static std::vector<raym3::v2::BoxShadow> parseBoxShadowCss(const std::string& cs
     return shadows;
 }
 
+static bool jsValueIsAuto(JSContext* ctx, JSValue v) {
+    if (!JS_IsString(v)) return false;
+    const char* s = JS_ToCString(ctx, v);
+    bool result = s && strcmp(s, "auto") == 0;
+    if (s) JS_FreeCString(ctx, s);
+    return result;
+}
+
+static void applyMarginEdgeProp(JSContext* ctx, JSValue obj, const char* key,
+                                std::optional<float>& point,
+                                std::optional<bool>& autoFlag) {
+    if (!jsHasProperty(ctx, obj, key)) return;
+    JSValue v = JS_GetPropertyStr(ctx, obj, key);
+    if (jsValueIsAuto(ctx, v)) {
+        autoFlag = true;
+        point = std::nullopt;
+    } else if (!JS_IsUndefined(v) && !JS_IsNull(v)) {
+        double d;
+        if (JS_ToFloat64(ctx, &d, v) == 0) {
+            point = (float)d;
+            autoFlag = false;
+        }
+    }
+    JS_FreeValue(ctx, v);
+}
+
 static std::optional<raym3::v2::EdgeValues> jsGetEdgeValues(JSContext* ctx, JSValue obj, const char* key) {
     JSValue v = JS_GetPropertyStr(ctx, obj, key);
     if (JS_IsUndefined(v) || JS_IsNull(v)) { JS_FreeValue(ctx, v); return std::nullopt; }
     raym3::v2::EdgeValues ev;
-    if (JS_IsNumber(v)) {
+    if (JS_IsString(v) && jsValueIsAuto(ctx, v) && strcmp(key, "margin") == 0) {
+        ev.allAuto = true;
+    } else if (JS_IsNumber(v)) {
         double d; JS_ToFloat64(ctx, &d, v);
         ev.all = (float)d;
     } else if (JS_IsObject(v)) {
         auto edge = [&](const char* k) -> std::optional<float> {
             JSValue e = JS_GetPropertyStr(ctx, v, k);
             std::optional<float> r;
-            if (!JS_IsUndefined(e)) { double d; JS_ToFloat64(ctx, &d, e); r = (float)d; }
+            if (!JS_IsUndefined(e) && !JS_IsNull(e) && !jsValueIsAuto(ctx, e)) {
+                double d; JS_ToFloat64(ctx, &d, e); r = (float)d;
+            }
+            JS_FreeValue(ctx, e);
+            return r;
+        };
+        auto edgeAuto = [&](const char* k) -> std::optional<bool> {
+            JSValue e = JS_GetPropertyStr(ctx, v, k);
+            std::optional<bool> r;
+            if (!JS_IsUndefined(e) && !JS_IsNull(e)) {
+                if (jsValueIsAuto(ctx, e)) r = true;
+                else if (JS_IsNumber(e)) r = false;
+            }
             JS_FreeValue(ctx, e);
             return r;
         };
         ev.top = edge("top"); ev.right = edge("right");
         ev.bottom = edge("bottom"); ev.left = edge("left");
+        if (strcmp(key, "margin") == 0) {
+            ev.topAuto = edgeAuto("top"); ev.rightAuto = edgeAuto("right");
+            ev.bottomAuto = edgeAuto("bottom"); ev.leftAuto = edgeAuto("left");
+        }
     }
     JS_FreeValue(ctx, v);
     return ev;
@@ -1340,8 +1392,9 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
     if (auto v = jsGetEdgeValues(ctx, obj, "padding")) s.padding = *v;
     if (auto v = jsGetFloat(ctx, obj, "paddingHorizontal")) s.padding.horizontal = v;
     if (auto v = jsGetFloat(ctx, obj, "paddingVertical"))   s.padding.vertical = v;
-    if (auto v = jsGetFloat(ctx, obj, "marginHorizontal"))  s.margin.horizontal = v;
-    if (auto v = jsGetFloat(ctx, obj, "marginVertical"))    s.margin.vertical = v;
+    applyMarginEdgeProp(ctx, obj, "marginHorizontal", s.margin.horizontal, s.margin.horizontalAuto);
+    applyMarginEdgeProp(ctx, obj, "marginVertical", s.margin.vertical, s.margin.verticalAuto);
+    applyMarginEdgeProp(ctx, obj, "margin", s.margin.all, s.margin.allAuto);
     // Per-edge shortcuts (override shorthand if both present)
     auto applyEdge = [&](raym3::v2::EdgeValues& ev, const char* tKey, const char* rKey,
                          const char* bKey, const char* lKey) {
@@ -1351,7 +1404,10 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
         if (auto v = jsGetFloat(ctx, obj, lKey)) ev.left   = v;
     };
     applyEdge(s.padding, "paddingTop", "paddingRight", "paddingBottom", "paddingLeft");
-    applyEdge(s.margin,  "marginTop",  "marginRight",  "marginBottom",  "marginLeft");
+    applyMarginEdgeProp(ctx, obj, "marginTop", s.margin.top, s.margin.topAuto);
+    applyMarginEdgeProp(ctx, obj, "marginRight", s.margin.right, s.margin.rightAuto);
+    applyMarginEdgeProp(ctx, obj, "marginBottom", s.margin.bottom, s.margin.bottomAuto);
+    applyMarginEdgeProp(ctx, obj, "marginLeft", s.margin.left, s.margin.leftAuto);
 
     // Visual
     if (auto v = jsGetColor(ctx, obj, "backgroundColor")) s.backgroundColor = v;
@@ -1793,6 +1849,7 @@ JSValue JS_createButton(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueC
     auto node = raym3::v2::MaterialComponent(raym3::v2::M3Component::Button, props, {});
     int id = g_nextNodeId++;
     g_nodes[id] = node;
+    g_materialComponentKinds[id] = raym3::v2::M3Component::Button;
     if (argc >= 2 && JS_IsObject(argv[1])) captureNodeClassName(ctx, id, argv[1]);
     return JS_NewInt32(ctx, id);
 }
@@ -2825,6 +2882,113 @@ JSValue JS_setOnRequestClose(JSContext* ctx, JSValue, int argc, JSValueConst* ar
     return JS_UNDEFINED;
 }
 
+static void invokeDragCallback(int id, const std::map<int, JSValue>& callbacks, float x, float y) {
+    auto it = callbacks.find(id);
+    if (it == callbacks.end() || !g_bridge_ctx) return;
+    JSValue event = JS_NewObject(g_bridge_ctx);
+    JS_SetPropertyStr(g_bridge_ctx, event, "x", JS_NewFloat64(g_bridge_ctx, x));
+    JS_SetPropertyStr(g_bridge_ctx, event, "y", JS_NewFloat64(g_bridge_ctx, y));
+    JSValue result = JS_Call(g_bridge_ctx, it->second, JS_UNDEFINED, 1, &event);
+    if (JS_IsException(result)) {
+        JSValue exc = JS_GetException(g_bridge_ctx);
+        const char* s = JS_ToCString(g_bridge_ctx, exc);
+        fprintf(stderr, "drag callback error: %s\n", s ? s : "(unknown)");
+        if (s) JS_FreeCString(g_bridge_ctx, s);
+        JS_FreeValue(g_bridge_ctx, exc);
+    }
+    JS_FreeValue(g_bridge_ctx, result);
+    JS_FreeValue(g_bridge_ctx, event);
+}
+
+JSValue JS_setOnDragStart(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setOnDragStart: expected (nodeId, fn)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto it = g_nodes.find(id);
+    if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnDragStart: invalid node id");
+    setStoredCallback(ctx, id, argv[1], g_dragStartCallbacks);
+    if (JS_IsFunction(ctx, argv[1]) && it->second)
+        it->second->onDragStart = [id](Vector2 pt) {
+            invokeDragCallback(id, g_dragStartCallbacks, pt.x, pt.y);
+        };
+    else if (it->second)
+        it->second->onDragStart = nullptr;
+    return JS_UNDEFINED;
+}
+
+JSValue JS_setOnDragMove(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setOnDragMove: expected (nodeId, fn)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto it = g_nodes.find(id);
+    if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnDragMove: invalid node id");
+    setStoredCallback(ctx, id, argv[1], g_dragMoveCallbacks);
+    if (JS_IsFunction(ctx, argv[1]) && it->second)
+        it->second->onDragMove = [id](Vector2 delta) {
+            invokeDragCallback(id, g_dragMoveCallbacks, delta.x, delta.y);
+        };
+    else if (it->second)
+        it->second->onDragMove = nullptr;
+    return JS_UNDEFINED;
+}
+
+JSValue JS_setOnDragEnd(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setOnDragEnd: expected (nodeId, fn)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto it = g_nodes.find(id);
+    if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnDragEnd: invalid node id");
+    setStoredCallback(ctx, id, argv[1], g_dragEndCallbacks);
+    if (JS_IsFunction(ctx, argv[1]) && it->second)
+        it->second->onDragEnd = [id](Vector2 delta) {
+            invokeDragCallback(id, g_dragEndCallbacks, delta.x, delta.y);
+        };
+    else if (it->second)
+        it->second->onDragEnd = nullptr;
+    return JS_UNDEFINED;
+}
+
+static void invokeLayoutCallback(int id, const Rectangle& r) {
+    auto it = g_layoutCallbacks.find(id);
+    if (it == g_layoutCallbacks.end() || !g_bridge_ctx) return;
+    JSValue event = JS_NewObject(g_bridge_ctx);
+    JSValue nativeEvent = JS_NewObject(g_bridge_ctx);
+    JSValue layout = JS_NewObject(g_bridge_ctx);
+    JS_SetPropertyStr(g_bridge_ctx, layout, "x", JS_NewFloat64(g_bridge_ctx, r.x));
+    JS_SetPropertyStr(g_bridge_ctx, layout, "y", JS_NewFloat64(g_bridge_ctx, r.y));
+    JS_SetPropertyStr(g_bridge_ctx, layout, "width", JS_NewFloat64(g_bridge_ctx, r.width));
+    JS_SetPropertyStr(g_bridge_ctx, layout, "height", JS_NewFloat64(g_bridge_ctx, r.height));
+    JS_SetPropertyStr(g_bridge_ctx, nativeEvent, "layout", layout);
+    JS_SetPropertyStr(g_bridge_ctx, event, "nativeEvent", nativeEvent);
+    JSValue result = JS_Call(g_bridge_ctx, it->second, JS_UNDEFINED, 1, &event);
+    if (JS_IsException(result)) {
+        JSValue exc = JS_GetException(g_bridge_ctx);
+        const char* s = JS_ToCString(g_bridge_ctx, exc);
+        fprintf(stderr, "onLayout error: %s\n", s ? s : "(unknown)");
+        if (s) JS_FreeCString(g_bridge_ctx, s);
+        JS_FreeValue(g_bridge_ctx, exc);
+    }
+  // Only free the root event object; nested nativeEvent/layout are owned by it.
+    JS_FreeValue(g_bridge_ctx, result);
+    JS_FreeValue(g_bridge_ctx, event);
+}
+
+JSValue JS_setOnLayout(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setOnLayout: expected (nodeId, fn)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto it = g_nodes.find(id);
+    if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnLayout: invalid node id");
+    setStoredCallback(ctx, id, argv[1], g_layoutCallbacks);
+    if (JS_IsFunction(ctx, argv[1]) && it->second) {
+        it->second->reportedLayoutValid = false;
+        it->second->onLayout = [id](Rectangle r) { invokeLayoutCallback(id, r); };
+    } else if (it->second) {
+        it->second->onLayout = nullptr;
+    }
+    return JS_UNDEFINED;
+}
+
 JSValue JS_setStyle(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
     if (argc < 2) return JS_ThrowTypeError(ctx, "setStyle: expected (nodeId, styleObj)");
     int id;
@@ -2851,7 +3015,7 @@ JSValue JS_setStyle(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst
         // Merge instead of replace so overflow=Scroll set at creation is preserved.
         it->second->style = raym3::v2::MergeStyles(it->second->style, parsed);
     } else {
-        it->second->style = parsed;
+        it->second->style = raym3::v2::MergeStyles(it->second->style, parsed);
     }
     if (jsHasProperty(ctx, argv[1], "capturesInput"))
         it->second->capturesInput = jsGetBool(ctx, argv[1], "capturesInput", false);
@@ -2970,6 +3134,26 @@ JSValue JS_disposeNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     if (closeCb != g_requestCloseCallbacks.end()) {
         JS_FreeValue(ctx, closeCb->second);
         g_requestCloseCallbacks.erase(closeCb);
+    }
+    auto dragStartCb = g_dragStartCallbacks.find(id);
+    if (dragStartCb != g_dragStartCallbacks.end()) {
+        JS_FreeValue(ctx, dragStartCb->second);
+        g_dragStartCallbacks.erase(dragStartCb);
+    }
+    auto dragMoveCb = g_dragMoveCallbacks.find(id);
+    if (dragMoveCb != g_dragMoveCallbacks.end()) {
+        JS_FreeValue(ctx, dragMoveCb->second);
+        g_dragMoveCallbacks.erase(dragMoveCb);
+    }
+    auto dragEndCb = g_dragEndCallbacks.find(id);
+    if (dragEndCb != g_dragEndCallbacks.end()) {
+        JS_FreeValue(ctx, dragEndCb->second);
+        g_dragEndCallbacks.erase(dragEndCb);
+    }
+    auto layoutCb = g_layoutCallbacks.find(id);
+    if (layoutCb != g_layoutCallbacks.end()) {
+        JS_FreeValue(ctx, layoutCb->second);
+        g_layoutCallbacks.erase(layoutCb);
     }
     g_nativeControlStates.erase(id);
     g_materialComponentKinds.erase(id);

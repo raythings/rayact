@@ -250,9 +250,11 @@ function MaterialGallery() {
         </NavigationRail>
       </Card>
 
-      <Dialog open={showDialog} onPress={() => setShowDialog(false)}>
-        <Text>Dialog content</Text>
-        <Button label="Close" onPress={() => { setShowDialog(false); setMessage('Dialog closed'); }} />
+        <Dialog open={showDialog} onPress={() => setShowDialog(false)}>
+          <View style={{ display: "flex", flex: 1, justifyContent: "space-between", padding: 16, gap: 12, minWidth: 200 }}>
+            <Text>Dialog content</Text>
+            <Button style={{ marginLeft: "auto" }} label="Close" onPress={() => { setShowDialog(false); setMessage('Dialog closed'); }} />
+          </View>
       </Dialog>
 
       <BottomSheet open={showBottomSheet} onRequestClose={() => setShowBottomSheet(false)}>

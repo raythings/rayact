@@ -105,6 +105,9 @@ export interface BaseProps {
   pointerEvents?: 'none' | 'auto';
   onPress?: () => void;
   onClick?: () => void;
+  onDragStart?: (event: { x: number; y: number }) => void;
+  onDragMove?: (event: { x: number; y: number }) => void;
+  onDragEnd?: (event: { x: number; y: number }) => void;
   /**
    * RN-style layout callback. Receives `{ nativeEvent: { layout: { x, y, width, height } } }`.
    * Used by the navigation transition container to size the slide/scale

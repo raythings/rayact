@@ -91,6 +91,8 @@ object RayactEngine {
     external fun nativeSetTextInputContent(nodeId: Int, text: String, cursor: Int)
     /** IME DONE/Enter — blur the focused native field on the render thread. */
     external fun nativeBlurTextInput()
+    /** System hid the IME without a native blur — clear JNI ime node id only. */
+    external fun nativeImeHiddenBySystem()
 }
 
 // Reverse-call from native (C++ engine, via JNI) to allocate a new

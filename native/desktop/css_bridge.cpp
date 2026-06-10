@@ -66,6 +66,10 @@ static std::string cleanValue(std::string v) {
 
 // ─── value parsers ────────────────────────────────────────────────────────────
 
+static bool isAuto(const std::string& v) {
+    return toLower(trimStr(v)) == "auto";
+}
+
 static float parseLength(const std::string& v) {
     if (v.empty()) return 0.0f;
     try {
@@ -75,6 +79,14 @@ static float parseLength(const std::string& v) {
         if (unit == "rem") f *= 16.0f;
         return f;
     } catch (...) { return 0.0f; }
+}
+
+static std::vector<std::string> expandEdgeParts(const std::vector<std::string>& parts) {
+    if (parts.empty()) return {};
+    if (parts.size() == 1) return {parts[0], parts[0], parts[0], parts[0]};
+    if (parts.size() == 2) return {parts[0], parts[1], parts[0], parts[1]};
+    if (parts.size() == 3) return {parts[0], parts[1], parts[2], parts[1]};
+    return {parts[0], parts[1], parts[2], parts[3]};
 }
 
 // Extract the fallback value from var(--name, fallback) or parse as plain float.
@@ -183,6 +195,28 @@ static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& props) {
 
         // ── edge shorthand ────────────────────────────────────────────────
         if (prop == "padding" || prop == "margin") {
+            auto parts = splitTrim(val, ' ');
+            if (prop == "margin") {
+                if (parts.size() == 1 && isAuto(parts[0])) {
+                    JS_SetPropertyStr(ctx, obj, "margin", JS_NewString(ctx, "auto"));
+                    continue;
+                }
+                bool anyAuto = false;
+                for (auto& p : parts) if (isAuto(p)) anyAuto = true;
+                if (anyAuto) {
+                    auto sides = expandEdgeParts(parts);
+                    JSValue ev = JS_NewObject(ctx);
+                    const char* keys[] = {"top", "right", "bottom", "left"};
+                    for (int i = 0; i < 4; ++i) {
+                        if (isAuto(sides[i]))
+                            JS_SetPropertyStr(ctx, ev, keys[i], JS_NewString(ctx, "auto"));
+                        else
+                            JS_SetPropertyStr(ctx, ev, keys[i], JS_NewFloat64(ctx, parseLength(sides[i])));
+                    }
+                    JS_SetPropertyStr(ctx, obj, "margin", ev);
+                    continue;
+                }
+            }
             auto vals = parseEdgeShorthand(val);
             if (vals[0]==vals[1] && vals[1]==vals[2] && vals[2]==vals[3]) {
                 JS_SetPropertyStr(ctx, obj, prop.c_str(), JS_NewFloat64(ctx, vals[0]));
@@ -198,7 +232,15 @@ static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& props) {
         }
 
         // ── individual edge sides ─────────────────────────────────────────
-        if (prop.rfind("padding-", 0) == 0 || prop.rfind("margin-", 0) == 0) {
+        if (prop.rfind("margin-", 0) == 0) {
+            std::string jsKey = camelCase(prop);
+            if (isAuto(val))
+                JS_SetPropertyStr(ctx, obj, jsKey.c_str(), JS_NewString(ctx, "auto"));
+            else
+                JS_SetPropertyStr(ctx, obj, jsKey.c_str(), JS_NewFloat64(ctx, parseLength(val)));
+            continue;
+        }
+        if (prop.rfind("padding-", 0) == 0) {
             size_t dash = prop.rfind('-');
             std::string parentKey = prop.substr(0, dash);
             std::string subKey    = prop.substr(dash + 1);

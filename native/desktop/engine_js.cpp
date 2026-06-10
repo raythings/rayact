@@ -476,6 +476,14 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_setOnScroll, "setOnScroll", 2));
     JS_SetPropertyStr(ctx, global, "setOnRequestClose",
                       JS_NewCFunction(ctx, JS_setOnRequestClose, "setOnRequestClose", 2));
+    JS_SetPropertyStr(ctx, global, "setOnDragStart",
+                      JS_NewCFunction(ctx, JS_setOnDragStart, "setOnDragStart", 2));
+    JS_SetPropertyStr(ctx, global, "setOnDragMove",
+                      JS_NewCFunction(ctx, JS_setOnDragMove, "setOnDragMove", 2));
+    JS_SetPropertyStr(ctx, global, "setOnDragEnd",
+                      JS_NewCFunction(ctx, JS_setOnDragEnd, "setOnDragEnd", 2));
+    JS_SetPropertyStr(ctx, global, "setOnLayout",
+                      JS_NewCFunction(ctx, JS_setOnLayout, "setOnLayout", 2));
     JS_SetPropertyStr(ctx, global, "setStyle",
                       JS_NewCFunction(ctx, JS_setStyle,     "setStyle",     2));
     JS_SetPropertyStr(ctx, global, "setText",
@@ -1400,7 +1408,12 @@ void enginePumpJS() {
         JS_FreeValue(ctx, result);
     }
 
-    if (g_root) {
+    static int shadowLayoutEnabled = -1;
+    if (shadowLayoutEnabled < 0) {
+        const char *env = std::getenv("RAYACT_SHADOW_LAYOUT");
+        shadowLayoutEnabled = (env && env[0] && env[0] != '0') ? 1 : 0;
+    }
+    if (shadowLayoutEnabled && g_root) {
         rayact::shadowTree().calculateLayout((float)GetRenderWidth(), (float)GetRenderHeight());
         raym3::MutationBatch layoutBatch;
         rayact::shadowTree().emitLayoutMutations(layoutBatch);

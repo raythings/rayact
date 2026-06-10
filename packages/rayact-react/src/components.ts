@@ -149,6 +149,13 @@ function monthYear(d: Date): string {
   return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
+// M3 day picker: 48dp rows, always 6 week rows (+ weekday header) so the picker
+// doesn't resize when the month spans fewer/more weeks.
+const CALENDAR_DAY_ROW_HEIGHT = 48;
+const CALENDAR_MAX_WEEK_ROWS = 6;
+const CALENDAR_GRID_HEIGHT = CALENDAR_DAY_ROW_HEIGHT * (CALENDAR_MAX_WEEK_ROWS + 1);
+const DOCKED_DATE_PICKER_HEIGHT = 456;
+
 // ─── DayCell ────────────────────────────────────────────────────────────────
 function DayCell(props: {
   day: number | null; cellW: number;
@@ -159,11 +166,11 @@ function DayCell(props: {
   const theme = useTheme();
 
   if (day === null) {
-    return React.createElement(View, { style: { width: cellW, height: 48 } });
+    return React.createElement(View, { style: { width: cellW, height: CALENDAR_DAY_ROW_HEIGHT } });
   }
   return React.createElement(
     View,
-    { style: { width: cellW, height: 48, justifyContent: 'center', alignItems: 'center' }, onPress },
+    { style: { width: cellW, height: CALENDAR_DAY_ROW_HEIGHT, justifyContent: 'center', alignItems: 'center' }, onPress },
     React.createElement(
       View,
       {
@@ -204,21 +211,22 @@ function CalendarGrid(props: {
   for (let i = 0; i < firstDay; i++) cells.push(null);
   for (let i = 1; i <= daysInMonth; i++) cells.push(i);
   while (cells.length % 7 !== 0) cells.push(null);
+  while (cells.length < CALENDAR_MAX_WEEK_ROWS * 7) cells.push(null);
   const rows: (number | null)[][] = [];
   for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
   const WD = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   return React.createElement(
     View,
-    { style: { flexDirection: 'column', alignItems: 'center', height: rows.length * 48 + 48 } },
+    { style: { flexDirection: 'column', alignItems: 'center', height: CALENDAR_GRID_HEIGHT } },
     // Weekday header
     React.createElement(
       View,
-      { style: { flexDirection: 'row', height: 48 } },
+      { style: { flexDirection: 'row', height: CALENDAR_DAY_ROW_HEIGHT } },
       WD.map((d, i) =>
         React.createElement(
           View,
-          { key: i, style: { width: cellW, height: 48, justifyContent: 'center', alignItems: 'center' } },
+          { key: i, style: { width: cellW, height: CALENDAR_DAY_ROW_HEIGHT, justifyContent: 'center', alignItems: 'center' } },
           React.createElement(Text, { style: { text: { fontSize: 14, fontWeight: '500', color: theme.onSurfaceVariant } } }, d)
         )
       )
@@ -322,6 +330,237 @@ function YearGrid(props: { current: number; onSelect: (y: number) => void }): Re
   );
 }
 
+// ─── Time picker dial math (mirrors Flutter material/time_picker.dart) ───────
+const TWO_PI = Math.PI * 2;
+const DIAL_SIZE = 256;
+const DIAL_LABEL_RADIUS = 104;
+const DIAL_HUB_RADIUS = 4;
+const DIAL_TIP_RADIUS = 20;
+const DIAL_HAND_WIDTH = 4;
+const HOUR_LABELS = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+const MINUTE_LABELS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+const DRAG_TAP_SLOP = 8;
+
+function thetaForHour12(hour12: number): number {
+  const fraction = (hour12 % 12) / 12;
+  return (Math.PI / 2 - fraction * TWO_PI) % TWO_PI;
+}
+
+function thetaForMinute(minute: number): number {
+  const fraction = (minute % 60) / 60;
+  return (Math.PI / 2 - fraction * TWO_PI) % TWO_PI;
+}
+
+function angleFromPointer(px: number, py: number, cx: number, cy: number): number {
+  const dx = px - cx;
+  const dy = py - cy;
+  return (Math.atan2(dx, dy) - Math.PI / 2 + TWO_PI) % TWO_PI;
+}
+
+function hour12FromAngle(angle: number): number {
+  const fraction = (0.25 - (angle % TWO_PI) / TWO_PI + 1) % 1;
+  const h = Math.round(fraction * 12) % 12;
+  return h === 0 ? 12 : h;
+}
+
+function minuteFromAngle(angle: number, roundMinutes: boolean): number {
+  const fraction = (0.25 - (angle % TWO_PI) / TWO_PI + 1) % 1;
+  let minute = Math.round(fraction * 60) % 60;
+  if (roundMinutes) {
+    minute = Math.floor((minute + 2) / 5) * 5 % 60;
+  }
+  return minute;
+}
+
+function dialLabelPosition(index: number, count: number): { left: number; top: number } {
+  const angle = ((index - 3) * (360 / count) * Math.PI) / 180;
+  return {
+    left: DIAL_SIZE / 2 + DIAL_LABEL_RADIUS * Math.cos(angle) - 18,
+    top: DIAL_SIZE / 2 + DIAL_LABEL_RADIUS * Math.sin(angle) - 18,
+  };
+}
+
+function handTip(theta: number, radius: number): { x: number; y: number } {
+  const cx = DIAL_SIZE / 2;
+  const cy = DIAL_SIZE / 2;
+  return {
+    x: cx + radius * Math.cos(theta),
+    y: cy - radius * Math.sin(theta),
+  };
+}
+
+interface ClockDialProps {
+  mode: 'hour' | 'minute';
+  hour12: number;
+  minute: number;
+  primaryColor: number;
+  onHourChange: (hour12: number) => void;
+  onMinuteChange: (minute: number) => void;
+  onHourSelected: () => void;
+}
+
+function ClockDial(props: ClockDialProps): React.ReactElement {
+  const { mode, hour12, minute, primaryColor, onHourChange, onMinuteChange, onHourSelected } = props;
+  const labels = mode === 'hour' ? HOUR_LABELS : MINUTE_LABELS;
+  const selectedValue = mode === 'hour' ? hour12 : minute;
+  const theta = mode === 'hour' ? thetaForHour12(hour12) : thetaForMinute(minute);
+  const tip = handTip(theta, DIAL_LABEL_RADIUS);
+  const cx = DIAL_SIZE / 2;
+  const cy = DIAL_SIZE / 2;
+  const handLength = DIAL_LABEL_RADIUS;
+  const handDeg = (Math.atan2(tip.y - cy, tip.x - cx) * 180) / Math.PI;
+
+  const dialLayoutRef = React.useRef({ x: 0, y: 0, width: DIAL_SIZE, height: DIAL_SIZE });
+  const dragStartRef = React.useRef({ x: 0, y: 0 });
+  const didDragRef = React.useRef(false);
+
+  const pointerToLocal = (screenX: number, screenY: number) => {
+    const layout = dialLayoutRef.current;
+    return {
+      x: screenX - layout.x,
+      y: screenY - layout.y,
+    };
+  };
+
+  const applyPointer = (screenX: number, screenY: number, roundMinutes: boolean) => {
+    const local = pointerToLocal(screenX, screenY);
+    const angle = angleFromPointer(local.x, local.y, cx, cy);
+    if (mode === 'hour') {
+      onHourChange(hour12FromAngle(angle));
+    } else {
+      onMinuteChange(minuteFromAngle(angle, roundMinutes));
+    }
+  };
+
+  const handleDragStart = (e: { x: number; y: number }) => {
+    didDragRef.current = false;
+    dragStartRef.current = { x: e.x, y: e.y };
+    applyPointer(e.x, e.y, false);
+  };
+
+  const handleDragMove = (e: { x: number; y: number }) => {
+    const dx = e.x;
+    const dy = e.y;
+    if (Math.hypot(dx, dy) > DRAG_TAP_SLOP) didDragRef.current = true;
+    const screenX = dragStartRef.current.x + dx;
+    const screenY = dragStartRef.current.y + dy;
+    applyPointer(screenX, screenY, false);
+  };
+
+  const handleDragEnd = (e: { x: number; y: number }) => {
+    const travel = Math.hypot(e.x, e.y);
+    const screenX = dragStartRef.current.x + e.x;
+    const screenY = dragStartRef.current.y + e.y;
+    // Flutter: pan = 1-min resolution; tap-up snaps minutes to 5-min marks.
+    applyPointer(screenX, screenY, travel <= DRAG_TAP_SLOP);
+    if (mode === 'hour') onHourSelected();
+    didDragRef.current = false;
+  };
+
+  return React.createElement(
+    View,
+    {
+      style: {
+        alignSelf: 'center',
+        width: DIAL_SIZE,
+        height: DIAL_SIZE,
+        position: 'relative',
+        marginBottom: 16,
+      },
+      onLayout: (event: { nativeEvent: { layout: { x: number; y: number; width: number; height: number } } }) => {
+        const { x, y, width, height } = event.nativeEvent.layout;
+        dialLayoutRef.current = { x, y, width, height };
+      },
+      onDragStart: handleDragStart,
+      onDragMove: handleDragMove,
+      onDragEnd: handleDragEnd,
+    },
+    React.createElement(View, {
+      style: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: DIAL_SIZE,
+        height: DIAL_SIZE,
+        borderRadius: DIAL_SIZE / 2,
+        backgroundColor: 0xece6f0ff,
+        pointerEvents: 'none',
+      },
+    }),
+    React.createElement(View, {
+      style: {
+        position: 'absolute',
+        left: (cx + tip.x) / 2 - handLength / 2,
+        top: (cy + tip.y) / 2 - DIAL_HAND_WIDTH / 2,
+        width: handLength,
+        height: DIAL_HAND_WIDTH,
+        borderRadius: DIAL_HAND_WIDTH / 2,
+        backgroundColor: primaryColor,
+        rotation: handDeg,
+        pointerEvents: 'none',
+      },
+    }),
+    React.createElement(View, {
+      style: {
+        position: 'absolute',
+        left: cx - DIAL_HUB_RADIUS,
+        top: cy - DIAL_HUB_RADIUS,
+        width: DIAL_HUB_RADIUS * 2,
+        height: DIAL_HUB_RADIUS * 2,
+        borderRadius: DIAL_HUB_RADIUS,
+        backgroundColor: primaryColor,
+        pointerEvents: 'none',
+      },
+    }),
+    React.createElement(View, {
+      style: {
+        position: 'absolute',
+        left: tip.x - DIAL_TIP_RADIUS,
+        top: tip.y - DIAL_TIP_RADIUS,
+        width: DIAL_TIP_RADIUS * 2,
+        height: DIAL_TIP_RADIUS * 2,
+        borderRadius: DIAL_TIP_RADIUS,
+        backgroundColor: primaryColor,
+        pointerEvents: 'none',
+      },
+    }),
+    labels.map((val, idx) => {
+      const pos = dialLabelPosition(idx, labels.length);
+      const showSelected = mode === 'hour' ? val === hour12 : val === minute;
+      const numStyle: Record<string, unknown> = {
+        position: 'absolute',
+        left: pos.left,
+        top: pos.top,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        pointerEvents: 'none',
+      };
+      if (showSelected) numStyle.backgroundColor = primaryColor;
+      return React.createElement(
+        View,
+        { key: `${mode}-${idx}`, style: numStyle },
+        React.createElement(
+          Text,
+          {
+            style: {
+              textAlign: 'center',
+              text: {
+                fontSize: 14,
+                color: showSelected ? 0xffffffff : 0x1c1b1fff,
+                fontWeight: showSelected ? '700' : '400',
+              },
+            },
+          },
+          mode === 'minute' ? String(val).padStart(2, '0') : String(val)
+        )
+      );
+    })
+  );
+}
+
 // ─── Action row ──────────────────────────────────────────────────────────────
 function PickerActions(props: { onCancel: () => void; onOk: () => void }): React.ReactElement {
   const theme = useTheme();
@@ -407,6 +646,8 @@ export function DatePicker(props: DatePickerProps): React.ReactElement {
             padding: 0,
             width: 360,
             height: 568,
+            minWidth: 328,
+            minHeight: 400,
             backgroundColor: theme.surfaceContainerHigh,
             borderRadius: 28,
             flexDirection: 'column',
@@ -504,10 +745,12 @@ export function DatePicker(props: DatePickerProps): React.ReactElement {
             onRequestClose: handleCancel,
             style: {
               width: 360,
+              height: DOCKED_DATE_PICKER_HEIGHT,
               backgroundColor: theme.surfaceContainer,
               borderRadius: 8,
               overflow: 'hidden',
               elevation: 4,
+              flexDirection: 'column',
             },
           },
           React.createElement(
@@ -520,7 +763,7 @@ export function DatePicker(props: DatePickerProps): React.ReactElement {
           ),
           React.createElement(
             View,
-            { style: { paddingHorizontal: 12, paddingBottom: 4 } },
+            { style: { paddingHorizontal: 12, paddingBottom: 4, height: CALENDAR_GRID_HEIGHT } },
             calBody,
           ),
           React.createElement(PickerActions, { onCancel: handleCancel, onOk: handleOk }),
@@ -615,6 +858,16 @@ export function TextField(props: TextInputProps & { label?: string }): React.Rea
     ]
   });
 }
+function hour24ToHour12(hour24: number): number {
+  const h = hour24 % 12;
+  return h === 0 ? 12 : h;
+}
+
+function hour12ToHour24(hour12: number, period: 'AM' | 'PM'): number {
+  if (period === 'AM') return hour12 === 12 ? 0 : hour12;
+  return hour12 === 12 ? 12 : hour12 + 12;
+}
+
 export function TimePicker(props: TimePickerProps): React.ReactElement {
   const { open, value, onChange, onRequestClose, onDismiss, style, ...rest } = props;
   const theme = useTheme();
@@ -625,22 +878,23 @@ export function TimePicker(props: TimePickerProps): React.ReactElement {
       if (parts.length === 2) {
         const h = parseInt(parts[0], 10);
         const m = parseInt(parts[1], 10);
-        if (!isNaN(h) && !isNaN(m)) return { hour: h, minute: m };
+        if (!isNaN(h) && !isNaN(m)) return { hour24: h, minute: m };
       }
     }
     const now = new Date();
-    return { hour: now.getHours(), minute: now.getMinutes() };
+    return { hour24: now.getHours(), minute: now.getMinutes() };
   }, [value]);
 
-  const [hour, setHour] = React.useState(parsedTime.hour);
+  const [hour12, setHour12] = React.useState(() => hour24ToHour12(parsedTime.hour24));
   const [minute, setMinute] = React.useState(parsedTime.minute);
   const [selecting, setSelecting] = React.useState<'hour' | 'minute'>('hour');
-  const [period, setPeriod] = React.useState<'AM' | 'PM'>(parsedTime.hour >= 12 ? 'PM' : 'AM');
+  const [period, setPeriod] = React.useState<'AM' | 'PM'>(parsedTime.hour24 >= 12 ? 'PM' : 'AM');
 
   React.useEffect(() => {
-    setHour(parsedTime.hour);
+    setHour12(hour24ToHour12(parsedTime.hour24));
     setMinute(parsedTime.minute);
-    setPeriod(parsedTime.hour >= 12 ? 'PM' : 'AM');
+    setPeriod(parsedTime.hour24 >= 12 ? 'PM' : 'AM');
+    setSelecting('hour');
   }, [parsedTime]);
 
   const handleCancel = () => {
@@ -649,28 +903,17 @@ export function TimePicker(props: TimePickerProps): React.ReactElement {
   };
 
   const handleOk = () => {
-    let finalHour = hour;
-    if (period === 'AM') {
-      if (finalHour === 12) finalHour = 0;
-      else if (finalHour > 12) finalHour = finalHour - 12;
-    } else {
-      if (finalHour < 12) finalHour = finalHour + 12;
-      else if (finalHour === 12) finalHour = 12;
-    }
+    const finalHour = hour12ToHour24(hour12, period);
     const formattedHour = String(finalHour).padStart(2, '0');
     const formattedMinute = String(minute).padStart(2, '0');
     if (onChange) onChange(`${formattedHour}:${formattedMinute}`);
     handleCancel();
   };
 
-  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
-  const displayMinute = String(minute).padStart(2, '0');
-
-  const hoursList = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-  const minutesList = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
-
-  const currentList = selecting === 'hour' ? hoursList : minutesList;
-  const currentValue = selecting === 'hour' ? displayHour : minute;
+  const selectedCardBg = theme.primaryContainer;
+  const selectedCardFg = theme.onPrimaryContainer;
+  const unselectedCardBg = theme.surfaceContainerHighest;
+  const unselectedCardFg = theme.onSurface;
 
   return React.createElement(
     'rayact-time-picker',
@@ -679,9 +922,11 @@ export function TimePicker(props: TimePickerProps): React.ReactElement {
       onRequestClose: onRequestClose ?? onDismiss,
       style: [
         {
-          width: 328,
-          height: 508,
-          padding: 24,
+          padding: 0,
+          width: 310,
+          height: 468,
+          minWidth: 238,
+          minHeight: 326,
           backgroundColor: theme.surfaceContainerHigh,
           borderRadius: 28,
           flexDirection: 'column',
@@ -690,181 +935,165 @@ export function TimePicker(props: TimePickerProps): React.ReactElement {
       ],
       ...rest,
     },
-    // Title
-    React.createElement(
-      Text,
-      { style: { marginBottom: 20, height: 20, text: { fontSize: 12, fontWeight: '500', color: theme.onSurfaceVariant } } },
-      'Select time'
-    ),
-    // Selector boxes row
     React.createElement(
       View,
-      { style: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 24, height: 72 } },
-      // Hour Display Card
-      React.createElement(
-        View,
-        {
-          style: {
-            width: 80,
-            height: 72,
-            borderRadius: 8,
-            backgroundColor: selecting === 'hour' ? 0xe8def8ff : 0xece6f0ff,
-            justifyContent: 'center',
-            alignItems: 'center'
-          },
-          onPress: () => setSelecting('hour')
-        },
-        React.createElement(
-          Text,
-          { style: { text: { fontSize: 40, fontWeight: '700', color: selecting === 'hour' ? 0x21005dff : 0x1c1b1fff } } },
-          String(displayHour).padStart(2, '0')
-        )
-      ),
-      // Colon separator
+      { style: { paddingTop: 20, paddingBottom: 12, paddingHorizontal: 24 } },
       React.createElement(
         Text,
-        { style: { marginHorizontal: 8, height: 72, text: { fontSize: 40, fontWeight: '700', color: 0x1c1b1fff, lineHeight: 72 } } },
-        ':'
+        { style: { marginBottom: 8, text: { fontSize: 14, fontWeight: '500', color: theme.onSurfaceVariant } } },
+        'Select time'
       ),
-      // Minute Display Card
       React.createElement(
         View,
-        {
-          style: {
-            width: 80,
-            height: 72,
-            borderRadius: 8,
-            backgroundColor: selecting === 'minute' ? 0xe8def8ff : 0xece6f0ff,
-            justifyContent: 'center',
-            alignItems: 'center'
+        { style: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', height: 72 } },
+        React.createElement(
+          View,
+          {
+            style: {
+              width: 80,
+              height: 72,
+              borderRadius: 8,
+              backgroundColor: selecting === 'hour' ? selectedCardBg : unselectedCardBg,
+              justifyContent: 'center',
+              alignItems: 'center',
+            },
+            onPress: () => setSelecting('hour'),
           },
-          onPress: () => setSelecting('minute')
-        },
+          React.createElement(
+            Text,
+            {
+              style: {
+                text: {
+                  fontSize: 40,
+                  fontWeight: '700',
+                  color: selecting === 'hour' ? selectedCardFg : unselectedCardFg,
+                },
+              },
+            },
+            String(hour12).padStart(2, '0')
+          )
+        ),
         React.createElement(
           Text,
-          { style: { text: { fontSize: 40, fontWeight: '700', color: selecting === 'minute' ? 0x21005dff : 0x1c1b1fff } } },
-          displayMinute
-        )
-      ),
-      // AM/PM Toggle Column
-      React.createElement(
-        View,
-        { style: { flexDirection: 'column', height: 72, borderWidth: 1, borderColor: 0x79747eff, borderRadius: 8, marginLeft: 12, overflow: 'hidden' } },
-        React.createElement(
-          View,
           {
             style: {
-              width: 52,
-              height: 36,
-              backgroundColor: period === 'AM' ? 0xe8def8ff : undefined,
-              justifyContent: 'center',
-              alignItems: 'center'
+              marginHorizontal: 8,
+              height: 72,
+              text: { fontSize: 40, fontWeight: '700', color: unselectedCardFg, lineHeight: 72 },
             },
-            onPress: () => setPeriod('AM')
           },
-          React.createElement(Text, { style: { text: { fontSize: 14, fontWeight: '700', color: period === 'AM' ? 0x21005dff : 0x49454fff } } }, 'AM')
-        ),
-        React.createElement(
-          View,
-          { style: { height: 1, backgroundColor: 0x79747eff } },
-          null
+          ':'
         ),
         React.createElement(
           View,
           {
             style: {
-              width: 52,
-              height: 36,
-              backgroundColor: period === 'PM' ? 0xe8def8ff : undefined,
+              width: 80,
+              height: 72,
+              borderRadius: 8,
+              backgroundColor: selecting === 'minute' ? selectedCardBg : unselectedCardBg,
               justifyContent: 'center',
-              alignItems: 'center'
+              alignItems: 'center',
             },
-            onPress: () => setPeriod('PM')
+            onPress: () => setSelecting('minute'),
           },
-          React.createElement(Text, { style: { text: { fontSize: 14, fontWeight: '700', color: period === 'PM' ? 0x21005dff : 0x49454fff } } }, 'PM')
+          React.createElement(
+            Text,
+            {
+              style: {
+                text: {
+                  fontSize: 40,
+                  fontWeight: '700',
+                  color: selecting === 'minute' ? selectedCardFg : unselectedCardFg,
+                },
+              },
+            },
+            String(minute).padStart(2, '0')
+          )
+        ),
+        React.createElement(
+          View,
+          {
+            style: {
+              flexDirection: 'column',
+              height: 72,
+              borderWidth: 1,
+              borderColor: theme.outline,
+              borderRadius: 8,
+              marginLeft: 12,
+              overflow: 'hidden',
+            },
+          },
+          React.createElement(
+            View,
+            {
+              style: {
+                width: 52,
+                height: 36,
+                backgroundColor: period === 'AM' ? selectedCardBg : undefined,
+                justifyContent: 'center',
+                alignItems: 'center',
+              },
+              onPress: () => setPeriod('AM'),
+            },
+            React.createElement(
+              Text,
+              {
+                style: {
+                  text: {
+                    fontSize: 14,
+                    fontWeight: '700',
+                    color: period === 'AM' ? selectedCardFg : theme.onSurfaceVariant,
+                  },
+                },
+              },
+              'AM'
+            )
+          ),
+          React.createElement(View, { style: { height: 1, backgroundColor: theme.outline } }),
+          React.createElement(
+            View,
+            {
+              style: {
+                width: 52,
+                height: 36,
+                backgroundColor: period === 'PM' ? selectedCardBg : undefined,
+                justifyContent: 'center',
+                alignItems: 'center',
+              },
+              onPress: () => setPeriod('PM'),
+            },
+            React.createElement(
+              Text,
+              {
+                style: {
+                  text: {
+                    fontSize: 14,
+                    fontWeight: '700',
+                    color: period === 'PM' ? selectedCardFg : theme.onSurfaceVariant,
+                  },
+                },
+              },
+              'PM'
+            )
+          )
         )
       )
     ),
-    // Dial Circle Face Container
+    React.createElement(View, { style: { height: 1, backgroundColor: theme.outlineVariant } }),
     React.createElement(
       View,
-      {
-        style: {
-          alignSelf: 'center',
-          width: 256,
-          height: 256,
-          borderRadius: 128,
-          backgroundColor: 0xece6f0ff,
-          position: 'relative',
-          marginBottom: 16
-        }
-      },
-      // Central pivot dot
-      React.createElement(
-        View,
-        {
-          style: {
-            position: 'absolute',
-            left: 124,
-            top: 124,
-            width: 8,
-            height: 8,
-            borderRadius: 4,
-            backgroundColor: 0x6750a4ff
-          }
-        }
-      ),
-      // Dial values placed circularly
-      currentList.map((val, idx) => {
-        const angle = ((idx - 3) * 30 * Math.PI) / 180;
-        const left = 128 + 104 * Math.cos(angle) - 18;
-        const top = 128 + 104 * Math.sin(angle) - 18;
-
-        const isSelected = currentValue === val;
-        const numStyle: Record<string, unknown> = {
-          position: 'absolute',
-          left,
-          top,
-          width: 36,
-          height: 36,
-          borderRadius: 18,
-          justifyContent: 'center',
-          alignItems: 'center'
-        };
-        const textStyle: Record<string, unknown> = {
-          textAlign: 'center',
-          text: {
-            fontSize: 14,
-            color: isSelected ? 0xffffffff : 0x1c1b1fff,
-            fontWeight: isSelected ? '700' : '400',
-          }
-        };
-
-        if (isSelected) {
-          numStyle.backgroundColor = 0x6750a4ff;
-        }
-
-        const selectVal = () => {
-          if (selecting === 'hour') {
-            setHour(val);
-            setSelecting('minute');
-          } else {
-            setMinute(val);
-          }
-        };
-
-        return React.createElement(
-          View,
-          { key: idx, style: numStyle, onPress: selectVal },
-          React.createElement(
-            Text,
-            { style: textStyle },
-            selecting === 'minute' ? String(val).padStart(2, '0') : String(val)
-          )
-        );
+      { style: { paddingTop: 24, paddingHorizontal: 24, flexGrow: 1, alignItems: 'center' } },
+      React.createElement(ClockDial, {
+        mode: selecting,
+        hour12,
+        minute,
+        primaryColor: theme.primary,
+        onHourChange: setHour12,
+        onMinuteChange: setMinute,
+        onHourSelected: () => setSelecting('minute'),
       })
     ),
-    // Action footer
     React.createElement(PickerActions, { onCancel: handleCancel, onOk: handleOk })
   );
 }

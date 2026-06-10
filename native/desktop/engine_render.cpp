@@ -185,7 +185,13 @@ void main() {
 float getRenderScaleDpi() {
     float dp = GetWindowScaleDPI().x;
     raym3::v2::Density::SetPlatformDensity(dp);
+#if defined(RAYACT_ANDROID)
+    // Layout density is owned by setRaym3AndroidDensity (390dp-normalized policy).
+    if (raym3::v2::Density::GetLayoutDensity() <= 0.0f)
+        raym3::v2::Density::SetLayoutDensity(dp);
+#else
     raym3::v2::Density::SetLayoutDensity(dp);
+#endif
     return raym3::v2::Density::GetLayoutDensity();
 }
 
@@ -343,10 +349,10 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     // Layout is in dp (so a 200dp box is the same physical size on a 1x and
     // 4x device); render is in px. Push dp-scale on the matrix stack so the
     // children draw at the right physical size.
-    float dp = getRenderScaleDpi();
     const float logicalW = raym3::v2::Density::PxToDp((float)width);
     const float logicalH = raym3::v2::Density::PxToDp((float)height);
     Rectangle bounds = {0.0f, 0.0f, logicalW, logicalH};
+    float dp = getRenderScaleDpi();
     applyAnimatedStylesToNodes();
     raym3::v2::TickScrollMomentum(g_root);
     raym3::v2::UpdateLayout(g_root, bounds);
@@ -469,6 +475,7 @@ void engineRenderFrame(int width, int height) {
 // renders exactly one screen tree into the currently bound window.
 void engineRenderFrameAndroid(int screenId, int width, int height) {
     if (!engineHasScreenStack()) return; // legacy desktop path uses engineRenderFrame
+    mutationBatchPushToRenderQueue();
     // BeginDrawing/EndDrawing are the raylib frame boundaries. On the RLVK
     // (Vulkan) backend they drive swapchain acquire + submit + present — the
     // custom external-surface SwapScreenBuffer() is a no-op for RLVK, so

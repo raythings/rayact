@@ -120,8 +120,17 @@ set(ENGINE_SRC
     ${RAYACT}/native/desktop/color_parse.cpp
     ${RAYACT}/native/desktop/theme_bridge.cpp
     ${RAYACT}/native/desktop/main.cpp
+    ${RAYACT}/native/desktop/commit_queue.cpp
+    ${RAYACT}/native/desktop/shadow_tree.cpp
+    ${RAYACT}/native/desktop/engine_thread.cpp
     ${RAYACT}/native/desktop/engine_js.cpp
     ${RAYACT}/native/desktop/engine_render.cpp
+    ${RAYACT}/native/desktop/worklet_runtime.cpp
+    ${RAYACT}/native/desktop/gesture_recognizer.cpp
+    ${RAYACT}/native/desktop/async_storage.cpp
+    ${RAYACT}/native/desktop/devtools.cpp
+    ${RAYACT}/native/desktop/accessibility_bridge.cpp
+    ${RAYACT}/native/desktop/platform_wayland.cpp
     ${RAYACT}/native/desktop/quickjs_bridge.cpp
     ${RAYACT}/native/desktop/raylib_bridge.cpp
     ${RAYACT}/native/desktop/raym3_bridge.cpp
@@ -154,6 +163,7 @@ target_include_directories(rayact PRIVATE
     ${RAYLIB_DIR}/src
     ${RAYLIB_DIR}/src/platforms
     ${RAYM3_DIR}/include
+    ${YOGA_DIR}
 )
 target_link_libraries(rayact
     raylib qjs raym3 cssparser

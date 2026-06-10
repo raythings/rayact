@@ -51,7 +51,8 @@ void mutationBatchApplyPending() {
     return;
   }
 
-  raym3::ApplyMutations(raym3::v2::Ctx(), batch, g_nodes, g_root);
+  // raym3_bridge already applies tree mutations directly; re-applying the
+  // recorded batch would duplicate children and corrupt Yoga layout.
 }
 
 void mutationBatchPushToRenderQueue() {

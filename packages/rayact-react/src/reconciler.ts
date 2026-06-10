@@ -20,7 +20,10 @@ type Child = RayactHostInstance | RayactTextInstance;
 // special case — the host does not currently wire a layout event back to
 // JS, but consumers may pass it; strip it from the payload so the bridge
 // doesn't try to apply it as a style/attribute.
-const eventProps = ['onPress', 'onClick', 'onChangeText', 'onValueChange', 'onScroll', 'onRequestClose', 'onFocus', 'onBlur', 'onLayout'] as const;
+const eventProps = [
+  'onPress', 'onClick', 'onChangeText', 'onValueChange', 'onScroll', 'onRequestClose',
+  'onFocus', 'onBlur', 'onLayout', 'onDragStart', 'onDragMove', 'onDragEnd',
+] as const;
 
 const hostNodeTypes = new Set<string>([
   'root',
@@ -116,7 +119,6 @@ function syncTextContent(instance: RayactHostInstance): void {
 function attachEvents(instance: RayactHostInstance, props: Record<string, unknown>): void {
   const bridge = getDefaultRuntime().bridge;
   for (const prop of eventProps) {
-    if (prop === 'onLayout') continue;
     const handler = props[prop];
     if (typeof handler === 'function') {
       bridge.setEventHandler(instance.node, eventNameForProp(prop), handler as () => void);
@@ -127,7 +129,6 @@ function attachEvents(instance: RayactHostInstance, props: Record<string, unknow
 function updateEvents(instance: RayactHostInstance, oldProps: Record<string, unknown>, newProps: Record<string, unknown>): void {
   const bridge = getDefaultRuntime().bridge;
   for (const prop of eventProps) {
-    if (prop === 'onLayout') continue;
     if (oldProps[prop] !== newProps[prop]) {
       const handler = newProps[prop];
       bridge.setEventHandler(instance.node, eventNameForProp(prop), typeof handler === 'function' ? handler as () => void : null);
@@ -143,6 +144,10 @@ function eventNameForProp(prop: typeof eventProps[number]): HostEventName {
   if (prop === 'onRequestClose') return 'requestClose';
   if (prop === 'onFocus') return 'focus';
   if (prop === 'onBlur') return 'blur';
+  if (prop === 'onDragStart') return 'dragStart';
+  if (prop === 'onDragMove') return 'dragMove';
+  if (prop === 'onDragEnd') return 'dragEnd';
+  if (prop === 'onLayout') return 'layout';
   return 'press';
 }
 

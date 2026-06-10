@@ -69,6 +69,7 @@ function flattenStyleValue(style: unknown, isCreate: boolean, nodeId?: number): 
 
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(style as Record<string, unknown>)) {
+    if (value == null) continue;
     if (isSharedValue(value)) {
       if (isCreate) {
         result[key] = value.value;
@@ -396,6 +397,17 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
         native.setOnFocus(node.id, handler ?? null);
       } else if (eventName === 'blur' && typeof native.setOnBlur === 'function') {
         native.setOnBlur(node.id, handler ?? null);
+      } else if (eventName === 'dragStart' && typeof native.setOnDragStart === 'function') {
+        native.setOnDragStart(node.id, handler as ((event: { x: number; y: number }) => void) | null);
+      } else if (eventName === 'dragMove' && typeof native.setOnDragMove === 'function') {
+        native.setOnDragMove(node.id, handler as ((event: { x: number; y: number }) => void) | null);
+      } else if (eventName === 'dragEnd' && typeof native.setOnDragEnd === 'function') {
+        native.setOnDragEnd(node.id, handler as ((event: { x: number; y: number }) => void) | null);
+      } else if (eventName === 'layout' && typeof native.setOnLayout === 'function') {
+        native.setOnLayout(
+          node.id,
+          handler as ((event: { nativeEvent: { layout: { x: number; y: number; width: number; height: number } } }) => void) | null
+        );
       }
     },
 
