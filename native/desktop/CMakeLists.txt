@@ -209,6 +209,15 @@ set(SOURCES
     main.cpp
     engine_js.cpp
     engine_render.cpp
+    commit_queue.cpp
+    shadow_tree.cpp
+    engine_thread.cpp
+    worklet_runtime.cpp
+    gesture_recognizer.cpp
+    async_storage.cpp
+    devtools.cpp
+    accessibility_bridge.cpp
+    platform_wayland.cpp
     quickjs_bridge.cpp
     raylib_bridge.cpp
     raym3_bridge.cpp
@@ -244,6 +253,7 @@ endif()
 add_executable(rayact_desktop ${SOURCES})
 target_include_directories(rayact_desktop PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${RAYM3_BUILD_DIR}/_deps/yoga-src
     ${CURL_INCLUDE_DIRS}
     ${LWS_INCLUDE_DIRS}
     ${OPENSSL_INCLUDE_DIRS}

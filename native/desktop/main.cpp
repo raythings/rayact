@@ -4,6 +4,7 @@
 #include "raylib_bridge.hpp"
 #include "platform.hpp"
 #include "engine_internal.hpp"
+#include "engine_thread.hpp"
 #include "raym3_bridge.hpp"
 #include "../core/engine.hpp"
 
@@ -40,7 +41,8 @@ void mainLoop(JSContext* ctx) {
     // raym3::Initialize() + initSystemAppearance() were already done by
     // rayact::engineFinishLoad() before this loop starts.
     while (!WindowShouldClose()) {
-        rayact::enginePumpJS();
+        if (!rayact::engineThreadedModeEnabled())
+            rayact::enginePumpJS();
         rayact::engineRenderFrame(GetRenderWidth(), GetRenderHeight());
 
         // Input debug harness: capture down/up/after-500ms screenshots.

@@ -493,6 +493,27 @@ void registerWorkerBindings(JSContext* ctx) {
     JS_SetPropertyStr(ctx, global, "createWorkerView",
         JS_NewCFunction(ctx, JS_createWorkerView, "createWorkerView", 4));
     JS_SetPropertyStr(ctx, global, "onWorkerMessage", JS_UNDEFINED);
+
+    // Web-standard Worker(url) wrapper over spawnWorker/postToWorker.
+    static const char *workerClassSrc =
+        "globalThis.Worker = class Worker {"
+        "  constructor(url, opts) {"
+        "    const desc = (opts && opts.type) ? { type: opts.type, path: url } : url;"
+        "    this._id = spawnWorker(desc);"
+        "    this.onmessage = null;"
+        "    const prev = globalThis.onWorkerMessage;"
+        "    globalThis.onWorkerMessage = (id, data) => {"
+        "      if (prev) prev(id, data);"
+        "      if (id === this._id && this.onmessage) this.onmessage({ data });"
+        "    };"
+        "  }"
+        "  postMessage(data) { postToWorker(this._id, data); }"
+        "  terminate() { terminateWorker(this._id); }"
+        "};";
+    JSValue err = JS_Eval(ctx, workerClassSrc, strlen(workerClassSrc), "worker.js", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(err)) JS_FreeValue(ctx, JS_GetException(ctx));
+    else JS_FreeValue(ctx, err);
+
     JS_FreeValue(ctx, global);
 }
 

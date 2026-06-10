@@ -155,6 +155,8 @@ export interface TextInputProps extends BaseProps {
   // When false, the field paints no own hover/focus highlight; the parent (e.g.
   // SearchBar) owns the single state layer spanning the whole element.
   drawStateLayer?: boolean;
+  multiline?: boolean;
+  numberOfLines?: number;
 }
 
 export interface SliderProps extends BaseProps {

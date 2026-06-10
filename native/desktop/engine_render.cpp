@@ -6,6 +6,11 @@
 #include "engine_internal.hpp"
 #include "raym3_bridge.hpp"
 #include "js_stdlib.hpp"
+#include "commit_queue.hpp"
+#include "engine_thread.hpp"
+#include "worklet_runtime.hpp"
+#include "gesture_recognizer.hpp"
+#include "accessibility_bridge.hpp"
 #include "../core/engine.hpp"
 #include "../core/config_loader.hpp"
 #ifndef RAYACT_NO_WORKERS
@@ -406,6 +411,20 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
 
 // Desktop legacy single-surface render frame.
 void engineRenderFrame(int width, int height) {
+    if (engineThreadedModeEnabled()) {
+        engineSignalVsync();
+        mutationBatchPushToRenderQueue();
+    }
+
+    workletRuntimeTick(GetFrameTime());
+
+    const bool canIdleSkip = !engineNeedsAnotherFrame();
+    if (canIdleSkip && g_root && raym3::v2::ShouldSkipRender(g_root)) {
+        if (engineThreadedModeEnabled())
+            engineWaitForCommit(16);
+        return;
+    }
+
     BeginDrawing();
 #if defined(RAYACT_ANDROID_3D_SMOKE)
     ClearBackground((Color){20, 20, 30, 255});
@@ -439,6 +458,8 @@ void engineRenderFrame(int width, int height) {
     }
 
     raym3::EndFrame();
+    if (g_root) accessibilityBridge().rebuild(g_root);
+    raym3::v2::ClearDirtyRects();
     EndDrawing();
 }
 

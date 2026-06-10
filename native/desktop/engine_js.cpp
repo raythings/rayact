@@ -7,6 +7,12 @@
 #include "../core/config_loader.hpp"
 #include "quickjs_bridge.hpp"
 #include "raym3_bridge.hpp"
+#include "commit_queue.hpp"
+#include "shadow_tree.hpp"
+#include "engine_thread.hpp"
+#include "worklet_runtime.hpp"
+#include "async_storage.hpp"
+#include "devtools.hpp"
 #include "css_bridge.hpp"
 #include "js_stdlib.hpp"
 #ifndef RAYACT_NO_WORKERS
@@ -507,16 +513,17 @@ static void registerNativeFunctions(JSContext* ctx) {
 
     registerThemeBindings(ctx);
 
-    JS_FreeValue(ctx, global);
-
 #ifndef RAYACT_NO_WORKERS
-    // Worker system (spawnWorker, postToWorker, terminateWorker, drawWorkerCanvas)
     registerWorkerBindings(ctx);
 #endif
 #ifndef RAYACT_NO_NET
-    // Network: fetch, EventSource, WebSocket
     registerNetBindings(ctx);
 #endif
+    rayact::installAsyncStorage(ctx, global);
+    rayact::devtoolsInit(ctx);
+    rayact::workletRuntimeInit();
+
+    JS_FreeValue(ctx, global);
 }
 
 // JavaScript function: initRaylib(width, height, title)
@@ -1355,6 +1362,8 @@ void engineFinishLoad() {
         JS_FreeValue(g_ctx, cfgObj);
         JS_FreeValue(g_ctx, global);
     }
+
+    engineStartJSThread();
 }
 
 void enginePumpJS() {
@@ -1390,9 +1399,24 @@ void enginePumpJS() {
         }
         JS_FreeValue(ctx, result);
     }
+
+    if (g_root) {
+        rayact::shadowTree().calculateLayout((float)GetRenderWidth(), (float)GetRenderHeight());
+        raym3::MutationBatch layoutBatch;
+        rayact::shadowTree().emitLayoutMutations(layoutBatch);
+        for (const auto &m : layoutBatch.ops)
+            rayact::mutationRecorder().record(m);
+    }
+
+    rayact::mutationBatchApplyPending();
+    rayact::devtoolsPump(ctx);
 }
 void engineDestroy() {
     if (!g_ctx) return;
+    engineStopJSThread();
+    rayact::devtoolsShutdown();
+    rayact::workletRuntimeShutdown();
+    rayact::shutdownAsyncStorage(g_ctx);
     g_shapes.clear();
 #ifndef RAYACT_NO_WORKERS
     shutdownWorkers();          // join all worker threads, unload canvas textures

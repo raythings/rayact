@@ -1,6 +1,8 @@
 #include "raym3_bridge.hpp"
 #include "css_bridge.hpp"
 #include "color_parse.hpp"
+#include "commit_queue.hpp"
+#include "shadow_tree.hpp"
 
 #include <raym3/v2/View.h>
 #include <raym3/v2/Renderer.h>
@@ -1751,6 +1753,7 @@ JSValue JS_createView(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
     auto node = raym3::v2::View(props);
     int id = g_nextNodeId++;
     g_nodes[id] = node;
+    rayact::shadowTree().createNode((uint32_t)id, props.style);
     if (argc >= 1 && JS_IsObject(argv[0])) captureNodeClassName(ctx, id, argv[0]);
     return JS_NewInt32(ctx, id);
 }
@@ -2580,6 +2583,14 @@ JSValue JS_appendChild(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
 
     appendChildPreservingNavLabel(pit->second, cit->second);
     g_nodeParents[childId] = parentId;
+    {
+        raym3::Mutation m;
+        m.op = raym3::MutationOp::AppendChild;
+        m.parentId = (uint32_t)parentId;
+        m.childId = (uint32_t)childId;
+        rayact::mutationRecorder().record(m);
+        rayact::shadowTree().appendChild((uint32_t)parentId, (uint32_t)childId);
+    }
     // Sync icon fill to parent nav item's selected state immediately on append.
     if (pit->second->role == raym3::v2::NodeRole::NavItem &&
         g_iconRenderStates.count(childId)) {
@@ -2692,6 +2703,12 @@ JSValue JS_setRootNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
         return JS_UNDEFINED;
     }
     writeRootThrough(it->second);
+    {
+        raym3::Mutation m;
+        m.op = raym3::MutationOp::SetRoot;
+        m.id = (uint32_t)id;
+        rayact::mutationRecorder().record(m);
+    }
     return JS_UNDEFINED;
 }
 
