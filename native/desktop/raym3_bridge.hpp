@@ -2,6 +2,8 @@
 
 #include <map>
 #include <memory>
+#include <functional>
+#include <vector>
 
 extern "C" {
 #include "quickjs.h"
@@ -14,7 +16,10 @@ extern raym3::v2::NodePtr g_root;
 extern std::map<int, JSValue> g_pressCallbacks;
 extern JSContext* g_bridge_ctx;
 
-raym3::v2::NodePtr engineFindPressTarget(const raym3::v2::NodePtr& hit);
+// Dismiss the frontmost modal via onRequestClose when a tap lands outside its
+// panel (on the scrim). Returns true if a close callback was invoked. Intended
+// to be called only when HitTest produced no onPress target.
+bool engineTryRequestCloseOnScrimTap(Vector2 pointDp);
 
 JSValue JS_createView(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createText(JSContext*, JSValue, int, JSValueConst*);
@@ -35,6 +40,8 @@ JSValue JS_setRootNode(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_clearRootNode(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setOnPress(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setOnChangeText(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_setOnFocus(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_setOnBlur(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setOnChangeValue(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setOnScroll(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setOnRequestClose(JSContext*, JSValue, int, JSValueConst*);
@@ -42,14 +49,33 @@ JSValue JS_setStyle(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setText(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setValue(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_disposeNode(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_rayactRegisterAnimatedNode(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_rayactStartStyleAnimation(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_rayactStopStyleAnimation(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_rayactSetAnimatedStyle(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createImage(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createIcon(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_setIconProps(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_registerFont(JSContext*, JSValue, int, JSValueConst*);
 
-bool processRaym3ScrollInput(Vector2 mouse, float wheelY, bool pressed, bool down, bool released);
+#ifdef __ANDROID__
+void AndroidKeyboard_ShowForNode(int nodeId);
+void AndroidKeyboard_Hide();
+void AndroidKeyboard_UpdateSelection(int nodeId, int cursor);
+#endif
+
+void rayactSetTextInputContent(int nodeId, const char* text, int cursor = -1);
+void rayactBlurFocusedTextInput();
+
 void buildIconSpriteSheet();
 void cleanupRaym3Bridge(JSContext* ctx);
 void refreshStylesForColorScheme(JSContext* ctx);
+void setSafeAreaInsets(float top, float right, float bottom, float left);
+void resolvePopoverAnchors();
+void installAnimatedStyleBuffer(JSContext* ctx, JSValue global);
+void tickAnimatedStyles(JSContext* ctx);
+bool hasActiveStyleAnimations();
+void applyAnimatedStylesToNodes();
 
 // Multi-surface navigation: per-screen React trees share one QJS context.
 // JS calls setCurrentScreen(id) before each React mount; the engine then

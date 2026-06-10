@@ -12,6 +12,9 @@ void tickJSTimers(JSContext* ctx);
 
 // Fire queued requestAnimationFrame callbacks once per frame.
 void tickAnimationFrames(JSContext* ctx);
+// True while JS requestAnimationFrame callbacks are queued (drives the
+// Android on-demand frame scheduler).
+bool hasPendingAnimationFrames();
 
 // Free all pending timer callbacks. Call before JS_FreeContext.
 void cleanupJSStdlib(JSContext* ctx);

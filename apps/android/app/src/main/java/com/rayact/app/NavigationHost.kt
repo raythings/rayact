@@ -39,6 +39,8 @@ class NavigationHost @JvmOverloads constructor(
     /** surfaceId of the root view (the one installed by [installRoot]). */
     var rootSurfaceId: Int = 0
         private set
+    private var rootSurfaceView: RayactSurfaceView? = null
+    private val fragmentsBySurfaceId = LinkedHashMap<Int, RayactScreenFragment>()
 
     init {
         id = R.id.rayact_nav_stack_container
@@ -73,6 +75,7 @@ class NavigationHost @JvmOverloads constructor(
      */
     fun installRoot(root: RayactSurfaceView) {
         if (indexOfChild(root) >= 0) return
+        rootSurfaceView = root
         addView(root, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         // The root surface's surfaceId is 0 until surfaceCreated fires
         // (asynchronous), so pushToFront() must run from the ready callback,
@@ -107,9 +110,12 @@ class NavigationHost @JvmOverloads constructor(
         fm.beginTransaction()
             .setReorderingAllowed(true)
             .add(id, frag, tag)
-            .addToBackStack(tag)
             .commit()
         return frag
+    }
+
+    fun noteSurfaceReady(fragment: RayactScreenFragment, surfaceId: Int) {
+        if (surfaceId > 0) fragmentsBySurfaceId[surfaceId] = fragment
     }
 
     /**
@@ -117,22 +123,36 @@ class NavigationHost @JvmOverloads constructor(
      * FragmentManager back stack is empty (only the root is showing).
      */
     fun popScreen(): Boolean {
-        val fm = fragmentManager()
-        if (fm.backStackEntryCount == 0) return false
-        fm.popBackStack()
-        return true
+        val entry = fragmentsBySurfaceId.entries.lastOrNull() ?: return false
+        return releaseSurface(entry.key)
     }
 
     /** Number of pushed screens (Fragments), excluding the root. */
-    fun pushedCount(): Int = fragmentManager().backStackEntryCount
+    fun pushedCount(): Int = fragmentsBySurfaceId.size
+
+    fun releaseSurface(surfaceId: Int): Boolean {
+        if (surfaceId <= 0 || surfaceId == rootSurfaceId) return false
+        val fragment = fragmentsBySurfaceId.remove(surfaceId) ?: return false
+        fragmentManager().beginTransaction()
+            .setReorderingAllowed(true)
+            .remove(fragment)
+            .commit()
+        return true
+    }
+
+    fun orderSurfaces(surfaceIds: IntArray) {
+        for (surfaceId in surfaceIds) {
+            if (surfaceId == rootSurfaceId) continue
+            val view = fragmentsBySurfaceId[surfaceId]?.rayactSurfaceView()
+            view?.bringToFront()
+        }
+        invalidate()
+    }
 
     /**
      * Returns the surfaceId of the topmost fragment, or 0 if none.
      */
     fun topFragmentSurfaceId(): Int {
-        val fm = fragmentManager()
-        val frag = fm.fragments.lastOrNull { it is RayactScreenFragment }
-            as? RayactScreenFragment ?: return 0
-        return frag.surfaceId
+        return fragmentsBySurfaceId.keys.lastOrNull() ?: 0
     }
 }

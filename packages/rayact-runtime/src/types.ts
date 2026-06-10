@@ -32,14 +32,18 @@ export type HostNodeType =
   | 'fab'
   | 'fabMenu'
   | 'iconButton'
+  | 'list'
   | 'loadingIndicator'
   | 'menu'
+  | 'menuItem'
   | 'navigationBar'
   | 'navigationBarItem'
   | 'navigationDrawer'
   | 'navigationRail'
   | 'progressIndicator'
   | 'radioButton'
+  | 'rangeSlider'
+  | 'search'
   | 'searchBar'
   | 'segmentedButton'
   | 'sideSheet'
@@ -48,8 +52,11 @@ export type HostNodeType =
   | 'splitButton'
   | 'switch'
   | 'tabs'
+  | 'textField'
+  | 'timePicker'
   | 'toolbar'
-  | 'tooltip';
+  | 'tooltip'
+  | 'popover';
 
 export type HostNodeId = number;
 
@@ -58,7 +65,7 @@ export interface HostNode {
   type: HostNodeType;
 }
 
-export type HostEventName = 'press' | 'click' | 'changeText' | 'changeValue' | 'scroll' | 'requestClose';
+export type HostEventName = 'press' | 'click' | 'changeText' | 'changeValue' | 'scroll' | 'requestClose' | 'focus' | 'blur';
 
 export interface RayactAsset {
   id: string;
@@ -119,7 +126,8 @@ export interface RayactGlobal {
   createText?: (text: string, props?: Record<string, unknown>) => number;
   createButton?: (label: string, props?: Record<string, unknown>) => number;
   createImage?: (src: string | RayactAsset, props?: Record<string, unknown>) => number | null;
-  createIcon?: (name: string, size?: number, color?: number | string, props?: Record<string, unknown>, variant?: string) => number;
+  createIcon?: (name: string, size?: number, color?: number | string, props?: Record<string, unknown>, variant?: string, filled?: boolean) => number;
+  setIconProps?: (nodeId: number, size?: number, color?: number | string, variant?: string, name?: string, filled?: boolean) => void;
   createTextInput?: (value: string, props?: Record<string, unknown>) => number;
   createScrollView?: (props?: Record<string, unknown>) => number;
   createModal?: (props?: Record<string, unknown>) => number;
@@ -134,6 +142,15 @@ export interface RayactGlobal {
   insertBefore?: (parentId: number, childId: number, beforeChildId: number) => void;
   setRootNode?: (nodeId: number | null) => void;
   setStyle?: (nodeId: number, props: Record<string, unknown>) => void;
+  __rayactRegisterAnimatedNode?: (nodeId: number, initialStyle?: Record<string, number>) => void;
+  __rayactStartStyleAnimation?: (
+    nodeId: number,
+    targetStyle: Record<string, number>,
+    config: Record<string, unknown>,
+    onComplete?: () => void
+  ) => void;
+  __rayactStopStyleAnimation?: (nodeId: number, property?: string) => void;
+  __rayactSetAnimatedStyle?: (nodeId: number, partialStyle: Record<string, number>) => void;
   setText?: (nodeId: number, text: string) => void;
   setValue?: (nodeId: number, value: string) => void;
   setOnPress?: (nodeId: number, handler?: (() => void) | null) => void;

@@ -1,5 +1,7 @@
 package com.rayact.engine
 
+import android.os.Handler
+import android.os.Looper
 import android.view.Surface
 
 /**
@@ -45,6 +47,9 @@ object RayactEngine {
     fun createSurface(surface: Surface, density: Float): Int =
         nativeCreateSurface(surface, density)
 
+    fun setSafeAreaInsets(top: Float, right: Float, bottom: Float, left: Float) =
+        nativeSetSafeAreaInsets(top, right, bottom, left)
+
     fun destroySurface(surfaceId: Int) = nativeDestroySurface(surfaceId)
 
     /** Push a surface to the top of the focus stack. */
@@ -60,12 +65,14 @@ object RayactEngine {
     external fun nativeCreate(dataPath: String): Boolean
     external fun nativeLoadScript(mode: Int, arg: String): Boolean
     external fun nativeCreateSurface(surface: Surface, density: Float): Int
+    external fun nativeSetSafeAreaInsets(top: Float, right: Float, bottom: Float, left: Float)
     external fun nativeDestroySurface(surfaceId: Int)
     external fun nativeRequestNewSurface(): Int
     external fun nativePushSurface(surfaceId: Int)
     external fun nativePopSurface(): Int
     external fun nativeGetFocusedSurfaceId(): Int
-    external fun nativeRenderFrame()
+    /** Render one vsync-aligned frame. Returns true when another frame is needed (animations/momentum). */
+    external fun nativeRenderFrame(frameTimeNanos: Long, deltaNanos: Long): Boolean
     external fun nativeTouch(action: Int, id: Int, x: Float, y: Float)
     external fun nativeSurfaceDestroyed()
     external fun nativeDestroy()
@@ -79,6 +86,11 @@ object RayactEngine {
     /** JS-driven engine z-order trim. Replaces g_screenStack with the
      *  supplied ids (bottom→top). Idempotent; root screen preserved. */
     external fun nativeSetScreenStack(ids: IntArray)
+    /** Called from Android main thread when soft-keyboard text changes.
+     *  cursor is the IME selection end (-1 = caret at end). */
+    external fun nativeSetTextInputContent(nodeId: Int, text: String, cursor: Int)
+    /** IME DONE/Enter — blur the focused native field on the render thread. */
+    external fun nativeBlurTextInput()
 }
 
 // Reverse-call from native (C++ engine, via JNI) to allocate a new
@@ -96,11 +108,53 @@ fun requestNewSurfaceFromHost(): Int = RayactHostRegistry.requestNewSurface()
 // surface, not a freshly-allocated one.
 fun rootSurfaceIdFromHost(): Int = RayactHostRegistry.rootSurfaceId()
 
+// Reverse-call from native to read the topmost Fragment-backed surfaceId.
+fun topSurfaceIdFromHost(): Int = RayactHostRegistry.topSurfaceId()
+
 // Reverse-call from native to pop the topmost surface via the host.
 // The host (NavigationHost) handles the slide-out animation +
 // ViewGroup removal. The actual EGL surface teardown is done by the
 // view's surfaceDestroyed callback after the view is detached.
 fun releaseTopSurfaceFromHost(): Unit = RayactHostRegistry.releaseTopSurface()
 
+// Reverse-call from native to remove a specific Fragment-backed surface.
+fun releaseSurfaceFromHost(surfaceId: Int): Unit = RayactHostRegistry.releaseSurface(surfaceId)
+
+// Reverse-call from native to align Android View z-order with engine z-order.
+fun orderSurfacesFromHost(surfaceIds: IntArray): Unit = RayactHostRegistry.orderSurfaces(surfaceIds)
+
 // Reverse-call from native when no JS BackHandler listener handled system back.
 fun finishActivityFromHost(): Unit = RayactHostRegistry.finishActivityFromHost()
+
+// Reverse-call from C++ onFocus lambda — show keyboard for a specific TextInput node.
+fun showSoftKeyboardFromHost(nodeId: Int, value: String) {
+    val view = RayactHostRegistry.imeView ?: return
+    Handler(Looper.getMainLooper()).post {
+        view.setupForIme(nodeId, value)
+    }
+}
+
+// Reverse-call when focus moves between TextInputs — retarget IME without hiding.
+fun switchImeFromHost(nodeId: Int, value: String) {
+    val view = RayactHostRegistry.imeView ?: return
+    Handler(Looper.getMainLooper()).post {
+        view.switchIme(nodeId, value)
+    }
+}
+
+// Reverse-call from C++ onBlur lambda — hide keyboard.
+fun hideSoftKeyboardFromHost() {
+    val view = RayactHostRegistry.imeView ?: return
+    Handler(Looper.getMainLooper()).post {
+        view.clearIme()
+    }
+}
+
+// Reverse-call from C++ when a tap moves the caret on the focused field —
+// keep the IME InputConnection selection in sync.
+fun updateImeSelectionFromHost(nodeId: Int, cursor: Int) {
+    val view = RayactHostRegistry.imeView ?: return
+    Handler(Looper.getMainLooper()).post {
+        view.updateImeSelection(nodeId, cursor)
+    }
+}

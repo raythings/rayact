@@ -15,5 +15,6 @@ export function useSpring(target: number, options: SpringOptions = {}): number {
     duration,
     easing: options.easing,
     onSettled: options.onSettled,
+    from: options.from,
   });
 }

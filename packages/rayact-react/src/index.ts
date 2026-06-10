@@ -54,8 +54,10 @@ export {
   IconButton,
   Image,
   List,
+  MaterialList,
   LoadingIndicator,
   Menu,
+  MenuItem,
   Modal,
   NavigationBar,
   NavigationBarItem,
@@ -63,8 +65,10 @@ export {
   NavigationRail,
   ProgressIndicator,
   RadioButton,
+  RangeSlider,
   SafeArea,
   ScrollView,
+  Search,
   SearchBar,
   SegmentedButton,
   SideSheet,
@@ -75,6 +79,9 @@ export {
   Switch,
   Tabs,
   Text,
+  TextField,
+  TimePicker,
+  Input,
   TextInput,
   Toolbar,
   Tooltip,
@@ -89,6 +96,7 @@ export { RayactThemeProvider } from './theme/RayactThemeProvider';
 export type { RayactTheme } from './theme/tokens';
 export { useAnimatedValue, easeInOutCubic } from './anim/useAnimatedValue';
 export { useSpring } from './anim/useSpring';
+export { SharedValue, useSharedValue, withTiming, withSpring } from './anim/SharedValue';
 export { BackHandler, useBackHandler } from './BackHandler';
 export type { BackHandlerSubscription } from './BackHandler';
 

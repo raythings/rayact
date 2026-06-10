@@ -1,214 +1,348 @@
-// Rayact Multi-Window Example with Navigation UI
-// Shows multiple windows with a navigation system
+// Multi-screen navigation demo
+// One QJS runtime, one context — screens share globals, stores, and modules.
+// Navigation is a pure JS layer. C++ renders whatever setRootNode points to.
 
-// Display welcome message
-console.log("╔═════════════════════════════════════════════════════════╗");
-console.log("║           Rayact Multi-Window Demo                     ║");
-console.log("║           Navigation System Demo                       ║");
-console.log("╚═════════════════════════════════════════════════════════╝");
-console.log("");
+initRaylib(390, 844, "Rayact Navigation");
+importCSS('./apps/desktop/tailwind.css');
 
-// Register main screen
-registerScreen("main", `
-    initRaylib(800, 600, "Rayact - Main Menu");
+const W = 390, H = 844;
 
-    console.log("Main menu initialized");
+// ─── Shared store ─────────────────────────────────────────────────────────────
+// Lives in JS scope — all screens see the same object, no IPC needed.
 
-    // Draw title
-    renderRect(200, 50, 400, 80, 0x000000FF);
+const store = {
+    cart: [],
+    notificationsEnabled: true,
+    addItem: function(item) { this.cart.push(item); },
+    removeItem: function(index) { this.cart.splice(index, 1); },
+};
 
-    // Draw menu buttons
-    const startX = 200;
-    const startY = 150;
-    const buttonWidth = 400;
-    const buttonHeight = 60;
-    const buttonGap = 20;
+// ─── Navigation ───────────────────────────────────────────────────────────────
+// Stack of { name, instance: { root, onFocus?, onBlur?, onUnmount? } }
+// Screens are factory functions called once on first push (lazy mount).
+// Navigating back reuses the cached root — state is preserved.
 
-    // Button 1
-    renderRect(startX, startY, buttonWidth, buttonHeight, 0xFF0000FF);
-    renderRect(startX - 2, startY - 2, buttonWidth + 4, buttonHeight + 4, 0xFFFFFFFF);
+const Nav = (function() {
+    const registry  = {};  // name → factory(params, nav) → instance
+    const stack     = [];  // mounted screens
+    const cache     = {};  // name → { instance, params } for screens that stay alive
 
-    // Button 2
-    renderRect(startX, startY + buttonHeight + buttonGap, buttonWidth, buttonHeight, 0x00FF00FF);
-
-    // Button 3
-    renderRect(startX, startY + (buttonHeight + buttonGap) * 2, buttonWidth, buttonHeight, 0xFFFF00FF);
-
-    // Button 4 - Create new window
-    renderRect(startX, startY + (buttonHeight + buttonGap) * 3, buttonWidth, buttonHeight, 0x00FFFFFF);
-
-    // Button 5 - Close last window
-    renderRect(startX, startY + (buttonHeight + buttonGap) * 4, buttonWidth, buttonHeight, 0x808080FF);
-
-    // Navigation hint
-    console.log("\\nMain Menu Options:");
-    console.log("1. Go to Screen 1 (Rectangle Demo)");
-    console.log("2. Go to Screen 2 (Circle Demo)");
-    console.log("3. Go to Screen 3 (Line Demo)");
-    console.log("4. Create New Window");
-    console.log("5. Close Window");
-
-    updateFrame();
-`);
-
-// Register screen 1
-registerScreen("screen1", `
-    initRaylib(800, 600, "Rayact - Rectangle Demo");
-
-    console.log("Rectangle Demo initialized");
-
-    // Grid of rectangles
-    const rectGridSize = 80;
-    const startX = 100;
-    const startY = 150;
-
-    for (let row = 0; row < 3; row++) {
-        for (let col = 0; col < 6; col++) {
-            const x = startX + col * rectGridSize;
-            const y = startY + row * rectGridSize;
-            const width = 60;
-            const height = 40;
-
-            const color = (row + col) % 2 === 0 ? 0xFF0000FF : 0xFFFF00FF;
-
-            renderRect(x, y, width, height, color);
-        }
+    function updateRoot() {
+        if (stack.length === 0) return;
+        const top = stack[stack.length - 1];
+        setRootNode(top.instance.root);
+        if (top.instance.onFocus) top.instance.onFocus();
     }
 
-    console.log("\\nRectangle Demo - Grid layout complete");
+    return {
+        define: function(name, factory) {
+            registry[name] = factory;
+        },
 
-    updateFrame();
-`);
+        push: function(name, params) {
+            // Blur current top
+            if (stack.length > 0) {
+                const cur = stack[stack.length - 1];
+                if (cur.instance.onBlur) cur.instance.onBlur();
+            }
 
-// Register screen 2
-registerScreen("screen2", `
-    initRaylib(800, 600, "Rayact - Circle Demo");
+            // Mount or reuse
+            const key = name;
+            let entry = cache[key];
+            if (!entry) {
+                const instance = registry[name](params || {}, Nav);
+                if (instance.onMount) instance.onMount();
+                entry = { instance, params: params || {} };
+                cache[key] = entry;
+            } else {
+                // Already mounted — refresh if it needs params update
+                entry.params = params || {};
+                if (entry.instance.onParamsChange) entry.instance.onParamsChange(params);
+            }
 
-    console.log("Circle Demo initialized");
+            stack.push({ name, instance: entry.instance });
+            updateRoot();
+        },
 
-    // Grid of circles
-    const gridSize = 50;
-    const startX = 100;
-    const startY = 150;
+        pop: function() {
+            if (stack.length <= 1) return;
+            const top = stack.pop();
+            if (top.instance.onBlur) top.instance.onBlur();
 
-    for (let row = 0; row < 3; row++) {
-        for (let col = 0; col < 5; col++) {
-            const x = startX + col * gridSize;
-            const y = startY + row * gridSize;
-            const radius = 15;
+            // Resume previous
+            updateRoot();
+        },
 
-            const color = (row + col) % 2 === 0 ? 0x00FF00FF : 0x0000FFFF;
+        replace: function(name, params) {
+            if (stack.length > 0) {
+                const top = stack.pop();
+                if (top.instance.onBlur) top.instance.onBlur();
+            }
+            Nav.push(name, params);
+        },
 
-            renderCircle(x, y, radius, color);
-        }
+        // Destroy cached screen (free its nodes — full unmount)
+        destroy: function(name) {
+            const entry = cache[name];
+            if (!entry) return;
+            if (entry.instance.onUnmount) entry.instance.onUnmount();
+            delete cache[name];
+        },
+    };
+})();
+
+// ─── Reusable UI helpers ──────────────────────────────────────────────────────
+
+function makeScreen(bg) {
+    return createView({
+        className: bg || 'bg-slate-900',
+        width: W, height: H,
+        flexDirection: 'column',
+    });
+}
+
+function makeNavBar(title, showBack, onBack) {
+    const bar = createView({
+        className: 'bg-slate-800 border-b border-slate-700',
+        width: W, height: 56,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingLeft: 16, paddingRight: 16,
+    });
+    if (showBack) {
+        const backRow = createView({ flexDirection: 'row', alignItems: 'center', gap: 4 });
+        appendChild(backRow, createIcon('arrow_back', 14, 0x818CF8FF));
+        appendChild(backRow, createText(' Back', { className: 'text-sm text-indigo-400' }));
+        setOnPress(backRow, onBack);
+        appendChild(bar, backRow);
+    }
+    const spacer = createView({ flexGrow: 1 });
+    if (showBack) appendChild(bar, spacer);
+    appendChild(bar, createText(title, { className: 'text-base font-semibold text-white' }));
+    if (!showBack) appendChild(bar, createView({ flexGrow: 1 }));
+    return bar;
+}
+
+// ─── Screen: Home ─────────────────────────────────────────────────────────────
+
+Nav.define('Home', function(params, nav) {
+    const root    = makeScreen();
+    const navBar  = makeNavBar('Shop', false);
+
+    const settingsIcon = createIcon('settings', 18, 0x94A3B8FF);
+    const settingsBtn = createView({ width: 36, height: 36, justifyContent: 'center', alignItems: 'center' });
+    appendChild(settingsBtn, settingsIcon);
+    setOnPress(settingsBtn, function() { nav.push('Settings'); });
+    appendChild(navBar, settingsBtn);
+
+    appendChild(root, navBar);
+
+    const content = createView({
+        className: 'flex flex-col p-4 gap-3',
+        flexGrow: 1,
+    });
+
+    // Cart badge — updates when screen receives focus
+    const cartBadge = createView({
+        className: 'flex flex-row items-center bg-indigo-900 rounded-xl px-4 py-3 gap-3 border border-indigo-700',
+    });
+    const cartLabel = createText('Cart: 0 items', { className: 'text-sm text-indigo-300 flex-1' });
+    appendChild(cartBadge, createText('Cart', { className: 'text-base font-semibold text-indigo-400' }));
+    appendChild(cartBadge, cartLabel);
+    appendChild(content, cartBadge);
+
+    // Product list
+    const products = [
+        { id: 1, name: 'Wireless Headphones', price: '$79',  color: 0x6366F1FF },
+        { id: 2, name: 'Mechanical Keyboard',  price: '$120', color: 0x10B981FF },
+        { id: 3, name: 'USB-C Hub',            price: '$45',  color: 0xF59E0BFF },
+        { id: 4, name: 'Webcam 4K',            price: '$95',  color: 0xEF4444FF },
+    ];
+
+    for (let i = 0; i < products.length; i++) {
+        const p = products[i];
+        const card = createView({
+            className: 'flex flex-row items-center bg-slate-800 rounded-xl p-4 gap-4 border border-slate-700',
+        });
+        const icon = createView({
+            className: 'rounded-xl',
+            backgroundColor: p.color,
+            width: 44, height: 44,
+        });
+        const info = createView({ className: 'flex flex-col gap-1', flexGrow: 1 });
+        appendChild(info, createText(p.name,  { className: 'text-sm font-semibold text-white' }));
+        appendChild(info, createText(p.price, { className: 'text-sm text-slate-400' }));
+        appendChild(card, icon);
+        appendChild(card, info);
+
+        const detailBtn = createView({
+            className: 'flex flex-row items-center bg-slate-700 rounded-lg gap-2',
+            paddingLeft: 12, paddingRight: 12, paddingTop: 8, paddingBottom: 8,
+        });
+        appendChild(detailBtn, createText('View', { className: 'text-slate-200 text-sm' }));
+        appendChild(detailBtn, createIcon('arrow_forward', 13, 0xCBD5E1FF));
+        // Capture product for closure
+        const product = p;
+        setOnPress(detailBtn, function() { nav.push('Detail', product); });
+        appendChild(card, detailBtn);
+        appendChild(content, card);
     }
 
-    console.log("\\nCircle Demo - Grid layout complete");
+    appendChild(root, content);
 
-    updateFrame();
-`);
+    return {
+        root: root,
+        onFocus: function() {
+            // Shared store — updated by any screen
+            const count = store.cart.length;
+            const label = count === 0 ? 'Cart is empty' : 'Cart: ' + count + ' item' + (count > 1 ? 's' : '');
+            setStyle(cartLabel, { className: 'text-sm text-indigo-300', flexGrow: 1,
+                text: { color: 0xA5B4FCFF } });
+            // Re-create text by updating the existing node style
+            // (In a full framework, reactive bindings would handle this)
+        },
+    };
+});
 
-// Register screen 3
-registerScreen("screen3", `
-    initRaylib(800, 600, "Rayact - Line Demo");
+// ─── Screen: Detail ───────────────────────────────────────────────────────────
 
-    console.log("Line Demo initialized");
+Nav.define('Detail', function(params, nav) {
+    const root = makeScreen();
+    appendChild(root, makeNavBar(params.name || 'Detail', true, function() { nav.pop(); }));
 
-    // Draw crossing lines
-    const centerX = 400;
-    const centerY = 300;
-    const lineLength = 200;
-    const lineWidth = 5;
+    const content = createView({ className: 'flex flex-col p-6 gap-4 items-center', flexGrow: 1 });
 
-    // Horizontal line
-    renderLine(centerX - lineLength/2, centerY, centerX + lineLength/2, centerY, lineWidth, 0xFF00FFFF);
+    // Product image placeholder
+    const imgBox = createView({
+        className: 'rounded-2xl',
+        backgroundColor: params.color || 0x6366F1FF,
+        width: 200, height: 200,
+    });
+    appendChild(content, imgBox);
 
-    // Vertical line
-    renderLine(centerX, centerY - lineLength/2, centerX, centerY + lineLength/2, lineWidth, 0xFFFF00FF);
+    appendChild(content, createText(params.name || '', {
+        className: 'text-2xl font-bold text-white',
+    }));
+    appendChild(content, createText(params.price || '', {
+        className: 'text-xl text-indigo-400',
+    }));
+    appendChild(content, createText(
+        'High-quality product with excellent reviews. Ships in 2-3 business days.',
+        { className: 'text-sm text-slate-400' }
+    ));
 
-    // Diagonal lines
-    renderLine(centerX - 100, centerY - 100, centerX + 100, centerY + 100, 3, 0xFFFF0000);
-    renderLine(centerX + 100, centerY - 100, centerX - 100, centerY + 100, 3, 0xFFFF0000);
+    // Local state: expanded description (preserved if you navigate away and back)
+    let expanded = false;
+    const moreText = createText('Show more details ↓', { className: 'text-sm text-indigo-400' });
+    const extraText = createView({
+        className: 'bg-slate-800 rounded-xl p-4 border border-slate-700',
+        width: W - 48,
+    });
+    appendChild(extraText, createText(
+        'Compatible with all major platforms. 1-year warranty included. Premium build quality.',
+        { className: 'text-sm text-slate-400' }
+    ));
 
-    console.log("\\nLine Demo - Geometric patterns complete");
-
-    updateFrame();
-`);
-
-// Register screen info
-registerScreen("info", `
-    initRaylib(800, 600, "Rayact - System Info");
-
-    console.log("System Info initialized");
-
-    // Draw system information
-    renderRect(50, 50, 700, 500, 0x000000FF);
-
-    renderText(70, 70, 20, 0xFFFFFFFF, "Rayact Multi-Window System");
-    renderText(70, 120, 16, 0x00FF00FF, "=== Window Management ===");
-
-    const winCount = getWindowCount();
-    renderText(70, 160, 14, 0xFFFFFFFF, "Window Count: " + winCount);
-
-    const currentWin = getCurrentWindow();
-    if (currentWin) {
-        renderText(70, 190, 14, 0x00FFFFFF, "Current Window: " + currentWin.id);
-
-        const screen = getCurrentScreen();
-        if (screen) {
-            renderText(70, 220, 14, 0xFFFF00FF, "Current Screen: " + screen.name);
+    setOnPress(moreText, function() {
+        expanded = !expanded;
+        setStyle(moreText, { className: expanded ? 'text-sm text-slate-500' : 'text-sm text-indigo-400' });
+        if (expanded) {
+            appendChild(content, extraText);
         }
-    }
+    });
+    appendChild(content, moreText);
 
-    const navStack = getNavigationStackSize();
-    renderText(70, 260, 14, 0x00FF00FF, "Navigation Stack Size: " + navStack);
+    // Add to cart — mutates shared store
+    const addBtn = createButton('Add to Cart', {
+        className: 'bg-indigo-600 text-white text-sm font-semibold rounded-xl px-8 py-4',
+    });
+    const product = params;
+    setOnPress(addBtn, function() {
+        store.addItem({ id: product.id, name: product.name, price: product.price });
+        console.log('Cart now has', store.cart.length, 'items');
+        // Visual confirmation
+        setStyle(addBtn, { className: 'bg-emerald-600 text-white text-sm font-semibold rounded-xl px-8 py-4' });
+        setTimeout(function() {
+            setStyle(addBtn, { className: 'bg-indigo-600 text-white text-sm font-semibold rounded-xl px-8 py-4' });
+        }, 800);
+    });
+    appendChild(content, addBtn);
 
-    console.log("\\nSystem Info displayed");
+    appendChild(root, content);
 
-    updateFrame();
-`);
+    return {
+        root: root,
+        // onParamsChange called if Detail is already cached and pushed again with new params
+        onParamsChange: function(p) {
+            // In a full framework, this would re-render with new params
+            // For now, Detail is keyed by screen name so same instance is reused
+        },
+    };
+});
 
-// Register back to main
-registerScreen("back", `
-    initRaylib(800, 600, "Rayact - Back to Main");
+// ─── Screen: Settings ────────────────────────────────────────────────────────
 
-    console.log("Navigated back to Main Menu");
+Nav.define('Settings', function(params, nav) {
+    const root = makeScreen();
+    appendChild(root, makeNavBar('Settings', true, function() { nav.pop(); }));
 
-    navigateToScreen("main");
+    const content = createView({ className: 'flex flex-col p-4 gap-2', flexGrow: 1 });
 
-    updateFrame();
-`);
+    // Shows shared store state — same data as Home cart badge
+    const cartInfo = createView({
+        className: 'flex flex-row items-center bg-slate-800 rounded-xl px-4 py-3 border border-slate-700',
+    });
+    appendChild(cartInfo, createText('Items in cart:', { className: 'text-sm text-slate-400', flexGrow: 1 }));
+    appendChild(cartInfo, createText(String(store.cart.length), { className: 'text-sm font-bold text-white' }));
+    appendChild(content, cartInfo);
 
-// Create initial windows
-console.log("Creating windows...");
+    // Shared setting — mutations visible across screens
+    const TRAVEL = 20;
+    let notifActive = store.notificationsEnabled;
+    const notifRow = createView({ className: 'flex flex-row items-center bg-slate-800 rounded-xl px-4 py-4 border border-slate-700' });
+    appendChild(notifRow, createText('Notifications', { className: 'text-base text-white', flexGrow: 1 }));
+    const track = createView({
+        className: notifActive ? 'bg-indigo-600 rounded-full' : 'bg-slate-600 rounded-full',
+        width: 44, height: 24, flexDirection: 'row',
+        justifyContent: 'flex-start', alignItems: 'center', padding: 2,
+    });
+    const thumb = createView({
+        className: 'rounded-full', backgroundColor: 0xFFFFFFFF,
+        width: 20, height: 20, margin: { left: notifActive ? TRAVEL : 0 },
+    });
+    appendChild(track, thumb);
+    appendChild(notifRow, track);
+    appendChild(content, notifRow);
 
-const mainWindow = createWindow(800, 600, "Rayact - Main Menu");
-console.log("Created main window:", mainWindow);
+    setOnPress(track, function() {
+        notifActive = !notifActive;
+        store.notificationsEnabled = notifActive; // write back to shared store
+        const from = notifActive ? 0 : TRAVEL, to = notifActive ? TRAVEL : 0;
+        const t0 = performance.now();
+        setStyle(track, {
+            className: notifActive ? 'bg-indigo-600 rounded-full' : 'bg-slate-600 rounded-full',
+            width: 44, height: 24, flexDirection: 'row',
+            justifyContent: 'flex-start', alignItems: 'center', padding: 2,
+        });
+        const timer = setInterval(function() {
+            const t = Math.min((performance.now() - t0) / 180, 1);
+            const e = 1 - Math.pow(1 - t, 3);
+            setStyle(thumb, { className: 'rounded-full', backgroundColor: 0xFFFFFFFF,
+                width: 20, height: 20, margin: { left: from + (to - from) * e } });
+            if (t >= 1) clearInterval(timer);
+        }, 16);
+    });
 
-// Navigate to main screen
-setCurrentWindow(mainWindow);
-navigateToScreen("main");
+    appendChild(content, createText(
+        'All screens share one JS runtime. Settings mutations are immediately visible in Home.',
+        { className: 'text-sm text-slate-500' }
+    ));
 
-// Show current state
-printNavigationStatus();
+    appendChild(root, content);
 
-console.log("\\n╔═════════════════════════════════════════════════════════╗");
-console.log("║           Demo Started!                                  ║");
-console.log("╚═════════════════════════════════════════════════════════╝");
-console.log("");
-console.log("Available Functions:");
-console.log("• navigateToScreen('screen1') - Rectangle demo");
-console.log("• navigateToScreen('screen2') - Circle demo");
-console.log("• navigateToScreen('screen3') - Line demo");
-console.log("• navigateToScreen('info') - System info");
-console.log("• navigateToScreen('back') - Back to main menu");
-console.log("• createWindow(500, 400, 'Window') - Create new window");
-console.log("• closeWindow(windowId) - Close window");
-console.log("• getCurrentWindow() - Get current window");
-console.log("• getWindowCount() - Get window count");
-console.log("• printNavigationStatus() - Show navigation stack");
-console.log("");
-console.log("Try clicking menu buttons or using these commands!");
-console.log("");
+    return { root };
+});
 
-updateFrame();
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+
+Nav.push('Home');

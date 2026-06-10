@@ -4,6 +4,8 @@ import android.os.Handler
 import android.os.Looper
 import com.rayact.app.NavigationHost
 import com.rayact.app.RayactScreenFragment
+import com.rayact.app.RayactSurfaceView
+import java.lang.ref.WeakReference
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -21,6 +23,14 @@ object RayactHostRegistry {
 
     @Volatile
     private var host: NavigationHost? = null
+
+    /** The surface view that should receive IME input. Set by the focused RayactSurfaceView. */
+    @Volatile
+    var imeView: RayactSurfaceView? = null
+        private set
+
+    fun registerImeView(v: RayactSurfaceView) { imeView = v }
+    fun unregisterImeView(v: RayactSurfaceView) { if (imeView === v) imeView = null }
 
     fun setHost(h: NavigationHost) {
         host = h
@@ -49,6 +59,7 @@ object RayactHostRegistry {
             try {
                 val frag = h.pushScreen()
                 frag.onSurfaceReady = { sid ->
+                    h.noteSurfaceReady(frag, sid)
                     result[0] = sid
                     latch.countDown()
                 }
@@ -79,12 +90,35 @@ object RayactHostRegistry {
         }
     }
 
+    fun releaseSurface(surfaceId: Int) {
+        val h = host ?: return
+        Handler(Looper.getMainLooper()).post {
+            h.releaseSurface(surfaceId)
+        }
+    }
+
+    fun orderSurfaces(surfaceIds: IntArray) {
+        val h = host ?: return
+        Handler(Looper.getMainLooper()).post {
+            h.orderSurfaces(surfaceIds)
+        }
+    }
+
     /**
      * Returns the root surfaceId (the one MainActivity created with
      * `installRoot`). The JS navigator uses this for the initial route,
      * so the first screen doesn't allocate a redundant new fragment.
      */
     fun rootSurfaceId(): Int = host?.rootSurfaceId ?: 0
+
+    /** Returns the topmost Fragment-backed surface, or the root if none. */
+    fun topSurfaceId(): Int {
+        val h = host ?: return 0
+        return h.topFragmentSurfaceId().takeIf { it > 0 } ?: h.rootSurfaceId
+    }
+
+    /** Returns the host's Android Context (Activity), or null if no host is registered. */
+    fun hostContext(): android.content.Context? = host?.context
 
     /**
      * JS asks the host to finish the Activity (BackHandler.exitApp() OR

@@ -154,16 +154,32 @@ if(EXISTS "${RAYM3_DIR}/include/raym3/v2.h")
 else()
     message(FATAL_ERROR "raym3 not found at ${RAYM3_DIR}")
 endif()
-find_library(RAYM3_LIBRARY NAMES raym3 PATHS ${RAYM3_DIR}/build-v2-yoga2 NO_DEFAULT_PATH)
-if(NOT RAYM3_LIBRARY)
-    message(FATAL_ERROR "raym3 (yoga build) not found in ${RAYM3_DIR}/build-v2-yoga2")
+set(RAYM3_BUILD_DIR "${RAYM3_DIR}/build-v2-yoga2")
+set(RAYM3_LIB "${RAYM3_BUILD_DIR}/libraym3.a")
+set(YOGACORE_LIB "${RAYM3_BUILD_DIR}/_deps/yoga-build/libyogacore.a")
+if(NOT EXISTS "${RAYM3_LIB}")
+    message(FATAL_ERROR "raym3 (yoga build) not found at ${RAYM3_LIB}")
 endif()
-message(STATUS "Found raym3: ${RAYM3_LIBRARY}")
-find_library(YOGACORE_LIBRARY NAMES yogacore PATHS ${RAYM3_DIR}/build-v2-yoga2/_deps/yoga-build NO_DEFAULT_PATH)
-if(NOT YOGACORE_LIBRARY)
-    message(FATAL_ERROR "libyogacore not found — required by raym3 Yoga build")
+if(NOT EXISTS "${YOGACORE_LIB}")
+    message(FATAL_ERROR "libyogacore not found at ${YOGACORE_LIB}")
 endif()
-message(STATUS "Found yogacore: ${YOGACORE_LIBRARY}")
+message(STATUS "Found raym3: ${RAYM3_LIB}")
+message(STATUS "Found yogacore: ${YOGACORE_LIB}")
+
+# Rebuild raym3 before linking desktop so Renderer/input changes are picked up.
+add_custom_target(raym3_prebuild
+    COMMAND ${CMAKE_COMMAND} --build ${RAYM3_BUILD_DIR}
+    BYPRODUCTS ${RAYM3_LIB} ${YOGACORE_LIB}
+    COMMENT "Building raym3 (build-v2-yoga2)..."
+)
+
+add_library(raym3_prebuilt STATIC IMPORTED GLOBAL)
+set_target_properties(raym3_prebuilt PROPERTIES IMPORTED_LOCATION "${RAYM3_LIB}")
+add_dependencies(raym3_prebuilt raym3_prebuild)
+
+add_library(yogacore_prebuilt STATIC IMPORTED GLOBAL)
+set_target_properties(yogacore_prebuilt PROPERTIES IMPORTED_LOCATION "${YOGACORE_LIB}")
+add_dependencies(yogacore_prebuilt raym3_prebuild)
 
 # tree-sitter
 find_library(TREESITTER_LIBRARY NAMES tree-sitter
@@ -191,6 +207,8 @@ set(SOURCES
     theme_bridge.cpp
     system_appearance.cpp
     main.cpp
+    engine_js.cpp
+    engine_render.cpp
     quickjs_bridge.cpp
     raylib_bridge.cpp
     raym3_bridge.cpp
@@ -242,14 +260,15 @@ target_link_libraries(rayact_desktop
     ${QUICKJS_LIBC_LIBRARY}
     ${QUICKJS_LIBRARY}
     ${RAYLIB_LIBRARY}
-    ${RAYM3_LIBRARY}
-    ${YOGACORE_LIBRARY}
+    raym3_prebuilt
+    yogacore_prebuilt
     ${TREESITTER_LIBRARY}
     m3
     ${CURL_LIBRARIES}
     ${LWS_LIBRARIES}
     ${OPENSSL_LIBRARIES}
 )
+add_dependencies(rayact_desktop raym3_prebuild)
 
 # Platform-specific settings
 if(PLATFORM_LINUX)

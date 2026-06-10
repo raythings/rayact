@@ -9,6 +9,7 @@ import type {
   RayactHostInstance,
   RayactTextInstance
 } from './types';
+import { SharedValue } from './anim/SharedValue';
 
 const ReactReconciler = ReactReconcilerModule as unknown as (config: Record<string, unknown>) => any;
 
@@ -19,7 +20,7 @@ type Child = RayactHostInstance | RayactTextInstance;
 // special case — the host does not currently wire a layout event back to
 // JS, but consumers may pass it; strip it from the payload so the bridge
 // doesn't try to apply it as a style/attribute.
-const eventProps = ['onPress', 'onClick', 'onChangeText', 'onValueChange', 'onScroll', 'onRequestClose', 'onLayout'] as const;
+const eventProps = ['onPress', 'onClick', 'onChangeText', 'onValueChange', 'onScroll', 'onRequestClose', 'onFocus', 'onBlur', 'onLayout'] as const;
 
 const hostNodeTypes = new Set<string>([
   'root',
@@ -55,14 +56,18 @@ const hostNodeTypes = new Set<string>([
   'fab',
   'fabMenu',
   'iconButton',
+  'list',
   'loadingIndicator',
   'menu',
+  'menuItem',
   'navigationBar',
   'navigationBarItem',
   'navigationDrawer',
   'navigationRail',
   'progressIndicator',
   'radioButton',
+  'rangeSlider',
+  'search',
   'searchBar',
   'segmentedButton',
   'sideSheet',
@@ -71,8 +76,11 @@ const hostNodeTypes = new Set<string>([
   'splitButton',
   'switch',
   'tabs',
+  'textField',
+  'timePicker',
   'toolbar',
-  'tooltip'
+  'tooltip',
+  'popover'
 ]);
 
 function normalizeType(type: RayactElementType | string): HostNodeType {
@@ -133,6 +141,8 @@ function eventNameForProp(prop: typeof eventProps[number]): HostEventName {
   if (prop === 'onValueChange') return 'changeValue';
   if (prop === 'onScroll') return 'scroll';
   if (prop === 'onRequestClose') return 'requestClose';
+  if (prop === 'onFocus') return 'focus';
+  if (prop === 'onBlur') return 'blur';
   return 'press';
 }
 
@@ -148,6 +158,19 @@ function appendChild(parent: RayactHostInstance | RayactContainer, child: Child)
   getBridge(parent).appendChild(parent.kind === 'container' ? parent.rootNode : parent.node, child.node);
 }
 
+// React calls removeChild only for the ROOT of a deleted subtree, so the host
+// must tear down descendants itself. Without this, every descendant's native
+// node (and its event-handler closures) leaks on each navigation/unmount.
+// Disposes depth-first (leaves before parents).
+function disposeSubtree(instance: RayactHostInstance): void {
+  const bridge = getDefaultRuntime().bridge;
+  for (const grandchild of instance.children) {
+    if (isText(grandchild)) continue; // text has no standalone native node
+    disposeSubtree(grandchild);
+  }
+  bridge.disposeNode(instance.node);
+}
+
 function removeChild(parent: RayactHostInstance | RayactContainer, child: Child): void {
   const index = parent.children.indexOf(child);
   if (index !== -1) parent.children.splice(index, 1);
@@ -159,7 +182,7 @@ function removeChild(parent: RayactHostInstance | RayactContainer, child: Child)
   }
 
   getBridge(parent).removeChild(parent.kind === 'container' ? parent.rootNode : parent.node, child.node);
-  getBridge(parent).disposeNode(child.node);
+  disposeSubtree(child);
 }
 
 function insertBefore(parent: RayactHostInstance | RayactContainer, child: Child, beforeChild: Child): void {
@@ -198,6 +221,33 @@ function diffProps(oldProps: Record<string, unknown>, newProps: Record<string, u
   }
 
   return Object.keys(payload).length > 0 || oldProps.children !== newProps.children ? payload : null;
+}
+
+function scanAndBindSharedValues(nodeId: number, style: unknown) {
+  if (!style) return;
+  if (Array.isArray(style)) {
+    for (const item of style) {
+      scanAndBindSharedValues(nodeId, item);
+    }
+    return;
+  }
+  if (typeof style === 'object') {
+    for (const [key, value] of Object.entries(style as Record<string, unknown>)) {
+      if (key === 'transform' && Array.isArray(value)) {
+        for (const transformEntry of value) {
+          if (transformEntry && typeof transformEntry === 'object') {
+            for (const [tKey, tValue] of Object.entries(transformEntry)) {
+              if (tValue && typeof (tValue as any).bindToNode === 'function') {
+                (tValue as any).bindToNode(nodeId, tKey);
+              }
+            }
+          }
+        }
+      } else if (value && typeof (value as any).bindToNode === 'function') {
+        (value as any).bindToNode(nodeId, key);
+      }
+    }
+  }
 }
 
 export function createHostContainer(): RayactContainer {
@@ -269,6 +319,7 @@ export const RayactReconciler = __reconcilerGlobal.__RAYACT_RECONCILER__ ?? (__r
       children: []
     };
     attachEvents(instance, props);
+    scanAndBindSharedValues(node.id, props.style);
     return instance;
   },
 
@@ -302,6 +353,7 @@ export const RayactReconciler = __reconcilerGlobal.__RAYACT_RECONCILER__ ?? (__r
     if (payload) getDefaultRuntime().bridge.updateNode(instance.node, payload);
     updateEvents(instance, oldProps, newProps);
     syncTextContent(instance);
+    scanAndBindSharedValues(instance.node.id, newProps.style);
   },
 
   commitTextUpdate(textInstance: RayactTextInstance, _oldText: string, newText: string) {

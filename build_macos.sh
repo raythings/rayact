@@ -39,8 +39,8 @@ if [ ! -f "../raylib/build/raylib/libraylib.a" ]; then
     if [ ! -d build ]; then
         mkdir build
     fi
-    echo "cmake -B build -DPLATFORM=Desktop -DCMAKE_BUILD_TYPE=Release"
-    cmake -B build -DPLATFORM=Desktop -DCMAKE_BUILD_TYPE=Release
+    echo "cmake -B build -DPLATFORM=Desktop -DOPENGL_VERSION=3.3 -DCMAKE_BUILD_TYPE=Release"
+    cmake -B build -DPLATFORM=Desktop -DOPENGL_VERSION=3.3 -DCMAKE_BUILD_TYPE=Release
     echo "cmake --build build --parallel"
     cmake --build build --parallel
     cd ../rayact

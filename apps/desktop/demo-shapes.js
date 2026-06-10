@@ -54,17 +54,16 @@ for (let i = 1; i <= 5; i++) {
 
 // Lines forming a cross
 const lineLength = 200;
-const lineWidth = 5;
 
 // Horizontal line
-renderLine(centerX - lineLength/2, centerY, centerX + lineLength/2, centerY, lineWidth, 0xFF00FFFF);
+renderLine(centerX - lineLength/2, centerY, centerX + lineLength/2, centerY, 0xFF00FFFF);
 
 // Vertical line
-renderLine(centerX, centerY - lineLength/2, centerX, centerY + lineLength/2, lineWidth, 0xFFFF00FF);
+renderLine(centerX, centerY - lineLength/2, centerX, centerY + lineLength/2, 0xFFFF00FF);
 
 // Diagonal lines (forming an X)
-renderLine(centerX - 100, centerY - 100, centerX + 100, centerY + 100, lineWidth, 0xFFFF0000);
-renderLine(centerX + 100, centerY - 100, centerX - 100, centerY + 100, lineWidth, 0xFFFF0000);
+renderLine(centerX - 100, centerY - 100, centerX + 100, centerY + 100, 0xFFFF0000);
+renderLine(centerX + 100, centerY - 100, centerX - 100, centerY + 100, 0xFFFF0000);
 
 // Triangle
 const triX1 = 700;
@@ -74,9 +73,9 @@ const triY2 = 300;
 const triX3 = 650;
 const triY3 = 300;
 
-renderLine(triX1, triY1, triX2, triY2, 3, 0xFF00FF00);
-renderLine(triX2, triY2, triX3, triY3, 3, 0xFF00FF00);
-renderLine(triX3, triY3, triX1, triY1, 3, 0xFF00FF00);
+renderLine(triX1, triY1, triX2, triY2, 0xFF00FF00);
+renderLine(triX2, triY2, triX3, triY3, 0xFF00FF00);
+renderLine(triX3, triY3, triX1, triY1, 0xFF00FF00);
 
 // Display demo info
 console.log("Geometric shapes demo complete!");

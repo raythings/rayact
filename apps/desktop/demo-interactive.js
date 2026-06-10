@@ -7,7 +7,7 @@ initRaylib(800, 600, "Rayact - Interactive Demo");
 // State variables
 let mouseX = 0;
 let mouseY = 0;
-let isMouseDown = false;
+let isMouseDownVar = false;
 let selectedColor = 0xFF0000FF; // Default blue
 
 console.log("Interactive demo loaded!");
@@ -49,21 +49,17 @@ function onKeyDown(key) {
     }
 }
 
-// Draw a grid background
-for (let x = 0; x < 800; x += 50) {
-    renderLine(x, 0, x, 600, 0x1a1a1aFF);
-}
-for (let y = 0; y < 600; y += 50) {
-    renderLine(0, y, 800, y, 0x1a1a1aFF);
-}
-
-// Draw instructions
-console.log("Click to draw shapes at mouse position");
-console.log("Keyboard shortcuts: 1=Blue, 2=Green, 3=Red, 4=Magenta, 5=Cyan");
-
 // Simple animation loop
 function animate() {
-    // Draw cursor
+    // Clear and draw grid background
+    for (let x = 0; x < 800; x += 50) {
+        renderLine(x, 0, x, 600, 0x1a1a1aFF);
+    }
+    for (let y = 0; y < 600; y += 50) {
+        renderLine(0, y, 800, y, 0x1a1a1aFF);
+    }
+
+    // Draw cursor at current mouse position
     const cursorSize = 20;
     renderRect(mouseX - cursorSize/2, mouseY - cursorSize/2, cursorSize, cursorSize, 0xFFFFFFFF);
 
@@ -71,40 +67,31 @@ function animate() {
     renderRect(760, 20, 20, 20, selectedColor);
 }
 
-// Initial draw
-animate();
-
-// Update frame for animation
-updateFrame();
-
-console.log("Interactive demo ready!");
-console.log("Mouse position:", mouseX, mouseY);
-console.log("Selected color:", selectedColor.toString(16).toUpperCase());
-
-// Save the animation function for later use
-saveAnimation(animate);
-
 // Update frame periodically for animation
 function gameLoop() {
+    // Query native mouse position
+    mouseX = getMouseX();
+    mouseY = getMouseY();
+
+    // Query native mouse button down
+    if (isMouseDown(0)) {
+        isMouseDownState = true;
+        // Simple logic: clicking top-right corner changes color
+        if (mouseX > 700 && mouseY < 100) {
+            selectedColor = 0xFF00FF00; // Green
+        }
+    } else {
+        isMouseDownState = false;
+    }
+
     animate();
     updateFrame();
     requestAnimationFrame(gameLoop);
 }
 
+let isMouseDownState = false;
+
 // Start animation
 requestAnimationFrame(gameLoop);
 
 console.log("Animation started!");
-
-// Store global functions for native access
-window.updateFrame = updateFrame;
-window.saveAnimation = function(fn) {
-    // This will be implemented with native bridge
-    console.log("Animation function saved");
-};
-
-// Note: Full mouse and keyboard input handling will be implemented
-// in the next phase. For now, this demonstrates the structure.
-
-// Update frame for next iteration
-updateFrame();

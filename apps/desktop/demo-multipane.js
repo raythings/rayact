@@ -1,136 +1,276 @@
-// Rayact Multi-Window Demo
-// Demonstrates multiple windows managed by a single QuickJS instance
+// Multi-window demo — draggable floating windows via absolute positioning
 
-console.log("=== Rayact Multi-Window Demo ===\n");
+initRaylib(1200, 800, "Rayact - Multi Window");
+importCSS('./apps/desktop/tailwind.css');
 
-// Initialize first window
-const window1 = createWindow(800, 600, "Rayact - Window 1");
-console.log("Created window 1:", window1);
-console.log("Window count:", getWindowCount());
+// ── desktop root ─────────────────────────────────────────────────────────────
 
-// Navigate to screen 1
-registerScreen("screen1", `
-    initRaylib(800, 600, "Rayact - Screen 1");
+const desktop = createView({
+    className: 'bg-slate-900',
+    width: 1200, height: 800,
+    position: 'relative',
+    overflow: 'hidden',
+});
 
-    console.log("Screen 1 initialized");
+// ── window registry ───────────────────────────────────────────────────────────
 
-    // Draw some content
-    renderRect(100, 100, 200, 150, 0xFF0000FF);
-    renderCircle(400, 300, 50, 0x00FF00FF);
-    renderLine(100, 400, 700, 400, 0x0000FFFF);
+const windows = [];   // { id, titleBar, node, x, y, w, h, zIndex }
+let nextZ = 1;
+let dragging = null;  // { win, startX, startY }
 
-    // Draw navigation hint
-    console.log("\\nClick 'Next' button below to navigate to screen 2");
+function bringToFront(win) {
+    win.zIndex = ++nextZ;
+    setStyle(win.node, {
+        position: 'absolute',
+        left: win.x, top: win.y,
+        width: win.w, height: win.h,
+        zIndex: win.zIndex,
+    });
+}
 
-    updateFrame();
-`);
+// ── build a floating window ───────────────────────────────────────────────────
 
-// Register screen 2
-registerScreen("screen2", `
-    initRaylib(800, 600, "Rayact - Screen 2");
+function createWindow(opts) {
+    const { title, x, y, w, h, buildContent } = opts;
 
-    console.log("Screen 2 initialized");
+    const win = { x, y, w, h, zIndex: ++nextZ, node: null, titleBar: null };
 
-    // Different content
-    for (let i = 0; i < 5; i++) {
-        renderRect(100 + i * 150, 200 + (i % 2) * 100, 100, 80, 0xFFFF0000 + i * 0x008000);
+    // Outer frame
+    const frame = createView({
+        className: 'flex flex-col rounded-xl border border-slate-600',
+        backgroundColor: 0x1E293BFF,  // slate-800
+        position: 'absolute',
+        left: x, top: y, width: w, height: h,
+        zIndex: win.zIndex,
+        overflow: 'hidden',
+    });
+    win.node = frame;
+
+    // Title bar
+    const titleBar = createView({
+        className: 'flex flex-row items-center gap-3',
+        backgroundColor: 0x0F172AFF,  // slate-900
+        width: w, height: 36,
+        paddingLeft: 12, paddingRight: 12,
+    });
+    win.titleBar = titleBar;
+
+    // Traffic-light buttons
+    const colors = [0xFF5F57FF, 0xFFBD2EFF, 0x28C840FF];
+    for (let i = 0; i < 3; i++) {
+        const dot = createView({
+            className: 'rounded-full',
+            backgroundColor: colors[i],
+            width: 12, height: 12,
+        });
+        appendChild(titleBar, dot);
     }
 
-    // Draw navigation hint
-    console.log("\\nClick 'Next' button below to navigate to screen 3");
-    console.log("Or click 'Back' to return to screen 1");
+    const titleText = createText(title, {
+        className: 'text-sm text-slate-300 font-medium',
+    });
+    appendChild(titleBar, titleText);
+    appendChild(frame, titleBar);
 
-    updateFrame();
-`);
+    // Content area
+    const content = createView({
+        className: 'flex flex-col flex-1 p-4 gap-3',
+        width: w, height: h - 36,
+    });
+    buildContent(content, w, h - 36);
+    appendChild(frame, content);
 
-// Register screen 3
-registerScreen("screen3", `
-    initRaylib(800, 600, "Rayact - Screen 3");
+    appendChild(desktop, frame);
+    windows.push(win);
 
-    console.log("Screen 3 initialized");
+    // Title bar press → bring to front (click handler; drag is handled in frame loop)
+    setOnPress(titleBar, function() { bringToFront(win); });
 
-    // Star pattern
-    const centerX = 400;
-    const centerY = 300;
-    const outerRadius = 150;
-    const innerRadius = 70;
-    const points = 5;
+    return win;
+}
 
-    for (let i = 0; i < points * 2; i++) {
-        const angle = (i * Math.PI) / points - Math.PI / 2;
-        const radius = (i % 2 === 0) ? outerRadius : innerRadius;
-        const x = centerX + Math.cos(angle) * radius;
-        const y = centerY + Math.sin(angle) * radius;
+// ── Window 1: Notes ───────────────────────────────────────────────────────────
 
-        const startAngle = (angle - Math.PI / 5) - Math.PI / 2;
-        const endAngle = (angle + Math.PI / 5) - Math.PI / 2;
+createWindow({
+    title: 'Notes',
+    x: 60, y: 80, w: 340, h: 280,
+    buildContent: function(c) {
+        appendChild(c, createText('Meeting notes', { className: 'text-base font-semibold text-white' }));
+        const lines = [
+            '• Finalize API surface for rayact v0.2',
+            '• Add text input component',
+            '• Multi-window demo ✓',
+            '• Write docs',
+        ];
+        for (let i = 0; i < lines.length; i++) {
+            appendChild(c, createText(lines[i], { className: 'text-sm text-slate-400' }));
+        }
+    },
+});
 
-        const startX = centerX + Math.cos(startAngle) * radius;
-        const startY = centerY + Math.sin(startAngle) * radius;
-        const endX = centerX + Math.cos(endAngle) * radius;
-        const endY = centerY + Math.sin(endAngle) * radius;
+// ── Window 2: Stats dashboard ─────────────────────────────────────────────────
 
-        const color = i % 2 === 0 ? 0xFF0000FF : 0xFFD700FF;
-        renderLine(startX, startY, endX, endY, i % 2 === 0 ? 4 : 3, color);
+createWindow({
+    title: 'Dashboard',
+    x: 440, y: 60, w: 380, h: 300,
+    buildContent: function(c, cw) {
+        appendChild(c, createText('System Stats', { className: 'text-base font-semibold text-white' }));
+        const stats = [
+            { label: 'CPU', value: '12%',  color: 0x22C55EFF },
+            { label: 'RAM', value: '4.2 GB', color: 0x3B82F6FF },
+            { label: 'GPU', value: '8%',   color: 0xA855F7FF },
+            { label: 'Net', value: '2 MB/s', color: 0xF59E0BFF },
+        ];
+        const grid = createView({
+            className: 'flex flex-row gap-3',
+        });
+        for (let i = 0; i < stats.length; i++) {
+            const s = stats[i];
+            const card = createView({
+                className: 'flex flex-col gap-1 rounded-lg',
+                backgroundColor: 0x0F172AFF,
+                padding: 12, width: 148,
+            });
+            appendChild(card, createText(s.value, {
+                className: 'text-xl font-bold',
+                text: { color: s.color, fontSize: 20 },
+            }));
+            appendChild(card, createText(s.label, { className: 'text-sm text-slate-500' }));
+            appendChild(grid, card);
+        }
+        appendChild(c, grid);
+    },
+});
+
+// ── Window 3: Image viewer ────────────────────────────────────────────────────
+
+createWindow({
+    title: 'Image Viewer',
+    x: 200, y: 380, w: 400, h: 300,
+    buildContent: function(c, cw, ch) {
+        const imgContainer = createView({
+            className: 'rounded-lg overflow-hidden',
+            width: cw - 32, height: ch - 32,
+        });
+        const img = createImage('./apps/desktop/avatar.png', {
+            width: cw - 32, height: ch - 32,
+        });
+        appendChild(imgContainer, img);
+        appendChild(c, imgContainer);
+    },
+});
+
+// ── Window 4: Settings panel ──────────────────────────────────────────────────
+
+createWindow({
+    title: 'Preferences',
+    x: 700, y: 400, w: 320, h: 240,
+    buildContent: function(c) {
+        const rows = [
+            { label: 'Dark mode',    active: true  },
+            { label: 'Animations',   active: true  },
+            { label: 'Telemetry',    active: false },
+        ];
+        for (let i = 0; i < rows.length; i++) {
+            const r = rows[i];
+            let active = r.active;
+            const TRAVEL = 20;
+            const row = createView({
+                className: 'flex flex-row items-center',
+                paddingTop: 8, paddingBottom: 8,
+            });
+            appendChild(row, createText(r.label, { className: 'text-sm text-slate-300', flexGrow: 1 }));
+            const track = createView({
+                className: active ? 'bg-indigo-600 rounded-full' : 'bg-slate-600 rounded-full',
+                width: 44, height: 24,
+                flexDirection: 'row',
+                justifyContent: 'flex-start',
+                alignItems: 'center',
+                padding: 2,
+            });
+            const thumb = createView({
+                className: 'rounded-full',
+                backgroundColor: 0xFFFFFFFF,
+                width: 20, height: 20,
+                margin: { left: active ? TRAVEL : 0 },
+            });
+            appendChild(track, thumb);
+            appendChild(row, track);
+            appendChild(c, row);
+            setOnPress(track, function() {
+                active = !active;
+                const from = active ? 0 : TRAVEL;
+                const to   = active ? TRAVEL : 0;
+                const t0   = performance.now();
+                setStyle(track, {
+                    className: active ? 'bg-indigo-600 rounded-full' : 'bg-slate-600 rounded-full',
+                    width: 44, height: 24,
+                    flexDirection: 'row', justifyContent: 'flex-start',
+                    alignItems: 'center', padding: 2,
+                });
+                const timer = setInterval(function() {
+                    const t = Math.min((performance.now() - t0) / 180, 1);
+                    const e = 1 - Math.pow(1 - t, 3);
+                    setStyle(thumb, {
+                        className: 'rounded-full', backgroundColor: 0xFFFFFFFF,
+                        width: 20, height: 20, margin: { left: from + (to - from) * e },
+                    });
+                    if (t >= 1) clearInterval(timer);
+                }, 16);
+            });
+        }
+    },
+});
+
+// ── set root & register per-frame drag handler ────────────────────────────────
+
+setRootNode(desktop);
+
+// Hit-test which window's title bar the mouse is over
+function findTitleBarWin(mx, my) {
+    // Check in reverse z-order (top window first)
+    const sorted = windows.slice().sort(function(a, b) { return b.zIndex - a.zIndex; });
+    for (let i = 0; i < sorted.length; i++) {
+        const w = sorted[i];
+        if (mx >= w.x && mx <= w.x + w.w &&
+            my >= w.y && my <= w.y + 36) {
+            return w;
+        }
+    }
+    return null;
+}
+
+setOnFrame(function(dt, elapsed) {
+    const mx = getMouseX();
+    const my = getMouseY();
+
+    if (isMousePressed(0)) {
+        const hit = findTitleBarWin(mx, my);
+        if (hit) {
+            dragging = hit;
+            bringToFront(hit);
+        }
     }
 
-    console.log("\\nMulti-window demo complete!");
-    console.log("Try creating more windows:");
-    console.log("- navigateToScreen('screen4') to see next screen");
-
-    updateFrame();
-`);
-
-// Create additional windows
-const window2 = createWindow(600, 400, "Rayact - Window 2");
-console.log("Created window 2:", window2);
-
-setCurrentWindow(window2);
-console.log("Set window 2 as current");
-
-// Draw on window 2
-initRaylib(600, 400, "Rayact - Window 2");
-renderRect(100, 100, 400, 200, 0x00FF00FF);
-console.log("Window 2 content drawn");
-
-updateFrame();
-
-// Navigate through screens
-setCurrentWindow(window1);
-console.log("\\nNavigating to screens...");
-navigateToScreen("screen1");
-navigateToScreen("screen2");
-navigateToScreen("screen3");
-
-// Print navigation status
-printNavigationStatus();
-
-// Create more windows to demonstrate multi-window management
-const window3 = createWindow(400, 300, "Rayact - Window 3");
-console.log("Created window 3:", window3);
-
-console.log("\\n=== Demo Complete ===");
-console.log("Summary:");
-console.log("• 3 windows created");
-console.log("• 4 screens registered");
-console.log("• Navigation stack with 3 screens");
-console.log("• Each window managed independently");
-console.log("");
-console.log("Try these JavaScript commands:");
-console.log("• getCurrentWindow() - Get current window");
-console.log("• getWindowCount() - Get window count");
-console.log("• createWindow(500, 400, 'My Window') - Create new window");
-console.log("• closeWindow(windowId) - Close window");
-console.log("• setCurrentWindow(windowId) - Switch windows");
-console.log("• navigateToScreen('screen3') - Navigate between screens");
-console.log("• printNavigationStatus() - Show navigation stack");
-console.log("• registerScreen(name, script) - Add new screen");
-console.log("");
-console.log("Next steps:");
-console.log("• Build raylib in background for multiple windows");
-console.log("• Implement view transitions");
-console.log("• Add window focus management");
-console.log("• Implement window-specific input handling");
-console.log("• Create complex multi-window applications");
-
-updateFrame();
+    if (dragging) {
+        if (isMouseDown(0)) {
+            const d = getMouseDelta();
+            if (d.x !== 0 || d.y !== 0) {
+                dragging.x += d.x;
+                dragging.y += d.y;
+                // Clamp to desktop bounds
+                dragging.x = Math.max(0, Math.min(1200 - dragging.w, dragging.x));
+                dragging.y = Math.max(0, Math.min(800 - 36, dragging.y));
+                setStyle(dragging.node, {
+                    position: 'absolute',
+                    left: dragging.x, top: dragging.y,
+                    width: dragging.w, height: dragging.h,
+                    zIndex: dragging.zIndex,
+                    overflow: 'hidden',
+                });
+            }
+        } else {
+            dragging = null;
+        }
+    }
+});

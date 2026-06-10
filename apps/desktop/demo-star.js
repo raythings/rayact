@@ -30,9 +30,8 @@ for (let i = 0; i < points * 2; i++) {
 
     // Draw line with gradient effect (alternating colors)
     const color = i % 2 === 0 ? 0xFF0000FF : 0xFFD700FF; // Blue or Gold
-    const lineWidth = i % 2 === 0 ? 4 : 3;
 
-    renderLine(startX, startY, endX, endY, lineWidth, color);
+    renderLine(startX, startY, endX, endY, color);
 }
 
 // Draw outer circle border
@@ -53,7 +52,7 @@ for (let i = 0; i < numRays; i++) {
     const endY = centerY + Math.sin(angle) * rayLength;
 
     const color = i % 2 === 0 ? 0x00FF00FF : 0x0000FFFF; // Green or Cyan
-    renderLine(startX, startY, endX, endY, 2, color);
+    renderLine(startX, startY, endX, endY, color);
 }
 
 // Display demo info

@@ -3,8 +3,14 @@
 #include "color_parse.hpp"
 
 #include <raym3/v2/View.h>
+#include <raym3/v2/Renderer.h>
 #include <raym3/v2/Style.h>
 #include <raym3/v2/Components.h>
+#include <raym3/v2/Density.h>
+#include <raym3/v2/IconRenderer.h>
+#include <raym3/v2/MaterialDefaults.h>
+#include <raym3/v2/MaterialTokens.h>
+#include <raym3/v2/TextInput.h>
 #include <raym3/fonts/FontManager.h>
 #include <raym3/components/Checkbox.h>
 #include <raym3/components/ProgressIndicator.h>
@@ -14,6 +20,7 @@
 #include <raylib.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -21,9 +28,19 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <regex>
 #include <cstdlib>
+
+// Navigation-crash instrumentation: log stale-id node ops and surface teardown
+// so a logcat capture during back-nav reveals which fault fires first.
+#ifdef RAYACT_ANDROID
+#include <android/log.h>
+#define RAYACT_NAV_LOG(...) __android_log_print(ANDROID_LOG_WARN, "RayactNav", __VA_ARGS__)
+#else
+#define RAYACT_NAV_LOG(...) do { fprintf(stderr, "[RayactNav] "); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while (0)
+#endif
 
 // ─── per-screen state ──────────────────────────────────────────────────────
 //
@@ -35,7 +52,7 @@
 //
 struct ScreenState;  // forward decl (defined later with NativeControlState below)
 
-enum class NativeControlKind { Checkbox, Switch, RadioButton, Slider };
+enum class NativeControlKind { Checkbox, Switch, RadioButton, Slider, RangeSlider };
 
 struct NativeControlState {
     NativeControlKind kind;
@@ -43,12 +60,20 @@ struct NativeControlState {
     bool disabled = false;
     std::string label;
     float anim = -1.0f; // eased 0..1 toggle progress; -1 = uninitialized
+    float animFrom = 0.0f;
+    float animTarget = -1.0f;
+    float animElapsedMs = 0.0f;
     // Slider state.
     float value = 0.0f;
     float minValue = 0.0f;
     float maxValue = 1.0f;
     float step = 0.0f;   // 0 = continuous
     bool dragging = false;
+    int draggingThumb = -1;
+    float startValue = 0.25f;
+    float endValue = 0.75f;
+    float sliderTrackH  = 16.0f;
+    float sliderHandleH = 44.0f;
 };
 
 // `g_nodes`, `g_root`, `g_pressCallbacks` are kept as live maps for back-compat
@@ -62,6 +87,8 @@ struct ScreenState {
     std::map<int, JSValue> pressCallbacks;
     std::map<int, std::string> nodeClassNames;
     std::map<int, JSValue> changeTextCallbacks;
+    std::map<int, JSValue> focusCallbacks;
+    std::map<int, JSValue> blurCallbacks;
     std::map<int, JSValue> changeValueCallbacks;
     std::map<int, JSValue> scrollCallbacks;
     std::map<int, JSValue> requestCloseCallbacks;
@@ -88,6 +115,102 @@ static std::map<int, std::string> g_nodeClassNames;
 static std::map<int, int> g_nodeParents;
 static int g_nextNodeId = 1;
 
+// ─── native animated render-only styles ───────────────────────────────────
+
+static constexpr int kAnimatedStyleSlots = 8;
+static constexpr int kAnimatedStyleMaxNodes = 65536;
+static constexpr int kAnimatedTranslateX = 0;
+static constexpr int kAnimatedTranslateY = 1;
+static constexpr int kAnimatedScale = 2;
+static constexpr int kAnimatedOpacity = 3;
+static constexpr int kAnimatedRotation = 4;
+static constexpr int kAnimatedDirty = 5;
+static constexpr int kAnimatedGeneration = 6;
+
+static std::vector<float> g_animatedStyleBuffer(
+    (size_t)kAnimatedStyleMaxNodes * (size_t)kAnimatedStyleSlots, 0.0f);
+static std::set<int> g_animatedNodes;
+
+struct StyleAnimation {
+    int nodeId = 0;
+    bool active[5] = {false, false, false, false, false};
+    float from[5] = {0, 0, 1, 1, 0};
+    float to[5] = {0, 0, 1, 1, 0};
+    double startMs = 0.0;
+    double durationMs = 0.0;
+    JSValue onComplete = JS_UNDEFINED;
+};
+
+static std::unordered_map<int, StyleAnimation> g_styleAnimations;
+
+static double animatedNowMs() {
+    using clock = std::chrono::steady_clock;
+    static const auto epoch = clock::now();
+    return std::chrono::duration<double, std::milli>(clock::now() - epoch).count();
+}
+
+static float easeInOutCubicNative(float t) {
+    return t < 0.5f ? 4.0f * t * t * t : 1.0f - powf(-2.0f * t + 2.0f, 3.0f) / 2.0f;
+}
+
+static int animatedOffsetForKey(const char* key) {
+    if (!key) return -1;
+    if (strcmp(key, "translateX") == 0) return kAnimatedTranslateX;
+    if (strcmp(key, "translateY") == 0) return kAnimatedTranslateY;
+    if (strcmp(key, "scale") == 0) return kAnimatedScale;
+    if (strcmp(key, "opacity") == 0) return kAnimatedOpacity;
+    if (strcmp(key, "rotation") == 0) return kAnimatedRotation;
+    return -1;
+}
+
+static bool animatedNodeIndex(int nodeId, size_t& base) {
+    if (nodeId < 0 || nodeId >= kAnimatedStyleMaxNodes) return false;
+    base = (size_t)nodeId * (size_t)kAnimatedStyleSlots;
+    return base + kAnimatedStyleSlots <= g_animatedStyleBuffer.size();
+}
+
+static float animatedDefaultForOffset(int offset) {
+    return (offset == kAnimatedScale || offset == kAnimatedOpacity) ? 1.0f : 0.0f;
+}
+
+static void setAnimatedStyleValue(int nodeId, int offset, float value) {
+    size_t base = 0;
+    if (!animatedNodeIndex(nodeId, base) || offset < 0 || offset >= 5) return;
+    g_animatedStyleBuffer[base + (size_t)offset] = value;
+    g_animatedStyleBuffer[base + kAnimatedDirty] = 1.0f;
+    g_animatedNodes.insert(nodeId);
+}
+
+static float getAnimatedStyleValue(int nodeId, int offset) {
+    size_t base = 0;
+    if (!animatedNodeIndex(nodeId, base) || offset < 0 || offset >= 5)
+        return animatedDefaultForOffset(offset);
+    return g_animatedStyleBuffer[base + (size_t)offset];
+}
+
+static void applyAnimatedValueToStyle(raym3::v2::Style& style, int offset, float value) {
+    switch (offset) {
+        case kAnimatedTranslateX: style.translateX = value; break;
+        case kAnimatedTranslateY: style.translateY = value; break;
+        case kAnimatedScale:      style.scale = value; break;
+        case kAnimatedOpacity:    style.opacity = value; break;
+        case kAnimatedRotation:   style.rotation = value; break;
+    }
+}
+
+static void clearAnimatedNode(JSContext* ctx, int nodeId) {
+    auto anim = g_styleAnimations.find(nodeId);
+    if (anim != g_styleAnimations.end()) {
+        if (!JS_IsUndefined(anim->second.onComplete)) JS_FreeValue(ctx, anim->second.onComplete);
+        g_styleAnimations.erase(anim);
+    }
+    size_t base = 0;
+    if (animatedNodeIndex(nodeId, base)) {
+        for (int i = 0; i < kAnimatedStyleSlots; ++i) g_animatedStyleBuffer[base + (size_t)i] = 0.0f;
+    }
+    g_animatedNodes.erase(nodeId);
+}
+
 static void captureNodeClassName(JSContext* ctx, int id, JSValueConst styleObj) {
     if (!JS_IsObject(styleObj)) return;
     JSValue classVal = JS_GetPropertyStr(ctx, styleObj, "className");
@@ -104,14 +227,66 @@ static void captureNodeClassName(JSContext* ctx, int id, JSValueConst styleObj) 
 
 static std::vector<Texture2D> g_textures;
 static std::map<int, JSValue> g_changeTextCallbacks;
+static std::map<int, JSValue> g_focusCallbacks;
+static std::map<int, JSValue> g_blurCallbacks;
 static std::map<int, JSValue> g_scrollCallbacks;
 static std::map<int, JSValue> g_requestCloseCallbacks;
-static int g_activeScrollNodeId = -1;
-static Vector2 g_lastScrollDragMouse = {0.0f, 0.0f};
-static float g_scrollDragDistance = 0.0f;
 
 static std::map<int, NativeControlState> g_nativeControlStates;
 static std::map<int, raym3::v2::M3Component> g_materialComponentKinds;
+static std::set<int> g_scrollViewIds;
+
+struct SafeAreaInsets {
+    float top = 0.0f;
+    float right = 0.0f;
+    float bottom = 0.0f;
+    float left = 0.0f;
+};
+
+static SafeAreaInsets g_safeAreaInsets;
+static std::map<int, raym3::v2::Style> g_safeAreaBaseStyles;
+
+static float maxPadding(float current, float inset) {
+    return std::max(current, inset);
+}
+
+static raym3::v2::Style applySafeAreaPadding(raym3::v2::Style style) {
+    style.padding.top = maxPadding(style.padding.Top(), g_safeAreaInsets.top);
+    style.padding.right = maxPadding(style.padding.Right(), g_safeAreaInsets.right);
+    style.padding.bottom = maxPadding(style.padding.Bottom(), g_safeAreaInsets.bottom);
+    style.padding.left = maxPadding(style.padding.Left(), g_safeAreaInsets.left);
+    return style;
+}
+
+static void refreshSafeAreaStyles() {
+    for (const auto& [id, baseStyle] : g_safeAreaBaseStyles) {
+        auto nodeIt = g_nodes.find(id);
+        if (nodeIt != g_nodes.end() && nodeIt->second) {
+            nodeIt->second->style = applySafeAreaPadding(baseStyle);
+        }
+    }
+}
+
+void setSafeAreaInsets(float top, float right, float bottom, float left) {
+    g_safeAreaInsets.top = std::max(0.0f, top);
+    g_safeAreaInsets.right = std::max(0.0f, right);
+    g_safeAreaInsets.bottom = std::max(0.0f, bottom);
+    g_safeAreaInsets.left = std::max(0.0f, left);
+    refreshSafeAreaStyles();
+}
+
+void resolvePopoverAnchors() {
+    for (auto& [id, node] : g_nodes) {
+        if (node && node->anchorId > 0) {
+            auto anchorIt = g_nodes.find(node->anchorId);
+            if (anchorIt != g_nodes.end() && anchorIt->second) {
+                node->anchorRect = anchorIt->second->layout;
+            } else {
+                node->anchorRect = std::nullopt;
+            }
+        }
+    }
+}
 
 // ─── icon sprite sheet ─────────────────────────────────────────────────────
 // All icons used by the app are rasterized once into a single RenderTexture.
@@ -138,10 +313,20 @@ struct IconFontKey {
     }
 };
 
+struct IconRenderState {
+    std::string glyph;
+    int codepoint = 0;
+    float size = 24.0f;
+    Color color = WHITE;
+    bool filled = false;
+    std::string variant = "rounded";
+};
+
 static std::map<IconFontKey, Font> g_iconFonts; // (size, fill) → Font
 static std::set<int>            g_iconCPSet;    // codepoints loaded into fonts
 static std::size_t              g_iconCPSetVer = 0;
 static std::map<IconFontKey, std::size_t> g_iconFontVer;
+static std::map<int, IconRenderState> g_iconRenderStates;
 
 // Sprite sheet state — built once after JS init via buildIconSpriteSheet()
 static std::set<IconKey>         g_iconRequests;  // (cp, size) pairs registered during init
@@ -197,6 +382,186 @@ static void DrawSliderTrackSegment(Rectangle r, float leftRadius,
     }
 }
 
+static float easeInOutCubic(float t) {
+    t = std::clamp(t, 0.0f, 1.0f);
+    return t < 0.5f ? 4.0f * t * t * t
+                    : 1.0f - std::pow(-2.0f * t + 2.0f, 3.0f) * 0.5f;
+}
+
+static Color lerpColor(Color a, Color b, float t) {
+    t = std::clamp(t, 0.0f, 1.0f);
+    auto channel = [t](unsigned char from, unsigned char to) {
+        return (unsigned char)std::round((float)from + ((float)to - (float)from) * t);
+    };
+    return {channel(a.r, b.r), channel(a.g, b.g), channel(a.b, b.b),
+            channel(a.a, b.a)};
+}
+
+static Rectangle centeredRect(Rectangle outer, float width, float height) {
+    return {outer.x + (outer.width - width) * 0.5f,
+            outer.y + (outer.height - height) * 0.5f,
+            width, height};
+}
+
+static float roundedRectRoundness(float width, float height, float radius) {
+    float minDim = std::min(width, height);
+    return minDim > 0.0f ? std::clamp((2.0f * radius) / minDim, 0.0f, 1.0f)
+                         : 0.0f;
+}
+
+static void paintNativeMaterialCheckmark(Rectangle r, Color color) {
+    Vector2 c = {r.x + r.width * 0.5f, r.y + r.height * 0.5f};
+    float s = std::min(r.width, r.height) * 0.5f;
+    Vector2 p1 = {c.x - s * 0.5f, c.y};
+    Vector2 p2 = {c.x - s * 0.1f, c.y + s * 0.45f};
+    Vector2 p3 = {c.x + s * 0.55f, c.y - s * 0.45f};
+    DrawLineEx(p1, p2, 2.0f, color);
+    DrawLineEx(p2, p3, 2.0f, color);
+}
+
+static void paintNativeMaterialCheckbox(Rectangle layout,
+                                        const NativeControlState& state,
+                                        float progress, bool pressed) {
+    using namespace raym3::v2;
+    const auto& scheme = raym3::Theme::GetColorScheme();
+    Rectangle visual = centeredRect(layout, tokens::kCheckboxVisualSize,
+                                    tokens::kCheckboxVisualSize);
+    float t = std::clamp(progress, 0.0f, 1.0f);
+    bool selected = t >= 0.5f;
+    float opacity = state.disabled ? tokens::kDisabledContentOpacity : 1.0f;
+
+    Color border = selected ? Color{0, 0, 0, 0} : scheme.onSurfaceVariant;
+    Color fill = scheme.primary;
+    Color mark = scheme.onPrimary;
+    if (state.disabled) {
+        border = selected ? Color{0, 0, 0, 0} : scheme.onSurface;
+        fill = scheme.onSurface;
+        mark = scheme.surface;
+    } else if (pressed && !selected) {
+        border = scheme.onSurface;
+    }
+
+    if (pressed && !state.disabled) {
+        Vector2 center = {layout.x + layout.width * 0.5f,
+                          layout.y + layout.height * 0.5f};
+        DrawCircleV(center, tokens::kStateLayerSize * 0.5f,
+                    ColorAlpha(selected ? scheme.onSurface : scheme.primary,
+                               tokens::kPressedStateOpacity));
+    }
+
+    float fillAlpha = selected ? opacity : opacity * t;
+    if (fillAlpha > 0.0f) {
+        float roundness = roundedRectRoundness(visual.width, visual.height, 2.0f);
+        DrawRectangleRounded(visual, roundness, 8, ColorAlpha(fill, fillAlpha));
+    }
+    if (!selected) {
+        float roundness = roundedRectRoundness(visual.width, visual.height, 2.0f);
+        DrawRectangleRoundedLinesEx(visual, roundness, 8, 2.0f,
+                                    ColorAlpha(border, opacity));
+    }
+    if (t > 0.0f) {
+        paintNativeMaterialCheckmark(visual, ColorAlpha(mark, opacity * t));
+    }
+}
+
+static void paintNativeMaterialRadio(Rectangle layout,
+                                     const NativeControlState& state,
+                                     float progress, bool pressed) {
+    using namespace raym3::v2;
+    const auto& scheme = raym3::Theme::GetColorScheme();
+    Rectangle visual = centeredRect(layout, tokens::kRadioVisualSize,
+                                    tokens::kRadioVisualSize);
+    float t = std::clamp(progress, 0.0f, 1.0f);
+    bool selected = t >= 0.5f;
+    float opacity = state.disabled ? tokens::kDisabledContentOpacity : 1.0f;
+    Vector2 center = {visual.x + visual.width * 0.5f,
+                      visual.y + visual.height * 0.5f};
+    Color color = selected ? scheme.primary : scheme.onSurfaceVariant;
+    if (state.disabled) color = scheme.onSurface;
+    else if (pressed && !selected) color = scheme.onSurface;
+
+    if (pressed && !state.disabled) {
+        Vector2 stateCenter = {layout.x + layout.width * 0.5f,
+                               layout.y + layout.height * 0.5f};
+        DrawCircleV(stateCenter, tokens::kStateLayerSize * 0.5f,
+                    ColorAlpha(selected ? scheme.onSurface : scheme.primary,
+                               tokens::kPressedStateOpacity));
+    }
+
+    float outer = tokens::kRadioVisualSize * 0.5f;
+    DrawRing(center, outer - 2.0f, outer, 0.0f, 360.0f, 32,
+             ColorAlpha(color, opacity));
+    if (t > 0.0f) {
+        DrawCircleV(center, 4.5f * t, ColorAlpha(scheme.primary, opacity));
+    }
+}
+
+static void paintNativeMaterialSwitch(Rectangle layout, const NativeControlState& state,
+                                      float progress, bool pressed) {
+    using namespace raym3::v2;
+    const auto& scheme = raym3::Theme::GetColorScheme();
+    Rectangle track = centeredRect(layout, tokens::kSwitchTrackWidth,
+                                   tokens::kSwitchTrackHeight);
+    float t = std::clamp(progress, 0.0f, 1.0f);
+    bool selected = t >= 0.5f;
+    float opacity = state.disabled ? tokens::kDisabledContentOpacity : 1.0f;
+
+    Color offTrack = scheme.surfaceContainerHighest;
+    Color onTrack = scheme.primary;
+    Color offThumb = scheme.outline;
+    Color onThumb = scheme.onPrimary;
+    Color trackColor = lerpColor(offTrack, onTrack, t);
+    Color thumbColor = lerpColor(offThumb, onThumb, t);
+    Color iconColor = selected ? scheme.onPrimaryContainer
+                               : scheme.surfaceContainerHighest;
+    if (state.disabled) {
+        trackColor = ColorAlpha(scheme.onSurface, tokens::kDisabledContainerOpacity);
+        thumbColor = selected ? scheme.surface : scheme.onSurface;
+        iconColor = scheme.onSurface;
+    }
+
+    DrawRectangleRounded(track, 1.0f, 16, ColorAlpha(trackColor, opacity));
+    if (t < 0.5f && !state.disabled) {
+        DrawRectangleRoundedLinesEx({track.x + 1.0f, track.y + 1.0f,
+                                      track.width - 2.0f, track.height - 2.0f},
+                                     1.0f,
+                                     16, 2.0f, scheme.outline);
+    }
+
+    float thumbSize = tokens::kSwitchInactiveThumbSize +
+                      (tokens::kSwitchActiveThumbSize -
+                       tokens::kSwitchInactiveThumbSize) * t;
+    if (pressed) thumbSize = tokens::kSwitchPressedThumbSize;
+    float cy = track.y + track.height * 0.5f;
+    float offX = track.x + track.height * 0.5f;
+    float onX = track.x + track.width - track.height * 0.5f;
+    float cx = offX + (onX - offX) * t;
+    Rectangle thumb = {cx - thumbSize * 0.5f, cy - thumbSize * 0.5f,
+                       thumbSize, thumbSize};
+
+    if (pressed && !state.disabled) {
+        Rectangle stateLayer = centeredRect({cx - 0.5f, cy - 0.5f, 1.0f, 1.0f},
+                                            tokens::kStateLayerSize,
+                                            tokens::kStateLayerSize);
+        DrawCircleV({stateLayer.x + stateLayer.width * 0.5f,
+                     stateLayer.y + stateLayer.height * 0.5f},
+                    stateLayer.width * 0.5f,
+                    ColorAlpha(selected ? scheme.primary : scheme.onSurface,
+                               tokens::kPressedStateOpacity));
+    }
+
+    DrawRectangleRounded(thumb, 1.0f, 16, ColorAlpha(thumbColor, opacity));
+    if (thumbSize >= tokens::kSwitchActiveThumbSize - 0.1f) {
+        raym3::v2::DrawMaterialIcon(selected ? 0xe5ca : 0xe5cd, thumb,
+                                    ColorAlpha(iconColor, opacity),
+                                    (int)tokens::kSwitchIconSize, true);
+    }
+}
+
+static int iconPixelSize(int sizeDp) {
+    return raym3::v2::Density::RasterPixels((float)sizeDp);
+}
+
 static const char* findIconFontPath(bool filled) {
     const char** candidates = filled ? kFilledIconFontCandidates : kOutlinedIconFontCandidates;
     for (int i = 0; candidates[i]; i++) {
@@ -237,7 +602,7 @@ static Font getIconFont(int size, bool filled) {
     Font font = {0};
     if (path && !g_iconCPSet.empty()) {
         std::vector<int> cps(g_iconCPSet.begin(), g_iconCPSet.end());
-        font = LoadFontEx(path, size, cps.data(), (int)cps.size());
+        font = LoadFontEx(path, iconPixelSize(size), cps.data(), (int)cps.size());
         printf("Icon font: loaded %d %s glyph(s) at size %d\n",
                (int)cps.size(), filled ? "filled" : "outlined", size);
     }
@@ -268,20 +633,21 @@ void buildIconSpriteSheet() {
         }
     };
 
-    // Each icon gets a SQUARE size x size cell. Font metrics (offsetY, advance,
+    // Each icon gets a SQUARE dpi-scaled cell. Font metrics (offsetY, advance,
     // line height) do NOT reliably center the visual glyph — different icons have
     // different ink bearings, so trusting metrics leaves them sitting high/low.
     // Instead build the atlas on the CPU: scan each glyph bitmap for its actual
     // ink bounds (first/last opaque pixel) and blit ONLY the ink, centered, into
     // the cell. This centers every icon by its real pixels, uniformly.
-    struct Entry { IconKey key; float x; };
+    struct Entry { IconKey key; float x; float cellPx; };
     std::vector<Entry> entries;
     float curX = PAD;
     int maxCell = 0;
     for (const auto& key : g_iconRequests) {
-        entries.push_back({key, curX});
-        curX += key.size + PAD * 2;
-        maxCell = std::max(maxCell, key.size);
+        int cellPx = iconPixelSize(key.size);
+        entries.push_back({key, curX, (float)cellPx});
+        curX += cellPx + PAD * 2;
+        maxCell = std::max(maxCell, cellPx);
     }
     if (entries.empty()) return;
 
@@ -295,7 +661,7 @@ void buildIconSpriteSheet() {
     ImageFormat(&atlas, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
     for (auto& e : entries) {
         Font font = getIconFont(e.key.size, e.key.filled);
-        float cell = (float)e.key.size;
+        float cell = e.cellPx;
         int gidx = GetGlyphIndex(font, e.key.cp);
         Image g = font.glyphs[gidx].image; // rasterized glyph bitmap at baseSize
         // Actual ink bounds (alpha or luminance > threshold).
@@ -412,6 +778,108 @@ static bool jsHasProperty(JSContext* ctx, JSValue obj, const char* key) {
 
 static raym3::v2::Style parseStyle(JSContext* ctx, JSValue obj);
 
+static std::optional<raym3::FontWeight> parseFontWeightString(const std::string& raw) {
+    std::string key;
+    key.reserve(raw.size());
+    for (char c : raw) {
+        if (c != '-' && c != '_' && c != ' ') key.push_back((char)std::tolower((unsigned char)c));
+    }
+    if (key == "thin" || key == "100") return raym3::FontWeight::Thin;
+    if (key == "light" || key == "300") return raym3::FontWeight::Light;
+    if (key == "regular" || key == "normal" || key == "400") return raym3::FontWeight::Regular;
+    if (key == "medium" || key == "500") return raym3::FontWeight::Medium;
+    if (key == "bold" || key == "700") return raym3::FontWeight::Bold;
+    if (key == "black" || key == "900") return raym3::FontWeight::Black;
+    return std::nullopt;
+}
+
+static std::optional<raym3::FontWeight> jsGetFontWeight(JSContext* ctx, JSValue obj, const char* key) {
+    JSValue v = JS_GetPropertyStr(ctx, obj, key);
+    std::optional<raym3::FontWeight> result;
+    if (JS_IsString(v)) {
+        const char* s = JS_ToCString(ctx, v);
+        if (s) {
+            result = parseFontWeightString(s);
+            JS_FreeCString(ctx, s);
+        }
+    } else if (JS_IsNumber(v)) {
+        double d = 0.0;
+        if (JS_ToFloat64(ctx, &d, v) == 0) {
+            result = parseFontWeightString(std::to_string((int)std::round(d)));
+        }
+    }
+    JS_FreeValue(ctx, v);
+    return result;
+}
+
+static raym3::v2::Style preserveLayoutStyle(const raym3::v2::Style& visualStyle,
+                                            const raym3::v2::Style& previousStyle) {
+    raym3::v2::Style result = visualStyle;
+    result.display = previousStyle.display;
+    result.flexDirection = previousStyle.flexDirection;
+    result.justifyContent = previousStyle.justifyContent;
+    result.alignItems = previousStyle.alignItems;
+    result.alignSelf = previousStyle.alignSelf;
+    result.position = previousStyle.position;
+    result.overflow = previousStyle.overflow;
+    result.pointerEvents = previousStyle.pointerEvents;
+    result.width = previousStyle.width;
+    result.height = previousStyle.height;
+    result.minWidth = previousStyle.minWidth;
+    result.minHeight = previousStyle.minHeight;
+    result.maxWidth = previousStyle.maxWidth;
+    result.maxHeight = previousStyle.maxHeight;
+    result.flexGrow = previousStyle.flexGrow;
+    result.flexShrink = previousStyle.flexShrink;
+    result.flexBasis = previousStyle.flexBasis;
+    result.gap = previousStyle.gap;
+    result.rowGap = previousStyle.rowGap;
+    result.columnGap = previousStyle.columnGap;
+    result.margin = previousStyle.margin;
+    result.padding = previousStyle.padding;
+    result.inset = previousStyle.inset;
+    return result;
+}
+
+static void enforceNativeControlLayoutDefaults(int id, raym3::v2::Style& style) {
+    auto stateIt = g_nativeControlStates.find(id);
+    if (stateIt == g_nativeControlStates.end()) return;
+    switch (stateIt->second.kind) {
+        case NativeControlKind::Slider:
+        case NativeControlKind::RangeSlider: {
+            auto m = raym3::v2::GetMaterialMetrics(
+                stateIt->second.kind == NativeControlKind::RangeSlider
+                    ? raym3::v2::M3Component::RangeSlider
+                    : raym3::v2::M3Component::Slider);
+            if (!style.height || *style.height < m.layoutHeight) style.height = m.layoutHeight;
+            if (!style.minHeight || *style.minHeight < m.layoutHeight) style.minHeight = m.layoutHeight;
+            if (!style.minWidth || *style.minWidth < m.minWidth) style.minWidth = m.minWidth;
+            break;
+        }
+        case NativeControlKind::Switch: {
+            auto m = raym3::v2::GetMaterialMetrics(raym3::v2::M3Component::Switch);
+            if (!style.width || *style.width < m.layoutWidth) style.width = m.layoutWidth;
+            if (!style.height || *style.height < m.layoutHeight) style.height = m.layoutHeight;
+            if (!style.minWidth || *style.minWidth < m.minWidth) style.minWidth = m.minWidth;
+            if (!style.minHeight || *style.minHeight < m.minHeight) style.minHeight = m.minHeight;
+            break;
+        }
+        case NativeControlKind::Checkbox:
+        case NativeControlKind::RadioButton: {
+            raym3::v2::M3Component component =
+                stateIt->second.kind == NativeControlKind::Checkbox
+                    ? raym3::v2::M3Component::Checkbox
+                    : raym3::v2::M3Component::RadioButton;
+            auto m = raym3::v2::GetMaterialMetrics(component);
+            if (!style.width || *style.width < m.layoutWidth) style.width = m.layoutWidth;
+            if (!style.height || *style.height < m.layoutHeight) style.height = m.layoutHeight;
+            if (!style.minWidth || *style.minWidth < m.minWidth) style.minWidth = m.minWidth;
+            if (!style.minHeight || *style.minHeight < m.minHeight) style.minHeight = m.minHeight;
+            break;
+        }
+    }
+}
+
 static raym3::v2::ComponentProps parseMaterialProps(JSContext* ctx, JSValue obj) {
     raym3::v2::ComponentProps props;
     if (!JS_IsObject(obj)) return props;
@@ -425,6 +893,7 @@ static raym3::v2::ComponentProps parseMaterialProps(JSContext* ctx, JSValue obj)
     props.indeterminate = jsGetBool(ctx, obj, "indeterminate", false);
     props.wavy = jsGetBool(ctx, obj, "wavy", false);
     props.open = jsGetBool(ctx, obj, "open", false);
+    props.scrim = jsGetBool(ctx, obj, "scrim", false);
     {
         std::string layout = jsGetString(ctx, obj, "layout");
         if (layout == "row") {
@@ -434,8 +903,27 @@ static raym3::v2::ComponentProps parseMaterialProps(JSContext* ctx, JSValue obj)
         }
     }
     if (auto z = jsGetFloat(ctx, obj, "zIndex")) props.zIndex = (int)roundf(*z);
+    if (jsHasProperty(ctx, obj, "capturesInput"))
+        props.capturesInput = jsGetBool(ctx, obj, "capturesInput", false);
     if (auto progress = jsGetFloat(ctx, obj, "progress")) props.progress = *progress;
+    if (auto start = jsGetFloat(ctx, obj, "startProgress")) props.startProgress = *start;
+    if (auto end = jsGetFloat(ctx, obj, "endProgress")) props.endProgress = *end;
+    if (auto start = jsGetFloat(ctx, obj, "start")) props.startProgress = *start;
+    if (auto end = jsGetFloat(ctx, obj, "end")) props.endProgress = *end;
+    if (auto start = jsGetFloat(ctx, obj, "lower")) props.startProgress = *start;
+    if (auto end = jsGetFloat(ctx, obj, "upper")) props.endProgress = *end;
     if (auto wavelength = jsGetFloat(ctx, obj, "wavelength")) props.wavelength = *wavelength;
+    if (auto anchor = jsGetFloat(ctx, obj, "anchor")) props.anchorId = (int)roundf(*anchor);
+    {
+        std::string placementStr = jsGetString(ctx, obj, "placement");
+        if (placementStr == "below") {
+            props.placement = raym3::v2::PopoverPlacement::Below;
+        } else if (placementStr == "above") {
+            props.placement = raym3::v2::PopoverPlacement::Above;
+        } else {
+            props.placement = raym3::v2::PopoverPlacement::Auto;
+        }
+    }
     return props;
 }
 
@@ -472,12 +960,14 @@ static std::optional<raym3::v2::M3Component> materialComponentFromString(const s
         {"list", raym3::v2::M3Component::List},
         {"loadingindicator", raym3::v2::M3Component::LoadingIndicator},
         {"menu", raym3::v2::M3Component::Menu},
+        {"menuitem", raym3::v2::M3Component::MenuItem},
         {"navigationbar", raym3::v2::M3Component::NavigationBar},
         {"navigationbaritem", raym3::v2::M3Component::NavigationBarItem},
         {"navigationdrawer", raym3::v2::M3Component::NavigationDrawer},
         {"navigationrail", raym3::v2::M3Component::NavigationRail},
         {"progressindicator", raym3::v2::M3Component::ProgressIndicator},
         {"radiobutton", raym3::v2::M3Component::RadioButton},
+        {"rangeslider", raym3::v2::M3Component::RangeSlider},
         {"search", raym3::v2::M3Component::Search},
         {"searchbar", raym3::v2::M3Component::Search},
         {"segmentedbutton", raym3::v2::M3Component::SegmentedButton},
@@ -491,11 +981,22 @@ static std::optional<raym3::v2::M3Component> materialComponentFromString(const s
         {"timepicker", raym3::v2::M3Component::TimePicker},
         {"toolbar", raym3::v2::M3Component::Toolbar},
         {"tooltip", raym3::v2::M3Component::Tooltip},
+        {"popover", raym3::v2::M3Component::Popover},
     };
 
     auto it = components.find(key);
     if (it == components.end()) return std::nullopt;
     return it->second;
+}
+
+struct SliderSizeVals { float trackH, handleH; };
+static SliderSizeVals sliderSizeFor(const std::string& s) {
+    if (s == "s")  return {24.0f, 44.0f};
+    if (s == "m")  return {40.0f, 52.0f};
+    if (s == "l")  return {56.0f, 68.0f};
+    if (s == "xl") return {96.0f, 108.0f};
+    return {raym3::v2::tokens::kSliderTrackHeight,
+            raym3::v2::tokens::kSliderHandleHeight};
 }
 
 static std::optional<NativeControlKind> nativeControlKindFromString(const std::string& raw) {
@@ -508,6 +1009,7 @@ static std::optional<NativeControlKind> nativeControlKindFromString(const std::s
     if (key == "switch") return NativeControlKind::Switch;
     if (key == "radiobutton") return NativeControlKind::RadioButton;
     if (key == "slider") return NativeControlKind::Slider;
+    if (key == "rangeslider") return NativeControlKind::RangeSlider;
     return std::nullopt;
 }
 
@@ -519,6 +1021,20 @@ static void invokePressCallback(int id) {
         JSValue exc = JS_GetException(g_bridge_ctx);
         const char* s = JS_ToCString(g_bridge_ctx, exc);
         fprintf(stderr, "onPress error: %s\n", s ? s : "(unknown)");
+        if (s) JS_FreeCString(g_bridge_ctx, s);
+        JS_FreeValue(g_bridge_ctx, exc);
+    }
+    JS_FreeValue(g_bridge_ctx, result);
+}
+
+static void invokeRequestClose(int id) {
+    auto it = g_requestCloseCallbacks.find(id);
+    if (it == g_requestCloseCallbacks.end() || !g_bridge_ctx) return;
+    JSValue result = JS_Call(g_bridge_ctx, it->second, JS_UNDEFINED, 0, nullptr);
+    if (JS_IsException(result)) {
+        JSValue exc = JS_GetException(g_bridge_ctx);
+        const char* s = JS_ToCString(g_bridge_ctx, exc);
+        fprintf(stderr, "onRequestClose error: %s\n", s ? s : "(unknown)");
         if (s) JS_FreeCString(g_bridge_ctx, s);
         JS_FreeValue(g_bridge_ctx, exc);
     }
@@ -544,6 +1060,31 @@ static void invokeChangeValueCallback(int id, float value) {
     JS_FreeValue(g_bridge_ctx, result);
 }
 
+// Push the JS-facing control state into the first-class node's core
+// ControlState so raym3 paints + drives it. Core owns dragging/anim, so those
+// are never clobbered; controlled value/checked flow JS -> core here.
+static void syncControlNodeFromState(int id) {
+    auto nit = g_nodes.find(id);
+    auto sit = g_nativeControlStates.find(id);
+    if (nit == g_nodes.end() || sit == g_nativeControlStates.end() || !nit->second)
+        return;
+    auto& n = *nit->second;
+    const NativeControlState& s = sit->second;
+    auto& c = n.control;
+    n.disabled = s.disabled;
+    c.minValue = s.minValue;
+    c.maxValue = s.maxValue;
+    c.step = s.step;
+    c.sliderTrackH = s.sliderTrackH;
+    c.sliderHandleH = s.sliderHandleH;
+    if (!c.dragging) {
+        c.value = s.value;
+        c.startValue = s.startValue;
+        c.endValue = s.endValue;
+    }
+    c.checked = s.checked;
+}
+
 static void updateNativeControlState(JSContext* ctx, int id, JSValue props) {
     auto it = g_nativeControlStates.find(id);
     if (it == g_nativeControlStates.end() || !JS_IsObject(props)) return;
@@ -557,14 +1098,37 @@ static void updateNativeControlState(JSContext* ctx, int id, JSValue props) {
     if (jsHasProperty(ctx, props, "disabled")) {
         state.disabled = jsGetBool(ctx, props, "disabled", state.disabled);
     }
-    if (state.kind == NativeControlKind::Slider) {
+    if (state.kind == NativeControlKind::Slider || state.kind == NativeControlKind::RangeSlider) {
         if (auto v = jsGetFloat(ctx, props, "min")) state.minValue = *v;
         if (auto v = jsGetFloat(ctx, props, "max")) state.maxValue = *v;
         if (auto v = jsGetFloat(ctx, props, "step")) state.step = *v;
         // Don't clobber the in-flight value while the user is dragging.
         if (!state.dragging) {
             if (auto v = jsGetFloat(ctx, props, "value")) state.value = *v;
+            if (auto v = jsGetFloat(ctx, props, "startProgress")) state.startValue = *v;
+            if (auto v = jsGetFloat(ctx, props, "endProgress")) state.endValue = *v;
+            if (auto v = jsGetFloat(ctx, props, "start")) state.startValue = *v;
+            if (auto v = jsGetFloat(ctx, props, "end")) state.endValue = *v;
+            if (auto v = jsGetFloat(ctx, props, "lower")) state.startValue = *v;
+            if (auto v = jsGetFloat(ctx, props, "upper")) state.endValue = *v;
         }
+        if (jsHasProperty(ctx, props, "size")) {
+            JSValue sizeVal = JS_GetPropertyStr(ctx, props, "size");
+            const char* sz = JS_ToCString(ctx, sizeVal);
+            if (sz) {
+                auto sv2 = sliderSizeFor(sz);
+                state.sliderTrackH  = sv2.trackH;
+                state.sliderHandleH = sv2.handleH;
+                JS_FreeCString(ctx, sz);
+                auto nodeIt = g_nodes.find(id);
+                if (nodeIt != g_nodes.end()) {
+                    nodeIt->second->style.height    = sv2.handleH;
+                    nodeIt->second->style.minHeight = sv2.handleH;
+                }
+            }
+            JS_FreeValue(ctx, sizeVal);
+        }
+        syncControlNodeFromState(id);
         return;
     }
     if (state.kind == NativeControlKind::RadioButton) {
@@ -574,11 +1138,7 @@ static void updateNativeControlState(JSContext* ctx, int id, JSValue props) {
         state.checked = jsGetBool(ctx, props, "checked",
                          jsGetBool(ctx, props, "selected", state.checked));
     }
-}
-
-static float clampScrollOffset(float value, float contentSize, float viewportSize) {
-    float maxValue = std::max(0.0f, contentSize - viewportSize);
-    return std::max(0.0f, std::min(value, maxValue));
+    syncControlNodeFromState(id);
 }
 
 static int nodeIdFor(const raym3::v2::NodePtr& node) {
@@ -588,45 +1148,20 @@ static int nodeIdFor(const raym3::v2::NodePtr& node) {
     return -1;
 }
 
-raym3::v2::NodePtr engineFindPressTarget(const raym3::v2::NodePtr& hit) {
-    int id = nodeIdFor(hit);
-    while (id > 0) {
-        auto nodeIt = g_nodes.find(id);
-        if (nodeIt != g_nodes.end() && nodeIt->second && nodeIt->second->onPress) {
-            return nodeIt->second;
-        }
-        auto parentIt = g_nodeParents.find(id);
-        if (parentIt == g_nodeParents.end()) break;
-        id = parentIt->second;
-    }
-    return nullptr;
-}
-
-static raym3::v2::NodePtr findScrollableNodeAt(const raym3::v2::NodePtr& node, Vector2 point) {
-    if (!node || node->style.display == raym3::v2::Display::None ||
-        node->style.pointerEvents == raym3::v2::PointerEvents::None) {
-        return nullptr;
-    }
-
-    bool inBounds = CheckCollisionPointRec(point, node->layout);
-    bool clipped = node->style.overflow == raym3::v2::Overflow::Hidden ||
-                   node->style.overflow == raym3::v2::Overflow::Scroll;
-    if (clipped && !inBounds) return nullptr;
-
-    std::vector<raym3::v2::NodePtr> children = node->children;
-    std::stable_sort(children.begin(), children.end(),
-                     [](const raym3::v2::NodePtr& a, const raym3::v2::NodePtr& b) {
-                         return a->zIndex > b->zIndex;
-                     });
-    for (const auto& child : children) {
-        if (auto hit = findScrollableNodeAt(child, point)) return hit;
-    }
-
-    if (inBounds && node->style.overflow == raym3::v2::Overflow::Scroll &&
-        node->scrollContentHeight > node->layout.height + 0.5f) {
-        return node;
-    }
-    return nullptr;
+// Fire a modal's onRequestClose when a tap lands on the scrim (outside the
+// frontmost modal panel). Pickers (DatePicker/TimePicker) dismiss via
+// onRequestClose rather than a root onPress, so HitTest produces no press
+// target for a backdrop tap. Call this only on that miss path so it never
+// competes with Dialog/BottomSheet root onPress or inner child handlers.
+bool engineTryRequestCloseOnScrimTap(Vector2 pointDp) {
+    auto modal = raym3::v2::TopmostModalNode();
+    if (!modal) return false;
+    if (CheckCollisionPointRec(pointDp, modal->layout)) return false; // inside panel
+    int id = nodeIdFor(modal);
+    if (id < 0) return false;
+    if (g_requestCloseCallbacks.find(id) == g_requestCloseCallbacks.end()) return false;
+    invokeRequestClose(id);
+    return true;
 }
 
 static void emitScrollEvent(int id, const raym3::v2::NodePtr& node) {
@@ -646,62 +1181,6 @@ static void emitScrollEvent(int id, const raym3::v2::NodePtr& node) {
     }
     JS_FreeValue(g_bridge_ctx, result);
     JS_FreeValue(g_bridge_ctx, event);
-}
-
-static bool scrollNodeBy(const raym3::v2::NodePtr& node, float deltaX, float deltaY) {
-    if (!node) return false;
-    float oldX = node->scrollOffsetX;
-    float oldY = node->scrollOffsetY;
-    node->scrollOffsetX = clampScrollOffset(node->scrollOffsetX + deltaX,
-                                            node->scrollContentWidth, node->layout.width);
-    node->scrollOffsetY = clampScrollOffset(node->scrollOffsetY + deltaY,
-                                            node->scrollContentHeight, node->layout.height);
-    bool changed = std::abs(node->scrollOffsetX - oldX) > 0.01f ||
-                   std::abs(node->scrollOffsetY - oldY) > 0.01f;
-    if (changed) {
-        int id = nodeIdFor(node);
-        if (id > 0) emitScrollEvent(id, node);
-    }
-    return changed;
-}
-
-bool processRaym3ScrollInput(Vector2 mouse, float wheelY, bool pressed, bool down, bool released) {
-    bool consumedPress = false;
-
-    if (std::abs(wheelY) > 0.01f) {
-        if (auto target = findScrollableNodeAt(g_root, mouse)) {
-            scrollNodeBy(target, 0.0f, -wheelY * 48.0f);
-        }
-    }
-
-    if (pressed) {
-        auto target = findScrollableNodeAt(g_root, mouse);
-        g_activeScrollNodeId = target ? nodeIdFor(target) : -1;
-        g_lastScrollDragMouse = mouse;
-        g_scrollDragDistance = 0.0f;
-    }
-
-    if (down && g_activeScrollNodeId > 0) {
-        auto it = g_nodes.find(g_activeScrollNodeId);
-        if (it != g_nodes.end()) {
-            float dx = mouse.x - g_lastScrollDragMouse.x;
-            float dy = mouse.y - g_lastScrollDragMouse.y;
-            g_scrollDragDistance += std::abs(dx) + std::abs(dy);
-            if (std::abs(dx) > 0.01f || std::abs(dy) > 0.01f) {
-                scrollNodeBy(it->second, -dx, -dy);
-            }
-            g_lastScrollDragMouse = mouse;
-            consumedPress = g_scrollDragDistance > 4.0f;
-        }
-    }
-
-    if (released) {
-        consumedPress = g_activeScrollNodeId > 0 && g_scrollDragDistance > 4.0f;
-        g_activeScrollNodeId = -1;
-        g_scrollDragDistance = 0.0f;
-    }
-
-    return consumedPress;
 }
 
 static std::vector<std::string> splitCssTopLevel(const std::string& input, char delimiter) {
@@ -834,6 +1313,19 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
     if (auto v = jsGetFloat(ctx, obj, "maxHeight")) s.maxHeight = v;
 
     // Flex
+    if (auto v = jsGetFloat(ctx, obj, "flex")) {
+        if (*v > 0.0f) {
+            s.flexGrow = *v;
+            s.flexShrink = 1.0f;
+            s.flexBasis = 0.0f;
+        } else if (*v == 0.0f) {
+            s.flexGrow = 0.0f;
+            s.flexShrink = 0.0f;
+        } else {
+            s.flexGrow = 0.0f;
+            s.flexShrink = -*v;
+        }
+    }
     if (auto v = jsGetFloat(ctx, obj, "flexGrow"))   s.flexGrow   = v;
     if (auto v = jsGetFloat(ctx, obj, "flexShrink")) s.flexShrink = v;
     if (auto v = jsGetFloat(ctx, obj, "flexBasis"))  s.flexBasis  = v;
@@ -844,6 +1336,10 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
     // Spacing — shorthand and per-edge
     if (auto v = jsGetEdgeValues(ctx, obj, "margin"))  s.margin  = *v;
     if (auto v = jsGetEdgeValues(ctx, obj, "padding")) s.padding = *v;
+    if (auto v = jsGetFloat(ctx, obj, "paddingHorizontal")) s.padding.horizontal = v;
+    if (auto v = jsGetFloat(ctx, obj, "paddingVertical"))   s.padding.vertical = v;
+    if (auto v = jsGetFloat(ctx, obj, "marginHorizontal"))  s.margin.horizontal = v;
+    if (auto v = jsGetFloat(ctx, obj, "marginVertical"))    s.margin.vertical = v;
     // Per-edge shortcuts (override shorthand if both present)
     auto applyEdge = [&](raym3::v2::EdgeValues& ev, const char* tKey, const char* rKey,
                          const char* bKey, const char* lKey) {
@@ -878,6 +1374,7 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
         }
     }
     if (auto v = jsGetFloat(ctx, obj, "opacity"))         s.opacity         = v;
+    if (auto v = jsGetFloat(ctx, obj, "scrimOpacity"))    s.scrimOpacity    = v;
     if (auto v = jsGetFloat(ctx, obj, "elevation"))       s.elevation       = v;
 
     // Transforms
@@ -927,6 +1424,11 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
     std::string pos = jsGetString(ctx, obj, "position");
     if      (pos == "absolute") s.position = raym3::v2::PositionType::Absolute;
     else if (pos == "relative") s.position = raym3::v2::PositionType::Relative;
+    else if (pos == "fixed")    s.position = raym3::v2::PositionType::Fixed;
+
+    std::string pe = jsGetString(ctx, obj, "pointerEvents");
+    if (pe == "none") s.pointerEvents = raym3::v2::PointerEvents::None;
+    else if (pe == "auto") s.pointerEvents = raym3::v2::PointerEvents::Auto;
 
     // Absolute insets (top/left/right/bottom)
     {
@@ -955,6 +1457,8 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
         if (auto v = jsGetColor(ctx, textObj, "color"))        s.text.color        = v;
         if (auto v = jsGetFloat(ctx, textObj, "lineHeight"))   s.text.lineHeight   = v;
         if (auto v = jsGetFloat(ctx, textObj, "letterSpacing")) s.text.letterSpacing = v;
+        if (auto v = jsGetFontWeight(ctx, textObj, "weight")) s.text.weight = v;
+        if (auto v = jsGetFontWeight(ctx, textObj, "fontWeight")) s.text.weight = v;
         JSValue fv = JS_GetPropertyStr(ctx, textObj, "fontFamily");
         if (!JS_IsUndefined(fv)) {
             const char* fname = JS_ToCString(ctx, fv);
@@ -989,8 +1493,39 @@ static raym3::v2::Style parseStyle(JSContext* ctx, JSValue obj) {
     return style;
 }
 
+static void syncNavItemIconFill(const raym3::v2::NodePtr& node, bool selected);
+
 void refreshStylesForColorScheme(JSContext* ctx) {
     if (!ctx) return;
+    for (auto& [id, component] : g_materialComponentKinds) {
+        auto nodeIt = g_nodes.find(id);
+        if (nodeIt == g_nodes.end() || !nodeIt->second) continue;
+        raym3::v2::ComponentProps props;
+        props.selected = nodeIt->second->selected;
+        props.checked = nodeIt->second->selected;
+        props.open = component == raym3::v2::M3Component::NavigationRail
+            ? nodeIt->second->selected
+            : false;
+        props.disabled = nodeIt->second->disabled;
+        props.zIndex = nodeIt->second->zIndex;
+        props.onPress = nodeIt->second->onPress;
+        auto updated = raym3::v2::MaterialComponent(component, props);
+        nodeIt->second->style = preserveLayoutStyle(updated->style, nodeIt->second->style);
+        nodeIt->second->stateStyles = updated->stateStyles;
+        nodeIt->second->motion = updated->motion;
+        if (nodeIt->second->role == raym3::v2::NodeRole::NavItem) {
+            Color labelColor = nodeIt->second->selected
+                ? raym3::Theme::GetColorScheme().onSurface
+                : raym3::Theme::GetColorScheme().onSurfaceVariant;
+            for (auto& child : nodeIt->second->children) {
+                if (child && child->kind == raym3::v2::NodeKind::Text) {
+                    child->style.text.color = labelColor;
+                }
+            }
+            syncNavItemIconFill(nodeIt->second, nodeIt->second->selected);
+        }
+    }
+
     for (auto& [id, node] : g_nodes) {
         auto cn = g_nodeClassNames.find(id);
         if (cn == g_nodeClassNames.end() || cn->second.empty()) continue;
@@ -1006,6 +1541,202 @@ void refreshStylesForColorScheme(JSContext* ctx) {
     }
 }
 
+void installAnimatedStyleBuffer(JSContext* ctx, JSValue global) {
+    if (g_animatedStyleBuffer.empty()) return;
+    JSValue buffer = JS_NewArrayBuffer(
+        ctx,
+        reinterpret_cast<uint8_t*>(g_animatedStyleBuffer.data()),
+        g_animatedStyleBuffer.size() * sizeof(float),
+        nullptr,
+        nullptr,
+        false);
+    JS_SetPropertyStr(ctx, global, "__rayactAnimatedStyleBuffer", JS_DupValue(ctx, buffer));
+    // Back-compat with the original SharedValue experiment.
+    JS_SetPropertyStr(ctx, global, "__rayactSharedStyleBuffer", buffer);
+}
+
+static void readAnimatedStyleObject(JSContext* ctx, JSValueConst obj, bool present[5], float values[5]) {
+    const char* keys[5] = {"translateX", "translateY", "scale", "opacity", "rotation"};
+    for (int i = 0; i < 5; ++i) {
+        present[i] = false;
+        values[i] = animatedDefaultForOffset(i);
+        JSValue v = JS_GetPropertyStr(ctx, obj, keys[i]);
+        if (!JS_IsUndefined(v) && !JS_IsNull(v)) {
+            double d = 0.0;
+            if (JS_ToFloat64(ctx, &d, v) == 0) {
+                present[i] = true;
+                values[i] = (float)d;
+            }
+        }
+        JS_FreeValue(ctx, v);
+    }
+}
+
+JSValue JS_rayactRegisterAnimatedNode(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "__rayactRegisterAnimatedNode: expected (nodeId, initialStyle?)");
+    int nodeId = 0;
+    JS_ToInt32(ctx, &nodeId, argv[0]);
+    size_t base = 0;
+    if (!animatedNodeIndex(nodeId, base)) return JS_UNDEFINED;
+
+    g_animatedNodes.insert(nodeId);
+    if (g_animatedStyleBuffer[base + kAnimatedGeneration] == 0.0f) {
+        g_animatedStyleBuffer[base + kAnimatedScale] = 1.0f;
+        g_animatedStyleBuffer[base + kAnimatedOpacity] = 1.0f;
+    }
+    g_animatedStyleBuffer[base + kAnimatedGeneration] += 1.0f;
+
+    if (argc >= 2 && JS_IsObject(argv[1])) {
+        bool present[5];
+        float values[5];
+        readAnimatedStyleObject(ctx, argv[1], present, values);
+        for (int i = 0; i < 5; ++i) {
+            if (present[i]) g_animatedStyleBuffer[base + (size_t)i] = values[i];
+        }
+    }
+    g_animatedStyleBuffer[base + kAnimatedDirty] = 1.0f;
+    return JS_UNDEFINED;
+}
+
+JSValue JS_rayactSetAnimatedStyle(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2 || !JS_IsObject(argv[1]))
+        return JS_ThrowTypeError(ctx, "__rayactSetAnimatedStyle: expected (nodeId, partialStyle)");
+    int nodeId = 0;
+    JS_ToInt32(ctx, &nodeId, argv[0]);
+    bool present[5];
+    float values[5];
+    readAnimatedStyleObject(ctx, argv[1], present, values);
+    for (int i = 0; i < 5; ++i) {
+        if (present[i]) setAnimatedStyleValue(nodeId, i, values[i]);
+    }
+    return JS_UNDEFINED;
+}
+
+JSValue JS_rayactStopStyleAnimation(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    int nodeId = 0;
+    JS_ToInt32(ctx, &nodeId, argv[0]);
+    auto it = g_styleAnimations.find(nodeId);
+    if (it == g_styleAnimations.end()) return JS_UNDEFINED;
+
+    if (argc >= 2 && JS_IsString(argv[1])) {
+        const char* key = JS_ToCString(ctx, argv[1]);
+        int offset = animatedOffsetForKey(key);
+        JS_FreeCString(ctx, key);
+        if (offset >= 0) {
+            it->second.active[offset] = false;
+            bool any = false;
+            for (bool active : it->second.active) any = any || active;
+            if (any) return JS_UNDEFINED;
+        }
+    }
+
+    if (!JS_IsUndefined(it->second.onComplete)) JS_FreeValue(ctx, it->second.onComplete);
+    g_styleAnimations.erase(it);
+    return JS_UNDEFINED;
+}
+
+JSValue JS_rayactStartStyleAnimation(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 3 || !JS_IsObject(argv[1]) || !JS_IsObject(argv[2]))
+        return JS_ThrowTypeError(ctx, "__rayactStartStyleAnimation: expected (nodeId, targetStyle, config, onComplete?)");
+    int nodeId = 0;
+    JS_ToInt32(ctx, &nodeId, argv[0]);
+    size_t base = 0;
+    if (!animatedNodeIndex(nodeId, base)) return JS_UNDEFINED;
+
+    JSValue durationValue = JS_GetPropertyStr(ctx, argv[2], "duration");
+    double duration = 300.0;
+    if (!JS_IsUndefined(durationValue) && !JS_IsNull(durationValue)) JS_ToFloat64(ctx, &duration, durationValue);
+    JS_FreeValue(ctx, durationValue);
+
+    bool present[5];
+    float values[5];
+    readAnimatedStyleObject(ctx, argv[1], present, values);
+
+    auto existing = g_styleAnimations.find(nodeId);
+    if (existing != g_styleAnimations.end() && !JS_IsUndefined(existing->second.onComplete)) {
+        JS_FreeValue(ctx, existing->second.onComplete);
+    }
+
+    StyleAnimation anim;
+    anim.nodeId = nodeId;
+    anim.startMs = animatedNowMs();
+    anim.durationMs = duration < 0.0 ? 0.0 : duration;
+    if (argc >= 4 && JS_IsFunction(ctx, argv[3])) anim.onComplete = JS_DupValue(ctx, argv[3]);
+
+    bool any = false;
+    for (int i = 0; i < 5; ++i) {
+        anim.active[i] = present[i];
+        if (!present[i]) continue;
+        any = true;
+        anim.from[i] = getAnimatedStyleValue(nodeId, i);
+        anim.to[i] = values[i];
+    }
+    if (!any) {
+        if (!JS_IsUndefined(anim.onComplete)) {
+            JSValue r = JS_Call(ctx, anim.onComplete, JS_UNDEFINED, 0, nullptr);
+            JS_FreeValue(ctx, r);
+            JS_FreeValue(ctx, anim.onComplete);
+        }
+        return JS_UNDEFINED;
+    }
+
+    g_styleAnimations[nodeId] = anim;
+    g_animatedNodes.insert(nodeId);
+    return JS_UNDEFINED;
+}
+
+bool hasActiveStyleAnimations() { return !g_styleAnimations.empty(); }
+
+void tickAnimatedStyles(JSContext* ctx) {
+    if (g_styleAnimations.empty()) return;
+    double now = animatedNowMs();
+    std::vector<JSValue> completions;
+    for (auto it = g_styleAnimations.begin(); it != g_styleAnimations.end();) {
+        StyleAnimation& anim = it->second;
+        float t = anim.durationMs <= 0.0
+            ? 1.0f
+            : (float)std::min(1.0, (now - anim.startMs) / anim.durationMs);
+        float eased = easeInOutCubicNative(t);
+        for (int i = 0; i < 5; ++i) {
+            if (!anim.active[i]) continue;
+            float value = t >= 1.0f ? anim.to[i] : anim.from[i] + (anim.to[i] - anim.from[i]) * eased;
+            setAnimatedStyleValue(anim.nodeId, i, value);
+        }
+        if (t >= 1.0f) {
+            if (!JS_IsUndefined(anim.onComplete)) completions.push_back(anim.onComplete);
+            it = g_styleAnimations.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (JSValue cb : completions) {
+        JSValue r = JS_Call(ctx, cb, JS_UNDEFINED, 0, nullptr);
+        if (JS_IsException(r)) {
+            JSValue exc = JS_GetException(ctx);
+            const char* s = JS_ToCString(ctx, exc);
+            fprintf(stderr, "[animated style completion error] %s\n", s ? s : "?");
+            if (s) JS_FreeCString(ctx, s);
+            JS_FreeValue(ctx, exc);
+        }
+        JS_FreeValue(ctx, r);
+        JS_FreeValue(ctx, cb);
+    }
+}
+
+void applyAnimatedStylesToNodes() {
+    if (g_animatedNodes.empty()) return;
+    for (int nodeId : g_animatedNodes) {
+        auto it = g_nodes.find(nodeId);
+        if (it == g_nodes.end() || !it->second) continue;
+        size_t base = 0;
+        if (!animatedNodeIndex(nodeId, base)) continue;
+        raym3::v2::Style& style = it->second->style;
+        for (int i = 0; i < 5; ++i) applyAnimatedValueToStyle(style, i, g_animatedStyleBuffer[base + (size_t)i]);
+        g_animatedStyleBuffer[base + kAnimatedDirty] = 0.0f;
+    }
+}
+
 // ─── JS bridge functions ────────────────────────────────────────────────────
 
 JSValue JS_createView(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
@@ -1013,6 +1744,8 @@ JSValue JS_createView(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
     if (argc >= 1 && JS_IsObject(argv[0])) {
         props.style = parseStyle(ctx, argv[0]);
         if (auto z = jsGetFloat(ctx, argv[0], "zIndex")) props.zIndex = (int)roundf(*z);
+        if (jsHasProperty(ctx, argv[0], "capturesInput"))
+            props.capturesInput = jsGetBool(ctx, argv[0], "capturesInput", false);
     }
 
     auto node = raym3::v2::View(props);
@@ -1045,21 +1778,47 @@ JSValue JS_createButton(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueC
     const char* label = JS_ToCString(ctx, argv[0]);
     if (!label) return JS_ThrowTypeError(ctx, "createButton: invalid label");
 
-    raym3::v2::ButtonProps props;
+    raym3::v2::ComponentProps props;
     props.label = label;
     JS_FreeCString(ctx, label);
 
     if (argc >= 2 && JS_IsObject(argv[1]))
         props.style = parseStyle(ctx, argv[1]);
 
-    auto node = raym3::v2::Button(props);
+    // Route through MaterialComponent so M3 defaults (primary bg, 40dp height,
+    // 20dp radius, labelLarge text) are applied before user style overrides.
+    auto node = raym3::v2::MaterialComponent(raym3::v2::M3Component::Button, props, {});
     int id = g_nextNodeId++;
     g_nodes[id] = node;
     if (argc >= 2 && JS_IsObject(argv[1])) captureNodeClassName(ctx, id, argv[1]);
     return JS_NewInt32(ctx, id);
 }
 
+void rayactBlurFocusedTextInput() {
+    raym3::v2::Blur();
+}
+
+#ifdef __ANDROID__
+// Push native caret moves (tap-to-caret) back into the IME InputConnection.
+static void registerImeCursorCallbackOnce() {
+    static bool registered = false;
+    if (registered) return;
+    registered = true;
+    raym3::v2::SetTextInputCursorCallback([](raym3::v2::NodeId nodeId, int cursor) {
+        for (auto& [id, node] : g_nodes) {
+            if (raym3::v2::IdOf(node) == nodeId) {
+                AndroidKeyboard_UpdateSelection(id, cursor);
+                return;
+            }
+        }
+    });
+}
+#endif
+
 JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
+#ifdef __ANDROID__
+    registerImeCursorCallbackOnce();
+#endif
     std::string value;
     if (argc >= 1 && !JS_IsUndefined(argv[0]) && !JS_IsNull(argv[0])) {
         const char* s = JS_ToCString(ctx, argv[0]);
@@ -1075,6 +1834,14 @@ JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSVal
         props.passwordMode = jsGetBool(ctx, argv[1], "secureTextEntry", false);
         props.readOnly = jsGetBool(ctx, argv[1], "readOnly", false);
         props.disabled = jsGetBool(ctx, argv[1], "disabled", false);
+        {
+            std::string variant = jsGetString(ctx, argv[1], "variant");
+            if (variant == "filled") props.variant = raym3::TextFieldVariant::Filled;
+            else if (variant == "outlined") props.variant = raym3::TextFieldVariant::Outlined;
+            else if (variant == "underline") props.variant = raym3::TextFieldVariant::Underline;
+        }
+        props.drawBackground = jsGetBool(ctx, argv[1], "drawBackground", true);
+        props.drawOutline = jsGetBool(ctx, argv[1], "drawOutline", true);
         props.drawStateLayer = jsGetBool(ctx, argv[1], "drawStateLayer", true);
     }
 
@@ -1100,6 +1867,33 @@ JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSVal
         JS_FreeValue(g_bridge_ctx, result);
         JS_FreeValue(g_bridge_ctx, arg);
     };
+    node->textInput.onFocus = [id = g_nextNodeId]() {
+#ifdef __ANDROID__
+        AndroidKeyboard_ShowForNode(id);
+#endif
+        auto it = g_focusCallbacks.find(id);
+        if (it == g_focusCallbacks.end() || !g_bridge_ctx) return;
+        JSValue result = JS_Call(g_bridge_ctx, it->second, JS_UNDEFINED, 0, nullptr);
+        if (JS_IsException(result)) JS_FreeValue(g_bridge_ctx, JS_GetException(g_bridge_ctx));
+        JS_FreeValue(g_bridge_ctx, result);
+    };
+    node->textInput.onBlur = [id = g_nextNodeId]() {
+#ifdef __ANDROID__
+        // Focus already moved when switching fields — keep keyboard open.
+        raym3::v2::NodeId focused = raym3::v2::GetFocusedId();
+        if (focused != 0) {
+            auto *n = reinterpret_cast<raym3::v2::Node *>(focused);
+            if (n && n->kind == raym3::v2::NodeKind::TextInput)
+                return;
+        }
+        AndroidKeyboard_Hide();
+#endif
+        auto it = g_blurCallbacks.find(id);
+        if (it == g_blurCallbacks.end() || !g_bridge_ctx) return;
+        JSValue result = JS_Call(g_bridge_ctx, it->second, JS_UNDEFINED, 0, nullptr);
+        if (JS_IsException(result)) JS_FreeValue(g_bridge_ctx, JS_GetException(g_bridge_ctx));
+        JS_FreeValue(g_bridge_ctx, result);
+    };
 
     int id = g_nextNodeId++;
     g_nodes[id] = node;
@@ -1115,8 +1909,12 @@ JSValue JS_createScrollView(JSContext* ctx, JSValue, int argc, JSValueConst* arg
         if (auto z = jsGetFloat(ctx, argv[0], "zIndex")) props.zIndex = (int)roundf(*z);
     }
     auto node = raym3::v2::View(props);
+#if defined(RAYACT_ANDROID) || defined(__ANDROID__)
+    node->scrollMomentumEnabled = true;
+#endif
     int id = g_nextNodeId++;
     g_nodes[id] = node;
+    g_scrollViewIds.insert(id);
     if (argc >= 1 && JS_IsObject(argv[0])) captureNodeClassName(ctx, id, argv[0]);
     return JS_NewInt32(ctx, id);
 }
@@ -1138,7 +1936,19 @@ JSValue JS_createModal(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
 }
 
 JSValue JS_createSafeArea(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
-    return JS_createView(ctx, JS_UNDEFINED, argc, argv);
+    raym3::v2::ViewProps props;
+    raym3::v2::Style baseStyle;
+    if (argc >= 1 && JS_IsObject(argv[0])) {
+        baseStyle = parseStyle(ctx, argv[0]);
+        if (auto z = jsGetFloat(ctx, argv[0], "zIndex")) props.zIndex = (int)roundf(*z);
+    }
+    props.style = applySafeAreaPadding(baseStyle);
+    auto node = raym3::v2::View(props);
+    int id = g_nextNodeId++;
+    g_nodes[id] = node;
+    g_safeAreaBaseStyles[id] = baseStyle;
+    if (argc >= 1 && JS_IsObject(argv[0])) captureNodeClassName(ctx, id, argv[0]);
+    return JS_NewInt32(ctx, id);
 }
 
 JSValue JS_createStatusBar(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
@@ -1156,7 +1966,7 @@ JSValue JS_createStatusBar(JSContext* ctx, JSValue, int argc, JSValueConst* argv
 JSValue JS_createActivityIndicator(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     float size = 48.0f; // M3 spec: circular progress indicator is 48dp
     Color color = BLANK;
-    bool wavy = true;
+    bool wavy = true; // M3 expressive active indicator is wavy by default
     float wavelength = 15.0f;
     raym3::v2::ViewProps props;
     if (argc >= 1 && JS_IsObject(argv[0])) {
@@ -1214,10 +2024,13 @@ JSValue JS_createActivityIndicator(JSContext* ctx, JSValue, int argc, JSValueCon
                 Vector2 p = {center.x + cosf(a) * rr, center.y + sinf(a) * rr};
                 if (i == 0) first = p;
                 else DrawLineEx(prev, p, stroke, c);
+                // Round join at every vertex: DrawLineEx quads meet only at the
+                // centerline, leaving triangular gaps ("cracks") on the outer
+                // edge of each bend. A capR circle at each point fills them.
+                DrawCircleV(p, capR, c);
                 prev = p;
             }
             DrawCircleV(first, capR, c);
-            DrawCircleV(prev, capR, c);
         } else {
             DrawRing(center, inner, outer, start, start + sweep, 96, c);
             cap(start, c);
@@ -1253,11 +2066,86 @@ JSValue JS_createMaterialComponent(JSContext* ctx, JSValue, int argc, JSValueCon
         g_nativeControlStates[id] = {.kind = *nativeControl};
         controlProps.style.pointerEvents = raym3::v2::PointerEvents::None;
 
+        // Parse slider size before setting layout defaults.
+        SliderSizeVals sv = {raym3::v2::tokens::kSliderTrackHeight,
+                             raym3::v2::tokens::kSliderHandleHeight};
+        if ((*nativeControl == NativeControlKind::Slider ||
+             *nativeControl == NativeControlKind::RangeSlider) &&
+            argc >= 2 && JS_IsObject(argv[1])) {
+            JSValue sizeVal = JS_GetPropertyStr(ctx, argv[1], "size");
+            if (!JS_IsUndefined(sizeVal) && !JS_IsNull(sizeVal)) {
+                const char* sz = JS_ToCString(ctx, sizeVal);
+                if (sz) { sv = sliderSizeFor(sz); JS_FreeCString(ctx, sz); }
+            }
+            JS_FreeValue(ctx, sizeVal);
+        }
+
+        // Apply M3 default dimensions so Yoga gives correct layout bounds.
+        // Without these, hit testing fails (Yoga computes 0×0 for unsized nodes).
+        switch (*nativeControl) {
+            case NativeControlKind::Switch: {
+                auto m = raym3::v2::GetMaterialMetrics(raym3::v2::M3Component::Switch);
+                controlProps.style.width = m.layoutWidth;
+                controlProps.style.height = m.layoutHeight;
+                controlProps.style.minWidth = m.minWidth;
+                controlProps.style.minHeight = m.minHeight;
+                break;
+            }
+            case NativeControlKind::Checkbox: {
+                auto m = raym3::v2::GetMaterialMetrics(raym3::v2::M3Component::Checkbox);
+                controlProps.style.width = m.layoutWidth;
+                controlProps.style.height = m.layoutHeight;
+                controlProps.style.minWidth = m.minWidth;
+                controlProps.style.minHeight = m.minHeight;
+                break;
+            }
+            case NativeControlKind::RadioButton: {
+                auto m = raym3::v2::GetMaterialMetrics(raym3::v2::M3Component::RadioButton);
+                controlProps.style.width = m.layoutWidth;
+                controlProps.style.height = m.layoutHeight;
+                controlProps.style.minWidth = m.minWidth;
+                controlProps.style.minHeight = m.minHeight;
+                break;
+            }
+            case NativeControlKind::Slider:
+            case NativeControlKind::RangeSlider: {
+                auto m = raym3::v2::GetMaterialMetrics(
+                    *nativeControl == NativeControlKind::RangeSlider
+                        ? raym3::v2::M3Component::RangeSlider
+                        : raym3::v2::M3Component::Slider);
+                controlProps.style.height = sv.handleH;
+                controlProps.style.minHeight = sv.handleH;
+                controlProps.style.minWidth = m.minWidth;
+                break;
+            }
+        }
+
         if (argc >= 2 && JS_IsObject(argv[1])) {
-            controlProps.style = parseStyle(ctx, argv[1]);
+            if (auto z = jsGetFloat(ctx, argv[1], "zIndex")) controlProps.zIndex = (int)roundf(*z);
+            auto explicitStyle = parseStyle(ctx, argv[1]);
+            // Merge: explicit style overrides defaults, but keep defaults where not set
+            if (explicitStyle.width)    controlProps.style.width    = explicitStyle.width;
+            if (explicitStyle.height)   controlProps.style.height   = explicitStyle.height;
+            if (explicitStyle.minWidth) controlProps.style.minWidth = explicitStyle.minWidth;
+            if (explicitStyle.minHeight)controlProps.style.minHeight= explicitStyle.minHeight;
+            if (explicitStyle.flexGrow)   controlProps.style.flexGrow   = explicitStyle.flexGrow;
+            if (explicitStyle.flexShrink) controlProps.style.flexShrink = explicitStyle.flexShrink;
+            if (explicitStyle.flexBasis)  controlProps.style.flexBasis  = explicitStyle.flexBasis;
+            controlProps.style.margin    = explicitStyle.margin;
+            controlProps.style.padding   = explicitStyle.padding;
+            controlProps.style.alignSelf = explicitStyle.alignSelf;
             controlProps.style.pointerEvents = raym3::v2::PointerEvents::None;
+            enforceNativeControlLayoutDefaults(id, controlProps.style);
             updateNativeControlState(ctx, id, argv[1]);
             captureNodeClassName(ctx, id, argv[1]);
+        }
+        enforceNativeControlLayoutDefaults(id, controlProps.style);
+
+        // Store slider size values for use in the render lambda.
+        if (*nativeControl == NativeControlKind::Slider ||
+            *nativeControl == NativeControlKind::RangeSlider) {
+            g_nativeControlStates[id].sliderTrackH  = sv.trackH;
+            g_nativeControlStates[id].sliderHandleH = sv.handleH;
         }
 
         auto node = raym3::v2::Custom(controlProps, [id](Rectangle layout) {
@@ -1267,81 +2155,145 @@ JSValue JS_createMaterialComponent(JSContext* ctx, JSValue, int argc, JSValueCon
             NativeControlState& state = it->second;
             bool value = state.checked;
             bool changed = false;
-            const char* label = state.label.empty() ? nullptr : state.label.c_str();
 
-            // Ease the toggle animation toward the current checked value.
+            // Material state transitions use a fixed-duration curve so the
+            // native bridge matches the v2 component painters.
             float target = state.checked ? 1.0f : 0.0f;
-            if (state.anim < 0.0f) state.anim = target; // snap on first frame
             float dt = GetFrameTime();
             if (dt <= 0.0f || dt > 0.1f) dt = 0.016f;
-            state.anim += (target - state.anim) * std::min(1.0f, dt * 14.0f);
+            if (state.anim < 0.0f) {
+                state.anim = target;
+                state.animFrom = target;
+                state.animTarget = target;
+                state.animElapsedMs = raym3::v2::tokens::kSwitchToggleDurationMs;
+            } else if (state.animTarget != target) {
+                state.animFrom = state.anim;
+                state.animTarget = target;
+                state.animElapsedMs = 0.0f;
+            }
+            if (state.anim != state.animTarget) {
+                state.animElapsedMs += dt * 1000.0f;
+                float duration = raym3::v2::tokens::kSwitchToggleDurationMs;
+                float t = duration <= 0.0f ? 1.0f : state.animElapsedMs / duration;
+                if (t >= 1.0f) {
+                    state.anim = state.animTarget;
+                } else {
+                    float eased = easeInOutCubic(t);
+                    state.anim = state.animFrom +
+                                 (state.animTarget - state.animFrom) * eased;
+                }
+            }
 
             switch (state.kind) {
             case NativeControlKind::Checkbox: {
-                raym3::CheckboxOptions options;
-                options.animProgress = state.anim;
-                changed = raym3::CheckboxComponent::Render(label, layout, &value, &options);
+                Vector2 m = GetMousePosition();
+#if defined(RAYACT_ANDROID) || defined(__ANDROID__)
+                m = raym3::v2::Density::PxToDp(m);
+#endif
+                bool over = !state.disabled && CheckCollisionPointRec(m, layout) && raym3::v2::OwnsInput(g_nodes[id], m);
+                bool pressed = over && IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+                paintNativeMaterialCheckbox(layout, state, state.anim, pressed);
+                changed = over && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
+                value = !state.checked;
                 break;
             }
             case NativeControlKind::Switch: {
-                raym3::SwitchOptions options;
-                options.animProgress = state.anim;
-                changed = raym3::SwitchComponent::Render(label, layout, &value, &options);
+                Vector2 m = GetMousePosition();
+#if defined(RAYACT_ANDROID) || defined(__ANDROID__)
+                m = raym3::v2::Density::PxToDp(m);
+#endif
+                bool over = !state.disabled && CheckCollisionPointRec(m, layout) && raym3::v2::OwnsInput(g_nodes[id], m);
+                bool pressed = over && IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+                paintNativeMaterialSwitch(layout, state, state.anim, pressed);
+                changed = over && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
+                value = !state.checked;
                 break;
             }
             case NativeControlKind::RadioButton: {
-                raym3::RadioButtonOptions options;
-                options.animProgress = state.anim;
-                changed = raym3::RadioButtonComponent::Render(label, layout, value, &options);
-                if (changed) value = true;
+                Vector2 m = GetMousePosition();
+#if defined(RAYACT_ANDROID) || defined(__ANDROID__)
+                m = raym3::v2::Density::PxToDp(m);
+#endif
+                bool over = !state.disabled && CheckCollisionPointRec(m, layout) && raym3::v2::OwnsInput(g_nodes[id], m);
+                bool pressed = over && IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+                paintNativeMaterialRadio(layout, state, state.anim, pressed);
+                changed = over && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
+                value = true;
                 break;
             }
             case NativeControlKind::Slider: {
                 const auto& scheme = raym3::Theme::GetColorScheme();
                 float span = (state.maxValue - state.minValue);
                 float opacity = state.disabled ? 0.38f : 1.0f;
-
-                // --- drag input (self-contained; no global field-id) ---------
                 float trackX = layout.x;
                 float trackW = layout.width;
-                if (!state.disabled && trackW > 0.0f) {
-                    Vector2 m = GetMousePosition();
-                    bool over = CheckCollisionPointRec(m, layout);
-                    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && over) state.dragging = true;
-                    if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)) state.dragging = false;
-                    if (state.dragging) {
-                        float n = std::clamp((m.x - trackX) / trackW, 0.0f, 1.0f);
-                        float nv = state.minValue + n * span;
-                        if (state.step > 0.0f)
-                            nv = state.minValue + std::round((nv - state.minValue) / state.step) * state.step;
-                        nv = std::clamp(nv, state.minValue, state.maxValue);
-                        if (nv != state.value) {
-                            state.value = nv;
-                            invokeChangeValueCallback(id, nv);
-                        }
-                    }
-                }
-
-                // --- paint (M3 XS track + handle) --------------------------
                 float p = span > 0.0f ? std::clamp((state.value - state.minValue) / span, 0.0f, 1.0f) : 0.0f;
-                float trackH = 16.0f;
-                float handleW = state.dragging ? 2.0f : 4.0f;
-                float handleH = 44.0f;
+                float trackH  = state.sliderTrackH;
+                float handleH = state.sliderHandleH;
+                float handleW = raym3::v2::tokens::kSliderHandleWidth;
                 float cy = layout.y + layout.height * 0.5f;
                 float thumbX = trackX + p * trackW;
                 thumbX = std::clamp(thumbX, trackX, trackX + trackW);
-                float handleGap = 6.0f;
+                float handleGap = raym3::v2::tokens::kSliderTrackGap;
                 float activeEnd = std::max(trackX, thumbX - handleW * 0.5f - handleGap);
                 float inactiveStart = std::min(trackX + trackW, thumbX + handleW * 0.5f + handleGap);
-                float innerRadius = 2.0f;
+                float innerRadius = std::min(2.0f, trackH * 0.05f);
                 if (activeEnd > trackX)
                     DrawSliderTrackSegment({trackX, cy - trackH * 0.5f, activeEnd - trackX, trackH}, trackH * 0.5f, innerRadius, ColorAlpha(scheme.primary, opacity));
                 if (inactiveStart < trackX + trackW)
                     DrawSliderTrackSegment({inactiveStart, cy - trackH * 0.5f, trackX + trackW - inactiveStart, trackH}, innerRadius, trackH * 0.5f, ColorAlpha(scheme.secondaryContainer, opacity));
                 Vector2 mouse = GetMousePosition();
+#if defined(RAYACT_ANDROID) || defined(__ANDROID__)
+                mouse = raym3::v2::Density::PxToDp(mouse);
+#endif
                 if (!state.disabled && CheckCollisionPointRec(mouse, layout))
                     DrawCircle((int)thumbX, (int)cy, 20.0f, ColorAlpha(scheme.primary, 0.12f));
                 DrawRectangleRounded({thumbX - handleW * 0.5f, cy - handleH * 0.5f, handleW, handleH}, handleW * 0.5f, 8, ColorAlpha(scheme.primary, opacity));
+                break;
+            }
+            case NativeControlKind::RangeSlider: {
+                const auto& scheme = raym3::Theme::GetColorScheme();
+                float opacity = state.disabled ? 0.38f : 1.0f;
+                float trackX = layout.x;
+                float trackW = layout.width;
+                if (state.startValue > state.endValue) std::swap(state.startValue, state.endValue);
+
+                float start = std::clamp(state.startValue, 0.0f, 1.0f);
+                float end = std::clamp(state.endValue, 0.0f, 1.0f);
+                if (start > end) std::swap(start, end);
+                float trackH = state.sliderTrackH;
+                float handleH = state.sliderHandleH;
+                float handleW = raym3::v2::tokens::kSliderHandleWidth;
+                float handleGap = raym3::v2::tokens::kSliderTrackGap;
+                float cy = layout.y + layout.height * 0.5f;
+                float leftX = trackX + start * trackW;
+                float rightX = trackX + end * trackW;
+                // Gaps (masks) on BOTH sides of each thumb to hide the track,
+                // like the standard slider.
+                float leftInactiveEnd = std::max(trackX, leftX - handleW * 0.5f - handleGap);
+                float activeStart = std::min(trackX + trackW, leftX + handleW * 0.5f + handleGap);
+                float activeEnd = std::max(trackX, rightX - handleW * 0.5f - handleGap);
+                float rightInactiveStart = std::min(trackX + trackW, rightX + handleW * 0.5f + handleGap);
+                float innerRadius = std::min(2.0f, trackH * 0.05f);
+
+                if (leftInactiveEnd > trackX)
+                    DrawSliderTrackSegment({trackX, cy - trackH * 0.5f, leftInactiveEnd - trackX, trackH}, trackH * 0.5f, innerRadius, ColorAlpha(scheme.secondaryContainer, opacity));
+                if (activeEnd > activeStart)
+                    DrawSliderTrackSegment({activeStart, cy - trackH * 0.5f, activeEnd - activeStart, trackH}, innerRadius, innerRadius, ColorAlpha(scheme.primary, opacity));
+                if (rightInactiveStart < trackX + trackW)
+                    DrawSliderTrackSegment({rightInactiveStart, cy - trackH * 0.5f, trackX + trackW - rightInactiveStart, trackH}, innerRadius, trackH * 0.5f, ColorAlpha(scheme.secondaryContainer, opacity));
+
+                Vector2 mouse = GetMousePosition();
+#if defined(RAYACT_ANDROID) || defined(__ANDROID__)
+                mouse = raym3::v2::Density::PxToDp(mouse);
+#endif
+                if (!state.disabled && CheckCollisionPointRec(mouse, layout)) {
+                    float hoverX = fabsf(mouse.x - leftX) <= fabsf(mouse.x - rightX) ? leftX : rightX;
+                    DrawCircle((int)hoverX, (int)cy, 20.0f, ColorAlpha(scheme.primary, 0.12f));
+                }
+                Color handleColor = ColorAlpha(scheme.primary, opacity);
+                DrawRectangleRounded({leftX - handleW * 0.5f, cy - handleH * 0.5f, handleW, handleH}, handleW * 0.5f, 8, handleColor);
+                DrawRectangleRounded({rightX - handleW * 0.5f, cy - handleH * 0.5f, handleW, handleH}, handleW * 0.5f, 8, handleColor);
                 break;
             }
             }
@@ -1352,7 +2304,35 @@ JSValue JS_createMaterialComponent(JSContext* ctx, JSValue, int argc, JSValueCon
             }
         });
 
+        // Promote to a first-class raym3 control node: raym3 core now paints
+        // and drives interaction (ResolveInput). The Custom lambda above is
+        // dead weight (never invoked once kind != Custom) — clear it.
+        node->customRender = nullptr;
+        switch (*nativeControl) {
+            case NativeControlKind::Slider:      node->kind = raym3::v2::NodeKind::Slider; break;
+            case NativeControlKind::RangeSlider: node->kind = raym3::v2::NodeKind::RangeSlider; break;
+            case NativeControlKind::Switch:      node->kind = raym3::v2::NodeKind::Switch; break;
+            case NativeControlKind::Checkbox:    node->kind = raym3::v2::NodeKind::Checkbox; break;
+            case NativeControlKind::RadioButton: node->kind = raym3::v2::NodeKind::RadioButton; break;
+        }
+        node->capturesInput = true;
+        node->onValueChange = [id](float v) {
+            auto nit = g_nodes.find(id);
+            auto sit = g_nativeControlStates.find(id);
+            if (nit != g_nodes.end() && nit->second && sit != g_nativeControlStates.end()) {
+                sit->second.value = nit->second->control.value;
+                sit->second.startValue = nit->second->control.startValue;
+                sit->second.endValue = nit->second->control.endValue;
+            }
+            invokeChangeValueCallback(id, v);
+        };
+        node->onToggle = [id](bool checked) {
+            auto sit = g_nativeControlStates.find(id);
+            if (sit != g_nativeControlStates.end()) sit->second.checked = checked;
+            invokePressCallback(id);
+        };
         g_nodes[id] = node;
+        syncControlNodeFromState(id);
         return JS_NewInt32(ctx, id);
     }
 
@@ -1360,12 +2340,35 @@ JSValue JS_createMaterialComponent(JSContext* ctx, JSValue, int argc, JSValueCon
     if (argc >= 2 && JS_IsObject(argv[1])) props = parseMaterialProps(ctx, argv[1]);
 
     int id = g_nextNodeId++;
-    props.onPress = [id]() { invokePressCallback(id); };
+    // onPress is intentionally left null here. JS_setOnPress sets it only when
+    // a real JS callback is registered, so containers without handlers stay
+    // non-interactive (ComputeState + HitTest both gate on node->onPress).
 
     g_nodes[id] = raym3::v2::MaterialComponent(*component, props);
     g_materialComponentKinds[id] = *component;
     if (argc >= 2 && JS_IsObject(argv[1])) captureNodeClassName(ctx, id, argv[1]);
     return JS_NewInt32(ctx, id);
+}
+
+static int nodeToId(const raym3::v2::NodePtr& ptr) {
+    for (auto& [nid, node] : g_nodes)
+        if (node == ptr) return nid;
+    return -1;
+}
+
+static void syncNavItemIconFill(const raym3::v2::NodePtr& node, bool selected) {
+    for (auto& child : node->children) {
+        if (!child) continue;
+        int childId = nodeToId(child);
+        auto iconIt = g_iconRenderStates.find(childId);
+        if (iconIt == g_iconRenderStates.end()) continue;
+        if (iconIt->second.filled != selected) {
+            iconIt->second.filled = selected;
+            if (iconIt->second.codepoint != 0)
+                requireIcon(iconIt->second.codepoint,
+                            (int)roundf(iconIt->second.size), selected);
+        }
+    }
 }
 
 JSValue JS_setMaterialComponentProps(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
@@ -1378,6 +2381,7 @@ JSValue JS_setMaterialComponentProps(JSContext* ctx, JSValue, int argc, JSValueC
 
     auto materialIt = g_materialComponentKinds.find(id);
     if (materialIt != g_materialComponentKinds.end()) {
+        raym3::v2::Style previousStyle = it->second->style;
         raym3::v2::ComponentProps props = parseMaterialProps(ctx, argv[1]);
         // React commits only changed props, so a selection key missing from this
         // payload means "unchanged" — not false. parseMaterialProps defaults it
@@ -1389,19 +2393,131 @@ JSValue JS_setMaterialComponentProps(JSContext* ctx, JSValue, int argc, JSValueC
             !jsHasProperty(ctx, argv[1], "indeterminate")) {
             props.selected = it->second->selected;
         }
+        // Nav item: selection-only commits should not rebuild via MaterialComponent
+        // (which would churn styles). Update selected + label/icon sync only so the
+        // native Flutter-style per-item indicator animation can run continuously.
+        if (materialIt->second == raym3::v2::M3Component::NavigationBarItem &&
+            it->second->role == raym3::v2::NodeRole::NavItem &&
+            !jsHasProperty(ctx, argv[1], "className") &&
+            !jsHasProperty(ctx, argv[1], "style") &&
+            !jsHasProperty(ctx, argv[1], "label") &&
+            !jsHasProperty(ctx, argv[1], "text")) {
+            bool selected = jsGetBool(ctx, argv[1], "selected", false) ||
+                            jsGetBool(ctx, argv[1], "checked", false) ||
+                            jsGetBool(ctx, argv[1], "indeterminate", false);
+            if (!jsHasProperty(ctx, argv[1], "selected") &&
+                !jsHasProperty(ctx, argv[1], "checked") &&
+                !jsHasProperty(ctx, argv[1], "indeterminate")) {
+                selected = it->second->selected;
+            }
+            it->second->selected = selected;
+            Color labelColor = selected ? raym3::Theme::GetColorScheme().onSurface
+                                        : raym3::Theme::GetColorScheme().onSurfaceVariant;
+            for (auto& child : it->second->children) {
+                if (child && child->kind == raym3::v2::NodeKind::Text) {
+                    child->style.text.color = labelColor;
+                }
+            }
+            syncNavItemIconFill(it->second, selected);
+            updateNativeControlState(ctx, id, argv[1]);
+            return JS_UNDEFINED;
+        }
         props.onPress = it->second->onPress;
         auto updated = raym3::v2::MaterialComponent(materialIt->second, props);
-        it->second->style = updated->style;
+        it->second->style = (jsHasProperty(ctx, argv[1], "className") || jsHasProperty(ctx, argv[1], "style"))
+            ? updated->style
+            : preserveLayoutStyle(updated->style, previousStyle);
+        // Overlay surfaces toggle visibility via the `open` prop -> display.
+        // A style-only partial update (common when JS passes an inline style
+        // object that React recreates every render) rebuilds the full style
+        // with the default open=false -> display:none, which would wrongly
+        // hide an already-open overlay whose `open` didn't change (so it isn't
+        // in the diff payload). Re-apply display from the payload's `open` when
+        // present; otherwise preserve the prior open-driven display.
+        if (materialIt->second == raym3::v2::M3Component::Dialog ||
+            materialIt->second == raym3::v2::M3Component::BottomSheet ||
+            materialIt->second == raym3::v2::M3Component::SideSheet ||
+            materialIt->second == raym3::v2::M3Component::DatePicker ||
+            materialIt->second == raym3::v2::M3Component::TimePicker ||
+            materialIt->second == raym3::v2::M3Component::Popover) {
+            it->second->style.display = jsHasProperty(ctx, argv[1], "open")
+                ? updated->style.display
+                : previousStyle.display;
+        }
         it->second->stateStyles = updated->stateStyles;
         it->second->motion = updated->motion;
         it->second->disabled = updated->disabled;
         it->second->zIndex = updated->zIndex;
+        // Overlay hit-test flags are assigned in MaterialComponent() at create
+        // time. Only re-sync them when the update payload actually carries the
+        // prop: React sends DIFF payloads, so an inner-state re-render (month
+        // nav, day select) omits an unchanged `scrim`/`anchor` — rebuilding
+        // from the diff would silently reset the scrim and input capture,
+        // killing backdrop dismiss for the still-open overlay.
+        if (jsHasProperty(ctx, argv[1], "scrim")) {
+            it->second->hasScrim = updated->hasScrim;
+            it->second->capturesInput = updated->capturesInput;
+        }
+        if (jsHasProperty(ctx, argv[1], "capturesInput"))
+            it->second->capturesInput = updated->capturesInput;
         it->second->selected = updated->selected;
-        it->second->role = updated->role;
+        if (jsHasProperty(ctx, argv[1], "anchor"))
+            it->second->anchorId = updated->anchorId;
+        if (jsHasProperty(ctx, argv[1], "placement"))
+            it->second->placement = updated->placement;
+        // SegmentedButton/ButtonGroup/Tabs role (container vs item) is determined
+        // at creation via label presence and must not be overwritten on partial
+        // prop updates (which omit label). All other components are safe to update.
+        const bool isContainerItemKind =
+            materialIt->second == raym3::v2::M3Component::SegmentedButton ||
+            materialIt->second == raym3::v2::M3Component::ButtonGroup ||
+            materialIt->second == raym3::v2::M3Component::Tabs;
+        if (!isContainerItemKind) {
+            it->second->role = updated->role;
+        }
+        // SegmentedButton/ButtonGroup/Tabs items: rebuild internal children so the
+        // checkmark/label restyle as selected state changes. Containers
+        // (ButtonGroupContainer / Tabs role) own their children via JS_appendChild
+        // — don't touch those.
+        const bool isContainer =
+            it->second->role == raym3::v2::NodeRole::ButtonGroupContainer ||
+            it->second->role == raym3::v2::NodeRole::ButtonGroupConnected ||
+            it->second->role == raym3::v2::NodeRole::NavigationBar ||
+            it->second->role == raym3::v2::NodeRole::Tabs;
+        if (isContainerItemKind && !isContainer) {
+            // Partial prop updates omit label. Recover it from the existing
+            // Text child so MaterialComponent takes the item (not container) branch.
+            if (props.label.empty()) {
+                for (auto& child : it->second->children) {
+                    if (child && child->kind == raym3::v2::NodeKind::Text &&
+                        !child->text.empty()) {
+                        props.label = child->text;
+                        break;
+                    }
+                }
+            }
+            if (!props.label.empty()) {
+                auto itemUpdated = raym3::v2::MaterialComponent(materialIt->second, props);
+                it->second->style = preserveLayoutStyle(itemUpdated->style, previousStyle);
+                it->second->stateStyles = itemUpdated->stateStyles;
+                it->second->motion = itemUpdated->motion;
+                it->second->disabled = itemUpdated->disabled;
+                it->second->selected = itemUpdated->selected;
+                it->second->children = itemUpdated->children;
+            }
+        }
     } else if (jsHasProperty(ctx, argv[1], "className") || jsHasProperty(ctx, argv[1], "style")) {
-        it->second->style = parseStyle(ctx, argv[1]);
+        auto parsed = parseStyle(ctx, argv[1]);
+        if (g_nativeControlStates.count(id)) {
+            // Merge: preserve M3 default dimensions (height/minHeight etc.) set at creation.
+            it->second->style = raym3::v2::MergeStyles(it->second->style, parsed);
+            enforceNativeControlLayoutDefaults(id, it->second->style);
+        } else {
+            it->second->style = parsed;
+        }
     }
     if (g_nativeControlStates.find(id) != g_nativeControlStates.end()) {
+        enforceNativeControlLayoutDefaults(id, it->second->style);
         it->second->style.pointerEvents = raym3::v2::PointerEvents::None;
     }
     bool selected = jsGetBool(ctx, argv[1], "selected", it->second->selected) ||
@@ -1418,6 +2534,7 @@ JSValue JS_setMaterialComponentProps(JSContext* ctx, JSValue, int argc, JSValueC
                 child->style.text.color = labelColor;
             }
         }
+        syncNavItemIconFill(it->second, selected);
     }
     updateNativeControlState(ctx, id, argv[1]);
     return JS_UNDEFINED;
@@ -1431,6 +2548,20 @@ static void appendChildPreservingNavLabel(const raym3::v2::NodePtr& parent,
         children.front() && children.front()->kind == raym3::v2::NodeKind::Text &&
         child && child->kind != raym3::v2::NodeKind::Text) {
         children.insert(children.begin(), child);
+        return;
+    }
+    // ExtendedFab/Button created with a `label` keeps it in node->text (drawn
+    // centered). When React then appends a leading Icon child, the centered text
+    // would overlap the icon. Convert node->text into a trailing Text child so
+    // Yoga lays out [icon][label] as a centered row, matching the no-children
+    // composed path in MaterialComponent.
+    if (parent->kind == raym3::v2::NodeKind::Button && !parent->text.empty() &&
+        child && child->kind != raym3::v2::NodeKind::Text) {
+        raym3::v2::TextProps textProps;
+        textProps.style.text = parent->style.text;
+        children.push_back(child);
+        children.push_back(raym3::v2::Text(parent->text, textProps));
+        parent->text.clear();
         return;
     }
     children.push_back(child);
@@ -1449,6 +2580,20 @@ JSValue JS_appendChild(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
 
     appendChildPreservingNavLabel(pit->second, cit->second);
     g_nodeParents[childId] = parentId;
+    // Sync icon fill to parent nav item's selected state immediately on append.
+    if (pit->second->role == raym3::v2::NodeRole::NavItem &&
+        g_iconRenderStates.count(childId)) {
+        auto iconIt = g_iconRenderStates.find(childId);
+        if (iconIt != g_iconRenderStates.end()) {
+            bool sel = pit->second->selected;
+            if (iconIt->second.filled != sel) {
+                iconIt->second.filled = sel;
+                if (iconIt->second.codepoint != 0)
+                    requireIcon(iconIt->second.codepoint,
+                                (int)roundf(iconIt->second.size), sel);
+            }
+        }
+    }
     return JS_UNDEFINED;
 }
 
@@ -1458,10 +2603,21 @@ JSValue JS_removeChild(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     JS_ToInt32(ctx, &parentId, argv[0]);
     JS_ToInt32(ctx, &childId, argv[1]);
 
+    // Tolerant: node maps are global across screens and React 19 commits
+    // async, so an unmount of a popped route can reference an id another
+    // screen's commit already removed. Throwing here propagates into React's
+    // commit phase and crashes after a few navigations — treat a missing id
+    // as a no-op (the node is already detached) and just log it.
     auto pit = g_nodes.find(parentId);
     auto cit = g_nodes.find(childId);
-    if (pit == g_nodes.end()) return JS_ThrowTypeError(ctx, "removeChild: invalid parent id");
-    if (cit == g_nodes.end()) return JS_ThrowTypeError(ctx, "removeChild: invalid child id");
+    if (pit == g_nodes.end() || cit == g_nodes.end()) {
+        RAYACT_NAV_LOG("removeChild stale id: parent=%d(%s) child=%d(%s) screen=%d",
+                       parentId, pit == g_nodes.end() ? "miss" : "ok",
+                       childId, cit == g_nodes.end() ? "miss" : "ok",
+                       g_currentScreenId);
+        if (cit != g_nodes.end()) g_nodeParents.erase(childId);
+        return JS_UNDEFINED;
+    }
 
     auto& children = pit->second->children;
     children.erase(std::remove(children.begin(), children.end(), cit->second), children.end());
@@ -1476,16 +2632,28 @@ JSValue JS_insertBefore(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueC
     JS_ToInt32(ctx, &childId, argv[1]);
     JS_ToInt32(ctx, &beforeChildId, argv[2]);
 
+    // Tolerant for the same reason as removeChild: a stale parent/child id is
+    // a no-op, and a missing beforeChild degrades to append (handled below).
     auto pit = g_nodes.find(parentId);
     auto cit = g_nodes.find(childId);
     auto bit = g_nodes.find(beforeChildId);
-    if (pit == g_nodes.end()) return JS_ThrowTypeError(ctx, "insertBefore: invalid parent id");
-    if (cit == g_nodes.end()) return JS_ThrowTypeError(ctx, "insertBefore: invalid child id");
-    if (bit == g_nodes.end()) return JS_ThrowTypeError(ctx, "insertBefore: invalid beforeChild id");
+    if (pit == g_nodes.end() || cit == g_nodes.end()) {
+        RAYACT_NAV_LOG("insertBefore stale id: parent=%d(%s) child=%d(%s) before=%d screen=%d",
+                       parentId, pit == g_nodes.end() ? "miss" : "ok",
+                       childId, cit == g_nodes.end() ? "miss" : "ok",
+                       beforeChildId, g_currentScreenId);
+        return JS_UNDEFINED;
+    }
+    if (bit == g_nodes.end()) {
+        RAYACT_NAV_LOG("insertBefore stale beforeChild=%d (append) parent=%d child=%d screen=%d",
+                       beforeChildId, parentId, childId, g_currentScreenId);
+    }
 
     auto& children = pit->second->children;
     children.erase(std::remove(children.begin(), children.end(), cit->second), children.end());
-    auto beforeIt = std::find(children.begin(), children.end(), bit->second);
+    auto beforeIt = (bit == g_nodes.end())
+        ? children.end()
+        : std::find(children.begin(), children.end(), bit->second);
     if (beforeIt == children.end()) {
         children.push_back(cit->second);
     } else {
@@ -1517,7 +2685,12 @@ JSValue JS_setRootNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     int id;
     JS_ToInt32(ctx, &id, argv[0]);
     auto it = g_nodes.find(id);
-    if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setRootNode: invalid node id");
+    if (it == g_nodes.end()) {
+        // Tolerant: a stale root id from an async cross-screen commit is a
+        // no-op rather than a fatal throw.
+        RAYACT_NAV_LOG("setRootNode stale id=%d screen=%d", id, g_currentScreenId);
+        return JS_UNDEFINED;
+    }
     writeRootThrough(it->second);
     return JS_UNDEFINED;
 }
@@ -1577,6 +2750,22 @@ JSValue JS_setOnChangeText(JSContext* ctx, JSValue, int argc, JSValueConst* argv
     return setStoredCallback(ctx, id, argv[1], g_changeTextCallbacks);
 }
 
+JSValue JS_setOnFocus(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setOnFocus: expected (nodeId, fn)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    if (g_nodes.find(id) == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnFocus: invalid node id");
+    return setStoredCallback(ctx, id, argv[1], g_focusCallbacks);
+}
+
+JSValue JS_setOnBlur(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setOnBlur: expected (nodeId, fn)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    if (g_nodes.find(id) == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnBlur: invalid node id");
+    return setStoredCallback(ctx, id, argv[1], g_blurCallbacks);
+}
+
 JSValue JS_setOnChangeValue(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (argc < 2) return JS_ThrowTypeError(ctx, "setOnChangeValue: expected (nodeId, fn)");
     int id;
@@ -1589,16 +2778,34 @@ JSValue JS_setOnScroll(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (argc < 2) return JS_ThrowTypeError(ctx, "setOnScroll: expected (nodeId, fn)");
     int id;
     JS_ToInt32(ctx, &id, argv[0]);
-    if (g_nodes.find(id) == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnScroll: invalid node id");
-    return setStoredCallback(ctx, id, argv[1], g_scrollCallbacks);
+    auto it = g_nodes.find(id);
+    if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnScroll: invalid node id");
+    setStoredCallback(ctx, id, argv[1], g_scrollCallbacks);
+    if (JS_IsFunction(ctx, argv[1]) && it->second)
+        it->second->onScroll = [id]() {
+            auto nit = g_nodes.find(id);
+            if (nit != g_nodes.end() && nit->second)
+                emitScrollEvent(id, nit->second);
+        };
+    else if (it->second)
+        it->second->onScroll = nullptr;
+    return JS_UNDEFINED;
 }
 
 JSValue JS_setOnRequestClose(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (argc < 2) return JS_ThrowTypeError(ctx, "setOnRequestClose: expected (nodeId, fn)");
     int id;
     JS_ToInt32(ctx, &id, argv[0]);
-    if (g_nodes.find(id) == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnRequestClose: invalid node id");
-    return setStoredCallback(ctx, id, argv[1], g_requestCloseCallbacks);
+    auto it = g_nodes.find(id);
+    if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnRequestClose: invalid node id");
+    setStoredCallback(ctx, id, argv[1], g_requestCloseCallbacks);
+    // Core ResolveInput fires this when a scrim/backdrop tap dismisses the
+    // overlay (z-order occlusion — no modal special-casing).
+    if (JS_IsFunction(ctx, argv[1]) && it->second)
+        it->second->onRequestClose = [id]() { invokeRequestClose(id); };
+    else if (it->second)
+        it->second->onRequestClose = nullptr;
+    return JS_UNDEFINED;
 }
 
 JSValue JS_setStyle(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
@@ -1614,10 +2821,23 @@ JSValue JS_setStyle(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst
     // setStyle with the same CSS — so a plain replace here would wipe the
     // defaults and collapse e.g. the search bar's row into a column. Merge the
     // CSS over the existing style for material nodes; plain views replace.
-    if (g_materialComponentKinds.find(id) != g_materialComponentKinds.end())
+    if (g_safeAreaBaseStyles.find(id) != g_safeAreaBaseStyles.end()) {
+        g_safeAreaBaseStyles[id] = parsed;
+        it->second->style = applySafeAreaPadding(parsed);
+    } else if (g_materialComponentKinds.find(id) != g_materialComponentKinds.end()) {
         it->second->style = raym3::v2::MergeStyles(it->second->style, parsed);
-    else
+    } else if (g_nativeControlStates.find(id) != g_nativeControlStates.end()) {
+        it->second->style = raym3::v2::MergeStyles(it->second->style, parsed);
+        enforceNativeControlLayoutDefaults(id, it->second->style);
+        it->second->style.pointerEvents = raym3::v2::PointerEvents::None;
+    } else if (g_scrollViewIds.count(id)) {
+        // Merge instead of replace so overflow=Scroll set at creation is preserved.
+        it->second->style = raym3::v2::MergeStyles(it->second->style, parsed);
+    } else {
         it->second->style = parsed;
+    }
+    if (jsHasProperty(ctx, argv[1], "capturesInput"))
+        it->second->capturesInput = jsGetBool(ctx, argv[1], "capturesInput", false);
     captureNodeClassName(ctx, id, argv[1]);
     return JS_UNDEFINED;
 }
@@ -1646,6 +2866,14 @@ JSValue JS_setValue(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setValue: invalid node id");
     const char* value = JS_ToCString(ctx, argv[1]);
     if (!value) return JS_ThrowTypeError(ctx, "setValue: value must be a string");
+    // While focused, native buffer is authoritative — ignore stale React
+    // reconcile props until blur (onChange may not have committed yet).
+    if (it->second->kind == raym3::v2::NodeKind::TextInput &&
+        raym3::v2::GetFocusedId() == raym3::v2::IdOf(it->second) &&
+        it->second->inputScratch != value) {
+        JS_FreeCString(ctx, value);
+        return JS_UNDEFINED;
+    }
     it->second->inputScratch = value;
     if (it->second->inputBuffer.empty()) it->second->inputBuffer.assign(1024, '\0');
     std::fill(it->second->inputBuffer.begin(), it->second->inputBuffer.end(), '\0');
@@ -1657,10 +2885,39 @@ JSValue JS_setValue(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     return JS_UNDEFINED;
 }
 
+// Called from Android JNI when the soft keyboard commits text.
+// Updates the node's buffer and fires onChange so React sees the new value.
+// cursor is the IME's selection end; -1 means "place caret at end".
+void rayactSetTextInputContent(int nodeId, const char* text, int cursor) {
+    auto it = g_nodes.find(nodeId);
+    if (it == g_nodes.end() || !text) return;
+    it->second->inputScratch = text;
+    if (it->second->inputBuffer.empty()) it->second->inputBuffer.assign(1024, '\0');
+    std::fill(it->second->inputBuffer.begin(), it->second->inputBuffer.end(), '\0');
+    std::strncpy(it->second->inputBuffer.data(), text, it->second->inputBuffer.size() - 1);
+    it->second->textInput.buffer = it->second->inputBuffer.data();
+    it->second->textInput.bufferSize = (int)it->second->inputBuffer.size();
+    it->second->textInput.value = &it->second->inputScratch;
+    int len = static_cast<int>(std::strlen(text));
+    it->second->textEdit.cursor = (cursor < 0) ? len : std::min(cursor, len);
+    it->second->textEdit.selectionStart = -1;
+    it->second->textEdit.selectionEnd = -1;
+    raym3::v2::ResyncTextInputBuffer(nodeId, it->second->textEdit.cursor);
+    auto cbIt = g_changeTextCallbacks.find(nodeId);
+    if (cbIt != g_changeTextCallbacks.end() && g_bridge_ctx) {
+        JSValue arg = JS_NewString(g_bridge_ctx, text);
+        JSValue result = JS_Call(g_bridge_ctx, cbIt->second, JS_UNDEFINED, 1, &arg);
+        if (JS_IsException(result)) JS_FreeValue(g_bridge_ctx, JS_GetException(g_bridge_ctx));
+        JS_FreeValue(g_bridge_ctx, result);
+        JS_FreeValue(g_bridge_ctx, arg);
+    }
+}
+
 JSValue JS_disposeNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_ThrowTypeError(ctx, "disposeNode: expected (nodeId)");
     int id;
     JS_ToInt32(ctx, &id, argv[0]);
+    clearAnimatedNode(ctx, id);
 
     auto cb = g_pressCallbacks.find(id);
     if (cb != g_pressCallbacks.end()) {
@@ -1671,6 +2928,16 @@ JSValue JS_disposeNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     if (changeCb != g_changeTextCallbacks.end()) {
         JS_FreeValue(ctx, changeCb->second);
         g_changeTextCallbacks.erase(changeCb);
+    }
+    auto focusCb = g_focusCallbacks.find(id);
+    if (focusCb != g_focusCallbacks.end()) {
+        JS_FreeValue(ctx, focusCb->second);
+        g_focusCallbacks.erase(focusCb);
+    }
+    auto blurCb = g_blurCallbacks.find(id);
+    if (blurCb != g_blurCallbacks.end()) {
+        JS_FreeValue(ctx, blurCb->second);
+        g_blurCallbacks.erase(blurCb);
     }
     auto changeValCb = g_changeValueCallbacks.find(id);
     if (changeValCb != g_changeValueCallbacks.end()) {
@@ -1689,6 +2956,9 @@ JSValue JS_disposeNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     }
     g_nativeControlStates.erase(id);
     g_materialComponentKinds.erase(id);
+    g_safeAreaBaseStyles.erase(id);
+    g_scrollViewIds.erase(id);
+    g_iconRenderStates.erase(id);
     g_nodeClassNames.erase(id);
     g_nodeParents.erase(id);
     for (auto it = g_nodeParents.begin(); it != g_nodeParents.end();) {
@@ -1721,14 +2991,16 @@ JSValue JS_createIcon(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
         double d; JS_ToFloat64(ctx, &d, argv[1]); size = (float)d;
     }
 
+    std::string variantStr = "rounded";
+    if (argc >= 5 && !JS_IsUndefined(argv[4]) && !JS_IsNull(argv[4])) {
+        const char* v = JS_ToCString(ctx, argv[4]);
+        if (v) { variantStr = v; JS_FreeCString(ctx, v); }
+    }
+    // argv[5]: explicit filled bool; default true
     bool filled = true;
-    if (argc >= 5 && !JS_IsUndefined(argv[4])) {
-        const char* variant = JS_ToCString(ctx, argv[4]);
-        if (variant) {
-            std::string variantStr(variant);
-            filled = variantStr != "outlined" && variantStr != "outline";
-            JS_FreeCString(ctx, variant);
-        }
+    if (argc >= 6 && !JS_IsUndefined(argv[5]) && !JS_IsNull(argv[5])) {
+        int b = 0;
+        if (JS_ToInt32(ctx, &b, argv[5]) == 0) filled = (b != 0);
     }
 
     const char* glyph = JS_ToCString(ctx, argv[0]);
@@ -1801,34 +3073,112 @@ JSValue JS_createIcon(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
     if (!props.style.minHeight) props.style.minHeight = props.style.height;
     if (!props.style.flexShrink) props.style.flexShrink = 0.0f;
 
-    auto node = raym3::v2::Custom(props, [glyphStr, resolvedCp, size, color, filled](Rectangle layout) {
+    int id = g_nextNodeId++;
+    g_iconRenderStates[id] = IconRenderState{glyphStr, resolvedCp, size, color, filled, variantStr};
+
+    auto node = raym3::v2::Custom(props, [id](Rectangle layout) {
+        auto stateIt = g_iconRenderStates.find(id);
+        if (stateIt == g_iconRenderStates.end()) return;
+        const IconRenderState& icon = stateIt->second;
         // Prefer sprite sheet (single GPU batch for all icons).
-        if (resolvedCp != 0 && g_iconSheet.id != 0) {
-            IconKey key{resolvedCp, (int)roundf(size), filled};
+        if (icon.codepoint != 0 && g_iconSheet.id != 0) {
+            IconKey key{icon.codepoint, (int)roundf(icon.size), icon.filled};
             auto it = g_iconSheetRects.find(key);
             if (it != g_iconSheetRects.end()) {
                 Rectangle src = it->second;
                 // Atlas is a normal top-down texture (LoadTextureFromImage), so
                 // no vertical flip needed when sampling.
                 Rectangle drawSrc = {src.x, src.y, src.width, src.height};
-                float x = layout.x + (layout.width  - src.width)  * 0.5f;
-                float y = layout.y + (layout.height - src.height) * 0.5f;
-                DrawTextureRec(g_iconSheet, drawSrc, {x, y}, color);
+                float drawSize = icon.size;
+                Rectangle dest = {layout.x + (layout.width - drawSize) * 0.5f,
+                                  layout.y + (layout.height - drawSize) * 0.5f,
+                                  drawSize, drawSize};
+                DrawTexturePro(g_iconSheet, drawSrc, dest, {0.0f, 0.0f}, 0.0f, icon.color);
                 return;
             }
         }
         // Fallback: direct glyph draw (before sprite sheet is built or for raw UTF-8).
-        Font f = getIconFont((int)size, filled);
-        Vector2 textSize = MeasureTextEx(f, glyphStr.c_str(), size, 0);
+        Font f = getIconFont((int)icon.size, icon.filled);
+        Vector2 textSize = MeasureTextEx(f, icon.glyph.c_str(), icon.size, 0);
         float x = layout.x + (layout.width  - textSize.x) * 0.5f;
         float y = layout.y + (layout.height - textSize.y) * 0.5f;
-        DrawTextEx(f, glyphStr.c_str(), {x, y}, size, 0, color);
+        DrawTextEx(f, icon.glyph.c_str(), {x, y}, icon.size, 0, icon.color);
     });
 
-    int id = g_nextNodeId++;
     g_nodes[id] = node;
     if (argc >= 2 && JS_IsObject(argv[1])) captureNodeClassName(ctx, id, argv[1]);
     return JS_NewInt32(ctx, id);
+}
+
+JSValue JS_setIconProps(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "setIconProps: expected (nodeId, size?, color?, variant?)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto stateIt = g_iconRenderStates.find(id);
+    auto nodeIt = g_nodes.find(id);
+    if (stateIt == g_iconRenderStates.end() || nodeIt == g_nodes.end()) {
+        return JS_ThrowTypeError(ctx, "setIconProps: invalid icon id");
+    }
+
+    IconRenderState& icon = stateIt->second;
+    if (argc >= 2 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1])) {
+        double d = 0.0;
+        if (JS_ToFloat64(ctx, &d, argv[1]) == 0 && d > 0.0) {
+            icon.size = (float)d;
+            if (icon.codepoint != 0) requireIcon(icon.codepoint, (int)roundf(icon.size), icon.filled);
+            auto& style = nodeIt->second->style;
+            if (!style.width || *style.width <= 0.0f) style.width = icon.size;
+            if (!style.height || *style.height <= 0.0f) style.height = icon.size;
+            style.minWidth = style.width;
+            style.minHeight = style.height;
+        }
+    }
+    if (argc >= 3 && !JS_IsUndefined(argv[2]) && !JS_IsNull(argv[2])) {
+        if (auto c = jsToColor(ctx, argv[2])) icon.color = *c;
+    }
+    if (argc >= 4 && !JS_IsUndefined(argv[3]) && !JS_IsNull(argv[3])) {
+        const char* v = JS_ToCString(ctx, argv[3]);
+        if (v) { icon.variant = v; JS_FreeCString(ctx, v); }
+    }
+    if (argc >= 5 && !JS_IsUndefined(argv[4]) && !JS_IsNull(argv[4])) {
+        const char* nameStr = JS_ToCString(ctx, argv[4]);
+        if (nameStr) {
+            std::string nameS(nameStr);
+            JS_FreeCString(ctx, nameStr);
+            // Resolve name through the Icons global map (same path as createIcon)
+            JSValue globalObj = JS_GetGlobalObject(ctx);
+            JSValue iconsMap  = JS_GetPropertyStr(ctx, globalObj, "Icons");
+            if (JS_IsObject(iconsMap)) {
+                JSValue cpVal = JS_GetPropertyStr(ctx, iconsMap, nameS.c_str());
+                uint32_t cp = 0;
+                if (!JS_IsUndefined(cpVal) && JS_ToUint32(ctx, &cp, cpVal) == 0 && cp > 0) {
+                    icon.codepoint = (int)cp;
+                    requireIcon(icon.codepoint, (int)roundf(icon.size), icon.filled);
+                    char utf8[5] = {};
+                    if (cp < 0x80)        { utf8[0] = (char)cp; }
+                    else if (cp < 0x800)  { utf8[0]=(char)(0xC0|(cp>>6)); utf8[1]=(char)(0x80|(cp&0x3F)); }
+                    else if (cp < 0x10000){ utf8[0]=(char)(0xE0|(cp>>12)); utf8[1]=(char)(0x80|((cp>>6)&0x3F)); utf8[2]=(char)(0x80|(cp&0x3F)); }
+                    else                  { utf8[0]=(char)(0xF0|(cp>>18)); utf8[1]=(char)(0x80|((cp>>12)&0x3F)); utf8[2]=(char)(0x80|((cp>>6)&0x3F)); utf8[3]=(char)(0x80|(cp&0x3F)); }
+                    icon.glyph = std::string(utf8);
+                }
+                JS_FreeValue(ctx, cpVal);
+            }
+            JS_FreeValue(ctx, iconsMap);
+            JS_FreeValue(ctx, globalObj);
+        }
+    }
+    // argv[5]: explicit filled bool override
+    if (argc >= 6 && !JS_IsUndefined(argv[5]) && !JS_IsNull(argv[5])) {
+        int b = 0;
+        if (JS_ToInt32(ctx, &b, argv[5]) == 0) {
+            bool nextFilled = (b != 0);
+            if (icon.filled != nextFilled) {
+                icon.filled = nextFilled;
+                if (icon.codepoint != 0) requireIcon(icon.codepoint, (int)roundf(icon.size), icon.filled);
+            }
+        }
+    }
+    return JS_UNDEFINED;
 }
 
 JSValue JS_createImage(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
@@ -1951,6 +3301,7 @@ JSValue JS_setCurrentScreen(JSContext* ctx, JSValue, int argc, JSValueConst* arg
 extern "C" {
 extern int  rayactJniRequestNewSurface();
 extern void rayactJniReleaseSurface(int surfaceId);
+extern void rayactJniOrderSurfaces(const int* ids, int count);
 extern int  rayactJniGetRootSurfaceId();
 extern void rayactJniReleaseTopSurface();
 extern void rayactJniExitApp();
@@ -1963,6 +3314,7 @@ extern int  rayactJniPopScreen();
 extern "C" {
 int  rayactJniRequestNewSurface()       { return 0; }
 void rayactJniReleaseSurface(int)        { (void)0; }
+void rayactJniOrderSurfaces(const int*, int) { (void)0; }
 int  rayactJniGetRootSurfaceId()         { return 0; }
 void rayactJniReleaseTopSurface()        { (void)0; }
 void rayactJniExitApp()                  { (void)0; }
@@ -2044,6 +3396,7 @@ JSValue JS_rayactEngineSetScreenStack(JSContext* ctx, JSValue, int argc, JSValue
         JS_FreeValue(ctx, el);
     }
     engineSetScreenStack(ids);
+    if (!ids.empty()) rayactJniOrderSurfaces(ids.data(), (int)ids.size());
     return JS_UNDEFINED;
 }
 
@@ -2236,10 +3589,18 @@ void engineForEachVisibleScreen(const std::function<void(int, const raym3::v2::N
 // ─── lifecycle ──────────────────────────────────────────────────────────────
 
 void cleanupRaym3Bridge(JSContext* ctx) {
+    for (auto& [id, anim] : g_styleAnimations) {
+        if (!JS_IsUndefined(anim.onComplete)) JS_FreeValue(ctx, anim.onComplete);
+    }
+    g_styleAnimations.clear();
+    g_animatedNodes.clear();
+    std::fill(g_animatedStyleBuffer.begin(), g_animatedStyleBuffer.end(), 0.0f);
     // Free all per-screen callback JSValues before clearing the maps.
     for (auto& [id, s] : g_screens) {
         for (auto& [k, v] : s.pressCallbacks) JS_FreeValue(ctx, v);
         for (auto& [k, v] : s.changeTextCallbacks) JS_FreeValue(ctx, v);
+        for (auto& [k, v] : s.focusCallbacks) JS_FreeValue(ctx, v);
+        for (auto& [k, v] : s.blurCallbacks) JS_FreeValue(ctx, v);
         for (auto& [k, v] : s.changeValueCallbacks) JS_FreeValue(ctx, v);
         for (auto& [k, v] : s.scrollCallbacks) JS_FreeValue(ctx, v);
         for (auto& [k, v] : s.requestCloseCallbacks) JS_FreeValue(ctx, v);
@@ -2249,8 +3610,14 @@ void cleanupRaym3Bridge(JSContext* ctx) {
     g_nodes.clear();
     g_nativeControlStates.clear();
     g_materialComponentKinds.clear();
+    g_safeAreaBaseStyles.clear();
+    g_scrollViewIds.clear();
+    g_safeAreaInsets = SafeAreaInsets{};
+    g_iconRenderStates.clear();
     g_nodeClassNames.clear();
     g_changeTextCallbacks.clear();
+    g_focusCallbacks.clear();
+    g_blurCallbacks.clear();
     g_changeValueCallbacks.clear();
     g_scrollCallbacks.clear();
     g_requestCloseCallbacks.clear();

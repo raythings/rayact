@@ -30,6 +30,8 @@ class RayactScreenFragment : Fragment() {
     var onSurfaceReady: ((Int) -> Unit)? = null
     private var surfaceReadyFired = false
 
+    fun rayactSurfaceView(): RayactSurfaceView? = surfaceView
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,

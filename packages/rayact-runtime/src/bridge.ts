@@ -1,16 +1,162 @@
 import type { HostBridge, HostEventName, HostNode, HostNodeType, RayactGlobal } from './types';
 import { isRayactAsset, resolveAssetUrl } from './assets';
 
-function flattenStyleValue(style: unknown): Record<string, unknown> {
-  if (Array.isArray(style)) {
-    return Object.assign({}, ...style.map(flattenStyleValue));
-  }
-  if (!style || typeof style !== 'object') return {};
-  return { ...(style as Record<string, unknown>) };
+function isSharedValue(value: unknown): value is { value: number; bindToNode: Function } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'bindToNode' in value &&
+    typeof (value as any).bindToNode === 'function'
+  );
 }
 
-function toStyleProps(props: Record<string, unknown> = {}): Record<string, unknown> {
-  const style = flattenStyleValue(props.style);
+const SLAB_SIZE = 8;
+const OFFSETS = {
+  translateX: 0,
+  translateY: 1,
+  scale: 2,
+  opacity: 3,
+  rotation: 4,
+  dirty: 5,
+};
+
+let sharedFloatArray: Float32Array | null = null;
+
+function writeSharedStyle(nodeId: number, property: string, value: number) {
+  const propOffset = OFFSETS[property as keyof typeof OFFSETS];
+  if (propOffset !== undefined) {
+    const globalObj = globalThis as any;
+    const buffer = globalObj.__rayactAnimatedStyleBuffer ?? globalObj.__rayactSharedStyleBuffer;
+    if (buffer && !sharedFloatArray) {
+      sharedFloatArray = new Float32Array(buffer);
+    }
+    if (sharedFloatArray) {
+      const index = nodeId * SLAB_SIZE + propOffset;
+      const dirtyIndex = nodeId * SLAB_SIZE + OFFSETS.dirty;
+      sharedFloatArray[index] = value;
+      sharedFloatArray[dirtyIndex] = 1.0;
+    }
+    if (typeof globalObj.__rayactSetAnimatedStyle === 'function') {
+      globalObj.__rayactSetAnimatedStyle(nodeId, { [property]: value });
+    }
+  }
+}
+
+function animatedStyleSnapshot(style: Record<string, unknown>): Record<string, number> {
+  const animated: Record<string, number> = {};
+  for (const key of Object.keys(OFFSETS)) {
+    if (key === 'dirty') continue;
+    const value = style[key];
+    if (typeof value === 'number') animated[key] = value;
+  }
+  return animated;
+}
+
+function registerAnimatedHostNode(node: HostNode, style: Record<string, unknown>): HostNode {
+  const globalObj = globalThis as RayactGlobal;
+  const animated = animatedStyleSnapshot(style);
+  if (Object.keys(animated).length > 0 && typeof globalObj.__rayactRegisterAnimatedNode === 'function') {
+    globalObj.__rayactRegisterAnimatedNode(node.id, animated);
+  }
+  return node;
+}
+
+function flattenStyleValue(style: unknown, isCreate: boolean, nodeId?: number): Record<string, unknown> {
+  if (Array.isArray(style)) {
+    return Object.assign({}, ...style.map(s => flattenStyleValue(s, isCreate, nodeId)));
+  }
+  if (!style || typeof style !== 'object') return {};
+
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(style as Record<string, unknown>)) {
+    if (isSharedValue(value)) {
+      if (isCreate) {
+        result[key] = value.value;
+      }
+    } else if (OFFSETS[key as keyof typeof OFFSETS] !== undefined) {
+      if (isCreate) {
+        result[key] = value;
+      } else if (nodeId !== undefined && typeof value === 'number') {
+        writeSharedStyle(nodeId, key, value);
+      }
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+// React-Native exposes transforms as an ordered array of single-key objects,
+// e.g. [{ translateX: 10 }, { scale: 0.9 }, { rotate: '90deg' }]. The native
+// bridge only reads FLAT style keys (translateX/translateY/scale/rotation), so
+// fold the array into those keys here. Without this, slide/scale animations
+// produce no visible movement (only opacity-based transitions work).
+function parseAngle(value: unknown): number | undefined {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const n = parseFloat(value);
+    if (Number.isNaN(n)) return undefined;
+    return value.trim().endsWith('rad') ? (n * 180) / Math.PI : n;
+  }
+  return undefined;
+}
+
+function flattenTransform(style: Record<string, unknown>, isCreate: boolean, nodeId?: number): void {
+  const t = style.transform;
+  if (!Array.isArray(t)) return;
+  for (const entry of t) {
+    if (!entry || typeof entry !== 'object') continue;
+    for (const [key, raw] of Object.entries(entry as Record<string, unknown>)) {
+      switch (key) {
+        case 'translateX':
+        case 'translateY':
+        case 'scale': {
+          if (isSharedValue(raw)) {
+            if (isCreate) {
+              style[key] = raw.value;
+            }
+          } else if (typeof raw === 'number') {
+            if (isCreate) {
+              style[key] = raw;
+            } else if (nodeId !== undefined) {
+              writeSharedStyle(nodeId, key, raw);
+            }
+          }
+          break;
+        }
+        case 'rotate':
+        case 'rotation': {
+          const keyName = 'rotation';
+          if (isSharedValue(raw)) {
+            if (isCreate) {
+              const deg = parseAngle(raw.value);
+              if (deg !== undefined) style[keyName] = deg;
+            }
+          } else {
+            const deg = parseAngle(raw);
+            if (deg !== undefined) {
+              if (isCreate) {
+                style[keyName] = deg;
+              } else if (nodeId !== undefined) {
+                writeSharedStyle(nodeId, keyName, deg);
+              }
+            }
+          }
+          break;
+        }
+        // Other transform ops (scaleX/scaleY/skew/…) are not yet supported
+        // by the native bridge; ignore rather than forward an unknown key.
+      }
+    }
+  }
+  delete style.transform;
+}
+
+function toStyleProps(props: Record<string, unknown> = {}, isCreate: boolean, nodeId?: number): Record<string, unknown> {
+  // Style numbers are dp-space values. The native raym3 host converts them to
+  // physical pixels only at render/input/raster boundaries.
+  const style = flattenStyleValue(props.style, isCreate, nodeId);
+  flattenTransform(style, isCreate, nodeId);
 
   if (typeof props.className === 'string') {
     style.className = props.className;
@@ -63,14 +209,18 @@ const materialHostTypes = new Set<HostNodeType>([
   'fab',
   'fabMenu',
   'iconButton',
+  'list',
   'loadingIndicator',
   'menu',
+  'menuItem',
   'navigationBar',
   'navigationBarItem',
   'navigationDrawer',
   'navigationRail',
   'progressIndicator',
   'radioButton',
+  'rangeSlider',
+  'search',
   'searchBar',
   'segmentedButton',
   'sideSheet',
@@ -79,8 +229,11 @@ const materialHostTypes = new Set<HostNodeType>([
   'splitButton',
   'switch',
   'tabs',
+  'textField',
+  'timePicker',
   'toolbar',
-  'tooltip'
+  'tooltip',
+  'popover'
 ]);
 
 function materialProps(type: HostNodeType, props: Record<string, unknown>, style: Record<string, unknown>): Record<string, unknown> {
@@ -100,75 +253,76 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
 
   const bridge: HostBridge = {
     createNode(type, props = {}) {
-      const style = toStyleProps(props);
+      const style = toStyleProps(props, true);
 
       switch (type) {
         case 'root':
         case 'view':
-          return asHostNode(requireFunction(native.createView, 'createView')(style), type);
+          return registerAnimatedHostNode(asHostNode(requireFunction(native.createView, 'createView')(style), type), style);
         case 'text': {
           const text = String(props.text ?? props.children ?? '');
-          return asHostNode(requireFunction(native.createText, 'createText')(text, style), type);
+          return registerAnimatedHostNode(asHostNode(requireFunction(native.createText, 'createText')(text, style), type), style);
         }
         case 'button': {
           const label = String(props.label ?? props.text ?? props.children ?? '');
-          return asHostNode(requireFunction(native.createButton, 'createButton')(label, style), type);
+          return registerAnimatedHostNode(asHostNode(requireFunction(native.createButton, 'createButton')(label, style), type), style);
         }
         case 'image':
-          return asHostNode(requireFunction(native.createImage, 'createImage')(resolveImageSource(props.source ?? props.src, native), style), type);
+          return registerAnimatedHostNode(asHostNode(requireFunction(native.createImage, 'createImage')(resolveImageSource(props.source ?? props.src, native), style), type), style);
         case 'icon':
-          return asHostNode(
+          return registerAnimatedHostNode(asHostNode(
             requireFunction(native.createIcon, 'createIcon')(
               String(props.name ?? props.icon ?? ''),
               typeof props.size === 'number' ? props.size : undefined,
               typeof props.color === 'number' || typeof props.color === 'string' ? props.color : undefined,
               style,
-              typeof props.variant === 'string' ? props.variant : undefined
+              typeof props.variant === 'string' ? props.variant : undefined,
+              typeof props.filled === 'boolean' ? props.filled : undefined
             ),
             type
-          );
+          ), style);
         case 'textInput':
-          return asHostNode(
+          return registerAnimatedHostNode(asHostNode(
             requireFunction(native.createTextInput, 'createTextInput')(
               String(props.value ?? props.defaultValue ?? ''),
               { ...style, ...props }
             ),
             type
-          );
+          ), style);
         case 'scrollView':
-          return asHostNode(requireFunction(native.createScrollView, 'createScrollView')({ ...style, ...props }), type);
+          return registerAnimatedHostNode(asHostNode(requireFunction(native.createScrollView, 'createScrollView')({ ...style, ...props }), type), style);
         case 'modal':
-          return asHostNode(requireFunction(native.createModal, 'createModal')({ ...style, ...props }), type);
+          return registerAnimatedHostNode(asHostNode(requireFunction(native.createModal, 'createModal')({ ...style, ...props }), type), style);
         case 'safeArea':
-          return asHostNode(
+          return registerAnimatedHostNode(asHostNode(
             (native.createSafeArea ?? native.createView ?? requireFunction(native.createView, 'createView'))({ ...style, ...props }),
             type
-          );
+          ), style);
         case 'statusBar':
-          return asHostNode(
+          return registerAnimatedHostNode(asHostNode(
             (native.createStatusBar ?? native.createView ?? requireFunction(native.createView, 'createView'))({ ...style, ...props }),
             type
-          );
+          ), style);
         case 'activityIndicator':
-          return asHostNode(requireFunction(native.createActivityIndicator, 'createActivityIndicator')({ ...style, ...props }), type);
+          return registerAnimatedHostNode(asHostNode(requireFunction(native.createActivityIndicator, 'createActivityIndicator')({ ...style, ...props }), type), style);
         case 'avoidKeyboard':
-          return asHostNode(
+          return registerAnimatedHostNode(asHostNode(
             (native.createAvoidKeyboard ?? native.createView ?? requireFunction(native.createView, 'createView'))({ ...style, ...props }),
             type
-          );
+          ), style);
         default:
           if (materialHostTypes.has(type)) {
-            return asHostNode(
+            return registerAnimatedHostNode(asHostNode(
               requireFunction(native.createMaterialComponent, 'createMaterialComponent')(type, materialProps(type, props, style)),
               type
-            );
+            ), style);
           }
           throw new Error(`Unsupported Rayact host node type: ${type}`);
       }
     },
 
     updateNode(node, props) {
-      const style = toStyleProps(props);
+      const style = toStyleProps(props, false, node.id);
       if (materialHostTypes.has(node.type) && typeof native.setMaterialComponentProps === 'function') {
         native.setMaterialComponentProps(node.id, materialProps(node.type, props, style));
       }
@@ -177,12 +331,23 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
         requireFunction(native.setStyle, 'setStyle')(node.id, style);
       }
 
+      if (node.type === 'icon' && typeof native.setIconProps === 'function') {
+        native.setIconProps(
+          node.id,
+          typeof props.size === 'number' ? props.size : undefined,
+          typeof props.color === 'number' || typeof props.color === 'string' ? props.color : undefined,
+          typeof props.variant === 'string' ? props.variant : undefined,
+          typeof props.name === 'string' ? props.name : typeof props.icon === 'string' ? props.icon : undefined,
+          typeof props.filled === 'boolean' ? props.filled : undefined
+        );
+      }
+
       if (node.type === 'text' && ('text' in props || 'children' in props)) {
         requireFunction(native.setText, 'setText')(node.id, String(props.text ?? props.children ?? ''));
       }
 
       if (
-        (node.type === 'button' || materialHostTypes.has(node.type)) &&
+        node.type === 'button' &&
         ('label' in props || 'text' in props || 'title' in props ||
           typeof props.children === 'string' || typeof props.children === 'number')
       ) {
@@ -227,6 +392,10 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
         native.setOnScroll(node.id, handler as ((event: unknown) => void) | null);
       } else if (eventName === 'requestClose' && typeof native.setOnRequestClose === 'function') {
         native.setOnRequestClose(node.id, handler ?? null);
+      } else if (eventName === 'focus' && typeof native.setOnFocus === 'function') {
+        native.setOnFocus(node.id, handler ?? null);
+      } else if (eventName === 'blur' && typeof native.setOnBlur === 'function') {
+        native.setOnBlur(node.id, handler ?? null);
       }
     },
 

@@ -10,8 +10,8 @@
 // surfaces/screens (react-navigation native-stack model).
 //
 // Multi-surface model:
-//   - The first nativeCreateSurface() brings up the EGL context (legacy
-//     SetWindow + InitWindow path). surfaceId 0 is the "boot" surface.
+//   - The first nativeCreateSurface() brings up the graphics context (legacy
+//     SetWindow + InitWindow path). The root surface owns the app's React tree.
 //   - Subsequent nativeCreateSurface() calls allocate additional EGL surfaces
 //     via RcoreAndroidSurface_CreateWindow() and corresponding engine screens
 //     via engineCreateScreen(). Each surface owns ONE EGL window + ONE engine
@@ -32,10 +32,14 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include <unistd.h>   // chdir
 
 #include "../core/engine.hpp"
 #include "../core/config_loader.hpp"
 #include "../desktop/raym3_bridge.hpp"
+#include <raym3/fonts/FontManager.h>
+#include <raym3/v2/Density.h>
+#include <raym3/v2/EmojiFont.h>
 
 extern "C" {
 #include "rcore_android_surface.h"   // RcoreAndroidSurface_* host hooks (from raylib)
@@ -67,16 +71,19 @@ struct Surface {
 
 bool g_engineReady = false;
 bool g_scriptExecuted = false;
+// Real Android display density (DisplayMetrics.density). Stored so safe-area
+// insets arriving as real-dp can be rescaled to layout-dp.
+static float g_realDensity = 1.0f;
 int g_pendingScriptMode = -1;          // 0 = source string, 1 = dev-server URL
 std::string g_pendingScript;
 std::string g_dataPath;                // Activity internalDataPath; used by config loader
 std::map<int, Surface> g_surfaces;     // surfaceId -> Surface
+int g_rootScreenId = 0;                // Stable process root screen; survives Activity/Surface recreation.
 
-// QuickJS + raym3 are single-threaded; each surface has its OWN render thread,
-// so without serialization two threads pump JS into the same context at once →
-// heap corruption (Scudo "invalid chunk state" abort) the moment a second
-// surface appears (i.e. on navigation). All engine work that runs outside the
-// request-new-surface parked window takes this lock.
+// QuickJS + raym3 are single-threaded; the process-level render scheduler calls
+// nativeRenderFrame from one render thread, and host/lifecycle calls may arrive
+// from the main thread. All engine work that runs outside the request-new-
+// surface parked window takes this lock.
 std::mutex g_engineMutex;
 
 // Stored at JNI_OnLoad; the C++ render thread uses it to attach/detach when
@@ -104,6 +111,21 @@ std::string jstr(JNIEnv* env, jstring s) {
     return out;
 }
 
+void setRaym3AndroidDensity(float realDensity, float layoutDensity) {
+    raym3::v2::Density::SetPlatformDensity(realDensity);
+    raym3::v2::Density::SetLayoutDensity(layoutDensity);
+    raym3::FontManager::SetDpiScale(layoutDensity);
+}
+
+float androidLayoutDensityForSurface(ANativeWindow* window, float realDensity) {
+    int surfaceWidth = window ? ANativeWindow_getWidth(window) : 0;
+    // Current Rayact policy: normalize layout width to 390dp so component dp
+    // dimensions remain stable across phones while rasterization uses the
+    // resulting surface px/dp ratio. Keep this explicit until a per-app
+    // density policy is introduced.
+    return (surfaceWidth > 0) ? (float)surfaceWidth / 390.0f : realDensity;
+}
+
 bool executePendingScript() {
     if (g_scriptExecuted || g_pendingScriptMode < 0) return g_scriptExecuted;
     rayact::enginePrepareJSThread();
@@ -124,7 +146,7 @@ bool executePendingScript() {
 // new EGL surface + engine screen, returning the new surfaceId. Called from
 // the render thread when JS invokes __rayactHostRequestNewSurface. Blocks
 // until the host finishes (the host does the UI work on the main thread).
-static jint callIntoHost_RequestNewSurface() {
+static jint callIntoHost_IntMethod(const char* methodName) {
     if (!g_jvm) return 0;
     JNIEnv* env = nullptr;
     bool needDetach = false;
@@ -135,14 +157,14 @@ static jint callIntoHost_RequestNewSurface() {
     } else if (rs != JNI_OK) {
         return 0;
     }
-    jint surfaceId = 0;
+    jint result = 0;
     // Top-level Kotlin functions in package com.rayact.engine are compiled
     // into class com.rayact.engine.RayactEngineKt with static methods.
     jclass cls = env->FindClass("com/rayact/engine/RayactEngineKt");
     if (cls) {
-        jmethodID m = env->GetStaticMethodID(cls, "requestNewSurfaceFromHost", "()I");
-        if (m) surfaceId = env->CallStaticIntMethod(cls, m);
-        else LOGE("RayactEngineKt.requestNewSurfaceFromHost not found");
+        jmethodID m = env->GetStaticMethodID(cls, methodName, "()I");
+        if (m) result = env->CallStaticIntMethod(cls, m);
+        else LOGE("RayactEngineKt.%s not found", methodName);
         env->DeleteLocalRef(cls);
     } else {
         LOGE("com/rayact/engine/RayactEngineKt class not found");
@@ -152,7 +174,72 @@ static jint callIntoHost_RequestNewSurface() {
         env->ExceptionClear();
     }
     if (needDetach) g_jvm->DetachCurrentThread();
-    return surfaceId;
+    return result;
+}
+
+static jint callIntoHost_RequestNewSurface() {
+    return callIntoHost_IntMethod("requestNewSurfaceFromHost");
+}
+
+static jint callIntoHost_TopSurfaceId() {
+    return callIntoHost_IntMethod("topSurfaceIdFromHost");
+}
+
+static jint callIntoHost_RootSurfaceId() {
+    return callIntoHost_IntMethod("rootSurfaceIdFromHost");
+}
+
+static bool attachEnv(JNIEnv** outEnv, bool* outNeedDetach) {
+    if (!g_jvm || !outEnv || !outNeedDetach) return false;
+    *outEnv = nullptr;
+    *outNeedDetach = false;
+    jint rs = g_jvm->GetEnv((void**)outEnv, JNI_VERSION_1_6);
+    if (rs == JNI_EDETACHED) {
+        if (g_jvm->AttachCurrentThread(outEnv, nullptr) != JNI_OK) return false;
+        *outNeedDetach = true;
+        return true;
+    }
+    return rs == JNI_OK;
+}
+
+static void callIntoHost_ReleaseSurface(int surfaceId) {
+    JNIEnv* env = nullptr;
+    bool needDetach = false;
+    if (!attachEnv(&env, &needDetach)) return;
+    jclass cls = env->FindClass("com/rayact/engine/RayactEngineKt");
+    if (cls) {
+        jmethodID m = env->GetStaticMethodID(cls, "releaseSurfaceFromHost", "(I)V");
+        if (m) env->CallStaticVoidMethod(cls, m, (jint)surfaceId);
+        else LOGE("RayactEngineKt.releaseSurfaceFromHost not found");
+        env->DeleteLocalRef(cls);
+    } else {
+        LOGE("com/rayact/engine/RayactEngineKt class not found");
+    }
+    if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); }
+    if (needDetach) g_jvm->DetachCurrentThread();
+}
+
+static void callIntoHost_OrderSurfaces(const int* ids, int count) {
+    if (!ids || count <= 0) return;
+    JNIEnv* env = nullptr;
+    bool needDetach = false;
+    if (!attachEnv(&env, &needDetach)) return;
+    jintArray arr = env->NewIntArray((jsize)count);
+    if (arr) {
+        env->SetIntArrayRegion(arr, 0, (jsize)count, reinterpret_cast<const jint*>(ids));
+        jclass cls = env->FindClass("com/rayact/engine/RayactEngineKt");
+        if (cls) {
+            jmethodID m = env->GetStaticMethodID(cls, "orderSurfacesFromHost", "([I)V");
+            if (m) env->CallStaticVoidMethod(cls, m, arr);
+            else LOGE("RayactEngineKt.orderSurfacesFromHost not found");
+            env->DeleteLocalRef(cls);
+        } else {
+            LOGE("com/rayact/engine/RayactEngineKt class not found");
+        }
+        env->DeleteLocalRef(arr);
+    }
+    if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); }
+    if (needDetach) g_jvm->DetachCurrentThread();
 }
 
 } // namespace
@@ -169,19 +256,102 @@ static jint callIntoHost_RequestNewSurface() {
 // raym3_bridge.cpp's header.
 extern "C" int  rayactJniRequestNewSurface() { return callIntoHost_RequestNewSurface(); }
 extern "C" void rayactJniReleaseSurface(int surfaceId) {
-    // Surface release: tear down the engine screen (id == surfaceId in our model).
-    // The host (Kotlin NavigationHost.pop) has already removed the view and
-    // triggered nativeDestroySurface, but we also expose this so JS can drop the
-    // surface without going through Kotlin (e.g. for hmr / cleanups).
-    if (surfaceId <= 0) return;
-    auto it = g_surfaces.find(surfaceId);
-    if (it == g_surfaces.end()) return;
-    Surface& s = it->second;
-    if (engineGetFocusedScreenId() == surfaceId) enginePopScreen();
-    RcoreAndroidSurface_DestroyWindow(s.windowId); // releases the ANativeWindow ref
-    s.window = nullptr;
-    engineDestroyScreen(surfaceId);
-    g_surfaces.erase(it);
+    callIntoHost_ReleaseSurface(surfaceId);
+}
+extern "C" void rayactJniOrderSurfaces(const int* ids, int count) {
+    callIntoHost_OrderSurfaces(ids, count);
+}
+
+// Pending text updates from Android IME (main thread) drained on render thread.
+struct PendingTextUpdate {
+    std::string text;
+    int cursor = -1;
+};
+static std::mutex g_textUpdateMutex;
+static std::map<int, PendingTextUpdate> g_pendingTextUpdates;
+// IME DONE/Enter requested a blur of the focused field (drained on render thread).
+static std::atomic<bool> g_pendingImeBlur{false};
+
+// Only show keyboard if not already showing for this node.
+static std::atomic<int> g_imeNodeId{-1};
+
+void AndroidKeyboard_ShowForNode(int nodeId) {
+    if (g_imeNodeId.load() == nodeId) return;
+    int prevNode = g_imeNodeId.load();
+    g_imeNodeId.store(nodeId);
+    // Called from render thread which already holds g_engineMutex — no re-lock.
+    std::string value;
+    {
+        auto it = g_nodes.find(nodeId);
+        if (it != g_nodes.end() && it->second->textInput.value)
+            value = *it->second->textInput.value;
+    }
+    JNIEnv* env = nullptr;
+    bool needDetach = false;
+    if (!attachEnv(&env, &needDetach)) return;
+    jclass cls = env->FindClass("com/rayact/engine/RayactEngineKt");
+    if (cls) {
+        const char* method = prevNode >= 0 ? "switchImeFromHost" : "showSoftKeyboardFromHost";
+        const char* sig = "(ILjava/lang/String;)V";
+        jmethodID m = env->GetStaticMethodID(cls, method, sig);
+        if (m) {
+            jstring jVal = env->NewStringUTF(value.c_str());
+            env->CallStaticVoidMethod(cls, m, (jint)nodeId, jVal);
+            env->DeleteLocalRef(jVal);
+        } else {
+            LOGE("RayactEngineKt.%s not found", method);
+        }
+        env->DeleteLocalRef(cls);
+    }
+    if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); }
+    if (needDetach) g_jvm->DetachCurrentThread();
+}
+
+void AndroidKeyboard_Hide() {
+    g_imeNodeId.store(-1);
+    JNIEnv* env = nullptr;
+    bool needDetach = false;
+    if (!attachEnv(&env, &needDetach)) return;
+    jclass cls = env->FindClass("com/rayact/engine/RayactEngineKt");
+    if (cls) {
+        jmethodID m = env->GetStaticMethodID(cls, "hideSoftKeyboardFromHost", "()V");
+        if (m) env->CallStaticVoidMethod(cls, m);
+        env->DeleteLocalRef(cls);
+    }
+    if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); }
+    if (needDetach) g_jvm->DetachCurrentThread();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngine_nativeSetTextInputContent(JNIEnv* env, jclass, jint nodeId, jstring text, jint cursor) {
+    const char* s = env->GetStringUTFChars(text, nullptr);
+    if (!s) return;
+    std::string str(s);
+    env->ReleaseStringUTFChars(text, s);
+    // QuickJS is render-thread-only. Queue the update; drain on render thread.
+    std::lock_guard<std::mutex> lock(g_textUpdateMutex);
+    g_pendingTextUpdates[(int)nodeId] = {std::move(str), (int)cursor};
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngine_nativeBlurTextInput(JNIEnv*, jclass) {
+    g_pendingImeBlur.store(true, std::memory_order_release);
+}
+
+// Render thread → Kotlin: keep the IME InputConnection selection in sync with
+// native caret moves (tap-to-caret on a focused field).
+void AndroidKeyboard_UpdateSelection(int nodeId, int cursor) {
+    if (g_imeNodeId.load() != nodeId) return;
+    JNIEnv* env = nullptr;
+    bool needDetach = false;
+    if (!attachEnv(&env, &needDetach)) return;
+    jclass cls = env->FindClass("com/rayact/engine/RayactEngineKt");
+    if (cls) {
+        jmethodID m = env->GetStaticMethodID(cls, "updateImeSelectionFromHost", "(II)V");
+        if (m) env->CallStaticVoidMethod(cls, m, (jint)nodeId, (jint)cursor);
+    }
+    if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); }
+    if (needDetach) g_jvm->DetachCurrentThread();
 }
 extern "C" int  rayactJniGetRootSurfaceId() {
     if (!g_jvm) return 0;
@@ -257,10 +427,129 @@ extern "C" int rayactJniPopScreen() {
     return top;
 }
 
+// ── Android OS emoji rasterizer ───────────────────────────────────────────
+// Uses android.graphics.Paint + Bitmap to render a UTF-8 emoji cluster at
+// `px` size into an RGBA8 heap buffer. Called from the render thread; attaches
+// the JNI env as needed.
+namespace {
+unsigned char *AndroidRasterizeEmoji(const char *utf8, int px, int *outW, int *outH) {
+    if (!utf8 || px <= 0 || !g_jvm) return nullptr;
+
+    JNIEnv *env = nullptr;
+    bool needDetach = false;
+    jint rs = g_jvm->GetEnv((void **)&env, JNI_VERSION_1_6);
+    if (rs == JNI_EDETACHED) {
+        if (g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) return nullptr;
+        needDetach = true;
+    } else if (rs != JNI_OK) {
+        return nullptr;
+    }
+
+    unsigned char *result = nullptr;
+
+    // android.graphics.Bitmap
+    jclass bitmapClass   = env->FindClass("android/graphics/Bitmap");
+    jclass configClass   = env->FindClass("android/graphics/Bitmap$Config");
+    jclass paintClass    = env->FindClass("android/graphics/Paint");
+    jclass canvasClass   = env->FindClass("android/graphics/Canvas");
+
+    if (!bitmapClass || !configClass || !paintClass || !canvasClass) goto done;
+
+    {
+        // Bitmap.Config.ARGB_8888
+        jfieldID argb8888Field = env->GetStaticFieldID(configClass, "ARGB_8888",
+                                                        "Landroid/graphics/Bitmap$Config;");
+        jobject argb8888 = env->GetStaticObjectField(configClass, argb8888Field);
+
+        // Bitmap.createBitmap(px, px, ARGB_8888)
+        jmethodID createBitmap = env->GetStaticMethodID(bitmapClass, "createBitmap",
+            "(IILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;");
+        jobject bitmap = env->CallStaticObjectMethod(bitmapClass, createBitmap,
+                                                     (jint)px, (jint)px, argb8888);
+        if (!bitmap) goto done;
+
+        // Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG); paint.setTextSize(px * 0.88f)
+        jmethodID paintInit = env->GetMethodID(paintClass, "<init>", "(I)V");
+        jobject paint = env->NewObject(paintClass, paintInit, (jint)1 /*ANTI_ALIAS_FLAG*/);
+        if (!paint) goto done;
+
+        jmethodID setTextSize = env->GetMethodID(paintClass, "setTextSize", "(F)V");
+        env->CallVoidMethod(paint, setTextSize, (jfloat)(px * 0.88f));
+
+        // Canvas canvas = new Canvas(bitmap)
+        jmethodID canvasInit = env->GetMethodID(canvasClass, "<init>",
+                                                 "(Landroid/graphics/Bitmap;)V");
+        jobject canvas = env->NewObject(canvasClass, canvasInit, bitmap);
+        if (!canvas) goto done;
+
+        // canvas.drawText(utf8, px/2 - measured/2, baseline, paint)
+        jstring jtext = env->NewStringUTF(utf8);
+        if (!jtext) goto done;
+
+        jmethodID measureText = env->GetMethodID(paintClass, "measureText",
+                                                  "(Ljava/lang/String;)F");
+        jfloat textW = env->CallFloatMethod(paint, measureText, jtext);
+
+        // Estimate baseline from ascent: roughly 80% of px from top.
+        jfloat x = ((jfloat)px - textW) * 0.5f;
+        jfloat y = (jfloat)px * 0.82f;
+
+        jmethodID drawText = env->GetMethodID(canvasClass, "drawText",
+            "(Ljava/lang/String;FFLandroid/graphics/Paint;)V");
+        env->CallVoidMethod(canvas, drawText, jtext, x, y, paint);
+        env->DeleteLocalRef(jtext);
+
+        // bitmap.copyPixelsToBuffer — use int[] getPixels for simplicity
+        jintArray pixels = env->NewIntArray(px * px);
+        if (!pixels) goto done;
+        jmethodID getPixels = env->GetMethodID(bitmapClass, "getPixels",
+            "([IIIIIII)V");
+        env->CallVoidMethod(bitmap, getPixels, pixels, (jint)0, (jint)px,
+                             (jint)0, (jint)0, (jint)px, (jint)px);
+
+        jint *data = env->GetIntArrayElements(pixels, nullptr);
+        if (!data) goto done;
+
+        // ARGB_8888 → RGBA8 straight alpha
+        std::size_t bytes = (std::size_t)(px * px * 4);
+        result = (unsigned char *)std::malloc(bytes);
+        if (result) {
+            for (int i = 0; i < px * px; ++i) {
+                jint argb = data[i];
+                unsigned char a = (unsigned char)((argb >> 24) & 0xFF);
+                unsigned char r = (unsigned char)((argb >> 16) & 0xFF);
+                unsigned char g2 = (unsigned char)((argb >> 8) & 0xFF);
+                unsigned char b = (unsigned char)(argb & 0xFF);
+                // unpremultiply
+                if (a > 0 && a < 255) {
+                    r = (unsigned char)std::min(255, (int)r * 255 / a);
+                    g2 = (unsigned char)std::min(255, (int)g2 * 255 / a);
+                    b = (unsigned char)std::min(255, (int)b * 255 / a);
+                }
+                result[i * 4 + 0] = r;
+                result[i * 4 + 1] = g2;
+                result[i * 4 + 2] = b;
+                result[i * 4 + 3] = a;
+            }
+            *outW = px;
+            *outH = px;
+        }
+        env->ReleaseIntArrayElements(pixels, data, JNI_ABORT);
+        env->DeleteLocalRef(pixels);
+    }
+
+done:
+    if (needDetach) g_jvm->DetachCurrentThread();
+    return result;
+}
+} // namespace
+
 extern "C" {
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     g_jvm = vm;
+    // Wire OS emoji rasterizer immediately — uses g_jvm which is now set.
+    raym3::v2::EmojiFont::Instance().SetRasterizer(AndroidRasterizeEmoji);
     return JNI_VERSION_1_6;
 }
 
@@ -281,6 +570,9 @@ Java_com_rayact_engine_RayactEngine_nativeCreate(JNIEnv* env, jclass, jstring da
     if (!dp.empty()) {
         g_dataPath = dp;
         RcoreAndroidSurface_SetDataPath(strdup(dp.c_str()));
+        // Set CWD to the app's files directory so relative resource paths
+        // (icon fonts, material_icons.js) resolve without filesystem rewiring.
+        chdir(dp.c_str());
     }
     LOGI("Rayact engine created");
     return JNI_TRUE;
@@ -313,6 +605,43 @@ Java_com_rayact_engine_RayactEngine_nativeCreateSurface(JNIEnv* env, jclass, job
     ANativeWindow* win = ANativeWindow_fromSurface(env, surface);
     if (!win) { LOGE("nativeCreateSurface: ANativeWindow_fromSurface returned null"); return 0; }
 
+    {
+        std::lock_guard<std::mutex> lock(g_engineMutex);
+        int existingRootId = g_rootScreenId > 0 ? g_rootScreenId : callIntoHost_RootSurfaceId();
+        if (g_scriptExecuted && g_surfaces.empty() && existingRootId > 0) {
+            float layoutDensity = androidLayoutDensityForSurface(win, density);
+            g_realDensity = density;
+            engineBindScreenRoot(existingRootId);
+            RcoreAndroidSurface_SetWindow(win);
+            RcoreAndroidSurface_SetDensity(layoutDensity);
+            SetTargetFPS(0);
+            InitWindow(0, 0, "Rayact");
+            if (!IsWindowReady()) {
+                LOGE("nativeCreateSurface: resume InitWindow failed");
+                ANativeWindow_release(win);
+                return 0;
+            }
+            raym3::FontManager::ResetDeviceCache();
+            setRaym3AndroidDensity(density, layoutDensity);
+            raym3::FontManager::Initialize();
+            rayact::engineLoadConfig(g_dataPath.c_str());
+            rayact::engineFinishLoad();
+            int windowId = RcoreAndroidSurface_GetCurrentId();
+            if (windowId <= 0) windowId = 1;
+            Surface s;
+            s.window = win;
+            s.windowId = windowId;
+            s.screenId = existingRootId;
+            s.density = density;
+            s.ownsContext = true;
+            g_surfaces[existingRootId] = s;
+            engineSetScreenStack({existingRootId});
+            LOGI("nativeCreateSurface: resumed root surfaceId=%d windowId=%d",
+                 existingRootId, windowId);
+            return (jint)existingRootId;
+        }
+    }
+
     int screenId = engineCreateScreen();
     if (screenId <= 0) {
         LOGE("nativeCreateSurface: engineCreateScreen failed");
@@ -332,9 +661,11 @@ Java_com_rayact_engine_RayactEngine_nativeCreateSurface(JNIEnv* env, jclass, job
         // surface's screenId rather than the implicit legacy screen 0.
         // Without this the render loop iterates the screen stack (screenId 1+)
         // but the content sits on screen 0 → nothing renders (black).
+        float layoutDensity = androidLayoutDensityForSurface(win, density);
+        g_realDensity = density;
         engineBindScreenRoot(screenId);
         RcoreAndroidSurface_SetWindow(win);
-        RcoreAndroidSurface_SetDensity(density);
+        RcoreAndroidSurface_SetDensity(layoutDensity);
         if (!executePendingScript()) {
             LOGE("nativeCreateSurface: script load failed");
             ANativeWindow_release(win);
@@ -343,13 +674,18 @@ Java_com_rayact_engine_RayactEngine_nativeCreateSurface(JNIEnv* env, jclass, job
         SetTargetFPS(0);
         InitWindow(0, 0, "Rayact");
         if (!IsWindowReady()) { LOGE("nativeCreateSurface: InitWindow failed"); ANativeWindow_release(win); return 0; }
+        setRaym3AndroidDensity(density, layoutDensity);
+        raym3::FontManager::Initialize();
         rayact::engineLoadConfig(g_dataPath.c_str());
         rayact::engineFinishLoad();
         windowId = RcoreAndroidSurface_GetCurrentId();
         if (windowId <= 0) windowId = 1; // raylib legacy path: first surface id is 1
         ownsContext = true;
+        if (g_rootScreenId <= 0) g_rootScreenId = screenId;
     } else {
-        RcoreAndroidSurface_SetDensity(density);
+        float layoutDensity = androidLayoutDensityForSurface(win, density);
+        RcoreAndroidSurface_SetDensity(layoutDensity);
+        setRaym3AndroidDensity(density, layoutDensity);
         windowId = RcoreAndroidSurface_CreateWindow(win);
         if (windowId <= 0) { LOGE("nativeCreateSurface: CreateWindow failed"); ANativeWindow_release(win); return 0; }
     }
@@ -358,12 +694,24 @@ Java_com_rayact_engine_RayactEngine_nativeCreateSurface(JNIEnv* env, jclass, job
     s.window = win;
     s.windowId = windowId;
     s.screenId = screenId;
-    s.density = density;
+    s.density = density;  // real density stored for reference
     s.ownsContext = ownsContext;
     g_surfaces[screenId] = s;
     LOGI("nativeCreateSurface: surfaceId=%d windowId=%d (total=%zu)",
          screenId, windowId, g_surfaces.size());
     return (jint)screenId;
+}
+
+JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngine_nativeSetSafeAreaInsets(
+    JNIEnv*, jclass, jfloat top, jfloat right, jfloat bottom, jfloat left) {
+    std::lock_guard<std::mutex> lock(g_engineMutex);
+    // Insets arrive in real Android dp (px / DisplayMetrics.density).
+    // Rescale to layout-dp (px / layoutDensity) so Yoga allocates the correct space.
+    float layoutDensity = raym3::v2::Density::GetLayoutDensity();
+    float scale = (layoutDensity > 0.0f && g_realDensity > 0.0f)
+                  ? g_realDensity / layoutDensity : 1.0f;
+    setSafeAreaInsets(top * scale, right * scale, bottom * scale, left * scale);
 }
 
 // Destroy an EGL surface + engine screen. Idempotent.
@@ -373,10 +721,14 @@ Java_com_rayact_engine_RayactEngine_nativeDestroySurface(JNIEnv*, jclass, jint s
     auto it = g_surfaces.find(surfaceId);
     if (it == g_surfaces.end()) return;
     Surface& s = it->second;
+    const int hostRootId = callIntoHost_RootSurfaceId();
+    const bool isRootSurface =
+        (surfaceId == g_rootScreenId) || (hostRootId > 0 && surfaceId == hostRootId);
 
     // If this surface is the top of the focus stack, pop it first so the
     // focused screen no longer references a destroyed tree.
-    if (engineGetFocusedScreenId() == surfaceId) {
+    const bool wasFocused = engineGetFocusedScreenId() == surfaceId;
+    if (wasFocused && !isRootSurface) {
         enginePopScreen();
     }
 
@@ -387,8 +739,23 @@ Java_com_rayact_engine_RayactEngine_nativeDestroySurface(JNIEnv*, jclass, jint s
     // Surface.isValid during the SurfaceView teardown. Just drop our pointer.
     RcoreAndroidSurface_DestroyWindow(s.windowId);
     s.window = nullptr;
-    engineDestroyScreen(surfaceId);
     g_surfaces.erase(it);
+    if (isRootSurface) {
+        // Android can destroy and later recreate a SurfaceView's native window
+        // while the Activity is merely backgrounded. The process-level JS
+        // engine and root React tree stay alive, so keep the engine screen and
+        // only detach the transient ANativeWindow. nativeCreateSurface will
+        // bind the next window back to this same screen id on resume.
+        engineSetScreenStack({surfaceId});
+    } else {
+        engineDestroyScreen(surfaceId);
+    }
+    if (wasFocused && !isRootSurface) {
+        int top = callIntoHost_TopSurfaceId();
+        std::vector<int> ids;
+        if (top > 0 && g_surfaces.count(top)) ids.push_back(top);
+        engineSetScreenStack(ids);
+    }
     LOGI("nativeDestroySurface: surfaceId=%d (remaining=%zu)", surfaceId, g_surfaces.size());
 }
 
@@ -424,15 +791,17 @@ Java_com_rayact_engine_RayactEngine_nativeGetFocusedSurfaceId(JNIEnv*, jclass) {
 // we debounce by frame id so the engine only renders once per vsync.
 static int64_t g_lastRenderFrameNanos = 0;
 
-JNIEXPORT void JNICALL
-Java_com_rayact_engine_RayactEngine_nativeRenderFrame(JNIEnv*, jclass) {
+JNIEXPORT jboolean JNICALL
+Java_com_rayact_engine_RayactEngine_nativeRenderFrame(JNIEnv*, jclass,
+                                                      jlong frameTimeNanos,
+                                                      jlong deltaNanos) {
+    (void)frameTimeNanos;
+    (void)deltaNanos;
     std::lock_guard<std::mutex> lock(g_engineMutex);
-    if (g_surfaces.empty()) return;
+    if (g_surfaces.empty()) return JNI_FALSE;
 
-    // Debounce: only the first call per frame (within 1ms of the last) does
-    // the actual work. Other surface render threads are no-ops.
     int64_t now = RcoreAndroidSurface_NowNanos();
-    if (now - g_lastRenderFrameNanos < 1000000) return; // <1ms since last
+    if (now - g_lastRenderFrameNanos < 1000000) return JNI_FALSE;
     g_lastRenderFrameNanos = now;
 
     // The initial JS_Eval + React scheduling runs on the UI thread (surfaceCreated),
@@ -451,6 +820,22 @@ Java_com_rayact_engine_RayactEngine_nativeRenderFrame(JNIEnv*, jclass) {
     // (newest-first) and consumes the event if any returns true; otherwise
     // it falls back to finishing the Activity. Done under g_engineMutex so
     // a back press can't race a JS pump / setRoot.
+    // Drain IME text updates posted by the main thread.
+    {
+        std::map<int, PendingTextUpdate> updates;
+        {
+            std::lock_guard<std::mutex> tlock(g_textUpdateMutex);
+            updates.swap(g_pendingTextUpdates);
+        }
+        for (auto& [nodeId, update] : updates) {
+            rayactSetTextInputContent(nodeId, update.text.c_str(), update.cursor);
+        }
+    }
+
+    if (g_pendingImeBlur.exchange(false, std::memory_order_acq_rel)) {
+        rayactBlurFocusedTextInput();
+    }
+
     if (g_pendingBackPress.exchange(false, std::memory_order_acq_rel)) {
         bool exitApp = g_exitAppRequested.exchange(false, std::memory_order_acq_rel);
         if (exitApp) {
@@ -518,18 +903,21 @@ Java_com_rayact_engine_RayactEngine_nativeRenderFrame(JNIEnv*, jclass) {
     }
 
     // Snapshot the visible-screen list in z-order (bottom→top) so the
-    // engine's per-screen state (g_root swap) is observed cleanly.
+    // engine's per-screen state (g_root swap) is observed cleanly. The top
+    // SurfaceView can be focused before React has committed its sub-root, so
+    // lower surfaces still need to keep their last valid visual frame during
+    // the enter transition. Input is still gated to the focused screen.
     std::vector<int> ordered;
     ordered.reserve(g_surfaces.size());
     engineForEachVisibleScreen([&](int id, const raym3::v2::NodePtr&) {
         if (g_surfaces.count(id)) ordered.push_back(id);
     });
-    if (ordered.empty()) return;
+    if (ordered.empty()) return JNI_FALSE;
 
-    // Per-surface bind → render pass → swap. The engine does layout, render,
-    // and input dispatch (only on the focused screen). Each pass binds the
-    // right EGL window first, and swaps it after, so the on-screen result
-    // is the composited stack (back-to-front).
+    // Per-surface bind → render pass → swap. Each SurfaceView owns one Android
+    // native window and one engine screen; Android composites the windows in
+    // ViewGroup z-order. Render only the matching screen into the bound window
+    // and consume queued touch only on the focused surface.
     for (int id : ordered) {
         auto& s = g_surfaces[id];
         RcoreAndroidSurface_BindWindow(s.windowId);
@@ -539,9 +927,10 @@ Java_com_rayact_engine_RayactEngine_nativeRenderFrame(JNIEnv*, jclass) {
         int w = s.window ? ANativeWindow_getWidth(s.window) : 0;
         int h = s.window ? ANativeWindow_getHeight(s.window) : 0;
         if (w <= 0 || h <= 0) { w = GetRenderWidth(); h = GetRenderHeight(); }
-        rayact::engineRenderFrameAndroid(w, h);
+        rayact::engineRenderFrameAndroid(id, w, h);
         RcoreAndroidSurface_SwapWindow();
     }
+    return rayact::engineNeedsAnotherFrame() ? JNI_TRUE : JNI_FALSE;
 }
 
 // Touch event from the UI thread. action: 0=down 1=up 2=move (RCORE_AS_TOUCH_*).
@@ -618,6 +1007,7 @@ Java_com_rayact_engine_RayactEngine_nativeDestroy(JNIEnv*, jclass) {
     g_scriptExecuted = false;
     g_pendingScriptMode = -1;
     g_pendingScript.clear();
+    g_rootScreenId = 0;
 }
 
 } // extern "C"

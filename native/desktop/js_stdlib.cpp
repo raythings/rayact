@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstdio>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -245,28 +246,54 @@ static JSValue JS_clearInterval(JSContext* ctx, JSValue, int argc, JSValueConst*
 
 // ─── requestAnimationFrame ───────────────────────────────────────────────────
 
-static std::vector<JSValue> s_rafQueue;
+struct RafCallback {
+    int id;
+    JSValue callback;
+};
+
+static std::vector<RafCallback> s_rafQueue;
+static std::set<int> s_cancelledRafIds;
 static int s_nextRafId = 1;
 
 static JSValue JS_requestAnimationFrame(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (argc < 1 || !JS_IsFunction(ctx, argv[0]))
         return JS_ThrowTypeError(ctx, "requestAnimationFrame: expected function");
-    s_rafQueue.push_back(JS_DupValue(ctx, argv[0]));
-    return JS_NewInt32(ctx, s_nextRafId++);
+    int id = s_nextRafId++;
+    s_rafQueue.push_back({id, JS_DupValue(ctx, argv[0])});
+    return JS_NewInt32(ctx, id);
 }
 
-static JSValue JS_cancelAnimationFrame(JSContext* ctx, JSValue, int, JSValueConst*) {
+static JSValue JS_cancelAnimationFrame(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    int32_t id = 0;
+    JS_ToInt32(ctx, &id, argv[0]);
+    if (id <= 0) return JS_UNDEFINED;
+    s_cancelledRafIds.insert(id);
+    for (auto it = s_rafQueue.begin(); it != s_rafQueue.end();) {
+        if (it->id == id) {
+            JS_FreeValue(ctx, it->callback);
+            it = s_rafQueue.erase(it);
+        } else {
+            ++it;
+        }
+    }
     return JS_UNDEFINED;
 }
 
+bool hasPendingAnimationFrames() { return !s_rafQueue.empty(); }
+
 void tickAnimationFrames(JSContext* ctx) {
     if (s_rafQueue.empty()) return;
-    std::vector<JSValue> callbacks;
+    std::vector<RafCallback> callbacks;
     callbacks.swap(s_rafQueue);
     double ts = nowMs();
     JSValue tsVal = JS_NewFloat64(ctx, ts);
-    for (JSValue cb : callbacks) {
-        JSValue result = JS_Call(ctx, cb, JS_UNDEFINED, 1, &tsVal);
+    for (RafCallback& raf : callbacks) {
+        if (s_cancelledRafIds.erase(raf.id) > 0) {
+            JS_FreeValue(ctx, raf.callback);
+            continue;
+        }
+        JSValue result = JS_Call(ctx, raf.callback, JS_UNDEFINED, 1, &tsVal);
         if (JS_IsException(result)) {
             JSValue exc = JS_GetException(ctx);
             const char* s = JS_ToCString(ctx, exc);
@@ -275,7 +302,7 @@ void tickAnimationFrames(JSContext* ctx) {
             JS_FreeValue(ctx, exc);
         }
         JS_FreeValue(ctx, result);
-        JS_FreeValue(ctx, cb);
+        JS_FreeValue(ctx, raf.callback);
     }
     JS_FreeValue(ctx, tsVal);
 }
@@ -578,6 +605,9 @@ void registerJSStdlib(JSContext* ctx) {
 void cleanupJSStdlib(JSContext* ctx) {
     for (auto& t : s_timers) JS_FreeValue(ctx, t.callback);
     s_timers.clear();
+    for (auto& raf : s_rafQueue) JS_FreeValue(ctx, raf.callback);
+    s_rafQueue.clear();
+    s_cancelledRafIds.clear();
     s_consoleTimes.clear();
     s_consoleCounts.clear();
     s_groupDepth = 0;

@@ -55,13 +55,13 @@ void engineFinishLoad();
 //     and invoke the JS frame-update callback.
 //   - engineRenderFrame(w,h): draw the current surface's raym3 tree (or the
 //     legacy immediate-mode shapes) into the bound GL surface at size w x h.
-//   - engineRenderFrameAndroid(w,h): multi-surface render — caller must
-//     bind the right EGL window for each visible screen before/after each
-//     per-screen pass (raylib multi-surface EGL: RcoreAndroidSurface_BindWindow
-//     + SwapWindow). Desktop single-surface code path uses engineRenderFrame().
+//   - engineRenderFrameAndroid(screenId,w,h): Android multi-surface render for
+//     the already-bound EGL window that corresponds to screenId. The caller
+//     binds/swaps each visible SurfaceView window; Android composites them.
 void enginePumpJS();
 void engineRenderFrame(int width, int height);
-void engineRenderFrameAndroid(int width, int height);
+void engineRenderFrameAndroid(int screenId, int width, int height);
+bool engineNeedsAnotherFrame();
 
 // Android SurfaceView touches arrive on the UI thread. Queue the primary
 // pointer here so the render thread can dispatch press handlers on release.

@@ -45,7 +45,8 @@ set(RAYLIB_SRC
     ${RAYLIB_DIR}/src/raudio.c
 )
 
-set(RAYLIB_DEFS PLATFORM_ANDROID_SURFACE ${GLES3})
+set(RAYLIB_DEFS PLATFORM_ANDROID_SURFACE ${GLES3}
+    RL_DEFAULT_BATCH_BUFFER_ELEMENTS=8192)
 set(RAYLIB_LIBS EGL GLESv3)
 
 if (RAYACT_ANDROID_USE_RLVK)
@@ -89,6 +90,9 @@ set(RAYM3_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(RAYM3_USE_YOGA ON CACHE BOOL "" FORCE)
 set(RAYM3_USE_INPUT_LAYERS 0 CACHE BOOL "" FORCE)  # raw-test: v2::Render draws immediately (no deferred RenderQueue)
 set(YOGA_DIR "${RAYM3_DIR}/build-v2-yoga2/_deps/yoga-src" CACHE PATH "" FORCE)
+# Bake SVG icons + Roboto fonts into the .so — no filesystem access needed at runtime.
+set(RAYM3_EMBED_RESOURCES ON CACHE BOOL "" FORCE)
+set(RAYM3_EMBED_ALL_ICONS  ON CACHE BOOL "" FORCE)
 add_subdirectory(${RAYM3_DIR} ${CMAKE_BINARY_DIR}/raym3 EXCLUDE_FROM_ALL)
 
 if (RAYACT_ANDROID_USE_RLVK)
@@ -116,6 +120,8 @@ set(ENGINE_SRC
     ${RAYACT}/native/desktop/color_parse.cpp
     ${RAYACT}/native/desktop/theme_bridge.cpp
     ${RAYACT}/native/desktop/main.cpp
+    ${RAYACT}/native/desktop/engine_js.cpp
+    ${RAYACT}/native/desktop/engine_render.cpp
     ${RAYACT}/native/desktop/quickjs_bridge.cpp
     ${RAYACT}/native/desktop/raylib_bridge.cpp
     ${RAYACT}/native/desktop/raym3_bridge.cpp
@@ -138,6 +144,7 @@ endif()
 # to re-enable. Default is OFF so the app surface is the actual product.
 target_compile_definitions(rayact PRIVATE
     RAYACT_ANDROID ${GLES3}
+    RL_DEFAULT_BATCH_BUFFER_ELEMENTS=8192
     $<$<BOOL:${RAYACT_ANDROID_3D_SMOKE}>:RAYACT_ANDROID_3D_SMOKE>
     $<$<NOT:$<BOOL:${RAYACT_ANDROID_FULL}>>:RAYACT_NO_NET RAYACT_NO_WORKERS RAYACT_NO_TS>
 )

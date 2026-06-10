@@ -29,14 +29,18 @@ export type RayactElementType =
   | 'Fab'
   | 'FabMenu'
   | 'IconButton'
+  | 'MaterialList'
   | 'LoadingIndicator'
   | 'Menu'
+  | 'MenuItem'
   | 'NavigationBar'
   | 'NavigationBarItem'
   | 'NavigationDrawer'
   | 'NavigationRail'
   | 'ProgressIndicator'
   | 'RadioButton'
+  | 'RangeSlider'
+  | 'Search'
   | 'SearchBar'
   | 'SegmentedButton'
   | 'SideSheet'
@@ -45,8 +49,11 @@ export type RayactElementType =
   | 'SplitButton'
   | 'Switch'
   | 'Tabs'
+  | 'TextField'
+  | 'TimePicker'
   | 'Toolbar'
   | 'Tooltip'
+  | 'Popover'
   | HostNodeType;
 
 export interface RayactHostInstance {
@@ -78,16 +85,24 @@ export interface RayactRoot {
   unmount(): void;
 }
 
+// Numeric style values are raym3 layout dp, not physical pixels. Native hosts
+// convert to/from pixels only at render, font/icon raster, safe-area, and input
+// boundaries.
 export type Style = Record<string, unknown>;
 export type StyleProp = Style | null | false | undefined | StyleProp[];
 
 export type ColorValue = number | string;
 
 export interface BaseProps {
+  ref?: React.Ref<any>;
   children?: React.ReactNode;
   className?: string;
   style?: StyleProp;
   zIndex?: number;
+  /** When true, this node's layout box blocks input to content painted underneath. */
+  capturesInput?: boolean;
+  /** CSS pointer-events. Use 'none' to let taps pass through this node. */
+  pointerEvents?: 'none' | 'auto';
   onPress?: () => void;
   onClick?: () => void;
   /**
@@ -119,7 +134,8 @@ export interface IconProps extends BaseProps {
   icon?: string;
   size?: number;
   color?: ColorValue;
-  variant?: 'filled' | 'outlined';
+  variant?: 'outlined' | 'rounded' | 'sharp';
+  filled?: boolean;
 }
 
 export interface TextInputProps extends BaseProps {
@@ -130,8 +146,10 @@ export interface TextInputProps extends BaseProps {
   readOnly?: boolean;
   disabled?: boolean;
   onChangeText?: (value: string) => void;
+  onFocus?: (e?: unknown) => void;
+  onBlur?: (e?: unknown) => void;
   // M3 text-field rendering controls (used e.g. by SearchBar for a borderless field).
-  variant?: 'filled' | 'outlined';
+  variant?: 'filled' | 'outlined' | 'underline';
   drawOutline?: boolean;
   drawBackground?: boolean;
   // When false, the field paints no own hover/focus highlight; the parent (e.g.
@@ -145,6 +163,7 @@ export interface SliderProps extends BaseProps {
   max?: number;
   step?: number;
   disabled?: boolean;
+  size?: 'xs' | 's' | 'm' | 'l' | 'xl';
   onValueChange?: (value: number) => void;
 }
 
@@ -200,6 +219,12 @@ export interface MaterialComponentProps extends BaseProps {
   open?: boolean;
   layout?: 'row' | 'column';
   progress?: number;
+  startProgress?: number;
+  endProgress?: number;
+  start?: number;
+  end?: number;
+  lower?: number;
+  upper?: number;
   wavelength?: number;
 }
 
@@ -219,6 +244,35 @@ export interface SearchBarProps extends BaseProps {
   // Secondary styles applied ONLY when the corresponding slot is an <Icon>.
   leadingStyle?: StyleProp;
   trailingStyle?: StyleProp;
+}
+
+export interface DatePickerProps extends BaseProps {
+  open?: boolean;
+  value?: string; // e.g. "YYYY-MM-DD"
+  label?: string;
+  /** 'modal' (default) shows a centered overlay dialog.
+   *  'docked' / 'input' shows an outlined text field with a dropdown calendar. */
+  variant?: 'modal' | 'docked' | 'input';
+  onChange?: (date: string) => void;
+  onRequestClose?: () => void;
+  onDismiss?: () => void;
+}
+
+export interface TimePickerProps extends BaseProps {
+  open?: boolean;
+  value?: string; // e.g. "HH:MM" (24h)
+  /** 'modal' (default) | 'input' */
+  variant?: 'modal' | 'input';
+  onChange?: (time: string) => void;
+  onRequestClose?: () => void;
+  onDismiss?: () => void;
+}
+
+export interface PopoverProps extends MaterialComponentProps {
+  anchor?: number;
+  placement?: 'auto' | 'below' | 'above';
+  /** Full-screen backdrop scrim behind the popover (dismissible via onRequestClose). */
+  scrim?: boolean;
 }
 
 declare global {
@@ -244,7 +298,7 @@ declare global {
       Carousel: MaterialComponentProps;
       Checkbox: MaterialComponentProps;
       Chip: MaterialComponentProps;
-      DatePicker: MaterialComponentProps;
+      DatePicker: DatePickerProps;
       Dialog: MaterialComponentProps;
       Divider: MaterialComponentProps;
       ExtendedFab: MaterialComponentProps;
@@ -267,8 +321,10 @@ declare global {
       SplitButton: MaterialComponentProps;
       Switch: MaterialComponentProps;
       Tabs: MaterialComponentProps;
+      TimePicker: TimePickerProps;
       Toolbar: MaterialComponentProps;
       Tooltip: MaterialComponentProps;
+      Popover: PopoverProps;
       'rayact-view': BaseProps;
       'rayact-text': TextProps;
       'rayact-button': ButtonProps;
@@ -294,7 +350,7 @@ declare global {
       'rayact-carousel': MaterialComponentProps;
       'rayact-checkbox': MaterialComponentProps;
       'rayact-chip': MaterialComponentProps;
-      'rayact-date-picker': MaterialComponentProps;
+      'rayact-date-picker': DatePickerProps;
       'rayact-dialog': MaterialComponentProps;
       'rayact-divider': MaterialComponentProps;
       'rayact-extended-fab': MaterialComponentProps;
@@ -303,6 +359,7 @@ declare global {
       'rayact-icon-button': MaterialComponentProps;
       'rayact-loading-indicator': MaterialComponentProps;
       'rayact-menu': MaterialComponentProps;
+      'rayact-menu-item': MaterialComponentProps;
       'rayact-navigation-bar': MaterialComponentProps;
       'rayact-navigation-bar-item': MaterialComponentProps;
       'rayact-navigation-drawer': MaterialComponentProps;
@@ -317,8 +374,10 @@ declare global {
       'rayact-split-button': MaterialComponentProps;
       'rayact-switch': MaterialComponentProps;
       'rayact-tabs': MaterialComponentProps;
+      'rayact-time-picker': TimePickerProps;
       'rayact-toolbar': MaterialComponentProps;
       'rayact-tooltip': MaterialComponentProps;
+      'rayact-popover': PopoverProps;
     }
   }
 }

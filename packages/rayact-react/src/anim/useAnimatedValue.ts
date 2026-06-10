@@ -6,6 +6,14 @@ export interface AnimatedValueOptions {
   duration?: number;
   easing?: EasingFn;
   /**
+   * Initial value to start from on first mount. When it differs from `target`,
+   * the animation runs from `from` → `target` on mount. Defaults to `target`
+   * (no entry animation). Used by transitions that must animate in from an
+   * off-screen/hidden state (e.g. a pushed screen starts at progress 0 and
+   * animates to 1).
+   */
+  from?: number;
+  /**
    * Fired when the animation reaches its target (t >= 1) — i.e. the value
    * has settled. Used by the navigation system to drive lifecycle events
    * (deferred release, engine-stack trim) exactly when the user sees the
@@ -21,13 +29,14 @@ export function useAnimatedValue(
   target: number,
   options: AnimatedValueOptions = {}
 ): number {
-  const { duration = 300, easing = easeInOutCubic, onSettled } = options;
+  const { duration = 300, easing = easeInOutCubic, onSettled, from } = options;
+  const initial = from ?? target;
 
-  const [value, setValue] = React.useState(target);
-  const valueRef = React.useRef(target);
+  const [value, setValue] = React.useState(initial);
+  const valueRef = React.useRef(initial);
   const frameRef = React.useRef<number | null>(null);
   const startRef = React.useRef<number | null>(null);
-  const fromRef = React.useRef(target);
+  const fromRef = React.useRef(initial);
   // Keep the latest onSettled in a ref so the step closure (built per
   // effect run) always sees the current callback without re-running the
   // effect when the consumer swaps the function reference.
