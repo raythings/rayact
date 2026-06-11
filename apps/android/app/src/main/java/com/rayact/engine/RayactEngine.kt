@@ -1,5 +1,6 @@
 package com.rayact.engine
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.view.Surface
@@ -50,6 +51,10 @@ object RayactEngine {
     fun setSafeAreaInsets(top: Float, right: Float, bottom: Float, left: Float) =
         nativeSetSafeAreaInsets(top, right, bottom, left)
 
+    /** Report IME keyboard geometry (height in dp above the nav bar). */
+    fun setKeyboardInsets(heightDp: Float, visible: Boolean, durationMs: Float) =
+        nativeSetKeyboardInsets(heightDp, visible, durationMs)
+
     fun destroySurface(surfaceId: Int) = nativeDestroySurface(surfaceId)
 
     /** Push a surface to the top of the focus stack. */
@@ -66,6 +71,7 @@ object RayactEngine {
     external fun nativeLoadScript(mode: Int, arg: String): Boolean
     external fun nativeCreateSurface(surface: Surface, density: Float): Int
     external fun nativeSetSafeAreaInsets(top: Float, right: Float, bottom: Float, left: Float)
+    external fun nativeSetKeyboardInsets(heightDp: Float, visible: Boolean, durationMs: Float)
     external fun nativeDestroySurface(surfaceId: Int)
     external fun nativeRequestNewSurface(): Int
     external fun nativePushSurface(surfaceId: Int)
@@ -73,6 +79,10 @@ object RayactEngine {
     external fun nativeGetFocusedSurfaceId(): Int
     /** Render one vsync-aligned frame. Returns true when another frame is needed (animations/momentum). */
     external fun nativeRenderFrame(frameTimeNanos: Long, deltaNanos: Long): Boolean
+    external fun nativeNextJSTimerDelayMs(): Float
+    external fun nativePushExternalViewFrame(nodeId: Int, buffer: android.hardware.HardwareBuffer)
+    external fun nativeExternalViewTextChanged(nodeId: Int, text: String)
+    external fun nativeSetExternalViewInsets(nodeId: Int, l: Float, t: Float, r: Float, b: Float)
     external fun nativeTouch(action: Int, id: Int, x: Float, y: Float)
     external fun nativeSurfaceDestroyed()
     external fun nativeDestroy()
@@ -86,9 +96,15 @@ object RayactEngine {
     /** JS-driven engine z-order trim. Replaces g_screenStack with the
      *  supplied ids (bottom→top). Idempotent; root screen preserved. */
     external fun nativeSetScreenStack(ids: IntArray)
-    /** Called from Android main thread when soft-keyboard text changes.
-     *  cursor is the IME selection end (-1 = caret at end). */
-    external fun nativeSetTextInputContent(nodeId: Int, text: String, cursor: Int)
+    /** Called from Android main thread when soft-keyboard text changes. */
+    external fun nativeSetTextInputContent(
+        nodeId: Int,
+        text: String,
+        selectionStart: Int,
+        selectionEnd: Int,
+        composingStart: Int,
+        composingEnd: Int
+    )
     /** IME DONE/Enter — blur the focused native field on the render thread. */
     external fun nativeBlurTextInput()
     /** System hid the IME without a native blur — clear JNI ime node id only. */
@@ -129,18 +145,32 @@ fun orderSurfacesFromHost(surfaceIds: IntArray): Unit = RayactHostRegistry.order
 fun finishActivityFromHost(): Unit = RayactHostRegistry.finishActivityFromHost()
 
 // Reverse-call from C++ onFocus lambda — show keyboard for a specific TextInput node.
-fun showSoftKeyboardFromHost(nodeId: Int, value: String) {
+fun showSoftKeyboardFromHost(
+    nodeId: Int,
+    value: String,
+    inputType: String = "text",
+    autocorrect: Boolean = false,
+    secure: Boolean = false,
+    imeAction: String = "done"
+) {
     val view = RayactHostRegistry.imeView ?: return
     Handler(Looper.getMainLooper()).post {
-        view.setupForIme(nodeId, value)
+        view.setupForIme(nodeId, value, inputType, autocorrect, secure, imeAction)
     }
 }
 
 // Reverse-call when focus moves between TextInputs — retarget IME without hiding.
-fun switchImeFromHost(nodeId: Int, value: String) {
+fun switchImeFromHost(
+    nodeId: Int,
+    value: String,
+    inputType: String = "text",
+    autocorrect: Boolean = false,
+    secure: Boolean = false,
+    imeAction: String = "done"
+) {
     val view = RayactHostRegistry.imeView ?: return
     Handler(Looper.getMainLooper()).post {
-        view.switchIme(nodeId, value)
+        view.switchIme(nodeId, value, inputType, autocorrect, secure, imeAction)
     }
 }
 
@@ -152,11 +182,47 @@ fun hideSoftKeyboardFromHost() {
     }
 }
 
-// Reverse-call from C++ when a tap moves the caret on the focused field —
-// keep the IME InputConnection selection in sync.
-fun updateImeSelectionFromHost(nodeId: Int, cursor: Int) {
+// Reverse-call from C++ when the focused field changes editing state.
+fun updateImeStateFromHost(
+    nodeId: Int,
+    selectionStart: Int,
+    selectionEnd: Int,
+    composingStart: Int,
+    composingEnd: Int,
+    text: String?
+) {
     val view = RayactHostRegistry.imeView ?: return
     Handler(Looper.getMainLooper()).post {
-        view.updateImeSelection(nodeId, cursor)
+        view.updateImeState(
+            nodeId,
+            text,
+            selectionStart,
+            selectionEnd,
+            composingStart,
+            composingEnd
+        )
+    }
+}
+
+fun copyToClipboardFromHost(text: String) {
+    val view = RayactHostRegistry.imeView ?: return
+    Handler(Looper.getMainLooper()).post {
+        val clipboard = view.context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+        clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("rayact", text))
+    }
+}
+
+fun readClipboardFromHost(): String {
+    val view = RayactHostRegistry.imeView ?: return ""
+    val clipboard = view.context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+    val clip = clipboard?.primaryClip ?: return ""
+    if (clip.itemCount <= 0) return ""
+    return clip.getItemAt(0).coerceToText(view.context)?.toString().orEmpty()
+}
+
+fun performHapticFeedbackFromHost() {
+    val view = RayactHostRegistry.imeView ?: return
+    Handler(Looper.getMainLooper()).post {
+        view.performHapticFeedback(android.view.HapticFeedbackConstants.TEXT_HANDLE_MOVE)
     }
 }

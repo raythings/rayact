@@ -8,10 +8,10 @@ export type HostNodeType =
   | 'textInput'
   | 'scrollView'
   | 'modal'
+  | 'externalView'
   | 'safeArea'
   | 'statusBar'
   | 'activityIndicator'
-  | 'avoidKeyboard'
   | 'appBar'
   | 'badge'
   | 'banner'
@@ -149,6 +149,8 @@ export interface RayactGlobal {
   createTextInput?: (value: string, props?: Record<string, unknown>) => number;
   createScrollView?: (props?: Record<string, unknown>) => number;
   createModal?: (props?: Record<string, unknown>) => number;
+  createExternalView?: (kind: string, props?: Record<string, unknown>) => number;
+  setExternalViewProps?: (nodeId: number, props: Record<string, unknown>) => void;
   createSafeArea?: (props?: Record<string, unknown>) => number;
   createStatusBar?: (props?: Record<string, unknown>) => number;
   createActivityIndicator?: (props?: Record<string, unknown>) => number;

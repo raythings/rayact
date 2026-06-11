@@ -1,6 +1,7 @@
 import React from 'react';
 import type {
   ActivityIndicatorProps,
+  AvoidKeyboardProps,
   BaseProps,
   BadgeProps,
   ButtonProps,
@@ -19,6 +20,8 @@ import type {
   TimePickerProps
 } from './types';
 import { useTheme } from './theme/theming';
+import { useKeyboard } from './hooks/useKeyboard';
+import { useSafeAreaInsets } from './hooks/useSafeAreaInsets';
 
 const searchIconSlotStyle = { width: 24, height: 24 };
 
@@ -92,8 +95,107 @@ export function ActivityIndicator(props: ActivityIndicatorProps): React.ReactEle
   return React.createElement('rayact-activity-indicator', props);
 }
 
-export function AvoidKeyboard(props: BaseProps): React.ReactElement {
-  return React.createElement('rayact-avoid-keyboard', props);
+export interface ExternalViewProps extends BaseProps {
+  /** Producer kind: 'stub' (animated test pattern), 'textfield', ... */
+  kind?: string;
+}
+
+/**
+ * A node whose content is produced by a platform-native view and composited
+ * as a texture inside the scene (platform-view system). Producers: 'stub'
+ * (animated test pattern), 'textfield' (native EditText / NSTextField).
+ */
+export function ExternalView(props: ExternalViewProps): React.ReactElement {
+  return React.createElement('rayact-external-view', props);
+}
+
+export interface NativeTextInputProps extends BaseProps {
+  value?: string;
+  placeholder?: string;
+  /** 'text' | 'email' | 'number' | 'phone' | 'password' | 'multiline' */
+  inputType?: string;
+  autocorrect?: boolean;
+  secure?: boolean;
+  imeAction?: string;
+  onChangeText?: (text: string) => void;
+}
+
+/**
+ * An undecorated text field on the framework-rendered raym3 path (Flutter
+ * model: raym3 draws text/caret/selection/composing; the platform only
+ * proxies the IME — InputConnection on Android, NSTextInputClient on macOS).
+ * Single-line; placeholder/inputType/secure/imeAction apply at create time.
+ */
+export function NativeTextInput(props: NativeTextInputProps): React.ReactElement {
+  const { style, secure, inputType, ...rest } = props;
+  return React.createElement('rayact-text-input', {
+    ...rest,
+    inputType,
+    secure: !!secure,
+    // raym3 masks via secureTextEntry→passwordMode; honor both spellings.
+    secureTextEntry: !!secure || inputType === 'password',
+    drawBackground: false,
+    drawOutline: false,
+    drawStateLayer: false,
+    style: [{ height: 48 }, style],
+  });
+}
+
+const AVOID_KEYBOARD_PADDING_CLASS = 'rayact-AvoidKeyboard_paddingTransition';
+const AVOID_KEYBOARD_POSITION_CLASS = 'rayact-AvoidKeyboard_positionTransition';
+
+export function AvoidKeyboard(props: AvoidKeyboardProps): React.ReactElement {
+  const {
+    children,
+    style,
+    behavior = 'position',
+    animate = true,
+    className,
+    ...rest
+  } = props;
+  const keyboard = useKeyboard();
+  const insets = useSafeAreaInsets();
+
+  const offset =
+    keyboard.visible && keyboard.height > 0
+      ? Math.round(keyboard.height + insets.bottom)
+      : 0;
+
+  const duration = keyboard.duration > 0 ? keyboard.duration : 250;
+  const paddingTransition = animate && behavior === 'padding';
+  const positionTransition = animate && behavior === 'position';
+  const mergedClassName = [
+    paddingTransition ? AVOID_KEYBOARD_PADDING_CLASS : undefined,
+    positionTransition ? AVOID_KEYBOARD_POSITION_CLASS : undefined,
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ') || undefined;
+
+  const offsetStyle = React.useMemo(() => {
+    // Always emit explicit offset values: native setStyle merges, so omitting
+    // a key after it was set would leave the stale keyboard offset applied.
+    const s: Record<string, unknown> = {};
+    if (behavior === 'padding') {
+      s.marginBottom = offset;
+    } else {
+      if (offset > 0) s.position = 'relative';
+      s.bottom = offset;
+    }
+    if (animate && offset > 0) s.transitionDurationMs = duration;
+    else if (!animate) s.transition = 'none';
+    return s;
+  }, [behavior, offset, animate, duration]);
+
+  return React.createElement(
+    View,
+    {
+      ...rest,
+      className: mergedClassName,
+      style: [style, offsetStyle],
+    },
+    children
+  );
 }
 
 function createMaterialComponent(tag: string) {

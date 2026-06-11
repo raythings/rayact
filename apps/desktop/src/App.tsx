@@ -34,6 +34,8 @@ import {
   useColorSchemePreference
 } from '@rayact/react';
 import smokeAsset from './assets/smoke-note.txt';
+// Populate globalThis.Icons (name → codepoint) for icon rendering.
+import '../../../resources/fonts/material_icons.js';
 import '../styles.css';
 
 type WorkerMessage = {
@@ -191,7 +193,7 @@ function App() {
   return (
     <SafeArea className="qa-root">
       <StatusBar barStyle={t.dark ? 'light' : 'dark'} backgroundColor={t.surfaceContainerLowest} />
-      <AvoidKeyboard className="qa-shell">
+      <View className="qa-shell">
         <NavigationRail open={railOpen} className="qa-rail">
           <View
             className={railOpen ? 'qa-rail-menu qa-rail-menu-open' : 'qa-rail-menu'}
@@ -227,9 +229,13 @@ function App() {
           })}
         </NavigationRail>
 
-        <View className="qa-content" onPress={() => {
-          if (railOpen) setRailOpen(false);
-        }}>
+        <AvoidKeyboard
+          className="qa-content"
+          behavior="padding"
+          onPress={() => {
+            if (railOpen) setRailOpen(false);
+          }}
+        >
           <View className="qa-app-bar">
             <View className="qa-title-block">
               <Text text="Rayact Cross-Platform QA" className="qa-title" />
@@ -366,7 +372,7 @@ function App() {
               );
             })}
           </NavigationBar>
-          </View>
+        </AvoidKeyboard>
 
         <Modal visible={modalVisible} className="qa-modal" onRequestClose={() => setModalVisible(false)}>
           <View className="qa-modal-card">
@@ -375,7 +381,7 @@ function App() {
             <Button label="Close" className="qa-button" onPress={() => setModalVisible(false)} />
           </View>
         </Modal>
-      </AvoidKeyboard>
+      </View>
     </SafeArea>
   );
 }

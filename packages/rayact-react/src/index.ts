@@ -1,3 +1,4 @@
+import './avoid-keyboard.css';
 import type React from 'react';
 import ReactNS from 'react';
 import { getDefaultRuntime } from '@rayact/runtime';
@@ -6,6 +7,7 @@ import { RayactThemeProvider } from './theme/RayactThemeProvider';
 import type { RayactContainer, RayactRoot } from './types';
 
 export type {
+  AvoidKeyboardProps,
   BaseProps,
   ActivityIndicatorProps,
   BadgeProps,
@@ -27,6 +29,7 @@ export type {
   TextProps
 } from './types';
 
+export { ExternalView, NativeTextInput } from './components';
 export {
   ActivityIndicator,
   AppBar,
@@ -90,6 +93,10 @@ export {
 export { RayactReconciler };
 export { createRuntime, getDefaultRuntime } from '@rayact/runtime';
 export { useTheme, withTheme } from './theme/theming';
+export { useKeyboard } from './hooks/useKeyboard';
+export type { KeyboardInsets } from './hooks/useKeyboard';
+export { useSafeAreaInsets } from './hooks/useSafeAreaInsets';
+export type { SafeAreaInsets } from './hooks/useSafeAreaInsets';
 export { useColorScheme, useColorSchemePreference, setColorSchemePreference, cycleColorSchemePreference } from './theme/colorSchemeStore';
 export type { ColorSchemePreference } from './theme/colorSchemeStore';
 export { RayactThemeProvider } from './theme/RayactThemeProvider';

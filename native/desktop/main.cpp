@@ -65,7 +65,8 @@ void mainLoop(JSContext* ctx) {
         }
 
         // Scripted input harness (RAYACT_SCRIPT="frame:cmd[:args];...").
-        // Commands: size:w,h | scrollbottom | tap:x,y (px) | shot:name | quit.
+        // Commands: size:w,h | scrollbottom | tap:x,y | down:x,y | up:x,y |
+        // shot:name | quit.
         // Pair with RAYACT_SYNTH_INPUT=1 so taps route through the queued-touch
         // source instead of the real mouse.
         if (const char* script = std::getenv("RAYACT_SCRIPT")) {
@@ -99,6 +100,16 @@ void mainLoop(JSContext* ctx) {
                         rayact::engineQueueTouch(0, 0, tapX, tapY);
                         tapUpFrame = frame + 6;
                         (void)tapDownPending;
+                    }
+                } else if (strcmp(op, "down") == 0) {
+                    if (sscanf(arg, "%f,%f", &tapX, &tapY) == 2) {
+                        rayact::engineQueueTouch(0, 0, tapX, tapY);
+                        tapUpFrame = -1;
+                    }
+                } else if (strcmp(op, "up") == 0) {
+                    if (sscanf(arg, "%f,%f", &tapX, &tapY) == 2) {
+                        rayact::engineQueueTouch(1, 0, tapX, tapY);
+                        tapUpFrame = -1;
                     }
                 } else if (strcmp(op, "shot") == 0) {
                     TakeScreenshot(arg);

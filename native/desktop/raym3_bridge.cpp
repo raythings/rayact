@@ -13,6 +13,7 @@
 #include <raym3/v2/MaterialDefaults.h>
 #include <raym3/v2/MaterialTokens.h>
 #include <raym3/v2/TextInput.h>
+#include <raym3/v2/Transitions.h>
 #include <raym3/fonts/FontManager.h>
 #include <raym3/components/Checkbox.h>
 #include <raym3/components/ProgressIndicator.h>
@@ -40,8 +41,10 @@
 #ifdef RAYACT_ANDROID
 #include <android/log.h>
 #define RAYACT_NAV_LOG(...) __android_log_print(ANDROID_LOG_WARN, "RayactNav", __VA_ARGS__)
+#define RAYACT_IME_LOG(...) __android_log_print(ANDROID_LOG_WARN, "RayactIME", __VA_ARGS__)
 #else
 #define RAYACT_NAV_LOG(...) do { fprintf(stderr, "[RayactNav] "); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while (0)
+#define RAYACT_IME_LOG(...) do { } while (0)
 #endif
 
 // ─── per-screen state ──────────────────────────────────────────────────────
@@ -254,6 +257,63 @@ static std::map<int, raym3::v2::Style> g_safeAreaBaseStyles;
 
 static float maxPadding(float current, float inset) {
     return std::max(current, inset);
+}
+
+static int utf8NextByteLocal(const std::string& text, int pos) {
+    if (pos < 0) return 0;
+    if (pos >= (int)text.size()) return (int)text.size();
+    unsigned char c = (unsigned char)text[(size_t)pos];
+    int len = 1;
+    if ((c & 0x80) == 0) len = 1;
+    else if ((c & 0xE0) == 0xC0) len = 2;
+    else if ((c & 0xF0) == 0xE0) len = 3;
+    else if ((c & 0xF8) == 0xF0) len = 4;
+    return std::min((int)text.size(), pos + len);
+}
+
+static uint32_t utf8CodepointAtLocal(const std::string& text, int pos) {
+    if (pos < 0 || pos >= (int)text.size()) return 0;
+    unsigned char c = (unsigned char)text[(size_t)pos];
+    if ((c & 0x80) == 0) return c;
+    if ((c & 0xE0) == 0xC0 && pos + 1 < (int)text.size())
+        return ((uint32_t)(c & 0x1F) << 6) |
+               ((uint32_t)((unsigned char)text[(size_t)pos + 1] & 0x3F));
+    if ((c & 0xF0) == 0xE0 && pos + 2 < (int)text.size())
+        return ((uint32_t)(c & 0x0F) << 12) |
+               ((uint32_t)((unsigned char)text[(size_t)pos + 1] & 0x3F) << 6) |
+               ((uint32_t)((unsigned char)text[(size_t)pos + 2] & 0x3F));
+    if ((c & 0xF8) == 0xF0 && pos + 3 < (int)text.size())
+        return ((uint32_t)(c & 0x07) << 18) |
+               ((uint32_t)((unsigned char)text[(size_t)pos + 1] & 0x3F) << 12) |
+               ((uint32_t)((unsigned char)text[(size_t)pos + 2] & 0x3F) << 6) |
+               ((uint32_t)((unsigned char)text[(size_t)pos + 3] & 0x3F));
+    return c;
+}
+
+static int utf16OffsetToUtf8ByteLocal(const std::string& text, int utf16Offset) {
+    if (utf16Offset < 0) return -1;
+    int u16 = 0;
+    int byte = 0;
+    while (byte < (int)text.size() && u16 < utf16Offset) {
+        uint32_t cp = utf8CodepointAtLocal(text, byte);
+        int next = utf8NextByteLocal(text, byte);
+        int units = cp > 0xFFFF ? 2 : 1;
+        if (u16 + units > utf16Offset) break;
+        u16 += units;
+        byte = next;
+    }
+    return byte;
+}
+
+static int utf8ByteToUtf16OffsetLocal(const std::string& text, int byteOffset) {
+    if (byteOffset < 0) return -1;
+    byteOffset = std::clamp(byteOffset, 0, (int)text.size());
+    int u16 = 0;
+    for (int byte = 0; byte < byteOffset; byte = utf8NextByteLocal(text, byte)) {
+        uint32_t cp = utf8CodepointAtLocal(text, byte);
+        u16 += cp > 0xFFFF ? 2 : 1;
+    }
+    return u16;
 }
 
 static raym3::v2::Style applySafeAreaPadding(raym3::v2::Style style) {
@@ -616,6 +676,18 @@ static Font getIconFont(int size, bool filled) {
     g_iconFonts[fontKey]    = font;
     g_iconFontVer[fontKey]  = g_iconCPSetVer;
     return font;
+}
+
+// Drop all GPU-side icon-sheet state WITHOUT unloading: the graphics device
+// was re-initialized, so the held texture/font ids are stale (and may already
+// be reused by the new device). g_iconRequests/g_iconCPSet are kept so
+// buildIconSpriteSheet() can rebuild from the same registrations (icon fonts
+// reload from disk on demand).
+void rayactResetIconSheet() {
+    g_iconSheet = {0};
+    g_iconSheetRects.clear();
+    g_iconFonts.clear();
+    g_iconFontVer.clear();
 }
 
 // Build sprite sheet from all (cp, size) pairs registered during JS init.
@@ -1526,6 +1598,20 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
         JS_FreeValue(ctx, fv);
     }
     JS_FreeValue(ctx, textObj);
+
+    // CSS transitions: `transition` shorthand string (from a class rule via
+    // buildStyleObject, or inline — 'none' cancels), then an optional numeric
+    // transitionDurationMs override (AvoidKeyboard passes the IME-reported
+    // duration this way).
+    std::string transitionStr = jsGetString(ctx, obj, "transition");
+    if (!transitionStr.empty()) {
+        if (auto spec = parseTransitionShorthand(transitionStr))
+            s.transitions = std::move(*spec);
+    }
+    if (auto v = jsGetFloat(ctx, obj, "transitionDurationMs")) {
+        if (s.transitions)
+            for (auto& e : *s.transitions) e.durationMs = *v;
+    }
 }
 
 static raym3::v2::Style parseStyle(JSContext* ctx, JSValue obj) {
@@ -1859,15 +1945,18 @@ void rayactBlurFocusedTextInput() {
 }
 
 #ifdef __ANDROID__
-// Push native caret moves (tap-to-caret) back into the IME InputConnection.
-static void registerImeCursorCallbackOnce() {
+// Push native editing-state changes back into the IME InputConnection.
+static void registerImeStateCallbackOnce() {
     static bool registered = false;
     if (registered) return;
     registered = true;
-    raym3::v2::SetTextInputCursorCallback([](raym3::v2::NodeId nodeId, int cursor) {
+    raym3::v2::SetTextInputStateCallback([](raym3::v2::NodeId nodeId,
+                                            const raym3::v2::TextInputEditingState &state) {
         for (auto& [id, node] : g_nodes) {
             if (raym3::v2::IdOf(node) == nodeId) {
-                AndroidKeyboard_UpdateSelection(id, cursor);
+                AndroidKeyboard_UpdateSelection(id, state.selectionStart, state.selectionEnd,
+                                                state.composingStart, state.composingEnd,
+                                                state.textChanged ? state.text.c_str() : nullptr);
                 return;
             }
         }
@@ -1877,7 +1966,7 @@ static void registerImeCursorCallbackOnce() {
 
 JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
 #ifdef __ANDROID__
-    registerImeCursorCallbackOnce();
+    registerImeStateCallbackOnce();
 #endif
     std::string value;
     if (argc >= 1 && !JS_IsUndefined(argv[0]) && !JS_IsNull(argv[0])) {
@@ -1892,6 +1981,10 @@ JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSVal
         props.placeholder = jsGetString(ctx, argv[1], "placeholder");
         props.label = jsGetString(ctx, argv[1], "label");
         props.passwordMode = jsGetBool(ctx, argv[1], "secureTextEntry", false);
+        props.secure = jsGetBool(ctx, argv[1], "secure", false);
+        props.autocorrect = jsGetBool(ctx, argv[1], "autocorrect", false);
+        props.inputType = jsGetString(ctx, argv[1], "inputType");
+        props.imeAction = jsGetString(ctx, argv[1], "imeAction");
         props.readOnly = jsGetBool(ctx, argv[1], "readOnly", false);
         props.disabled = jsGetBool(ctx, argv[1], "disabled", false);
         {
@@ -1927,9 +2020,13 @@ JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSVal
         JS_FreeValue(g_bridge_ctx, result);
         JS_FreeValue(g_bridge_ctx, arg);
     };
-    node->textInput.onFocus = [id = g_nextNodeId]() {
+    node->textInput.onFocus = [id = g_nextNodeId,
+                               inputType = props.inputType,
+                               autocorrect = props.autocorrect,
+                               secure = props.secure || props.passwordMode,
+                               imeAction = props.imeAction]() {
 #ifdef __ANDROID__
-        AndroidKeyboard_ShowForNode(id);
+        AndroidKeyboard_ShowForNode(id, inputType, autocorrect, secure, imeAction);
 #endif
         auto it = g_focusCallbacks.find(id);
         if (it == g_focusCallbacks.end() || !g_bridge_ctx) return;
@@ -1993,6 +2090,223 @@ JSValue JS_createModal(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     g_nodes[id] = node;
     if (argc >= 1 && JS_IsObject(argv[0])) captureNodeClassName(ctx, id, argv[0]);
     return JS_NewInt32(ctx, id);
+}
+
+// ─── external (platform) views ────────────────────────────────────────────────
+// A node whose content is produced by a platform-native view (EditText,
+// NSTextField, WebView, ...) and composited as a texture inside the raym3
+// scene. The bridge owns the node + texture + layout/input channels; platform
+// hosts (JNI / ObjC++) own the producer and push frames.
+
+struct ExternalViewEntry {
+    std::string kind;                       // "stub" | "textfield" | ...
+    int nodeId = 0;
+    Texture2D texture = {0};                // lazy — JS may run before InitWindow
+    std::shared_ptr<Rectangle> layoutRect;  // dp; written by the render lambda
+    Rectangle lastPushedRect = {0, 0, -1, -1};
+    bool focused = false;
+    // Texture supplied by the platform host (AHB import etc.) — producers own
+    // its contents; the bridge must not UpdateTexture into it.
+    bool externalTexture = false;
+    // Texture content insets (px): the producer surface is oversized so
+    // overflow chrome (caret handles, selection toolbar, magnifier) isn't
+    // clipped at the field edge. The node draws the texture expanded by these
+    // insets; the field content itself stays aligned to the layout rect.
+    float insetL = 0, insetT = 0, insetR = 0, insetB = 0;
+    // Stub producer state (kind == "stub"): animated CPU test pattern.
+    std::vector<unsigned char> stubPixels;
+};
+static std::map<int, ExternalViewEntry> g_externalViews; // nodeId → entry
+
+// Platform host callbacks. Rect: dp-space layout (drives VirtualDisplay /
+// ImageReader / NSView sizing). Input: action 0=down 1=up 2=move, view-local dp.
+static void (*g_externalViewRectCb)(int nodeId, const char* kind, float x, float y, float w, float h) = nullptr;
+static void (*g_externalViewInputCb)(int nodeId, int action, float localX, float localY) = nullptr;
+static void (*g_externalViewPropCb)(int nodeId, const char* key, const char* value) = nullptr;
+static void (*g_externalViewDisposeCb)(int nodeId) = nullptr;
+
+void rayactSetExternalViewHostCallbacks(
+    void (*rectCb)(int, const char*, float, float, float, float),
+    void (*inputCb)(int, int, float, float),
+    void (*propCb)(int, const char*, const char*),
+    void (*disposeCb)(int)) {
+    g_externalViewRectCb = rectCb;
+    g_externalViewInputCb = inputCb;
+    g_externalViewPropCb = propCb;
+    g_externalViewDisposeCb = disposeCb;
+}
+
+// Producer-driven text change (e.g. EditText TextWatcher): invoke the node's
+// JS onChangeText callback. Runs on the JS thread (pump drain).
+void rayactExternalViewEmitText(int nodeId, const char* text) {
+    auto cbIt = g_changeTextCallbacks.find(nodeId);
+    if (cbIt == g_changeTextCallbacks.end() || !g_bridge_ctx) return;
+    JSValue arg = JS_NewString(g_bridge_ctx, text ? text : "");
+    JSValue result = JS_Call(g_bridge_ctx, cbIt->second, JS_UNDEFINED, 1, &arg);
+    if (JS_IsException(result)) JS_FreeValue(g_bridge_ctx, JS_GetException(g_bridge_ctx));
+    JS_FreeValue(g_bridge_ctx, result);
+    JS_FreeValue(g_bridge_ctx, arg);
+}
+
+// Replace an external view's texture with one imported/updated by the platform
+// host (e.g. rlvk AHardwareBuffer wrap). id 0 leaves the texture untouched.
+void rayactSetExternalViewTextureInsets(int nodeId, float l, float t, float r, float b) {
+    auto it = g_externalViews.find(nodeId);
+    if (it == g_externalViews.end()) return;
+    it->second.insetL = l;
+    it->second.insetT = t;
+    it->second.insetR = r;
+    it->second.insetB = b;
+}
+
+void rayactSetExternalViewTexture(int nodeId, Texture2D texture) {
+    auto it = g_externalViews.find(nodeId);
+    if (it == g_externalViews.end()) return;
+    // Drop the bridge-owned placeholder; the host owns the new texture.
+    if (!it->second.externalTexture && it->second.texture.id != 0 && IsWindowReady())
+        UnloadTexture(it->second.texture);
+    it->second.texture = texture;
+    it->second.externalTexture = true;
+}
+
+static void stubProducerTick(ExternalViewEntry& ev) {
+    // Animated diagonal gradient + moving bar: proves per-frame UpdateTexture,
+    // clipping, z-order, and frame scheduling without any native widget.
+    const int w = ev.texture.width, h = ev.texture.height;
+    if (w <= 0 || h <= 0) return;
+    if ((int)ev.stubPixels.size() != w * h * 4) ev.stubPixels.resize((size_t)w * h * 4);
+    const float t = (float)GetTime();
+    const int bar = (int)((0.5f + 0.5f * sinf(t * 2.0f)) * (float)(h - 8));
+    unsigned char* p = ev.stubPixels.data();
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const size_t i = ((size_t)y * w + x) * 4;
+            p[i + 0] = (unsigned char)((x * 255) / (w > 1 ? w - 1 : 1));
+            p[i + 1] = (unsigned char)((y * 255) / (h > 1 ? h - 1 : 1));
+            p[i + 2] = (unsigned char)(128 + 127 * sinf(t));
+            p[i + 3] = 255;
+            if (y >= bar && y < bar + 8) { p[i + 0] = p[i + 1] = p[i + 2] = 255; }
+        }
+    }
+    UpdateTexture(ev.texture, p);
+}
+
+// createExternalView(kind, propsObj?) → nodeId
+JSValue JS_createExternalView(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "createExternalView: expected (kind, props?)");
+    const char* kindC = JS_ToCString(ctx, argv[0]);
+    if (!kindC) return JS_ThrowTypeError(ctx, "createExternalView: invalid kind");
+    std::string kind = kindC;
+    JS_FreeCString(ctx, kindC);
+
+    raym3::v2::ViewProps props;
+    if (argc >= 2 && JS_IsObject(argv[1])) {
+        props.style = parseStyle(ctx, argv[1]);
+        if (auto z = jsGetFloat(ctx, argv[1], "zIndex")) props.zIndex = (int)roundf(*z);
+    }
+
+    const int id = g_nextNodeId++;
+    auto layoutRect = std::make_shared<Rectangle>(Rectangle{0, 0, 0, 0});
+    const bool isStub = (kind == "stub");
+
+    auto node = raym3::v2::Custom(props, [id, layoutRect, isStub](Rectangle layout) {
+        *layoutRect = layout;
+        auto it = g_externalViews.find(id);
+        if (it == g_externalViews.end()) return;
+        ExternalViewEntry& ev = it->second;
+
+        // Push layout changes to the platform host (dp-space).
+        if (g_externalViewRectCb &&
+            (fabsf(layout.x - ev.lastPushedRect.x) > 0.5f ||
+             fabsf(layout.y - ev.lastPushedRect.y) > 0.5f ||
+             fabsf(layout.width - ev.lastPushedRect.width) > 0.5f ||
+             fabsf(layout.height - ev.lastPushedRect.height) > 0.5f)) {
+            ev.lastPushedRect = layout;
+            g_externalViewRectCb(id, ev.kind.c_str(), layout.x, layout.y, layout.width, layout.height);
+        }
+
+        // Lazy texture creation: JS executes before InitWindow on Android.
+        if (!ev.externalTexture && ev.texture.id == 0 && IsWindowReady() &&
+            layout.width >= 1.0f && layout.height >= 1.0f) {
+            const int pw = (int)raym3::v2::Density::RasterPixels(layout.width);
+            const int ph = (int)raym3::v2::Density::RasterPixels(layout.height);
+            Image blank = GenImageColor(pw > 0 ? pw : 1, ph > 0 ? ph : 1, Color{0, 0, 0, 0});
+            ev.texture = LoadTextureFromImage(blank);
+            UnloadImage(blank);
+            SetTextureFilter(ev.texture, TEXTURE_FILTER_BILINEAR);
+        }
+        if (ev.texture.id == 0) return;
+
+        if (isStub && !ev.externalTexture) stubProducerTick(ev);
+
+        // Expand the destination by the producer's content insets so overflow
+        // chrome (selection handles, context menu) draws outside the field.
+        Rectangle dst = layout;
+        if (ev.insetL || ev.insetT || ev.insetR || ev.insetB) {
+            const float l = raym3::v2::Density::PxToDp(ev.insetL);
+            const float t = raym3::v2::Density::PxToDp(ev.insetT);
+            dst.x -= l;
+            dst.y -= t;
+            dst.width += l + raym3::v2::Density::PxToDp(ev.insetR);
+            dst.height += t + raym3::v2::Density::PxToDp(ev.insetB);
+        }
+        Rectangle src{0, 0, (float)ev.texture.width, (float)ev.texture.height};
+        DrawTexturePro(ev.texture, src, dst, {0, 0}, 0.0f, WHITE);
+    });
+
+    // Stub animates continuously; real producers wake frames via requestFrame.
+    if (isStub) node->alwaysAnimates = true;
+
+    // P1 input: forward presses view-local to the host sink (full down/move/up
+    // routing with stashed MotionEvents lands with the Android producer).
+    node->onPress = [id, layoutRect]() {
+        if (!g_externalViewInputCb) return;
+        Vector2 m = raym3::v2::Density::PxToDp(GetMousePosition());
+        g_externalViewInputCb(id, 1 /*up=tap*/, m.x - layoutRect->x, m.y - layoutRect->y);
+    };
+
+    g_nodes[id] = node;
+    ExternalViewEntry ev;
+    ev.kind = kind;
+    ev.nodeId = id;
+    ev.layoutRect = layoutRect;
+    g_externalViews[id] = std::move(ev);
+    if (argc >= 2 && JS_IsObject(argv[1])) captureNodeClassName(ctx, id, argv[1]);
+    return JS_NewInt32(ctx, id);
+}
+
+// setExternalViewProps(nodeId, propsObj) — forwards producer-relevant props
+// (value, placeholder, inputType, secure, focused) to the platform host as
+// key/value strings.
+JSValue JS_setExternalViewProps(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setExternalViewProps: expected (nodeId, props)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto it = g_externalViews.find(id);
+    if (it == g_externalViews.end()) return JS_UNDEFINED;
+
+    JSValue fv = JS_GetPropertyStr(ctx, argv[1], "focused");
+    if (!JS_IsUndefined(fv)) {
+        bool want = JS_ToBool(ctx, fv) != 0;
+        if (want != it->second.focused) {
+            it->second.focused = want;
+            if (g_externalViewPropCb)
+                g_externalViewPropCb(id, "focused", want ? "1" : "0");
+        }
+    }
+    JS_FreeValue(ctx, fv);
+
+    static const char* kForwarded[] = {"value", "placeholder", "inputType", "secure"};
+    for (const char* key : kForwarded) {
+        JSValue v = JS_GetPropertyStr(ctx, argv[1], key);
+        if (!JS_IsUndefined(v) && !JS_IsNull(v)) {
+            const char* str = JS_ToCString(ctx, v);
+            if (str && g_externalViewPropCb) g_externalViewPropCb(id, key, str);
+            if (str) JS_FreeCString(ctx, str);
+        }
+        JS_FreeValue(ctx, v);
+    }
+    return JS_UNDEFINED;
 }
 
 JSValue JS_createSafeArea(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
@@ -3002,21 +3316,22 @@ JSValue JS_setStyle(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst
     // setStyle with the same CSS — so a plain replace here would wipe the
     // defaults and collapse e.g. the search bar's row into a column. Merge the
     // CSS over the existing style for material nodes; plain views replace.
+    raym3::v2::Style target;
     if (g_safeAreaBaseStyles.find(id) != g_safeAreaBaseStyles.end()) {
         g_safeAreaBaseStyles[id] = parsed;
-        it->second->style = applySafeAreaPadding(parsed);
-    } else if (g_materialComponentKinds.find(id) != g_materialComponentKinds.end()) {
-        it->second->style = raym3::v2::MergeStyles(it->second->style, parsed);
+        target = applySafeAreaPadding(parsed);
     } else if (g_nativeControlStates.find(id) != g_nativeControlStates.end()) {
-        it->second->style = raym3::v2::MergeStyles(it->second->style, parsed);
-        enforceNativeControlLayoutDefaults(id, it->second->style);
-        it->second->style.pointerEvents = raym3::v2::PointerEvents::None;
-    } else if (g_scrollViewIds.count(id)) {
-        // Merge instead of replace so overflow=Scroll set at creation is preserved.
-        it->second->style = raym3::v2::MergeStyles(it->second->style, parsed);
+        target = raym3::v2::MergeStyles(it->second->style, parsed);
+        enforceNativeControlLayoutDefaults(id, target);
+        target.pointerEvents = raym3::v2::PointerEvents::None;
     } else {
-        it->second->style = raym3::v2::MergeStyles(it->second->style, parsed);
+        // Material components, scroll views, and plain views all merge.
+        target = raym3::v2::MergeStyles(it->second->style, parsed);
     }
+    // Starts/retargets CSS transitions for properties explicitly set in
+    // `parsed` when the target carries a transition spec; plain assignment
+    // otherwise.
+    raym3::v2::ApplyStyleWithTransitions(it->second, target, parsed);
     if (jsHasProperty(ctx, argv[1], "capturesInput"))
         it->second->capturesInput = jsGetBool(ctx, argv[1], "capturesInput", false);
     captureNodeClassName(ctx, id, argv[1]);
@@ -3066,12 +3381,21 @@ JSValue JS_setValue(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     return JS_UNDEFINED;
 }
 
-// Called from Android JNI when the soft keyboard commits text.
-// Updates the node's buffer and fires onChange so React sees the new value.
-// cursor is the IME's selection end; -1 means "place caret at end".
-void rayactSetTextInputContent(int nodeId, const char* text, int cursor) {
+// Called from Android JNI when the soft keyboard updates the editable state.
+void rayactSetTextInputContent(int nodeId, const char* text, int selectionStart,
+                               int selectionEnd, int composingStart,
+                               int composingEnd) {
     auto it = g_nodes.find(nodeId);
     if (it == g_nodes.end() || !text) return;
+    // Flutter's active-client check: IME editing state may only land on the
+    // currently focused text input. A stale update racing a focus change is
+    // discarded rather than overwriting a non-focused field's value.
+    if (it->second->kind == raym3::v2::NodeKind::TextInput &&
+        raym3::v2::GetFocusedId() != raym3::v2::IdOf(it->second)) {
+        RAYACT_IME_LOG("rayactSetTextInputContent node=%d DROPPED (not focused) text='%s'",
+                       nodeId, text);
+        return;
+    }
     it->second->inputScratch = text;
     if (it->second->inputBuffer.empty()) it->second->inputBuffer.assign(1024, '\0');
     std::fill(it->second->inputBuffer.begin(), it->second->inputBuffer.end(), '\0');
@@ -3080,9 +3404,11 @@ void rayactSetTextInputContent(int nodeId, const char* text, int cursor) {
     it->second->textInput.bufferSize = (int)it->second->inputBuffer.size();
     it->second->textInput.value = &it->second->inputScratch;
     int len = static_cast<int>(std::strlen(text));
-    it->second->textEdit.cursor = (cursor < 0) ? len : std::min(cursor, len);
-    it->second->textEdit.selectionStart = -1;
-    it->second->textEdit.selectionEnd = -1;
+    it->second->textEdit.cursor = (selectionEnd < 0) ? len : std::min(selectionEnd, len);
+    it->second->textEdit.selectionStart = selectionStart;
+    it->second->textEdit.selectionEnd = selectionEnd;
+    it->second->textEdit.composingStart = composingStart;
+    it->second->textEdit.composingEnd = composingEnd;
     raym3::v2::ResyncTextInputBuffer(nodeId, it->second->textEdit.cursor);
     auto cbIt = g_changeTextCallbacks.find(nodeId);
     if (cbIt != g_changeTextCallbacks.end() && g_bridge_ctx) {
@@ -3099,6 +3425,15 @@ JSValue JS_disposeNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     int id;
     JS_ToInt32(ctx, &id, argv[0]);
     clearAnimatedNode(ctx, id);
+
+    auto evIt = g_externalViews.find(id);
+    if (evIt != g_externalViews.end()) {
+        if (g_externalViewDisposeCb) g_externalViewDisposeCb(id);
+        if (!evIt->second.externalTexture &&
+            evIt->second.texture.id != 0 && IsWindowReady())
+            UnloadTexture(evIt->second.texture);
+        g_externalViews.erase(evIt);
+    }
 
     auto cb = g_pressCallbacks.find(id);
     if (cb != g_pressCallbacks.end()) {
@@ -3789,6 +4124,112 @@ void engineForEachVisibleScreen(const std::function<void(int, const raym3::v2::N
 
 // ─── lifecycle ──────────────────────────────────────────────────────────────
 
+static raym3::v2::Node* focusedRaym3TextInputForIme() {
+    raym3::v2::NodeId id = raym3::v2::GetFocusedId();
+    if (!id) return nullptr;
+    auto* node = reinterpret_cast<raym3::v2::Node*>(id);
+    if (!node || node->kind != raym3::v2::NodeKind::TextInput) return nullptr;
+    return node;
+}
+
+static std::string focusedTextValue(raym3::v2::Node& node) {
+    if (node.textInput.value) return *node.textInput.value;
+    if (node.textInput.buffer) return std::string(node.textInput.buffer);
+    if (!node.inputBuffer.empty()) return std::string(node.inputBuffer.data());
+    return {};
+}
+
+extern "C" bool rayactMacImeHasFocusedTextInput() {
+    return focusedRaym3TextInputForIme() != nullptr;
+}
+
+extern "C" void rayactMacImeInsertText(const char* utf8) {
+    raym3::v2::Node* node = focusedRaym3TextInputForIme();
+    if (!node || !utf8) return;
+    auto& edit = node->textEdit;
+    if (edit.composingStart >= 0 && edit.composingEnd >= edit.composingStart) {
+        raym3::v2::TextInputSetSelection(*node, edit.composingStart,
+                                         edit.composingEnd, edit.composingEnd);
+    }
+    raym3::v2::TextInputReplaceSelection(*node, utf8);
+}
+
+extern "C" void rayactMacImeSetMarkedText(const char* utf8, int selectedLocation,
+                                           int selectedLength) {
+    raym3::v2::Node* node = focusedRaym3TextInputForIme();
+    if (!node || !utf8) return;
+    auto& edit = node->textEdit;
+    if (edit.composingStart >= 0 && edit.composingEnd >= edit.composingStart) {
+        raym3::v2::TextInputSetSelection(*node, edit.composingStart,
+                                         edit.composingEnd, edit.composingEnd);
+    }
+    std::string marked = utf8;
+    raym3::v2::TextInputReplaceSelection(*node, marked, 0, (int)marked.size());
+    int composingStart = node->textEdit.composingStart;
+    if (composingStart >= 0) {
+        int selStart = composingStart + utf16OffsetToUtf8ByteLocal(marked, selectedLocation);
+        int selEnd = composingStart + utf16OffsetToUtf8ByteLocal(
+                                      marked, selectedLocation + selectedLength);
+        raym3::v2::TextInputSetSelection(*node, selStart, selEnd, selEnd);
+        node->textEdit.composingStart = composingStart;
+        node->textEdit.composingEnd = composingStart + (int)marked.size();
+        raym3::v2::TextInputNotifyEditingState(*node, true);
+    }
+}
+
+extern "C" void rayactMacImeUnmarkText() {
+    raym3::v2::Node* node = focusedRaym3TextInputForIme();
+    if (!node) return;
+    node->textEdit.composingStart = node->textEdit.composingEnd = -1;
+    raym3::v2::TextInputNotifyEditingState(*node, false);
+}
+
+extern "C" void rayactMacImeSelectedRange(int* location, int* length) {
+    if (!location || !length) return;
+    *location = 0;
+    *length = 0;
+    raym3::v2::Node* node = focusedRaym3TextInputForIme();
+    if (!node) return;
+    std::string text = focusedTextValue(*node);
+    int start = node->textEdit.selectionStart;
+    int end = node->textEdit.selectionEnd;
+    if (start < 0 || end < 0) start = end = node->textEdit.cursor;
+    if (start > end) std::swap(start, end);
+    int u16Start = utf8ByteToUtf16OffsetLocal(text, start);
+    int u16End = utf8ByteToUtf16OffsetLocal(text, end);
+    *location = std::max(0, u16Start);
+    *length = std::max(0, u16End - u16Start);
+}
+
+extern "C" void rayactMacImeMarkedRange(int* location, int* length) {
+    if (!location || !length) return;
+    *location = -1;
+    *length = 0;
+    raym3::v2::Node* node = focusedRaym3TextInputForIme();
+    if (!node) return;
+    int start = node->textEdit.composingStart;
+    int end = node->textEdit.composingEnd;
+    if (start < 0 || end < start) return;
+    std::string text = focusedTextValue(*node);
+    int u16Start = utf8ByteToUtf16OffsetLocal(text, start);
+    int u16End = utf8ByteToUtf16OffsetLocal(text, end);
+    *location = std::max(0, u16Start);
+    *length = std::max(0, u16End - u16Start);
+}
+
+extern "C" void rayactMacImeCaretRect(float* x, float* y, float* w, float* h) {
+    if (!x || !y || !w || !h) return;
+    *x = 0.0f; *y = 0.0f; *w = 1.0f; *h = 18.0f;
+    raym3::v2::Node* node = focusedRaym3TextInputForIme();
+    if (!node) return;
+    Rectangle input = raym3::v2::TextInputInputBounds(*node);
+    float caretX = raym3::v2::TextInputByteOffsetX(*node, node->textEdit.cursor);
+    *x = caretX;
+    *y = (float)GetRenderHeight() - input.y - input.height;
+    *w = 1.0f;
+    *h = input.height;
+}
+
 void cleanupRaym3Bridge(JSContext* ctx) {
     for (auto& [id, anim] : g_styleAnimations) {
         if (!JS_IsUndefined(anim.onComplete)) JS_FreeValue(ctx, anim.onComplete);
@@ -3808,6 +4249,26 @@ void cleanupRaym3Bridge(JSContext* ctx) {
     }
     for (auto& [id, fn] : g_pressCallbacks) JS_FreeValue(ctx, fn);
     g_pressCallbacks.clear();
+    for (auto& [id, fn] : g_dragStartCallbacks) JS_FreeValue(ctx, fn);
+    for (auto& [id, fn] : g_dragMoveCallbacks) JS_FreeValue(ctx, fn);
+    for (auto& [id, fn] : g_dragEndCallbacks) JS_FreeValue(ctx, fn);
+    for (auto& [id, fn] : g_layoutCallbacks) JS_FreeValue(ctx, fn);
+    for (auto& [id, fn] : g_changeTextCallbacks) JS_FreeValue(ctx, fn);
+    for (auto& [id, fn] : g_focusCallbacks) JS_FreeValue(ctx, fn);
+    for (auto& [id, fn] : g_blurCallbacks) JS_FreeValue(ctx, fn);
+    for (auto& [id, fn] : g_changeValueCallbacks) JS_FreeValue(ctx, fn);
+    for (auto& [id, fn] : g_scrollCallbacks) JS_FreeValue(ctx, fn);
+    for (auto& [id, fn] : g_requestCloseCallbacks) JS_FreeValue(ctx, fn);
+    g_dragStartCallbacks.clear();
+    g_dragMoveCallbacks.clear();
+    g_dragEndCallbacks.clear();
+    g_layoutCallbacks.clear();
+    g_changeTextCallbacks.clear();
+    g_focusCallbacks.clear();
+    g_blurCallbacks.clear();
+    g_changeValueCallbacks.clear();
+    g_scrollCallbacks.clear();
+    g_requestCloseCallbacks.clear();
     g_nodes.clear();
     g_nativeControlStates.clear();
     g_materialComponentKinds.clear();

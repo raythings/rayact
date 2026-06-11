@@ -282,6 +282,20 @@ static JSValue JS_cancelAnimationFrame(JSContext* ctx, JSValue, int argc, JSValu
 
 bool hasPendingAnimationFrames() { return !s_rafQueue.empty(); }
 
+double nextJSTimerDelayMs() {
+    bool found = false;
+    double best = 0.0;
+    const double now = nowMs();
+    for (const auto& t : s_timers) {
+        if (t.fired) continue;
+        const double delay = t.dueMs - now;
+        if (!found || delay < best) { best = delay; found = true; }
+    }
+    // Overdue timers clamp to 0 ("due now") — must not collide with the
+    // -1 "no pending timers" sentinel.
+    return found ? std::max(0.0, best) : -1.0;
+}
+
 void tickAnimationFrames(JSContext* ctx) {
     if (s_rafQueue.empty()) return;
     std::vector<RafCallback> callbacks;

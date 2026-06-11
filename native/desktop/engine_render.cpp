@@ -195,7 +195,6 @@ float getRenderScaleDpi() {
     return raym3::v2::Density::GetLayoutDensity();
 }
 
-
 namespace rayact {
 // rlgl matrix stack (C linkage) — used for the Android dp content scale.
 extern "C" { void rlPushMatrix(void); void rlPopMatrix(void); void rlScalef(float, float, float); void rlSetLineWidth(float); }
@@ -355,6 +354,7 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     float dp = getRenderScaleDpi();
     applyAnimatedStylesToNodes();
     raym3::v2::TickScrollMomentum(g_root);
+    raym3::v2::TickTransitions(g_root);
     raym3::v2::UpdateLayout(g_root, bounds);
     resolvePopoverAnchors();
 
@@ -382,8 +382,17 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
         pressed = g_queuedTouch.pressed;
         released = g_queuedTouch.released;
         down = g_queuedTouch.down;
-        g_queuedTouch.pressed = false;
-        g_queuedTouch.released = false;
+        if (pressed && released) {
+            // DOWN and UP arrived within one JS pump (fast tap / scripted
+            // input). Dispatch DOWN this frame and hold UP for the next so
+            // the release lands on the node activated by the press.
+            released = false;
+            down = true;
+            g_queuedTouch.pressed = false; // keep .released queued
+        } else {
+            g_queuedTouch.pressed = false;
+            g_queuedTouch.released = false;
+        }
     }
 #ifndef RAYACT_NO_WORKERS
     // Route hover/move/drag/down/up to any worker canvas node
@@ -424,7 +433,7 @@ void engineRenderFrame(int width, int height) {
 
     workletRuntimeTick(GetFrameTime());
 
-    const bool canIdleSkip = !engineNeedsAnotherFrame();
+    const bool canIdleSkip = engineThreadedModeEnabled() && !engineNeedsAnotherFrame();
     if (canIdleSkip && g_root && raym3::v2::ShouldSkipRender(g_root)) {
         if (engineThreadedModeEnabled())
             engineWaitForCommit(16);
@@ -503,12 +512,34 @@ void engineRenderFrameAndroid(int screenId, int width, int height) {
 }
 
 bool engineNeedsAnotherFrame() {
+    {
+        // A queued touch event (e.g. the deferred UP of a one-pump tap) must
+        // get a frame to dispatch in.
+        std::lock_guard<std::mutex> lock(g_touchMutex);
+        if (g_queuedTouch.pressed || g_queuedTouch.released)
+            return true;
+    }
     if (raym3::v2::HasActiveRipples())
         return true;
     // JS-driven animation sources: queued requestAnimationFrame callbacks and
     // in-flight setStyleAnimation transitions both need the next vsync.
     if (hasPendingAnimationFrames())
         return true;
+    // Pending QuickJS jobs (promise reactions, microtasks — e.g. a React
+    // commit scheduled by an onPress that fired during this frame's input
+    // phase) only run inside the per-frame JS pump, so they need a frame.
+    if (JSContext* ctx = engineContext()) {
+        if (JS_IsJobPending(JS_GetRuntime(ctx)))
+            return true;
+    }
+    // A setTimeout/setInterval that is already due also needs a frame to fire
+    // in. Future deadlines are handled by the host's delayed wakeup (see
+    // engineNextJSTimerDelayMs / RenderThread.postDelayed on Android).
+    {
+        const double timerDelay = nextJSTimerDelayMs();
+        if (timerDelay >= 0.0 && timerDelay <= 0.5)
+            return true;
+    }
     if (hasActiveStyleAnimations())
         return true;
     bool needs = false;

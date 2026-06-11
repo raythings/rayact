@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   AppBar,
+  AvoidKeyboard,
   Badge,
   Banner,
   BottomAppBar,
@@ -79,6 +80,7 @@ function MaterialGallery() {
   };
 
   return (
+    <AvoidKeyboard behavior="padding" style={{ flex: 1 }}>
     <ScrollView style={{ flex: 1, backgroundColor: 0xfffbfeff }}>
       <View style={{ padding: 16, gap: 16, flexShrink: 0, minHeight: 2000 }}>
       <Text style={{ fontSize: 22, lineHeight: 28, fontWeight: 'bold' }}>
@@ -279,6 +281,7 @@ function MaterialGallery() {
       />
       </View>
     </ScrollView>
+    </AvoidKeyboard>
   );
 }
 

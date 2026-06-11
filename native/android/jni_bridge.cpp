@@ -30,6 +30,8 @@
 #include <atomic>
 #include <map>
 #include <mutex>
+#include <set>
+#include <functional>
 #include <string>
 #include <vector>
 #include <unistd.h>   // chdir
@@ -37,9 +39,12 @@
 #include "../core/engine.hpp"
 #include "../core/config_loader.hpp"
 #include "../desktop/raym3_bridge.hpp"
+#include "../desktop/js_stdlib.hpp"
 #include <raym3/fonts/FontManager.h>
 #include <raym3/v2/Density.h>
+#include <raym3/v2/IconRenderer.h>
 #include <raym3/v2/EmojiFont.h>
+#include <raym3/v2/TextInput.h>
 
 extern "C" {
 #include "rcore_android_surface.h"   // RcoreAndroidSurface_* host hooks (from raylib)
@@ -109,6 +114,63 @@ std::string jstr(JNIEnv* env, jstring s) {
     std::string out(c ? c : "");
     if (c) env->ReleaseStringUTFChars(s, c);
     return out;
+}
+
+static int utf8NextByte(const std::string& text, int pos) {
+    if (pos < 0) return 0;
+    if (pos >= (int)text.size()) return (int)text.size();
+    unsigned char c = (unsigned char)text[(size_t)pos];
+    int len = 1;
+    if ((c & 0x80) == 0) len = 1;
+    else if ((c & 0xE0) == 0xC0) len = 2;
+    else if ((c & 0xF0) == 0xE0) len = 3;
+    else if ((c & 0xF8) == 0xF0) len = 4;
+    return std::min((int)text.size(), pos + len);
+}
+
+static uint32_t utf8CodepointAt(const std::string& text, int pos) {
+    if (pos < 0 || pos >= (int)text.size()) return 0;
+    unsigned char c = (unsigned char)text[(size_t)pos];
+    if ((c & 0x80) == 0) return c;
+    if ((c & 0xE0) == 0xC0 && pos + 1 < (int)text.size())
+        return ((uint32_t)(c & 0x1F) << 6) |
+               ((uint32_t)((unsigned char)text[(size_t)pos + 1] & 0x3F));
+    if ((c & 0xF0) == 0xE0 && pos + 2 < (int)text.size())
+        return ((uint32_t)(c & 0x0F) << 12) |
+               ((uint32_t)((unsigned char)text[(size_t)pos + 1] & 0x3F) << 6) |
+               ((uint32_t)((unsigned char)text[(size_t)pos + 2] & 0x3F));
+    if ((c & 0xF8) == 0xF0 && pos + 3 < (int)text.size())
+        return ((uint32_t)(c & 0x07) << 18) |
+               ((uint32_t)((unsigned char)text[(size_t)pos + 1] & 0x3F) << 12) |
+               ((uint32_t)((unsigned char)text[(size_t)pos + 2] & 0x3F) << 6) |
+               ((uint32_t)((unsigned char)text[(size_t)pos + 3] & 0x3F));
+    return c;
+}
+
+static int utf16OffsetToUtf8Byte(const std::string& text, int utf16Offset) {
+    if (utf16Offset < 0) return -1;
+    int u16 = 0;
+    int byte = 0;
+    while (byte < (int)text.size() && u16 < utf16Offset) {
+        uint32_t cp = utf8CodepointAt(text, byte);
+        int next = utf8NextByte(text, byte);
+        int units = cp > 0xFFFF ? 2 : 1;
+        if (u16 + units > utf16Offset) break;
+        u16 += units;
+        byte = next;
+    }
+    return byte;
+}
+
+static int utf8ByteToUtf16Offset(const std::string& text, int byteOffset) {
+    if (byteOffset < 0) return -1;
+    byteOffset = std::clamp(byteOffset, 0, (int)text.size());
+    int u16 = 0;
+    for (int byte = 0; byte < byteOffset; byte = utf8NextByte(text, byte)) {
+        uint32_t cp = utf8CodepointAt(text, byte);
+        u16 += cp > 0xFFFF ? 2 : 1;
+    }
+    return u16;
 }
 
 void setRaym3AndroidDensity(float realDensity, float layoutDensity) {
@@ -189,6 +251,103 @@ static jint callIntoHost_RootSurfaceId() {
     return callIntoHost_IntMethod("rootSurfaceIdFromHost");
 }
 
+static std::string callIntoHost_StringMethod(const char* methodName) {
+    if (!g_jvm) return {};
+    JNIEnv* env = nullptr;
+    bool needDetach = false;
+    jint rs = g_jvm->GetEnv((void**)&env, JNI_VERSION_1_6);
+    if (rs == JNI_EDETACHED) {
+        if (g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) return {};
+        needDetach = true;
+    } else if (rs != JNI_OK) {
+        return {};
+    }
+    std::string result;
+    jclass cls = env->FindClass("com/rayact/engine/RayactEngineKt");
+    if (cls) {
+        jmethodID m = env->GetStaticMethodID(cls, methodName, "()Ljava/lang/String;");
+        if (m) {
+            jstring js = (jstring)env->CallStaticObjectMethod(cls, m);
+            result = jstr(env, js);
+            if (js) env->DeleteLocalRef(js);
+        } else {
+            LOGE("RayactEngineKt.%s not found", methodName);
+        }
+        env->DeleteLocalRef(cls);
+    }
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+    }
+    if (needDetach) g_jvm->DetachCurrentThread();
+    return result;
+}
+
+static void callIntoHost_VoidMethod(const char* methodName) {
+    if (!g_jvm) return;
+    JNIEnv* env = nullptr;
+    bool needDetach = false;
+    jint rs = g_jvm->GetEnv((void**)&env, JNI_VERSION_1_6);
+    if (rs == JNI_EDETACHED) {
+        if (g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) return;
+        needDetach = true;
+    } else if (rs != JNI_OK) {
+        return;
+    }
+    jclass cls = env->FindClass("com/rayact/engine/RayactEngineKt");
+    if (cls) {
+        jmethodID m = env->GetStaticMethodID(cls, methodName, "()V");
+        if (m) env->CallStaticVoidMethod(cls, m);
+        else LOGE("RayactEngineKt.%s not found", methodName);
+        env->DeleteLocalRef(cls);
+    }
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+    }
+    if (needDetach) g_jvm->DetachCurrentThread();
+}
+
+static void installAndroidTextInputHostHooksOnce() {
+    static bool installed = false;
+    if (installed) return;
+    installed = true;
+    raym3::v2::SetTextInputHostHooks({
+        []() -> std::string { return callIntoHost_StringMethod("readClipboardFromHost"); },
+        [](const std::string& text) {
+            if (!g_jvm) return;
+            JNIEnv* env = nullptr;
+            bool needDetach = false;
+            jint rs = g_jvm->GetEnv((void**)&env, JNI_VERSION_1_6);
+            if (rs == JNI_EDETACHED) {
+                if (g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) return;
+                needDetach = true;
+            } else if (rs != JNI_OK) {
+                return;
+            }
+            jclass cls = env->FindClass("com/rayact/engine/RayactEngineKt");
+            if (cls) {
+                jmethodID m = env->GetStaticMethodID(
+                    cls, "copyToClipboardFromHost", "(Ljava/lang/String;)V");
+                if (m) {
+                    jstring js = env->NewStringUTF(text.c_str());
+                    env->CallStaticVoidMethod(cls, m, js);
+                    if (js) env->DeleteLocalRef(js);
+                } else {
+                    LOGE("RayactEngineKt.copyToClipboardFromHost not found");
+                }
+                env->DeleteLocalRef(cls);
+            }
+            if (env->ExceptionCheck()) {
+                env->ExceptionDescribe();
+                env->ExceptionClear();
+            }
+            if (needDetach) g_jvm->DetachCurrentThread();
+        },
+        []() { callIntoHost_VoidMethod("performHapticFeedbackFromHost"); }
+    });
+}
+
 static bool attachEnv(JNIEnv** outEnv, bool* outNeedDetach) {
     if (!g_jvm || !outEnv || !outNeedDetach) return false;
     *outEnv = nullptr;
@@ -265,17 +424,37 @@ extern "C" void rayactJniOrderSurfaces(const int* ids, int count) {
 // Pending text updates from Android IME (main thread) drained on render thread.
 struct PendingTextUpdate {
     std::string text;
-    int cursor = -1;
+    int selectionStart = -1;
+    int selectionEnd = -1;
+    int composingStart = -1;
+    int composingEnd = -1;
 };
 static std::mutex g_textUpdateMutex;
 static std::map<int, PendingTextUpdate> g_pendingTextUpdates;
 // IME DONE/Enter requested a blur of the focused field (drained on render thread).
 static std::atomic<bool> g_pendingImeBlur{false};
 
+// Keyboard (IME) geometry posted by the main thread, drained on the render
+// thread into globalThis.__rayactKeyboardInsets + change listener.
+struct PendingKeyboardInsets {
+    float heightDp = 0.0f;   // real Android dp; rescaled to layout-dp on drain
+    bool visible = false;
+    float durationMs = 250.0f;
+};
+static std::mutex g_keyboardInsetsMutex;
+static PendingKeyboardInsets g_pendingKeyboardInsets;
+static std::atomic<bool> g_keyboardInsetsDirty{false};
+// Safe-area snapshot (layout-dp) mirrored onto globalThis.__rayactSafeAreaInsets.
+static std::mutex g_safeAreaSnapshotMutex;
+static float g_safeAreaSnapshot[4] = {0, 0, 0, 0};  // top right bottom left
+static std::atomic<bool> g_safeAreaSnapshotDirty{false};
+
 // Only show keyboard if not already showing for this node.
 static std::atomic<int> g_imeNodeId{-1};
 
-void AndroidKeyboard_ShowForNode(int nodeId) {
+void AndroidKeyboard_ShowForNode(int nodeId, const std::string& inputType,
+                                 bool autocorrect, bool secure,
+                                 const std::string& imeAction) {
     const int prevNode = g_imeNodeId.load();
     g_imeNodeId.store(nodeId);
     // Called from render thread which already holds g_engineMutex — no re-lock.
@@ -295,11 +474,17 @@ void AndroidKeyboard_ShowForNode(int nodeId) {
         const char* method = (prevNode >= 0 && prevNode != nodeId)
                                  ? "switchImeFromHost"
                                  : "showSoftKeyboardFromHost";
-        const char* sig = "(ILjava/lang/String;)V";
+        const char* sig = "(ILjava/lang/String;Ljava/lang/String;ZZLjava/lang/String;)V";
         jmethodID m = env->GetStaticMethodID(cls, method, sig);
         if (m) {
             jstring jVal = env->NewStringUTF(value.c_str());
-            env->CallStaticVoidMethod(cls, m, (jint)nodeId, jVal);
+            jstring jInputType = env->NewStringUTF(inputType.c_str());
+            jstring jImeAction = env->NewStringUTF(imeAction.c_str());
+            env->CallStaticVoidMethod(cls, m, (jint)nodeId, jVal, jInputType,
+                                      (jboolean)autocorrect, (jboolean)secure,
+                                      jImeAction);
+            env->DeleteLocalRef(jInputType);
+            env->DeleteLocalRef(jImeAction);
             env->DeleteLocalRef(jVal);
         } else {
             LOGE("RayactEngineKt.%s not found", method);
@@ -326,14 +511,22 @@ void AndroidKeyboard_Hide() {
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_rayact_engine_RayactEngine_nativeSetTextInputContent(JNIEnv* env, jclass, jint nodeId, jstring text, jint cursor) {
+Java_com_rayact_engine_RayactEngine_nativeSetTextInputContent(
+    JNIEnv* env, jclass, jint nodeId, jstring text, jint selectionStart,
+    jint selectionEnd, jint composingStart, jint composingEnd) {
     const char* s = env->GetStringUTFChars(text, nullptr);
     if (!s) return;
     std::string str(s);
     env->ReleaseStringUTFChars(text, s);
     // QuickJS is render-thread-only. Queue the update; drain on render thread.
     std::lock_guard<std::mutex> lock(g_textUpdateMutex);
-    g_pendingTextUpdates[(int)nodeId] = {std::move(str), (int)cursor};
+    int byteSelectionStart = utf16OffsetToUtf8Byte(str, (int)selectionStart);
+    int byteSelectionEnd = utf16OffsetToUtf8Byte(str, (int)selectionEnd);
+    int byteComposingStart = utf16OffsetToUtf8Byte(str, (int)composingStart);
+    int byteComposingEnd = utf16OffsetToUtf8Byte(str, (int)composingEnd);
+    g_pendingTextUpdates[(int)nodeId] = {
+        std::move(str), byteSelectionStart, byteSelectionEnd,
+        byteComposingStart, byteComposingEnd};
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -346,17 +539,39 @@ Java_com_rayact_engine_RayactEngine_nativeImeHiddenBySystem(JNIEnv*, jclass) {
     g_imeNodeId.store(-1, std::memory_order_release);
 }
 
-// Render thread → Kotlin: keep the IME InputConnection selection in sync with
-// native caret moves (tap-to-caret on a focused field).
-void AndroidKeyboard_UpdateSelection(int nodeId, int cursor) {
+// Render thread → Kotlin: keep the IME InputConnection in sync with native
+// editing-state changes.
+void AndroidKeyboard_UpdateSelection(int nodeId, int selectionStart,
+                                     int selectionEnd, int composingStart,
+                                     int composingEnd,
+                                     const char* fullTextIfChanged) {
     if (g_imeNodeId.load() != nodeId) return;
+    std::string textForOffsets;
+    if (fullTextIfChanged) {
+        textForOffsets = fullTextIfChanged;
+    } else {
+        auto it = g_nodes.find(nodeId);
+        if (it != g_nodes.end() && it->second->textInput.value)
+            textForOffsets = *it->second->textInput.value;
+    }
+    int u16SelectionStart = utf8ByteToUtf16Offset(textForOffsets, selectionStart);
+    int u16SelectionEnd = utf8ByteToUtf16Offset(textForOffsets, selectionEnd);
+    int u16ComposingStart = utf8ByteToUtf16Offset(textForOffsets, composingStart);
+    int u16ComposingEnd = utf8ByteToUtf16Offset(textForOffsets, composingEnd);
     JNIEnv* env = nullptr;
     bool needDetach = false;
     if (!attachEnv(&env, &needDetach)) return;
     jclass cls = env->FindClass("com/rayact/engine/RayactEngineKt");
     if (cls) {
-        jmethodID m = env->GetStaticMethodID(cls, "updateImeSelectionFromHost", "(II)V");
-        if (m) env->CallStaticVoidMethod(cls, m, (jint)nodeId, (jint)cursor);
+        jmethodID m = env->GetStaticMethodID(
+            cls, "updateImeStateFromHost", "(IIIIILjava/lang/String;)V");
+        if (m) {
+            jstring jText = fullTextIfChanged ? env->NewStringUTF(fullTextIfChanged) : nullptr;
+            env->CallStaticVoidMethod(cls, m, (jint)nodeId, (jint)u16SelectionStart,
+                                      (jint)u16SelectionEnd, (jint)u16ComposingStart,
+                                      (jint)u16ComposingEnd, jText);
+            if (jText) env->DeleteLocalRef(jText);
+        }
     }
     if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); }
     if (needDetach) g_jvm->DetachCurrentThread();
@@ -558,7 +773,168 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     g_jvm = vm;
     // Wire OS emoji rasterizer immediately — uses g_jvm which is now set.
     raym3::v2::EmojiFont::Instance().SetRasterizer(AndroidRasterizeEmoji);
+    installAndroidTextInputHostHooksOnce();
     return JNI_VERSION_1_6;
+}
+
+// ─── external (platform) views: host side ────────────────────────────────────
+// Bridge callbacks run on the render thread (under g_engineMutex); they
+// forward to Kotlin static up-calls (com.rayact.engine.RayactPlatformViewsKt)
+// which post to the main thread. Frames come back via
+// nativePushExternalViewFrame (main thread) and are drained in the JS pump.
+
+#include <android/hardware_buffer.h>
+#include <android/hardware_buffer_jni.h>
+extern "C" unsigned int rlvkLoadTextureFromHardwareBuffer(AHardwareBuffer* buffer);
+extern "C" void rlUnloadTexture(unsigned int id);
+
+// Generic Kotlin static up-call (attaches the calling thread if needed).
+static void callPlatformViewsKt(const char* method, const char* sig,
+                                const std::function<void(JNIEnv*, jclass, jmethodID)>& invoke) {
+    if (!g_jvm) return;
+    JNIEnv* env = nullptr;
+    bool needDetach = false;
+    jint rs = g_jvm->GetEnv((void**)&env, JNI_VERSION_1_6);
+    if (rs == JNI_EDETACHED) {
+        if (g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) return;
+        needDetach = true;
+    } else if (rs != JNI_OK) {
+        return;
+    }
+    jclass cls = env->FindClass("com/rayact/engine/RayactPlatformViewsKt");
+    if (cls) {
+        jmethodID m = env->GetStaticMethodID(cls, method, sig);
+        if (m) invoke(env, cls, m);
+        else LOGE("RayactPlatformViewsKt.%s%s not found", method, sig);
+        env->DeleteLocalRef(cls);
+    } else {
+        env->ExceptionClear();
+        LOGE("RayactPlatformViewsKt class not found");
+    }
+    if (needDetach) g_jvm->DetachCurrentThread();
+}
+
+static void externalViewRectChanged(int nodeId, const char* kind,
+                                    float x, float y, float w, float h) {
+    // Convert layout-dp → raster px here, where the engine's density policy
+    // lives; the Kotlin host then works in surface px (touch coords match).
+    const float px = (float)raym3::v2::Density::RasterPixels(x);
+    const float py = (float)raym3::v2::Density::RasterPixels(y);
+    const float pw = (float)raym3::v2::Density::RasterPixels(w);
+    const float ph = (float)raym3::v2::Density::RasterPixels(h);
+    callPlatformViewsKt("platformViewRectFromHost", "(ILjava/lang/String;FFFF)V",
+        [&](JNIEnv* env, jclass cls, jmethodID m) {
+            jstring jk = env->NewStringUTF(kind ? kind : "");
+            env->CallStaticVoidMethod(cls, m, (jint)nodeId, jk, px, py, pw, ph);
+            env->DeleteLocalRef(jk);
+        });
+}
+
+static void externalViewInput(int nodeId, int action, float lx, float ly) {
+    callPlatformViewsKt("platformViewInputFromHost", "(IIFF)V",
+        [&](JNIEnv* env, jclass cls, jmethodID m) {
+            env->CallStaticVoidMethod(cls, m, (jint)nodeId, (jint)action, lx, ly);
+        });
+}
+
+static void externalViewProp(int nodeId, const char* key, const char* value) {
+    callPlatformViewsKt("platformViewPropFromHost",
+                        "(ILjava/lang/String;Ljava/lang/String;)V",
+        [&](JNIEnv* env, jclass cls, jmethodID m) {
+            jstring jkey = env->NewStringUTF(key ? key : "");
+            jstring jval = env->NewStringUTF(value ? value : "");
+            env->CallStaticVoidMethod(cls, m, (jint)nodeId, jkey, jval);
+            env->DeleteLocalRef(jkey);
+            env->DeleteLocalRef(jval);
+        });
+}
+
+static void externalViewDispose(int nodeId);
+
+// Pending producer frames (main thread → JS-pump drain). One slot per node:
+// a newer frame replaces an undrained older one.
+static std::mutex g_pvFrameMutex;
+static std::map<int, AHardwareBuffer*> g_pvPendingFrames;
+// Pending text-change events from EditText TextWatchers.
+static std::mutex g_pvTextMutex;
+static std::map<int, std::string> g_pvPendingText;
+
+// Per-node import cache: ImageReader recycles a small buffer pool, so each
+// AHardwareBuffer imports once and frames just swap which texture is bound.
+struct PvTexEntry { unsigned int texId; int width; int height; };
+static std::map<int, std::map<AHardwareBuffer*, PvTexEntry>> g_pvTexCache;
+
+static void externalViewDispose(int nodeId) {
+    {
+        std::lock_guard<std::mutex> lk(g_pvFrameMutex);
+        auto it = g_pvPendingFrames.find(nodeId);
+        if (it != g_pvPendingFrames.end()) {
+            if (it->second) AHardwareBuffer_release(it->second);
+            g_pvPendingFrames.erase(it);
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lk(g_pvTextMutex);
+        g_pvPendingText.erase(nodeId);
+    }
+    auto cit = g_pvTexCache.find(nodeId);
+    if (cit != g_pvTexCache.end()) {
+        for (auto& [ahb, entry] : cit->second) rlUnloadTexture(entry.texId);
+        g_pvTexCache.erase(cit);
+    }
+    callPlatformViewsKt("platformViewDisposeFromHost", "(I)V",
+        [&](JNIEnv* env, jclass cls, jmethodID m) {
+            env->CallStaticVoidMethod(cls, m, (jint)nodeId);
+        });
+}
+
+// Drain producer frames + text events. Called from the render-thread pump
+// section under g_engineMutex (graphics + JS safe).
+static void drainExternalViewEvents() {
+    std::map<int, AHardwareBuffer*> frames;
+    {
+        std::lock_guard<std::mutex> lk(g_pvFrameMutex);
+        frames.swap(g_pvPendingFrames);
+    }
+    for (auto& [nodeId, ahb] : frames) {
+        if (!ahb) continue;
+        auto& cache = g_pvTexCache[nodeId];
+        auto it = cache.find(ahb);
+        if (it == cache.end()) {
+            const unsigned int texId = rlvkLoadTextureFromHardwareBuffer(ahb);
+            if (texId == 0) { AHardwareBuffer_release(ahb); continue; }
+            AHardwareBuffer_Desc d = {};
+            AHardwareBuffer_describe(ahb, &d);
+            it = cache.emplace(ahb, PvTexEntry{texId, (int)d.width, (int)d.height}).first;
+            LOGI("externalView: imported frame buffer for node %d (tex=%u %ux%u, cache=%zu)",
+                 nodeId, texId, d.width, d.height, cache.size());
+            // Resize churn: cap the per-node cache (stale sizes evict oldest).
+            if (cache.size() > 6) {
+                auto evict = cache.begin();
+                if (evict->first == ahb) ++evict;
+                if (evict != cache.end()) {
+                    rlUnloadTexture(evict->second.texId);
+                    cache.erase(evict);
+                }
+            }
+        }
+        Texture2D tex = {};
+        tex.id = it->second.texId;
+        tex.width = it->second.width;
+        tex.height = it->second.height;
+        tex.mipmaps = 1;
+        tex.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+        rayactSetExternalViewTexture(nodeId, tex);
+        AHardwareBuffer_release(ahb); // pending-slot ref; cache import holds its own
+    }
+
+    std::map<int, std::string> texts;
+    {
+        std::lock_guard<std::mutex> lk(g_pvTextMutex);
+        texts.swap(g_pvPendingText);
+    }
+    for (auto& [nodeId, text] : texts)
+        rayactExternalViewEmitText(nodeId, text.c_str());
 }
 
 // Create the engine once per process (idempotent). dataPath = Activity internalDataPath.
@@ -574,6 +950,8 @@ Java_com_rayact_engine_RayactEngine_nativeCreate(JNIEnv* env, jclass, jstring da
     }
     if (!rayact::engineCreate()) { LOGE("engineCreate failed"); return JNI_FALSE; }
     g_engineReady = true;
+    rayactSetExternalViewHostCallbacks(externalViewRectChanged, externalViewInput,
+                                       externalViewProp, externalViewDispose);
     std::string dp = jstr(env, dataPath);
     if (!dp.empty()) {
         g_dataPath = dp;
@@ -620,22 +998,36 @@ Java_com_rayact_engine_RayactEngine_nativeCreateSurface(JNIEnv* env, jclass, job
             float layoutDensity = androidLayoutDensityForSurface(win, density);
             g_realDensity = density;
             engineBindScreenRoot(existingRootId);
-            RcoreAndroidSurface_SetWindow(win);
             RcoreAndroidSurface_SetDensity(layoutDensity);
-            SetTargetFPS(0);
-            InitWindow(0, 0, "Rayact");
-            if (!IsWindowReady()) {
-                LOGE("nativeCreateSurface: resume InitWindow failed");
-                ANativeWindow_release(win);
-                return 0;
-            }
-            raym3::FontManager::ResetDeviceCache();
             setRaym3AndroidDensity(density, layoutDensity);
-            raym3::FontManager::Initialize();
-            rayact::engineLoadConfig(g_dataPath.c_str());
-            rayact::engineFinishLoad();
-            int windowId = RcoreAndroidSurface_GetCurrentId();
-            if (windowId <= 0) windowId = 1;
+
+            // Fast path (RLVK): rebind the new window and recreate only the
+            // VkSurface + swapchain. The Vulkan device — and every texture on
+            // it (font atlases, icon sheets, images) — survives, so no GPU
+            // cache needs resetting and nothing leaks per background cycle.
+            int windowId = RcoreAndroidSurface_ResumeWindow(win);
+            if (windowId <= 0) {
+                // Fallback: full graphics re-init (GLES path, or swapchain
+                // recreation failure). This orphans device textures, so every
+                // GPU-side cache must be dropped and rebuilt.
+                LOGI("nativeCreateSurface: resume fast path unavailable, re-initializing");
+                RcoreAndroidSurface_SetWindow(win);
+                SetTargetFPS(0);
+                InitWindow(0, 0, "Rayact");
+                if (!IsWindowReady()) {
+                    LOGE("nativeCreateSurface: resume InitWindow failed");
+                    ANativeWindow_release(win);
+                    return 0;
+                }
+                raym3::FontManager::ResetDeviceCache();
+                raym3::v2::IconRendererResetDeviceCache();
+                rayactResetIconSheet();
+                raym3::FontManager::Initialize();
+                rayact::engineLoadConfig(g_dataPath.c_str());
+                rayact::engineFinishLoad();
+                windowId = RcoreAndroidSurface_GetCurrentId();
+                if (windowId <= 0) windowId = 1;
+            }
             Surface s;
             s.window = win;
             s.windowId = windowId;
@@ -720,6 +1112,26 @@ Java_com_rayact_engine_RayactEngine_nativeSetSafeAreaInsets(
     float scale = (layoutDensity > 0.0f && g_realDensity > 0.0f)
                   ? g_realDensity / layoutDensity : 1.0f;
     setSafeAreaInsets(top * scale, right * scale, bottom * scale, left * scale);
+    {
+        std::lock_guard<std::mutex> slock(g_safeAreaSnapshotMutex);
+        g_safeAreaSnapshot[0] = top * scale;
+        g_safeAreaSnapshot[1] = right * scale;
+        g_safeAreaSnapshot[2] = bottom * scale;
+        g_safeAreaSnapshot[3] = left * scale;
+    }
+    g_safeAreaSnapshotDirty.store(true, std::memory_order_release);
+}
+
+JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngine_nativeSetKeyboardInsets(
+    JNIEnv*, jclass, jfloat heightDp, jboolean visible, jfloat durationMs) {
+    {
+        std::lock_guard<std::mutex> lock(g_keyboardInsetsMutex);
+        g_pendingKeyboardInsets.heightDp = heightDp;
+        g_pendingKeyboardInsets.visible = visible == JNI_TRUE;
+        g_pendingKeyboardInsets.durationMs = durationMs;
+    }
+    g_keyboardInsetsDirty.store(true, std::memory_order_release);
 }
 
 // Destroy an EGL surface + engine screen. Idempotent.
@@ -836,12 +1248,78 @@ Java_com_rayact_engine_RayactEngine_nativeRenderFrame(JNIEnv*, jclass,
             updates.swap(g_pendingTextUpdates);
         }
         for (auto& [nodeId, update] : updates) {
-            rayactSetTextInputContent(nodeId, update.text.c_str(), update.cursor);
+            rayactSetTextInputContent(nodeId, update.text.c_str(), update.selectionStart,
+                                      update.selectionEnd, update.composingStart,
+                                      update.composingEnd);
         }
     }
 
     if (g_pendingImeBlur.exchange(false, std::memory_order_acq_rel)) {
         rayactBlurFocusedTextInput();
+    }
+
+    // External-view producer frames (AHB import + texture swap) and EditText
+    // text-change events.
+    drainExternalViewEvents();
+
+    // Publish safe-area / keyboard inset snapshots to JS globals and notify
+    // the React insets store. Runs on the render (JS) thread under
+    // g_engineMutex, so plain JS calls are safe here.
+    {
+        const bool safeAreaDirty =
+            g_safeAreaSnapshotDirty.exchange(false, std::memory_order_acq_rel);
+        const bool keyboardDirty =
+            g_keyboardInsetsDirty.exchange(false, std::memory_order_acq_rel);
+        JSContext* ctx = (safeAreaDirty || keyboardDirty) ? rayact::engineContext() : nullptr;
+        if (ctx) {
+            JSValue global = JS_GetGlobalObject(ctx);
+            if (safeAreaDirty) {
+                float t, r, b, l;
+                {
+                    std::lock_guard<std::mutex> slock(g_safeAreaSnapshotMutex);
+                    t = g_safeAreaSnapshot[0]; r = g_safeAreaSnapshot[1];
+                    b = g_safeAreaSnapshot[2]; l = g_safeAreaSnapshot[3];
+                }
+                JSValue obj = JS_NewObject(ctx);
+                JS_SetPropertyStr(ctx, obj, "top", JS_NewFloat64(ctx, t));
+                JS_SetPropertyStr(ctx, obj, "right", JS_NewFloat64(ctx, r));
+                JS_SetPropertyStr(ctx, obj, "bottom", JS_NewFloat64(ctx, b));
+                JS_SetPropertyStr(ctx, obj, "left", JS_NewFloat64(ctx, l));
+                JS_SetPropertyStr(ctx, global, "__rayactSafeAreaInsets", obj);
+            }
+            if (keyboardDirty) {
+                PendingKeyboardInsets kb;
+                {
+                    std::lock_guard<std::mutex> klock(g_keyboardInsetsMutex);
+                    kb = g_pendingKeyboardInsets;
+                }
+                // Rescale real-dp height to layout-dp (same as safe area).
+                float layoutDensity = raym3::v2::Density::GetLayoutDensity();
+                float scale = (layoutDensity > 0.0f && g_realDensity > 0.0f)
+                              ? g_realDensity / layoutDensity : 1.0f;
+                JSValue obj = JS_NewObject(ctx);
+                JS_SetPropertyStr(ctx, obj, "visible", JS_NewBool(ctx, kb.visible));
+                JS_SetPropertyStr(ctx, obj, "height",
+                                  JS_NewFloat64(ctx, kb.heightDp * scale));
+                JS_SetPropertyStr(ctx, obj, "duration",
+                                  JS_NewFloat64(ctx, kb.durationMs));
+                JS_SetPropertyStr(ctx, global, "__rayactKeyboardInsets", obj);
+            }
+            JSValue fn = JS_GetPropertyStr(ctx, global, "__rayactOnKeyboardInsetsChange");
+            if (JS_IsFunction(ctx, fn)) {
+                JSValue r = JS_Call(ctx, fn, JS_UNDEFINED, 0, nullptr);
+                if (JS_IsException(r)) {
+                    JSValue exc = JS_GetException(ctx);
+                    const char* s = JS_ToCString(ctx, exc);
+                    LOGE("__rayactOnKeyboardInsetsChange threw: %s", s ? s : "?");
+                    if (s) JS_FreeCString(ctx, s);
+                    JS_FreeValue(ctx, exc);
+                }
+                JS_FreeValue(ctx, r);
+            }
+            JS_FreeValue(ctx, fn);
+            JS_FreeValue(ctx, global);
+        }
     }
 
     if (g_pendingBackPress.exchange(false, std::memory_order_acq_rel)) {
@@ -939,6 +1417,46 @@ Java_com_rayact_engine_RayactEngine_nativeRenderFrame(JNIEnv*, jclass,
         RcoreAndroidSurface_SwapWindow();
     }
     return rayact::engineNeedsAnotherFrame() ? JNI_TRUE : JNI_FALSE;
+}
+
+// Milliseconds until the earliest pending JS timer fires (-1 = none). The
+// Kotlin render thread uses this to schedule a delayed wakeup frame when the
+// continuous loop stops — timers only tick inside the per-frame JS pump, so
+// without this a future setTimeout/setInterval would never fire while idle.
+JNIEXPORT jfloat JNICALL
+Java_com_rayact_engine_RayactEngine_nativeNextJSTimerDelayMs(JNIEnv*, jclass) {
+    std::lock_guard<std::mutex> lock(g_engineMutex);
+    return (jfloat)nextJSTimerDelayMs();
+}
+
+// External-view producer frame (main thread). Acquires a reference on the
+// AHardwareBuffer; the JS-pump drain imports/binds it and releases this ref.
+JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngine_nativePushExternalViewFrame(
+    JNIEnv* env, jclass, jint nodeId, jobject hardwareBuffer) {
+    AHardwareBuffer* ahb = AHardwareBuffer_fromHardwareBuffer(env, hardwareBuffer);
+    if (!ahb) return;
+    AHardwareBuffer_acquire(ahb);
+    std::lock_guard<std::mutex> lk(g_pvFrameMutex);
+    auto it = g_pvPendingFrames.find(nodeId);
+    if (it != g_pvPendingFrames.end() && it->second) AHardwareBuffer_release(it->second);
+    g_pvPendingFrames[nodeId] = ahb;
+}
+
+// Producer-surface content insets (px) — main thread, engine-locked.
+JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngine_nativeSetExternalViewInsets(
+    JNIEnv*, jclass, jint nodeId, jfloat l, jfloat t, jfloat r, jfloat b) {
+    std::lock_guard<std::mutex> lock(g_engineMutex);
+    rayactSetExternalViewTextureInsets(nodeId, l, t, r, b);
+}
+
+// EditText TextWatcher → JS onChangeText (drained in the pump).
+JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngine_nativeExternalViewTextChanged(
+    JNIEnv* env, jclass, jint nodeId, jstring text) {
+    std::lock_guard<std::mutex> lk(g_pvTextMutex);
+    g_pvPendingText[nodeId] = jstr(env, text);
 }
 
 // Touch event from the UI thread. action: 0=down 1=up 2=move (RCORE_AS_TOUCH_*).

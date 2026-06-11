@@ -53,5 +53,27 @@ adb shell run-as "$APP_PKG" cp "$TMP/MaterialSymbolsRounded-Filled.ttf" files/re
 adb shell run-as "$APP_PKG" cp "$TMP/MaterialSymbolsRounded.ttf" files/resources/fonts/MaterialSymbolsRounded.ttf 2>/dev/null || true
 adb shell run-as "$APP_PKG" cp "$TMP/NotoColorEmoji.ttf" files/resources/fonts/NotoColorEmoji.ttf 2>/dev/null || true
 
+# Push CSS files referenced by the bundle. importCSS() in the C++ layer reads
+# them from the filesystem at runtime (CWD is filesDir), so each file the
+# bundle names must exist on-device at the same relative path.
+echo "  Pushing bundle CSS files to device..."
+# for-loop, not while-read: adb inside the loop would consume the piped stdin
+for CSS_PATH in $(grep -o 'importCSS("[^"]*")' "$ASSETS_DIR/app.js" | sed 's/importCSS("\.\///;s/")//' | sort -u); do
+  if [[ ! -f "$CSS_PATH" ]]; then
+    echo "  warning: bundle references missing CSS file: $CSS_PATH" >&2
+    continue
+  fi
+  CSS_TMP="$TMP/$(echo "$CSS_PATH" | tr '/' '_')"
+  adb push "$CSS_PATH" "$CSS_TMP" 2>/dev/null || true
+  # mkdir -p not available via run-as — create each path level separately
+  DIR_ACC="files"
+  IFS='/' read -ra DIR_SEGS <<< "$(dirname "$CSS_PATH")"
+  for SEG in "${DIR_SEGS[@]}"; do
+    DIR_ACC="$DIR_ACC/$SEG"
+    adb shell run-as "$APP_PKG" mkdir "$DIR_ACC" 2>/dev/null || true
+  done
+  adb shell run-as "$APP_PKG" cp "$CSS_TMP" "files/$CSS_PATH" 2>/dev/null || true
+done
+
 adb shell am start -n com.rayact.app/.MainActivity | tail -1
 echo "Done. adb logcat -s raylib:I RayactJNI:I JS: to follow the run."

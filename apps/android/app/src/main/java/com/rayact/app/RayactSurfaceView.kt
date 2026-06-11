@@ -3,8 +3,10 @@ package com.rayact.app
 import android.content.Context
 import android.text.InputType
 import android.text.Selection
+import android.text.SpannableStringBuilder
 import android.util.AttributeSet
 import android.view.Choreographer
+import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.SurfaceHolder
@@ -13,13 +15,16 @@ import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
+import android.view.inputmethod.CursorAnchorInfo
+import android.view.inputmethod.ExtractedText
+import android.view.inputmethod.ExtractedTextRequest
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.rayact.engine.RayactEngine
 import com.rayact.engine.RayactHostRegistry
 import java.util.concurrent.atomic.AtomicInteger
 
-private object RayactRenderScheduler {
+internal object RayactRenderScheduler {
     private val surfaceCount = AtomicInteger(0)
     @Volatile private var renderThread: RenderThread? = null
 
@@ -56,6 +61,10 @@ private object RayactRenderScheduler {
         @Volatile private var continuous = false
         @Volatile private var lastFrameTimeNanos = 0L
 
+        private val timerWakeup = Runnable {
+            if (running) scheduleNextFrame()
+        }
+
         private val frameCallback = object : Choreographer.FrameCallback {
             override fun doFrame(frameTimeNanos: Long) {
                 if (!running) return
@@ -64,7 +73,18 @@ private object RayactRenderScheduler {
                 lastFrameTimeNanos = frameTimeNanos
                 val deltaNanos = if (prev > 0L) frameTimeNanos - prev else 16_666_667L
                 continuous = RayactEngine.nativeRenderFrame(frameTimeNanos, deltaNanos)
-                if (continuous) scheduleNextFrame()
+                if (continuous) {
+                    handler?.removeCallbacks(timerWakeup)
+                    scheduleNextFrame()
+                } else {
+                    // Loop is stopping: if a JS timer is pending, wake up at its
+                    // deadline so it can fire inside that frame's JS pump.
+                    val delayMs = RayactEngine.nativeNextJSTimerDelayMs()
+                    handler?.removeCallbacks(timerWakeup)
+                    if (delayMs >= 0f) {
+                        handler?.postDelayed(timerWakeup, delayMs.toLong().coerceAtLeast(1L))
+                    }
+                }
             }
         }
 
@@ -133,13 +153,28 @@ class RayactSurfaceView @JvmOverloads constructor(
 
     // ── IME (soft keyboard) ───────────────────────────────────────────────────
     private var imeNodeId: Int = -1
-    private val imeText = StringBuilder()
+    private val imeText = SpannableStringBuilder()
+    private var imeInputType: String = "text"
+    private var imeAutocorrect: Boolean = false
+    private var imeSecure: Boolean = false
+    private var imeAction: String = "done"
 
     /** Called from Kotlin main thread by showSoftKeyboardFromHost. */
-    fun setupForIme(nodeId: Int, initialText: String) {
+    fun setupForIme(
+        nodeId: Int,
+        initialText: String,
+        inputType: String,
+        autocorrect: Boolean,
+        secure: Boolean,
+        imeActionValue: String
+    ) {
         imeNodeId = nodeId
-        imeText.clear()
-        imeText.append(initialText)
+        imeText.replace(0, imeText.length, initialText)
+        Selection.setSelection(imeText, imeText.length)
+        imeInputType = inputType
+        imeAutocorrect = autocorrect
+        imeSecure = secure
+        this.imeAction = imeActionValue
         requestFocus()
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.restartInput(this)
@@ -147,14 +182,25 @@ class RayactSurfaceView @JvmOverloads constructor(
     }
 
     /** Retarget an open IME to a different TextInput without hide/show. */
-    fun switchIme(nodeId: Int, initialText: String) {
+    fun switchIme(
+        nodeId: Int,
+        initialText: String,
+        inputType: String,
+        autocorrect: Boolean,
+        secure: Boolean,
+        imeActionValue: String
+    ) {
         imeNodeId = nodeId
-        imeText.clear()
-        imeText.append(initialText)
+        imeText.replace(0, imeText.length, initialText)
+        Selection.setSelection(imeText, imeText.length)
+        imeInputType = inputType
+        imeAutocorrect = autocorrect
+        imeSecure = secure
+        this.imeAction = imeActionValue
         activeInputConnection?.editable?.let { ed ->
-            ed.clear()
-            ed.append(initialText)
+            ed.replace(0, ed.length, initialText)
             Selection.setSelection(ed, initialText.length)
+            activeInputConnection?.resetSnapshot()
         }
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.restartInput(this)
@@ -169,23 +215,69 @@ class RayactSurfaceView @JvmOverloads constructor(
         imm.hideSoftInputFromWindow(windowToken, 0)
     }
 
-    /** Native caret moved (tap-to-caret) — sync the InputConnection selection. */
-    fun updateImeSelection(nodeId: Int, cursor: Int) {
+    /** Native editing state changed — sync the InputConnection without echoing back. */
+    fun updateImeState(
+        nodeId: Int,
+        text: String?,
+        selectionStart: Int,
+        selectionEnd: Int,
+        composingStart: Int,
+        composingEnd: Int
+    ) {
         if (imeNodeId != nodeId) return
         val ic = activeInputConnection ?: return
         val ed = ic.editable ?: return
-        val pos = cursor.coerceIn(0, ed.length)
-        Selection.setSelection(ed, pos)
+        ic.applyingFromNative = true
+        if (text != null && text != ed.toString()) {
+            ed.replace(0, ed.length, text)
+            imeText.replace(0, imeText.length, text)
+        }
+        val start = if (selectionStart < 0 || selectionEnd < 0) {
+            ed.length
+        } else {
+            minOf(selectionStart, selectionEnd).coerceIn(0, ed.length)
+        }
+        val end = if (selectionStart < 0 || selectionEnd < 0) {
+            ed.length
+        } else {
+            maxOf(selectionStart, selectionEnd).coerceIn(0, ed.length)
+        }
+        Selection.setSelection(ed, start, end)
+        if (composingStart >= 0 && composingEnd >= composingStart) {
+            ic.setComposingRegion(
+                composingStart.coerceIn(0, ed.length),
+                composingEnd.coerceIn(0, ed.length)
+            )
+        } else {
+            ic.finishComposingText()
+        }
+        ic.applyingFromNative = false
+        ic.resetSnapshot()
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.updateSelection(this, pos, pos, -1, -1)
+        imm.updateSelection(this, start, end, composingStart, composingEnd)
+        val cursorBuilder = CursorAnchorInfo.Builder().setSelectionRange(start, end)
+        imm.updateCursorAnchorInfo(this, cursorBuilder.build())
     }
 
-    override fun onCheckIsTextEditor() = imeNodeId >= 0
+    override fun onCheckIsTextEditor() =
+        imeNodeId >= 0 || com.rayact.engine.RayactPlatformViews.focusedEditText != null
+
+    // The IMM asks the served view (this) whether [view] may act as its input
+    // proxy. Platform-view EditTexts live in unfocusable Presentation windows
+    // on VirtualDisplays, so the IME binds to this surface view and we
+    // delegate the InputConnection to the embedded EditText (Flutter's
+    // VirtualDisplay text-input mechanism).
+    override fun checkInputConnectionProxy(view: android.view.View): Boolean =
+        com.rayact.engine.RayactPlatformViews.isPlatformViewInput(view)
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
+        com.rayact.engine.RayactPlatformViews.createProxyInputConnection(outAttrs)?.let {
+            activeInputConnection = null
+            return it
+        }
         if (imeNodeId < 0) return null
-        outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        outAttrs.imeOptions = EditorInfo.IME_ACTION_DONE or EditorInfo.IME_FLAG_NO_FULLSCREEN
+        outAttrs.inputType = buildInputTypeFlags()
+        outAttrs.imeOptions = buildImeOptions()
         // Tell the IME where the cursor starts so backspace/insert land correctly.
         outAttrs.initialSelStart = imeText.length
         outAttrs.initialSelEnd = imeText.length
@@ -193,9 +285,9 @@ class RayactSurfaceView @JvmOverloads constructor(
         // Seed the connection's Editable with the current field value so the IME
         // can delete/edit existing text (backspace on an empty Editable is a no-op).
         ic.editable?.let { ed ->
-            ed.clear()
-            ed.append(imeText)
+            ed.replace(0, ed.length, imeText)
             Selection.setSelection(ed, imeText.length)
+            ic.resetSnapshot()
         }
         activeInputConnection = ic
         return ic
@@ -203,7 +295,69 @@ class RayactSurfaceView @JvmOverloads constructor(
 
     private var activeInputConnection: RayactInputConnection? = null
 
+    private fun buildInputTypeFlags(): Int {
+        var flags = when (imeInputType) {
+            "email" -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            "number" -> InputType.TYPE_CLASS_NUMBER
+            "phone" -> InputType.TYPE_CLASS_PHONE
+            "password" -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            "multiline" -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            else -> InputType.TYPE_CLASS_TEXT
+        }
+        if (!imeAutocorrect || imeSecure) {
+            flags = flags or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        return flags
+    }
+
+    private fun buildImeOptions(): Int {
+        val action = when (imeAction) {
+            "go" -> EditorInfo.IME_ACTION_GO
+            "next" -> EditorInfo.IME_ACTION_NEXT
+            "send" -> EditorInfo.IME_ACTION_SEND
+            "search" -> EditorInfo.IME_ACTION_SEARCH
+            else -> EditorInfo.IME_ACTION_DONE
+        }
+        return action or EditorInfo.IME_FLAG_NO_FULLSCREEN
+    }
+
     private inner class RayactInputConnection : BaseInputConnection(this@RayactSurfaceView, true) {
+        // Flutter-style client binding: this connection may only write to the
+        // node it was created for. A stale connection (kept alive by the IMM
+        // across restartInput/focus changes) must never push its editable at
+        // whatever imeNodeId currently points to — that cross-field write is
+        // how a non-focused field can get wiped.
+        private val boundNodeId = imeNodeId
+        var applyingFromNative: Boolean = false
+        private var batchDepth = 0
+        private var lastText = ""
+        private var lastSelStart = -1
+        private var lastSelEnd = -1
+        private var lastCompStart = -1
+        private var lastCompEnd = -1
+
+        override fun getEditable() = imeText
+
+        fun resetSnapshot() {
+            val ed = editable ?: return
+            lastText = ed.toString()
+            lastSelStart = Selection.getSelectionStart(ed)
+            lastSelEnd = Selection.getSelectionEnd(ed)
+            lastCompStart = BaseInputConnection.getComposingSpanStart(ed)
+            lastCompEnd = BaseInputConnection.getComposingSpanEnd(ed)
+        }
+
+        override fun beginBatchEdit(): Boolean {
+            batchDepth += 1
+            return true
+        }
+
+        override fun endBatchEdit(): Boolean {
+            if (batchDepth > 0) batchDepth -= 1
+            if (batchDepth == 0) syncToNative()
+            return true
+        }
+
         override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
             val ok = super.commitText(text, newCursorPosition)
             syncToNative()
@@ -211,9 +365,31 @@ class RayactSurfaceView @JvmOverloads constructor(
         }
 
         override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
+            if (text.isNullOrEmpty()) {
+                val ok = finishComposingText()
+                syncToNative()
+                return ok
+            }
             val ok = super.setComposingText(text, newCursorPosition)
             syncToNative()
             return ok
+        }
+
+        override fun getExtractedText(request: ExtractedTextRequest?, flags: Int): ExtractedText? {
+            val ed = editable ?: return null
+            return ExtractedText().apply {
+                text = ed.toString()
+                partialStartOffset = 0
+                partialEndOffset = text?.length ?: 0
+                selectionStart = Selection.getSelectionStart(ed)
+                selectionEnd = Selection.getSelectionEnd(ed)
+                this.flags = flags
+            }
+        }
+
+        override fun requestCursorUpdates(cursorUpdateMode: Int): Boolean {
+            syncToNative()
+            return true
         }
 
         override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
@@ -259,13 +435,40 @@ class RayactSurfaceView @JvmOverloads constructor(
             return super.performEditorAction(actionCode)
         }
 
+        override fun closeConnection() {
+            while (batchDepth > 0) batchDepth -= 1
+            syncToNative()
+            super.closeConnection()
+        }
+
         private fun syncToNative() {
+            if (applyingFromNative) return
+            if (batchDepth > 0) return
             if (imeNodeId < 0) return
+            if (this !== activeInputConnection || boundNodeId != imeNodeId) return
             val ed = editable ?: return
             val text = ed.toString()
-            imeText.clear(); imeText.append(text)
-            val cursor = Selection.getSelectionEnd(ed).coerceIn(0, text.length)
-            RayactEngine.nativeSetTextInputContent(imeNodeId, text, cursor)
+            val selStart = Selection.getSelectionStart(ed).coerceIn(0, text.length)
+            val selEnd = Selection.getSelectionEnd(ed).coerceIn(0, text.length)
+            val compStart = BaseInputConnection.getComposingSpanStart(ed)
+            val compEnd = BaseInputConnection.getComposingSpanEnd(ed)
+            if (text == lastText && selStart == lastSelStart && selEnd == lastSelEnd &&
+                compStart == lastCompStart && compEnd == lastCompEnd) {
+                return
+            }
+            lastText = text
+            lastSelStart = selStart
+            lastSelEnd = selEnd
+            lastCompStart = compStart
+            lastCompEnd = compEnd
+            RayactEngine.nativeSetTextInputContent(
+                imeNodeId,
+                text,
+                selStart,
+                selEnd,
+                compStart,
+                compEnd
+            )
             // IME commits arrive without a touch event — request a frame so the
             // render thread drains the update and repaints immediately.
             RayactRenderScheduler.requestFrame()
@@ -281,8 +484,12 @@ class RayactSurfaceView @JvmOverloads constructor(
         ViewCompat.setOnApplyWindowInsetsListener(this) { _, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             reportSafeAreaInsets(insets.top, insets.right, insets.bottom, insets.left)
+            reportKeyboardInsets(windowInsets)
             if (!windowInsets.isVisible(WindowInsetsCompat.Type.ime()) && imeNodeId >= 0) {
                 RayactEngine.nativeImeHiddenBySystem()
+                imeNodeId = -1
+                imeText.clear()
+                activeInputConnection = null
             }
             windowInsets
         }
@@ -302,6 +509,26 @@ class RayactSurfaceView @JvmOverloads constructor(
             bottomPx / density,
             leftPx / density
         )
+        RayactRenderScheduler.requestFrame()
+    }
+
+    private var lastImeHeightDp = -1f
+    private var lastImeVisible = false
+
+    private fun reportKeyboardInsets(windowInsets: WindowInsetsCompat) {
+        val density = resources.displayMetrics.density
+        if (density <= 0f) return
+        val visible = windowInsets.isVisible(WindowInsetsCompat.Type.ime())
+        val imeBottomPx = windowInsets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+        val navBottomPx = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
+        // Keyboard height above the nav bar: AvoidKeyboard adds safeArea.bottom
+        // back on top, so the net offset lands at the IME's top edge.
+        val heightDp = ((imeBottomPx - navBottomPx).coerceAtLeast(0)) / density
+        if (visible == lastImeVisible && heightDp == lastImeHeightDp) return
+        lastImeVisible = visible
+        lastImeHeightDp = heightDp
+        RayactEngine.setKeyboardInsets(heightDp, visible, 250f)
+        RayactRenderScheduler.requestFrame()
     }
 
     private fun updateSafeAreaInsets() {
@@ -357,6 +584,11 @@ class RayactSurfaceView @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (surfaceId <= 0 || RayactEngine.getFocusedSurfaceId() != surfaceId) {
             return false
+        }
+        // Gestures starting inside a platform-view field route wholesale into
+        // its Presentation (real event stream → native caret/selection).
+        if (com.rayact.engine.RayactPlatformViews.routeTouch(event)) {
+            return true
         }
         val action = when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> RayactEngine.TOUCH_DOWN

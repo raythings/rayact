@@ -117,6 +117,131 @@ static std::vector<float> parseEdgeShorthand(const std::string& v) {
     return {vals[0],vals[1],vals[2],vals[3]};
 }
 
+// ─── transition shorthand ─────────────────────────────────────────────────────
+
+// Split on `delim` at paren depth 0 (commas occur inside var() and
+// cubic-bezier()).
+static std::vector<std::string> splitTopLevel(const std::string& s, char delim) {
+    std::vector<std::string> out;
+    int depth = 0;
+    std::string cur;
+    for (char c : s) {
+        if (c == '(') depth++;
+        else if (c == ')') depth--;
+        if (c == delim && depth == 0) {
+            std::string t = trimStr(cur);
+            if (!t.empty()) out.push_back(t);
+            cur.clear();
+        } else {
+            cur += c;
+        }
+    }
+    std::string t = trimStr(cur);
+    if (!t.empty()) out.push_back(t);
+    return out;
+}
+
+static std::optional<raym3::v2::TransitionProperty>
+transitionPropertyFromName(const std::string& name) {
+    using P = raym3::v2::TransitionProperty;
+    static const std::map<std::string, P> kMap = {
+        {"margin-top", P::MarginTop},       {"margin-right", P::MarginRight},
+        {"margin-bottom", P::MarginBottom}, {"margin-left", P::MarginLeft},
+        {"top", P::InsetTop},               {"right", P::InsetRight},
+        {"bottom", P::InsetBottom},         {"left", P::InsetLeft},
+        {"opacity", P::Opacity},
+        {"translate-x", P::TranslateX},     {"translate-y", P::TranslateY},
+        {"scale", P::Scale},                {"rotation", P::Rotation},
+        {"width", P::Width},                {"height", P::Height},
+    };
+    auto it = kMap.find(name);
+    if (it == kMap.end()) return std::nullopt;
+    return it->second;
+}
+
+// "250ms" → 250, "0.3s" → 300, "var(--x, 250ms)" → 250. Negative → 0.
+static std::optional<float> parseCssTimeMs(const std::string& tok) {
+    std::string v = tok;
+    if (v.rfind("var(", 0) == 0) {
+        size_t comma = v.find(',');
+        size_t close = v.rfind(')');
+        if (comma == std::string::npos || close == std::string::npos) return std::nullopt;
+        v = trimStr(v.substr(comma + 1, close - comma - 1));
+    }
+    try {
+        size_t idx;
+        float num = std::stof(v, &idx);
+        std::string unit = toLower(trimStr(v.substr(idx)));
+        if (unit == "s") num *= 1000.0f;
+        else if (unit != "ms" && !unit.empty()) return std::nullopt;
+        return std::max(0.0f, num);
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+static bool parseCssEasing(const std::string& tok, raym3::v2::TransitionEntry& e) {
+    if (tok.rfind("cubic-bezier(", 0) == 0) {
+        size_t close = tok.rfind(')');
+        if (close == std::string::npos) return false;
+        auto nums = splitTrim(tok.substr(13, close - 13), ',');
+        if (nums.size() != 4) return false;
+        try {
+            e.x1 = std::stof(nums[0]); e.y1 = std::stof(nums[1]);
+            e.x2 = std::stof(nums[2]); e.y2 = std::stof(nums[3]);
+        } catch (...) { return false; }
+        return true;
+    }
+    if (tok == "linear")      { e.x1 = 0.0f;  e.y1 = 0.0f; e.x2 = 1.0f;  e.y2 = 1.0f; return true; }
+    if (tok == "ease")        { e.x1 = 0.25f; e.y1 = 0.1f; e.x2 = 0.25f; e.y2 = 1.0f; return true; }
+    if (tok == "ease-in")     { e.x1 = 0.42f; e.y1 = 0.0f; e.x2 = 1.0f;  e.y2 = 1.0f; return true; }
+    if (tok == "ease-out")    { e.x1 = 0.0f;  e.y1 = 0.0f; e.x2 = 0.58f; e.y2 = 1.0f; return true; }
+    if (tok == "ease-in-out") { e.x1 = 0.42f; e.y1 = 0.0f; e.x2 = 0.58f; e.y2 = 1.0f; return true; }
+    return false;
+}
+
+std::optional<std::vector<raym3::v2::TransitionEntry>>
+parseTransitionShorthand(const std::string& value) {
+    using P = raym3::v2::TransitionProperty;
+    std::string v = trimStr(value);
+    if (v.empty()) return std::nullopt;
+    if (toLower(v) == "none") return std::vector<raym3::v2::TransitionEntry>{};
+
+    std::vector<raym3::v2::TransitionEntry> entries;
+    for (const std::string& segment : splitTopLevel(v, ',')) {
+        auto tokens = splitTopLevel(segment, ' ');
+        if (tokens.empty()) continue;
+
+        std::vector<P> props;
+        std::string firstTok = toLower(tokens[0]);
+        if (firstTok == "all") {
+            for (uint8_t i = 0; i < (uint8_t)P::Count; ++i) props.push_back((P)i);
+        } else if (auto p = transitionPropertyFromName(firstTok)) {
+            props.push_back(*p);
+        } else {
+            continue; // unknown / unsupported property — skip segment
+        }
+
+        raym3::v2::TransitionEntry proto;
+        bool haveDuration = false;
+        for (size_t i = 1; i < tokens.size(); ++i) {
+            if (parseCssEasing(toLower(tokens[i]), proto)) continue;
+            if (auto ms = parseCssTimeMs(tokens[i])) {
+                if (!haveDuration) { proto.durationMs = *ms; haveDuration = true; }
+                else proto.delayMs = *ms;
+            }
+        }
+
+        for (P p : props) {
+            raym3::v2::TransitionEntry e = proto;
+            e.property = p;
+            entries.push_back(e);
+        }
+    }
+    if (entries.empty()) return std::nullopt;
+    return entries;
+}
+
 // ─── JS object builder ────────────────────────────────────────────────────────
 
 static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& props) {
@@ -127,6 +252,13 @@ static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& props) {
     for (auto& [prop, rawVal] : props) {
         std::string val = cleanValue(rawVal);
         if (val.empty()) continue;
+
+        // ── transition shorthand: pass raw string through; applyStyleProps
+        // parses it into Style::transitions ──────────────────────────────
+        if (prop == "transition") {
+            JS_SetPropertyStr(ctx, obj, "transition", JS_NewString(ctx, val.c_str()));
+            continue;
+        }
 
         // ── text sub-properties ──────────────────────────────────────────
         if (prop == "color")           { JS_SetPropertyStr(ctx, textObj, "color",        JS_NewFloat64(ctx, parseColor(val)));  hasText=true; continue; }

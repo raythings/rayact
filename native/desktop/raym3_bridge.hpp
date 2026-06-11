@@ -3,6 +3,7 @@
 #include <map>
 #include <memory>
 #include <functional>
+#include <string>
 #include <vector>
 
 extern "C" {
@@ -28,6 +29,8 @@ JSValue JS_createTextInput(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createScrollView(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createModal(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createSafeArea(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_createExternalView(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_setExternalViewProps(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createStatusBar(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createActivityIndicator(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createAvoidKeyboard(JSContext*, JSValue, int, JSValueConst*);
@@ -63,15 +66,38 @@ JSValue JS_setIconProps(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_registerFont(JSContext*, JSValue, int, JSValueConst*);
 
 #ifdef __ANDROID__
-void AndroidKeyboard_ShowForNode(int nodeId);
+void AndroidKeyboard_ShowForNode(int nodeId, const std::string &inputType,
+                                 bool autocorrect, bool secure,
+                                 const std::string &imeAction);
 void AndroidKeyboard_Hide();
-void AndroidKeyboard_UpdateSelection(int nodeId, int cursor);
+void AndroidKeyboard_UpdateSelection(int nodeId, int selectionStart, int selectionEnd,
+                                     int composingStart, int composingEnd,
+                                     const char *fullTextIfChanged);
 #endif
 
-void rayactSetTextInputContent(int nodeId, const char* text, int cursor = -1);
+void rayactSetTextInputContent(int nodeId, const char *text, int selectionStart = -1,
+                               int selectionEnd = -1, int composingStart = -1,
+                               int composingEnd = -1);
 void rayactBlurFocusedTextInput();
 
+// External (platform) views: host callbacks for layout-rect pushes and input
+// forwarding, plus texture replacement (e.g. rlvk AHardwareBuffer imports).
+void rayactSetExternalViewHostCallbacks(
+    void (*rectCb)(int nodeId, const char* kind, float x, float y, float w, float h),
+    void (*inputCb)(int nodeId, int action, float localX, float localY),
+    void (*propCb)(int nodeId, const char* key, const char* value),
+    void (*disposeCb)(int nodeId));
+void rayactSetExternalViewTexture(int nodeId, Texture2D texture);
+// Producer-surface content insets in px (oversized surface for overflow
+// chrome); the node's draw rect expands by these.
+void rayactSetExternalViewTextureInsets(int nodeId, float l, float t, float r, float b);
+// Invoke the node's JS onChangeText with producer text (JS thread only).
+void rayactExternalViewEmitText(int nodeId, const char* text);
+
 void buildIconSpriteSheet();
+// Drop GPU icon-sheet state without unloading (device re-init invalidated the
+// ids); sheet rebuilds from retained registrations via buildIconSpriteSheet().
+void rayactResetIconSheet();
 void cleanupRaym3Bridge(JSContext* ctx);
 void refreshStylesForColorScheme(JSContext* ctx);
 void setSafeAreaInsets(float top, float right, float bottom, float left);

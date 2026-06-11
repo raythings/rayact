@@ -15,6 +15,7 @@
 #include "devtools.hpp"
 #include "css_bridge.hpp"
 #include "js_stdlib.hpp"
+#include "mac_text_input.hpp"
 #ifndef RAYACT_NO_WORKERS
 #include "workers.hpp"
 #endif
@@ -387,6 +388,10 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_createModal, "createModal", 1));
     JS_SetPropertyStr(ctx, global, "createSafeArea",
                       JS_NewCFunction(ctx, JS_createSafeArea, "createSafeArea", 1));
+    JS_SetPropertyStr(ctx, global, "createExternalView",
+                      JS_NewCFunction(ctx, JS_createExternalView, "createExternalView", 2));
+    JS_SetPropertyStr(ctx, global, "setExternalViewProps",
+                      JS_NewCFunction(ctx, JS_setExternalViewProps, "setExternalViewProps", 2));
     JS_SetPropertyStr(ctx, global, "createStatusBar",
                       JS_NewCFunction(ctx, JS_createStatusBar, "createStatusBar", 1));
     JS_SetPropertyStr(ctx, global, "createActivityIndicator",
@@ -1349,6 +1354,7 @@ void engineFinishLoad() {
     // text would render blurry.
     raym3::FontManager::SetDpiScale(getRenderScaleDpi());
     raym3::Initialize();
+    rayactMacTextInputInstall();
     initSystemAppearance(g_ctx);
 
     // Expose app-wide config to JS. The transition container uses
@@ -1427,6 +1433,7 @@ void enginePumpJS() {
 void engineDestroy() {
     if (!g_ctx) return;
     engineStopJSThread();
+    rayactMacTextInputShutdown();
     rayact::devtoolsShutdown();
     rayact::workletRuntimeShutdown();
     rayact::shutdownAsyncStorage(g_ctx);

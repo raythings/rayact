@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(rayact_quickjs_desktop VERSION 0.1.0 LANGUAGES CXX C)
+if(APPLE)
+    enable_language(OBJCXX)
+endif()
 
 # C++ Standard
 set(CMAKE_CXX_STANDARD 17)
@@ -239,6 +242,10 @@ set(SOURCES
     ${TS_TYPESCRIPT_SOURCES}
     ${CSSPARSER_SOURCES}
 )
+
+if(PLATFORM_MACOS)
+    list(APPEND SOURCES mac_text_input.mm)
+endif()
 
 file(GLOB_RECURSE RAYACT_APP_NATIVE_WORKERS
     "${CMAKE_SOURCE_DIR}/native/workers/*/*.cpp"

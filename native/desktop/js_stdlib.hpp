@@ -16,5 +16,11 @@ void tickAnimationFrames(JSContext* ctx);
 // Android on-demand frame scheduler).
 bool hasPendingAnimationFrames();
 
+// Milliseconds until the earliest pending setTimeout/setInterval fires:
+// 0 = due now, >0 = due in that many ms, -1 = no pending timers. Drives the
+// Android on-demand frame scheduler — a due timer needs a frame to fire in
+// (timers only tick inside the per-frame JS pump).
+double nextJSTimerDelayMs();
+
 // Free all pending timer callbacks. Call before JS_FreeContext.
 void cleanupJSStdlib(JSContext* ctx);

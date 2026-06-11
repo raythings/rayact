@@ -118,6 +118,13 @@ export interface BaseProps {
   }) => void;
 }
 
+export interface AvoidKeyboardProps extends BaseProps {
+  /** `position` shifts with `bottom`; `padding` adds `marginBottom`. Default: `position`. */
+  behavior?: 'padding' | 'position';
+  /** Animate offset changes via CSS layout transitions. Default: `true`. */
+  animate?: boolean;
+}
+
 export interface TextProps extends BaseProps {
   text?: string;
 }
@@ -145,6 +152,10 @@ export interface TextInputProps extends BaseProps {
   value?: string;
   defaultValue?: string;
   placeholder?: string;
+  inputType?: 'text' | 'email' | 'number' | 'phone' | 'password' | 'multiline' | string;
+  autocorrect?: boolean;
+  secure?: boolean;
+  imeAction?: 'done' | 'go' | 'next' | 'send' | 'search' | string;
   secureTextEntry?: boolean;
   readOnly?: boolean;
   disabled?: boolean;
@@ -294,7 +305,7 @@ declare global {
       SafeArea: BaseProps;
       StatusBar: StatusBarProps;
       ActivityIndicator: ActivityIndicatorProps;
-      AvoidKeyboard: BaseProps;
+      AvoidKeyboard: AvoidKeyboardProps;
       AppBar: MaterialComponentProps;
       Badge: BadgeProps;
       BottomSheet: MaterialComponentProps;

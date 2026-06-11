@@ -292,6 +292,11 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
           ), style);
         case 'scrollView':
           return registerAnimatedHostNode(asHostNode(requireFunction(native.createScrollView, 'createScrollView')({ ...style, ...props }), type), style);
+        case 'externalView':
+          return registerAnimatedHostNode(asHostNode(
+            requireFunction(native.createExternalView, 'createExternalView')(
+              String(props.kind ?? 'stub'), { ...style, ...props }
+            ), type), style);
         case 'modal':
           return registerAnimatedHostNode(asHostNode(requireFunction(native.createModal, 'createModal')({ ...style, ...props }), type), style);
         case 'safeArea':
@@ -306,11 +311,6 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
           ), style);
         case 'activityIndicator':
           return registerAnimatedHostNode(asHostNode(requireFunction(native.createActivityIndicator, 'createActivityIndicator')({ ...style, ...props }), type), style);
-        case 'avoidKeyboard':
-          return registerAnimatedHostNode(asHostNode(
-            (native.createAvoidKeyboard ?? native.createView ?? requireFunction(native.createView, 'createView'))({ ...style, ...props }),
-            type
-          ), style);
         default:
           if (materialHostTypes.has(type)) {
             return registerAnimatedHostNode(asHostNode(
@@ -330,6 +330,10 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
 
       if (Object.keys(style).length > 0) {
         requireFunction(native.setStyle, 'setStyle')(node.id, style);
+      }
+
+      if (node.type === 'externalView' && typeof native.setExternalViewProps === 'function') {
+        native.setExternalViewProps(node.id, { ...props });
       }
 
       if (node.type === 'icon' && typeof native.setIconProps === 'function') {
