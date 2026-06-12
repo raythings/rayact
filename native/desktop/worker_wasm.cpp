@@ -1,5 +1,6 @@
 #include "worker_wasm.hpp"
 #include "worker_queue.hpp"
+#include "module_bus.hpp"
 
 extern "C" {
 #include "wasm3.h"
@@ -104,6 +105,39 @@ static m3ApiRawFunction(wasm_sys_present_canvas) {
     m3ApiSuccess();
 }
 
+// sys_invoke(namePtr,nameLen, methodPtr,methodLen, argPtr,argLen, outPtr,outCap) -> i32
+// Synchronous call into the native module bus from a WASM worker. Returns the
+// result length (>=0); if it exceeds outCap, nothing is written and the required
+// length is returned (caller retries with a bigger buffer). Negative = error.
+static m3ApiRawFunction(wasm_sys_invoke) {
+    m3ApiReturnType(int32_t);
+    m3ApiGetArg(uint32_t, namePtr);
+    m3ApiGetArg(uint32_t, nameLen);
+    m3ApiGetArg(uint32_t, methodPtr);
+    m3ApiGetArg(uint32_t, methodLen);
+    m3ApiGetArg(uint32_t, argPtr);
+    m3ApiGetArg(uint32_t, argLen);
+    m3ApiGetArg(uint32_t, outPtr);
+    m3ApiGetArg(uint32_t, outCap);
+
+    uint32_t memSize = 0;
+    uint8_t* mem = m3_GetMemory(runtime, &memSize, 0);
+    if (!mem ||
+        (uint64_t)namePtr + nameLen > memSize ||
+        (uint64_t)methodPtr + methodLen > memSize ||
+        (uint64_t)argPtr + argLen > memSize ||
+        (uint64_t)outPtr + outCap > memSize) {
+        m3ApiReturn(-1);
+    }
+
+    int n = rayact::busInvokeRaw(
+        (const char*)(mem + namePtr), nameLen,
+        (const char*)(mem + methodPtr), methodLen,
+        mem + argPtr, argLen,
+        mem + outPtr, outCap);
+    m3ApiReturn(n);
+}
+
 // ── Worker thread body ───────────────────────────────────────────────────────
 
 static void runWasmWorkerThread(int workerId,
@@ -164,12 +198,14 @@ static void runWasmWorkerThread(int workerId,
     m3_LinkRawFunctionEx(module, "env", "sys_post_primitive", "v(F)",    wasm_sys_post_primitive, &wctx);
     m3_LinkRawFunctionEx(module, "env", "sys_poll_message",   "i(ii)",   wasm_sys_poll_message,   &wctx);
     m3_LinkRawFunctionEx(module, "env", "sys_present_canvas", "v(iii)",  wasm_sys_present_canvas, &wctx);
+    m3_LinkRawFunctionEx(module, "env", "sys_invoke",         "i(iiiiiiii)", wasm_sys_invoke,     &wctx);
 
     // Also try "rayact" module name as an alias
     m3_LinkRawFunctionEx(module, "rayact", "sys_post_message",   "v(ii)",   wasm_sys_post_message,   &wctx);
     m3_LinkRawFunctionEx(module, "rayact", "sys_post_primitive", "v(F)",    wasm_sys_post_primitive, &wctx);
     m3_LinkRawFunctionEx(module, "rayact", "sys_poll_message",   "i(ii)",   wasm_sys_poll_message,   &wctx);
     m3_LinkRawFunctionEx(module, "rayact", "sys_present_canvas", "v(iii)",  wasm_sys_present_canvas, &wctx);
+    m3_LinkRawFunctionEx(module, "rayact", "sys_invoke",         "i(iiiiiiii)", wasm_sys_invoke,     &wctx);
 
     // Try _start first (WASI convention), then main, then start
     const char* entryPoints[] = {"_start", "main", "start", nullptr};

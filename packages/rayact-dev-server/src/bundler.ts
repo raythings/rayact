@@ -93,7 +93,8 @@ function assetId(hash: string, filePath: string): string {
 
 function isAssetImport(filePath: string, root: string): boolean {
   const relative = normalizePath(path.relative(root, filePath));
-  return relative.split('/').includes('assets');
+  if (relative.split('/').includes('assets')) return true;
+  return /\.(?:avif|gif|jpe?g|otf|png|svg|ttf|webp|woff2?)$/i.test(filePath);
 }
 
 function isScriptOrStyle(filePath: string): boolean {

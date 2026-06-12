@@ -14,10 +14,9 @@ if [[ -d build ]]; then
 fi
 
 if [[ "$EXT" == "jsx" || "$EXT" == "tsx" || "$EXT" == "ts" ]]; then
-  BUNDLE="/tmp/rayact_bundle.js"
-  ./node_modules/.bin/esbuild "$FILE" --bundle --platform=browser --main-fields=main,module --define:process.env.NODE_ENV=\"production\" --format=iife \
-    --jsx-factory=React.createElement --jsx-fragment=React.Fragment --outfile="$BUNDLE"
-  exec "$BINARY" "$BUNDLE"
+  OUT_DIR="/tmp/rayact_run"
+  node packages/rayact-dev-server/dist/cli.js build --mode release --entry "$FILE" --out "$OUT_DIR"
+  exec "$BINARY" "$OUT_DIR/bundle.js"
 else
   exec "$BINARY" "$FILE"
 fi

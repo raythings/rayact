@@ -3,6 +3,7 @@ module.exports = {
   darkMode: 'media',
   content: [
     './App.tailwind.js',
+    './App.tailwind.tsx',
   ],
   theme: {
     extend: {},

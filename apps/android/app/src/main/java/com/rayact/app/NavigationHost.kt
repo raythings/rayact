@@ -94,6 +94,16 @@ class NavigationHost @JvmOverloads constructor(
         }
     }
 
+    fun syncSurfacesToCurrentLayout() {
+        requestLayout()
+        post {
+            rootSurfaceView?.syncSurfaceSizeFromLayout()
+            for (fragment in fragmentsBySurfaceId.values) {
+                fragment.rayactSurfaceView()?.syncSurfaceSizeFromLayout()
+            }
+        }
+    }
+
     /**
      * Push a new screen fragment. The fragment is added to the FragmentManager
      * with NO custom animations — the transition is driven by the JS-side

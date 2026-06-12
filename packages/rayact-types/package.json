@@ -1,0 +1,15 @@
+{
+  "name": "@rayact/types",
+  "version": "0.1.0",
+  "description": "Ambient TypeScript declarations for rayact host globals (Storage, module bus, workers, assets)",
+  "types": "index.d.ts",
+  "files": ["index.d.ts"],
+  "scripts": {
+    "build": "tsc --noEmit index.d.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "keywords": ["rayact", "types", "ambient", "globals"],
+  "license": "MIT"
+}

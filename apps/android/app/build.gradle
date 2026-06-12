@@ -22,6 +22,7 @@ android {
             cmake {
                 arguments '-DANDROID_STL=c++_shared',
                           '-DBUILD_TESTING=OFF',
+                          "-DRAYACT_ANDROID_WASM=${project.findProperty('rayactWasm') ?: 'OFF'}",
                           '-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384'
                 cppFlags '-std=c++17'
                 targets 'rayact'   // only our shared lib — not yoga/raym3 test exes

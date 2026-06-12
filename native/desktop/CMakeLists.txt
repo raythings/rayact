@@ -218,6 +218,10 @@ set(SOURCES
     worklet_runtime.cpp
     gesture_recognizer.cpp
     async_storage.cpp
+    kv_store.cpp
+    data_dir.cpp
+    module_bus.cpp
+    plugin_loader.cpp
     devtools.cpp
     accessibility_bridge.cpp
     platform_wayland.cpp
@@ -260,6 +264,7 @@ endif()
 add_executable(rayact_desktop ${SOURCES})
 target_include_directories(rayact_desktop PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../core
     ${RAYM3_BUILD_DIR}/_deps/yoga-src
     ${CURL_INCLUDE_DIRS}
     ${LWS_INCLUDE_DIRS}
@@ -284,6 +289,7 @@ target_link_libraries(rayact_desktop
     ${CURL_LIBRARIES}
     ${LWS_LIBRARIES}
     ${OPENSSL_LIBRARIES}
+    ${CMAKE_DL_LIBS}
 )
 add_dependencies(rayact_desktop raym3_prebuild)
 

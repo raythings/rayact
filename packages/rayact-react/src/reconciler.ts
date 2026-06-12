@@ -225,6 +225,14 @@ function diffProps(oldProps: Record<string, unknown>, newProps: Record<string, u
     }
   }
 
+  if (
+    oldProps.className !== newProps.className &&
+    !Object.prototype.hasOwnProperty.call(payload, 'style') &&
+    newProps.style !== undefined
+  ) {
+    payload.style = newProps.style;
+  }
+
   return Object.keys(payload).length > 0 || oldProps.children !== newProps.children ? payload : null;
 }
 

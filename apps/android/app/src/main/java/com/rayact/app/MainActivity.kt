@@ -1,5 +1,6 @@
 package com.rayact.app
 
+import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.view.KeyEvent
@@ -77,6 +78,11 @@ class MainActivity : AppCompatActivity() {
             return true
         }
         return super.onKeyUp(keyCode, event)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        host.syncSurfacesToCurrentLayout()
     }
 
     @Deprecated("Use OnBackPressedDispatcher; kept as a fallback for adb/hardware key paths.")

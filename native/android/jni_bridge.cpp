@@ -36,8 +36,14 @@
 #include <vector>
 #include <unistd.h>   // chdir
 
+#include <dlfcn.h>
+
 #include "../core/engine.hpp"
 #include "../core/config_loader.hpp"
+#include "../desktop/kv_store.hpp"
+#include "../desktop/async_storage.hpp"
+#include "../desktop/module_bus.hpp"
+#include "../desktop/plugin_loader.hpp"
 #include "../desktop/raym3_bridge.hpp"
 #include "../desktop/js_stdlib.hpp"
 #include <raym3/fonts/FontManager.h>
@@ -71,6 +77,9 @@ struct Surface {
     int windowId = 0;                  // raylib EGL surface id (== surfaceId after CreateWindow)
     int screenId = 0;                  // engine screen id
     float density = 1.0f;
+    int pendingWidth = 0;
+    int pendingHeight = 0;
+    bool resizePending = false;
     bool ownsContext = false;          // true only for the boot surface (the one that called InitWindow)
 };
 
@@ -179,13 +188,19 @@ void setRaym3AndroidDensity(float realDensity, float layoutDensity) {
     raym3::FontManager::SetDpiScale(layoutDensity);
 }
 
-float androidLayoutDensityForSurface(ANativeWindow* window, float realDensity) {
-    int surfaceWidth = window ? ANativeWindow_getWidth(window) : 0;
+float androidLayoutDensityForWidth(int surfaceWidth, float realDensity) {
+    if (rayact::engineRelayoutOnSurfaceResizeEnabled())
+        return realDensity;
     // Current Rayact policy: normalize layout width to 390dp so component dp
     // dimensions remain stable across phones while rasterization uses the
     // resulting surface px/dp ratio. Keep this explicit until a per-app
     // density policy is introduced.
     return (surfaceWidth > 0) ? (float)surfaceWidth / 390.0f : realDensity;
+}
+
+float androidLayoutDensityForSurface(ANativeWindow* window, float realDensity) {
+    int surfaceWidth = window ? ANativeWindow_getWidth(window) : 0;
+    return androidLayoutDensityForWidth(surfaceWidth, realDensity);
 }
 
 bool executePendingScript() {
@@ -960,6 +975,23 @@ Java_com_rayact_engine_RayactEngine_nativeCreate(JNIEnv* env, jclass, jstring da
         // (icon fonts, material_icons.js) resolve without filesystem rewiring.
         chdir(dp.c_str());
     }
+    // Boot the storage + module system. nativeLibraryDir (where plugin .so live)
+    // is the directory containing our own librayact.so — found via dladdr, so no
+    // extra path needs threading through Kotlin.
+    rayact::busSetJavaVM(g_jvm);
+    rayact::kvStoreInit(g_dataPath);
+    rayact::registerBuiltinKvModule();
+    {
+        std::string libDir;
+        Dl_info info;
+        if (dladdr((void*)&Java_com_rayact_engine_RayactEngine_nativeCreate, &info) &&
+            info.dli_fname) {
+            std::string p = info.dli_fname;
+            auto slash = p.rfind('/');
+            if (slash != std::string::npos) libDir = p.substr(0, slash);
+        }
+        rayact::loadPlugins(libDir);
+    }
     LOGI("Rayact engine created");
     return JNI_TRUE;
 }
@@ -1071,6 +1103,8 @@ Java_com_rayact_engine_RayactEngine_nativeCreateSurface(JNIEnv* env, jclass, job
             ANativeWindow_release(win);
             return 0;
         }
+        layoutDensity = androidLayoutDensityForSurface(win, density);
+        RcoreAndroidSurface_SetDensity(layoutDensity);
         SetTargetFPS(0);
         InitWindow(0, 0, "Rayact");
         if (!IsWindowReady()) { LOGE("nativeCreateSurface: InitWindow failed"); ANativeWindow_release(win); return 0; }
@@ -1100,6 +1134,32 @@ Java_com_rayact_engine_RayactEngine_nativeCreateSurface(JNIEnv* env, jclass, job
     LOGI("nativeCreateSurface: surfaceId=%d windowId=%d (total=%zu)",
          screenId, windowId, g_surfaces.size());
     return (jint)screenId;
+}
+
+JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngine_nativeResizeSurface(
+    JNIEnv*, jclass, jint surfaceId, jint width, jint height, jfloat density) {
+    if (surfaceId <= 0 || width <= 0 || height <= 0) return;
+    std::lock_guard<std::mutex> lock(g_engineMutex);
+    auto it = g_surfaces.find(surfaceId);
+    if (it == g_surfaces.end()) return;
+
+    // Always record the resize: the swapchain must follow the surface size
+    // regardless of the layout policy. Only the relayout request is opt-in.
+    g_realDensity = density;
+    it->second.density = density;
+    it->second.pendingWidth = (int)width;
+    it->second.pendingHeight = (int)height;
+    it->second.resizePending = true;
+    LOGI("nativeResizeSurface: surface=%d %dx%d density=%.2f", surfaceId,
+         (int)width, (int)height, density);
+    if (rayact::engineRelayoutOnSurfaceResizeEnabled())
+        rayact::engineRequestSurfaceRelayout(surfaceId);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_rayact_engine_RayactEngine_nativeRelayoutOnSurfaceResizeEnabled(JNIEnv*, jclass) {
+    return rayact::engineRelayoutOnSurfaceResizeEnabled() ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL
@@ -1210,6 +1270,35 @@ Java_com_rayact_engine_RayactEngine_nativeGetFocusedSurfaceId(JNIEnv*, jclass) {
 // vsync on the render thread. Multiple surfaces each drive a render thread;
 // we debounce by frame id so the engine only renders once per vsync.
 static int64_t g_lastRenderFrameNanos = 0;
+
+// Publish the new window size (layout dp) to JS and fire the change callback.
+// Same pattern as the insets globals: runs on the render thread under
+// g_engineMutex, so plain JS calls are safe.
+static void publishWindowDimensions(int widthPx, int heightPx) {
+    JSContext* ctx = rayact::engineContext();
+    if (!ctx) return;
+    const float w = raym3::v2::Density::PxToDp((float)widthPx);
+    const float h = raym3::v2::Density::PxToDp((float)heightPx);
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "width", JS_NewFloat64(ctx, w));
+    JS_SetPropertyStr(ctx, obj, "height", JS_NewFloat64(ctx, h));
+    JS_SetPropertyStr(ctx, global, "__rayactWindowDimensions", obj);
+    JSValue fn = JS_GetPropertyStr(ctx, global, "__rayactOnDimensionsChange");
+    if (JS_IsFunction(ctx, fn)) {
+        JSValue r = JS_Call(ctx, fn, JS_UNDEFINED, 0, nullptr);
+        if (JS_IsException(r)) {
+            JSValue exc = JS_GetException(ctx);
+            const char* s = JS_ToCString(ctx, exc);
+            LOGE("__rayactOnDimensionsChange threw: %s", s ? s : "?");
+            if (s) JS_FreeCString(ctx, s);
+            JS_FreeValue(ctx, exc);
+        }
+        JS_FreeValue(ctx, r);
+    }
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, global);
+}
 
 JNIEXPORT jboolean JNICALL
 Java_com_rayact_engine_RayactEngine_nativeRenderFrame(JNIEnv*, jclass,
@@ -1407,11 +1496,30 @@ Java_com_rayact_engine_RayactEngine_nativeRenderFrame(JNIEnv*, jclass,
     for (int id : ordered) {
         auto& s = g_surfaces[id];
         RcoreAndroidSurface_BindWindow(s.windowId);
+        bool resized = false;
+        if (s.resizePending) {
+            const int resizeW = s.pendingWidth;
+            const int resizeH = s.pendingHeight;
+            s.resizePending = false;
+            if (resizeW > 0 && resizeH > 0) {
+                const float layoutDensity = androidLayoutDensityForWidth(resizeW, s.density);
+                RcoreAndroidSurface_SetDensity(layoutDensity);
+                if (!RcoreAndroidSurface_ResizeWindow(s.windowId, resizeW, resizeH)) {
+                    LOGE("RcoreAndroidSurface_ResizeWindow(%d, %d, %d) failed",
+                         s.windowId, resizeW, resizeH);
+                }
+                setRaym3AndroidDensity(s.density, layoutDensity);
+                LOGI("renderFrame: consumed resize surface=%d %dx%d layoutDensity=%.2f",
+                     id, resizeW, resizeH, layoutDensity);
+                resized = true;
+            }
+        }
+        if (resized) publishWindowDimensions(s.pendingWidth, s.pendingHeight);
         // Pass the bound window's REAL pixel size. (Previously this passed
         // s.windowId for both width and height — a 1x1 layout area, so every
         // node clipped to nothing and the frame drew zero vertices.)
-        int w = s.window ? ANativeWindow_getWidth(s.window) : 0;
-        int h = s.window ? ANativeWindow_getHeight(s.window) : 0;
+        int w = s.pendingWidth > 0 ? s.pendingWidth : (s.window ? ANativeWindow_getWidth(s.window) : 0);
+        int h = s.pendingHeight > 0 ? s.pendingHeight : (s.window ? ANativeWindow_getHeight(s.window) : 0);
         if (w <= 0 || h <= 0) { w = GetRenderWidth(); h = GetRenderHeight(); }
         rayact::engineRenderFrameAndroid(id, w, h);
         RcoreAndroidSurface_SwapWindow();
@@ -1516,6 +1624,7 @@ Java_com_rayact_engine_RayactEngine_nativeSurfaceDestroyed(JNIEnv*, jclass) {
 
 JNIEXPORT void JNICALL
 Java_com_rayact_engine_RayactEngine_nativeDestroy(JNIEnv*, jclass) {
+    rayact::kvStoreFlushAndStop();
     if (!g_surfaces.empty()) {
         // Release all surfaces in reverse order so the focus stack unwinds cleanly.
         std::vector<int> ids;

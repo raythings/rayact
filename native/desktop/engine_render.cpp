@@ -24,12 +24,14 @@
 #include <raym3/v2/View.h>
 #include <raym3/v2/Density.h>
 
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <mutex>
+#include <set>
 #include <string>
 #include <rlgl.h>
 
@@ -199,6 +201,32 @@ namespace rayact {
 // rlgl matrix stack (C linkage) — used for the Android dp content scale.
 extern "C" { void rlPushMatrix(void); void rlPopMatrix(void); void rlScalef(float, float, float); void rlSetLineWidth(float); }
 
+static std::mutex g_surfaceRelayoutMutex;
+static std::set<int> g_surfaceRelayoutScreens;
+static std::atomic<bool> g_relayoutOnSurfaceResize{false};
+
+void engineSetRelayoutOnSurfaceResize(bool enabled) {
+    g_relayoutOnSurfaceResize.store(enabled, std::memory_order_release);
+}
+
+bool engineRelayoutOnSurfaceResizeEnabled() {
+    return g_relayoutOnSurfaceResize.load(std::memory_order_acquire);
+}
+
+void engineRequestSurfaceRelayout(int screenId) {
+    if (screenId <= 0) return;
+    std::lock_guard<std::mutex> lock(g_surfaceRelayoutMutex);
+    g_surfaceRelayoutScreens.insert(screenId);
+}
+
+static bool engineConsumeSurfaceRelayout(int screenId) {
+    std::lock_guard<std::mutex> lock(g_surfaceRelayoutMutex);
+    auto it = g_surfaceRelayoutScreens.find(screenId);
+    if (it == g_surfaceRelayoutScreens.end()) return false;
+    g_surfaceRelayoutScreens.erase(it);
+    return true;
+}
+
 // Per-screen render body. Caller must have:
 //   - bound the right EGL surface (raylib BindWindow equivalent), or be running
 //     in single-surface desktop mode (default window is fine).
@@ -351,6 +379,7 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     const float logicalW = raym3::v2::Density::PxToDp((float)width);
     const float logicalH = raym3::v2::Density::PxToDp((float)height);
     Rectangle bounds = {0.0f, 0.0f, logicalW, logicalH};
+    const bool forceLayout = engineConsumeSurfaceRelayout(screenId);
     float dp = getRenderScaleDpi();
     applyAnimatedStylesToNodes();
     raym3::v2::TickScrollMomentum(g_root);
@@ -419,7 +448,7 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     rlPushMatrix();
     rlScalef(dp, dp, 1.0f);
     SetMouseScale(1.0f / dp, 1.0f / dp); // M3 components call GetMousePosition() in dp space
-    raym3::v2::Render(g_root, bounds, /*layoutAlreadyComputed=*/true);
+    raym3::v2::Render(g_root, bounds, /*layoutAlreadyComputed=*/!forceLayout);
     SetMouseScale(1.0f, 1.0f);
     rlPopMatrix();
 }

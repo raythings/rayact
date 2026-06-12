@@ -555,8 +555,28 @@ class RayactSurfaceView @JvmOverloads constructor(
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        // Native re-reads ANativeWindow_getWidth/Height on each BindWindow, so
-        // size changes are picked up automatically.
+        reportSurfaceResize(width, height)
+    }
+
+    override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
+        super.onSizeChanged(width, height, oldWidth, oldHeight)
+        if (width <= 0 || height <= 0 || (width == oldWidth && height == oldHeight)) return
+        if (RayactEngine.relayoutOnSurfaceResizeEnabled()) reportSurfaceResize(width, height)
+    }
+
+    fun syncSurfaceSizeFromLayout() {
+        if (!RayactEngine.relayoutOnSurfaceResizeEnabled()) return
+        requestLayout()
+        post {
+            if (width > 0 && height > 0) reportSurfaceResize(width, height)
+        }
+    }
+
+    private fun reportSurfaceResize(width: Int, height: Int) {
+        if (surfaceId <= 0 || width <= 0 || height <= 0) return
+        updateSafeAreaInsets()
+        RayactEngine.resizeSurface(surfaceId, width, height, resources.displayMetrics.density)
+        RayactRenderScheduler.requestFrame()
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {

@@ -21,6 +21,10 @@ set(WGVK_DIR     "${OUTER}/WGVK")
 # workers (wasm3/native), and the TS validator (tree-sitter) are deferred — the
 # engine call sites are guarded by RAYACT_NO_NET/NO_WORKERS/NO_TS.
 option(RAYACT_ANDROID_FULL "Build net + workers + TS subsystems" OFF)
+# WASM/worker subsystem without networking or the TS validator. Lets WASM and JS
+# workers (and the module bus's sys_invoke) run on Android while keeping curl/lws
+# and tree-sitter out of the build. Implied by RAYACT_ANDROID_FULL.
+option(RAYACT_ANDROID_WASM "Build the worker subsystem (wasm3 + workers) on Android" OFF)
 option(RAYACT_ANDROID_USE_RLVK "Build Android with the Vulkan-backed rlvk rlgl implementation" ON)
 # 3D smoke-test scene is opt-in. Pass -DRAYACT_ANDROID_3D_SMOKE=ON at configure
 # time to re-enable the in-process probe (FBO + grid + cube + lines). Default
@@ -128,6 +132,10 @@ set(ENGINE_SRC
     ${RAYACT}/native/desktop/worklet_runtime.cpp
     ${RAYACT}/native/desktop/gesture_recognizer.cpp
     ${RAYACT}/native/desktop/async_storage.cpp
+    ${RAYACT}/native/desktop/kv_store.cpp
+    ${RAYACT}/native/desktop/data_dir.cpp
+    ${RAYACT}/native/desktop/module_bus.cpp
+    ${RAYACT}/native/desktop/plugin_loader.cpp
     ${RAYACT}/native/desktop/devtools.cpp
     ${RAYACT}/native/desktop/accessibility_bridge.cpp
     ${RAYACT}/native/desktop/platform_wayland.cpp
@@ -142,7 +150,32 @@ set(ENGINE_SRC
     ${RAYACT}/native/android/jni_bridge.cpp
 )
 
+# Worker subsystem (WASM + JS + native workers). Compiled when FULL or WASM is
+# on. worker_js's net/TS use is guarded by RAYACT_NO_NET/NO_TS, so this links
+# without curl/lws/tree-sitter when only RAYACT_ANDROID_WASM is set.
+if(RAYACT_ANDROID_FULL OR RAYACT_ANDROID_WASM)
+    set(WASM3_DIR "${OUTER}/wasm3")
+    add_library(m3 STATIC
+        ${WASM3_DIR}/source/m3_bind.c   ${WASM3_DIR}/source/m3_code.c
+        ${WASM3_DIR}/source/m3_compile.c ${WASM3_DIR}/source/m3_core.c
+        ${WASM3_DIR}/source/m3_env.c     ${WASM3_DIR}/source/m3_exec.c
+        ${WASM3_DIR}/source/m3_function.c ${WASM3_DIR}/source/m3_info.c
+        ${WASM3_DIR}/source/m3_module.c  ${WASM3_DIR}/source/m3_parse.c)
+    target_include_directories(m3 PUBLIC ${WASM3_DIR}/source)
+    target_compile_options(m3 PRIVATE
+        -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter -Wno-sign-compare)
+    list(APPEND ENGINE_SRC
+        ${RAYACT}/native/desktop/workers.cpp
+        ${RAYACT}/native/desktop/worker_js.cpp
+        ${RAYACT}/native/desktop/worker_wasm.cpp
+        ${RAYACT}/native/desktop/worker_native.cpp)
+endif()
+
 add_library(rayact SHARED ${ENGINE_SRC})
+if(RAYACT_ANDROID_FULL OR RAYACT_ANDROID_WASM)
+    target_link_libraries(rayact m3)
+    target_include_directories(rayact PRIVATE ${OUTER}/wasm3/source)
+endif()
 if (RAYACT_ANDROID_USE_RLVK)
     target_sources(rayact PRIVATE ${WGVK_DIR}/src/spirv_reflect.c ${RLVK_DIR}/src/rlvk_reflect.c)
 endif()
@@ -155,8 +188,16 @@ target_compile_definitions(rayact PRIVATE
     RAYACT_ANDROID ${GLES3}
     RL_DEFAULT_BATCH_BUFFER_ELEMENTS=8192
     $<$<BOOL:${RAYACT_ANDROID_3D_SMOKE}>:RAYACT_ANDROID_3D_SMOKE>
-    $<$<NOT:$<BOOL:${RAYACT_ANDROID_FULL}>>:RAYACT_NO_NET RAYACT_NO_WORKERS RAYACT_NO_TS>
 )
+# Per-subsystem gating (independent so workers can build without net/TS):
+#   NET/TS  → only with FULL
+#   WORKERS → with FULL or WASM
+if(NOT RAYACT_ANDROID_FULL)
+    target_compile_definitions(rayact PRIVATE RAYACT_NO_NET RAYACT_NO_TS)
+endif()
+if(NOT (RAYACT_ANDROID_FULL OR RAYACT_ANDROID_WASM))
+    target_compile_definitions(rayact PRIVATE RAYACT_NO_WORKERS)
+endif()
 target_include_directories(rayact PRIVATE
     ${RAYACT}/native/desktop
     ${RAYACT}/native/core
@@ -167,7 +208,7 @@ target_include_directories(rayact PRIVATE
 )
 target_link_libraries(rayact
     raylib qjs raym3 cssparser
-    ${RAYLIB_LIBS} android log m
+    ${RAYLIB_LIBS} android log m dl
 )
 
 if (RAYACT_ANDROID_USE_RLVK)

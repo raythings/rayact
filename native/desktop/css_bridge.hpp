@@ -11,6 +11,10 @@ extern "C" {
 #include <string>
 #include <vector>
 
+// Parse a CSS dimensional length (px, rem, or unitless) into raym3 layout dp
+// using platform PPI (Flutter logical-pixel semantics).
+float parseCssLengthToLayoutDp(const std::string& v);
+
 // Resolve space-separated class names against the global stylesheet.
 JSValue resolveClassNames(JSContext* ctx, const std::string& classNames);
 

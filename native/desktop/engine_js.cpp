@@ -12,6 +12,10 @@
 #include "engine_thread.hpp"
 #include "worklet_runtime.hpp"
 #include "async_storage.hpp"
+#include "kv_store.hpp"
+#include "data_dir.hpp"
+#include "module_bus.hpp"
+#include "plugin_loader.hpp"
 #include "devtools.hpp"
 #include "css_bridge.hpp"
 #include "js_stdlib.hpp"
@@ -264,6 +268,33 @@ static void registerNativeFunctions(JSContext* ctx) {
             }
             return JS_UNDEFINED;
         }, "setTargetFPS", 1));
+
+    JS_SetPropertyStr(ctx, global, "setRelayoutOnSurfaceResize",
+        JS_NewCFunction(ctx, [](JSContext* ctx, JSValue, int argc, JSValueConst* argv) -> JSValue {
+            bool enabled = true;
+            if (argc >= 1) enabled = JS_ToBool(ctx, argv[0]) != 0;
+            rayact::engineSetRelayoutOnSurfaceResize(enabled);
+            return JS_UNDEFINED;
+        }, "setRelayoutOnSurfaceResize", 1));
+
+    // Desktop: allow the OS window to be resized by the user. Layout reflows
+    // every frame from GetRenderWidth/Height, so no relayout plumbing needed.
+    // Before initRaylib() this patches the config flags; after, it toggles the
+    // live window state. No-op on Android (window owned by the platform).
+    JS_SetPropertyStr(ctx, global, "setWindowResizable",
+        JS_NewCFunction(ctx, [](JSContext* ctx, JSValue, int argc, JSValueConst* argv) -> JSValue {
+            bool enabled = true;
+            if (argc >= 1) enabled = JS_ToBool(ctx, argv[0]) != 0;
+#ifndef RAYACT_ANDROID
+            if (enabled) g_configFlags |= FLAG_WINDOW_RESIZABLE;
+            else g_configFlags &= ~FLAG_WINDOW_RESIZABLE;
+            if (IsWindowReady()) {
+                if (enabled) SetWindowState(FLAG_WINDOW_RESIZABLE);
+                else ClearWindowState(FLAG_WINDOW_RESIZABLE);
+            }
+#endif
+            return JS_UNDEFINED;
+        }, "setWindowResizable", 1));
 
     // ── Frame callback ───────────────────────────────────────────────────────
     JS_SetPropertyStr(ctx, global, "setOnFrame",
@@ -533,6 +564,17 @@ static void registerNativeFunctions(JSContext* ctx) {
     registerNetBindings(ctx);
 #endif
     rayact::installAsyncStorage(ctx, global);
+#ifndef RAYACT_ANDROID
+    // Android boots the module system in nativeCreate (it owns g_dataPath).
+    static bool s_moduleBooted = false;
+    if (!s_moduleBooted) {
+        s_moduleBooted = true;
+        rayact::kvStoreInit(rayact::rayactDataDir());
+        rayact::registerBuiltinKvModule();
+        rayact::loadPlugins("");
+    }
+#endif
+    rayact::installModuleBindings(ctx, global);
     rayact::devtoolsInit(ctx);
     rayact::workletRuntimeInit();
 
@@ -1393,6 +1435,7 @@ void enginePumpJS() {
 #ifndef RAYACT_NO_NET
     drainNetEvents(ctx);      // deliver fetch responses / SSE / WS frames
 #endif
+    rayact::drainModuleEvents(ctx);  // resolve async module-bus invocations
 #ifndef RAYACT_NO_WORKERS
     drainWorkerOutbox(ctx);   // deliver worker messages to JS (non-blocking)
 #endif
@@ -1437,6 +1480,8 @@ void engineDestroy() {
     rayact::devtoolsShutdown();
     rayact::workletRuntimeShutdown();
     rayact::shutdownAsyncStorage(g_ctx);
+    rayact::shutdownModuleBus(g_ctx);
+    rayact::kvStoreFlushAndStop();
     g_shapes.clear();
 #ifndef RAYACT_NO_WORKERS
     shutdownWorkers();          // join all worker threads, unload canvas textures

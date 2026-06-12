@@ -9,6 +9,7 @@
 #include "../core/engine.hpp"
 
 #include <raym3/raym3.h>
+#include <raym3/v2/Density.h>
 #include <raym3/v2/View.h>
 
 #include <cstdio>
@@ -28,10 +29,52 @@ static std::string getArgValue(int argc, char** argv, const std::string& name) {
 }
 
 #ifndef RAYACT_ANDROID
+// Publish the new window size (layout dp) to JS and fire the change callback.
+// Mirrors the Android pump in jni_bridge.cpp (__rayactWindowDimensions /
+// __rayactOnDimensionsChange) so apps see one API on both platforms.
+static void publishWindowDimensions(JSContext* ctx, int widthPx, int heightPx) {
+    if (!ctx) return;
+    const float w = raym3::v2::Density::PxToDp((float)widthPx);
+    const float h = raym3::v2::Density::PxToDp((float)heightPx);
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "width", JS_NewFloat64(ctx, w));
+    JS_SetPropertyStr(ctx, obj, "height", JS_NewFloat64(ctx, h));
+    JS_SetPropertyStr(ctx, global, "__rayactWindowDimensions", obj);
+    JSValue fn = JS_GetPropertyStr(ctx, global, "__rayactOnDimensionsChange");
+    if (JS_IsFunction(ctx, fn)) {
+        JSValue r = JS_Call(ctx, fn, JS_UNDEFINED, 0, nullptr);
+        if (JS_IsException(r)) {
+            JSValue exc = JS_GetException(ctx);
+            const char* s = JS_ToCString(ctx, exc);
+            fprintf(stderr, "__rayactOnDimensionsChange threw: %s\n", s ? s : "?");
+            if (s) JS_FreeCString(ctx, s);
+            JS_FreeValue(ctx, exc);
+        }
+        JS_FreeValue(ctx, r);
+    }
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, global);
+}
+
+// During interactive resize (macOS modal drag loop) the main loop is blocked;
+// raylib invokes this hook from the framebuffer-size callback so the UI
+// reflows live instead of stretching the last frame. PollInputEvents is
+// suppressed inside the hook (see rcore_desktop_glfw.c).
+extern "C" void SetWindowLiveResizeHook(void (*hook)(int width, int height));
+static JSContext* g_liveResizeCtx = nullptr;
+static void liveResizeRender(int, int) {
+    if (!rayact::engineThreadedModeEnabled())
+        rayact::enginePumpJS();
+    publishWindowDimensions(g_liveResizeCtx, GetRenderWidth(), GetRenderHeight());
+    rayact::engineRenderFrame(GetRenderWidth(), GetRenderHeight());
+}
+
 // Desktop render loop: thin driver over the engine API.
 void mainLoop(JSContext* ctx) {
-    (void)ctx;
     printf("Starting main loop\n");
+    g_liveResizeCtx = ctx;
+    SetWindowLiveResizeHook(liveResizeRender);
 
     if (!IsWindowReady()) {
         fprintf(stderr, "Window not ready — cannot start render loop\n");
@@ -43,6 +86,8 @@ void mainLoop(JSContext* ctx) {
     while (!WindowShouldClose()) {
         if (!rayact::engineThreadedModeEnabled())
             rayact::enginePumpJS();
+        if (IsWindowResized())
+            publishWindowDimensions(ctx, GetRenderWidth(), GetRenderHeight());
         rayact::engineRenderFrame(GetRenderWidth(), GetRenderHeight());
 
         // Input debug harness: capture down/up/after-500ms screenshots.

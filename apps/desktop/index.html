@@ -266,22 +266,22 @@
             <p class="subtitle">Cross-Platform React Renderer with Raylib Graphics</p>
             <span class="badge">Version 0.1.0</span>
             <span class="badge badge-platform status status-ready">Desktop: Ready</span>
-            <span class="badge badge-platform status status-planned">Android: Planned</span>
+            <span class="badge badge-platform status status-ready">Android: Ready</span>
             <span class="badge badge-platform status status-planned">Web: Planned</span>
         </header>
 
         <div class="stats">
             <div class="stat">
-                <div class="stat-number">28%</div>
-                <div class="stat-label">Project Complete</div>
+                <div class="stat-number">2</div>
+                <div class="stat-label">Platforms Shipping</div>
             </div>
             <div class="stat">
-                <div class="stat-number">5</div>
-                <div class="stat-label">Dem Available</div>
+                <div class="stat-number">11</div>
+                <div class="stat-label">Packages</div>
             </div>
             <div class="stat">
                 <div class="stat-number">3</div>
-                <div class="stat-label">Core Packages</div>
+                <div class="stat-label">Runtime Lanes</div>
             </div>
         </div>
 
@@ -297,32 +297,38 @@
 
                 <div class="card">
                     <div class="card-icon">⚛️</div>
-                    <h3>React-Ready</h3>
-                    <p>Uses react-reconciler for state management, compatible with React 18+.</p>
+                    <h3>React 19</h3>
+                    <p>Real react-reconciler 0.31 host config — hooks, suspense, and react-navigation.</p>
                 </div>
 
                 <div class="card">
                     <div class="card-icon">🎨</div>
-                    <h3>Raylib Graphics</h3>
-                    <p>OpenGL-based graphics backend with support for shapes, colors, and animations.</p>
+                    <h3>raym3 + raylib</h3>
+                    <p>Material components with real Yoga flexbox layout, Vulkan-backed rlvk on Android.</p>
                 </div>
 
                 <div class="card">
-                    <div class="card-icon">📐</div>
-                    <h3>Basic Shapes</h3>
-                    <p>Rectangle, Circle, and Line components with screen coordinate props.</p>
+                    <div class="card-icon">💾</div>
+                    <h3>Persistent Storage</h3>
+                    <p>Built-in sync KV + AsyncStorage with write-behind flush. Opt-in MMKV and Keychain/Keystore secure store as autolinked plugins.</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-icon">🔌</div>
+                    <h3>Native Module Bus</h3>
+                    <p>Cross-context native-function registry. dlopen plugins autolink at runtime — no compile flags, no engine rebuild.</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-icon">🧵</div>
+                    <h3>Workers + WASM</h3>
+                    <p>JS and WASM workers as a near-native compute lane — and they reach the same native modules via <code>sys_invoke</code>.</p>
                 </div>
 
                 <div class="card">
                     <div class="card-icon">📱</div>
                     <h3>Cross-Platform</h3>
-                    <p>Designed for Desktop, Android, and Web platforms from day one.</p>
-                </div>
-
-                <div class="card">
-                    <div class="card-icon">🔄</div>
-                    <h3>Material Ready</h3>
-                    <p>Architecture prepared for raym3 integration when available.</p>
+                    <p>One codebase shipping on Desktop (macOS/Windows/Linux) and Android; Web via raygpu planned.</p>
                 </div>
             </div>
         </div>
@@ -357,6 +363,10 @@ cmake --build build
                 <div class="platform">
                     <div class="platform-icon">🍎</div>
                     <div class="platform-name">macOS</div>
+                </div>
+                <div class="platform">
+                    <div class="platform-icon">🤖</div>
+                    <div class="platform-name">Android</div>
                 </div>
             </div>
         </div>
@@ -402,30 +412,38 @@ cmake --build build
                     <p>Demonstrates input handling and animation concepts.</p>
                     <code>demo-interactive.js</code>
                 </div>
+
+                <div class="card">
+                    <div class="card-icon">🔌</div>
+                    <h3>Module-Bus WASM</h3>
+                    <p>Main writes a KV key; a WASM worker reads it back through the native bus and renders the result.</p>
+                    <code>kv_wasm_test.tsx</code>
+                </div>
             </div>
         </div>
 
         <div class="demo-section">
             <h2>💻 Code Example</h2>
             <p style="color: rgba(255,255,255,0.8); text-align: center; margin-bottom: 20px;">
-                Simple JavaScript rendering in action
+                React + persistent storage + the cross-context module bus
             </p>
 
             <div class="demo-code">
-// Initialize raylib window
-initRaylib(800, 600, "My Rayact App");
+import { View, Text, render } from '@rayact/react';
 
-// Draw a blue rectangle
-renderRect(100, 100, 200, 150, 0xFF0000FF);
+// Persistent sync key-value store (survives restart)
+Storage.set('user.name', 'Ada');
+const name = Storage.getString('user.name');   // "Ada"
 
-// Draw a green circle
-renderCircle(400, 300, 50, 0xFF00FF00);
+// Call a native module on the bus — reachable from main, JS, and WASM workers
+const buf = __rayact_invoke('kv', 'get', new TextEncoder().encode('user.name').buffer);
 
-// Draw a blue line
-renderLine(100, 400, 700, 400, 0x0000FFFF);
-
-// Prepare for next frame
-updateFrame();
+function App() {
+  return <View style={{ flex: 1, padding: 32 }}>
+    <Text text={`hello ${name}`} style={{ color: 0xffffffff, fontSize: 32 }} />
+  </View>;
+}
+render(&lt;App /&gt;);
             </div>
         </div>
 
@@ -444,11 +462,9 @@ updateFrame();
     </div>
 
     <script>
-        // Simple visitor counter for the website
         console.log('Rayact Website loaded');
         console.log('Welcome to Rayact - Cross-Platform React Rendering!');
-        console.log('Project Status: 28% Complete');
-        console.log('Ready for desktop development');
+        console.log('Shipping on Desktop + Android');
     </script>
 </body>
 </html>

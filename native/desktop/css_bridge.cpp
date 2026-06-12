@@ -7,6 +7,7 @@
 
 #include <raym3/styles/Stylesheet.h>
 #include <raym3/styles/Theme.h>
+#include <raym3/v2/Density.h>
 
 #include <algorithm>
 #include <cctype>
@@ -70,15 +71,21 @@ static bool isAuto(const std::string& v) {
     return toLower(trimStr(v)) == "auto";
 }
 
-static float parseLength(const std::string& v) {
+float parseCssLengthToLayoutDp(const std::string& v) {
     if (v.empty()) return 0.0f;
     try {
         size_t idx;
         float f = std::stof(v, &idx);
         std::string unit = toLower(trimStr(v.substr(idx)));
         if (unit == "rem") f *= 16.0f;
+        if (unit == "px" || unit == "rem")
+            return raym3::v2::Density::CssReferencePxToLayoutDp(f);
         return f;
     } catch (...) { return 0.0f; }
+}
+
+static float parseLength(const std::string& v) {
+    return parseCssLengthToLayoutDp(v);
 }
 
 static std::vector<std::string> expandEdgeParts(const std::vector<std::string>& parts) {
@@ -307,6 +314,12 @@ static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& props) {
             if (!parts.empty()) JS_SetPropertyStr(ctx, obj, "borderColor", JS_NewFloat64(ctx, parseColor(parts.back())));
             continue;
         }
+        if (prop == "border-width" || prop == "border-top-width" ||
+            prop == "border-right-width" || prop == "border-bottom-width" ||
+            prop == "border-left-width") {
+            JS_SetPropertyStr(ctx, obj, "borderWidth", JS_NewFloat64(ctx, parseLength(val)));
+            continue;
+        }
 
         // ── flex shorthand ────────────────────────────────────────────────
         if (prop == "flex") {
@@ -387,7 +400,7 @@ static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& props) {
         // ── numeric / length properties ───────────────────────────────────
         static const std::vector<std::string> kLength = {
             "width","height","min-width","min-height","max-width","max-height",
-            "border-radius","border-width","flex-grow","flex-shrink","flex-basis",
+            "border-radius","flex-grow","flex-shrink","flex-basis",
             "gap","row-gap","column-gap","opacity","elevation","scale",
             "translate-x","translate-y","top","right","bottom","left",
         };

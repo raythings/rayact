@@ -75,5 +75,19 @@ for CSS_PATH in $(grep -o 'importCSS("[^"]*")' "$ASSETS_DIR/app.js" | sed 's/imp
   adb shell run-as "$APP_PKG" cp "$CSS_TMP" "files/$CSS_PATH" 2>/dev/null || true
 done
 
+if [[ -d "$BUNDLE_DIR/assets" ]]; then
+  echo "  Pushing bundle assets to device..."
+  adb shell run-as "$APP_PKG" mkdir files/assets 2>/dev/null || true
+  adb shell run-as "$APP_PKG" mkdir files/assets/assets 2>/dev/null || true
+  for ASSET_PATH in "$BUNDLE_DIR"/assets/*; do
+    [[ -f "$ASSET_PATH" ]] || continue
+    ASSET_NAME="$(basename "$ASSET_PATH")"
+    ASSET_TMP="$TMP/$ASSET_NAME"
+    adb push "$ASSET_PATH" "$ASSET_TMP" 2>/dev/null || true
+    adb shell run-as "$APP_PKG" cp "$ASSET_TMP" "files/assets/$ASSET_NAME" 2>/dev/null || true
+    adb shell run-as "$APP_PKG" cp "$ASSET_TMP" "files/assets/assets/$ASSET_NAME" 2>/dev/null || true
+  done
+fi
+
 adb shell am start -n com.rayact.app/.MainActivity | tail -1
 echo "Done. adb logcat -s raylib:I RayactJNI:I JS: to follow the run."

@@ -62,6 +62,9 @@ void enginePumpJS();
 void engineRenderFrame(int width, int height);
 void engineRenderFrameAndroid(int screenId, int width, int height);
 bool engineNeedsAnotherFrame();
+void engineSetRelayoutOnSurfaceResize(bool enabled);
+bool engineRelayoutOnSurfaceResizeEnabled();
+void engineRequestSurfaceRelayout(int screenId);
 
 // Android SurfaceView touches arrive on the UI thread. Queue the primary
 // pointer here so the render thread can dispatch press handlers on release.

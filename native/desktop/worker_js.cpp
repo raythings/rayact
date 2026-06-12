@@ -1,7 +1,13 @@
 #include "worker_js.hpp"
 #include "worker_queue.hpp"
+#ifndef RAYACT_NO_NET
 #include "net.hpp"
+#endif
+#include "async_storage.hpp"
+#include "module_bus.hpp"
+#ifndef RAYACT_NO_TS
 #include "utils/TypeStripper.h"
+#endif
 #include "raylib.h"
 
 extern "C" {
@@ -169,8 +175,11 @@ static JSValue js_worker_sleep(JSContext* ctx, JSValue,
         // Interruptible: wake_all() during shutdown unblocks this immediately
         wctx->entry->inbox.sleep((int64_t)ms, wctx->entry->stop);
     }
-    // Drain network events and resolve any pending Promises
+    // Drain network + module-bus events and resolve any pending Promises
+#ifndef RAYACT_NO_NET
     drainNetEvents(ctx);
+#endif
+    rayact::drainModuleEvents(ctx);
     JSContext* pctx = nullptr;
     while (JS_ExecutePendingJob(JS_GetRuntime(ctx), &pctx) > 0) {}
     return JS_UNDEFINED;
@@ -204,10 +213,16 @@ static void runJSWorkerThread(int workerId,
     JS_SetContextOpaque(ctx, &wctx);
 
     // Network bindings (fetch, EventSource, WebSocket) — same API as main thread
+#ifndef RAYACT_NO_NET
     registerNetBindings(ctx);
+#endif
 
     // Inject all worker globals in one pass
     JSValue global = JS_GetGlobalObject(ctx);
+
+    // Storage + module bus — same singleton store the main thread sees
+    rayact::installAsyncStorage(ctx, global);
+    rayact::installModuleBindings(ctx, global);
     JS_SetPropertyStr(ctx, global, "postMessage",
         JS_NewCFunction(ctx, js_worker_postMessage,    "postMessage",    1));
     JS_SetPropertyStr(ctx, global, "loadGif",
@@ -252,6 +267,7 @@ static void runJSWorkerThread(int workerId,
     fclose(f);
 
     // Strip TypeScript syntax if needed
+#ifndef RAYACT_NO_TS
     {
         auto dot = filePath.rfind('.');
         if (dot != std::string::npos) {
@@ -260,6 +276,7 @@ static void runJSWorkerThread(int workerId,
                 src = Fovea::TypeStripper::Strip(src);
         }
     }
+#endif
 
     // Evaluate script — may block indefinitely for animation loops
     JSValue result = JS_Eval(ctx, src.c_str(), src.size(),
@@ -308,6 +325,10 @@ static void runJSWorkerThread(int workerId,
             JS_FreeValue(ctx, r);
             JS_FreeValue(ctx, data);
 
+#ifndef RAYACT_NO_NET
+            drainNetEvents(ctx);
+#endif
+            rayact::drainModuleEvents(ctx);
             while (JS_ExecutePendingJob(rt, &pctx) > 0) {}
         }
         JS_FreeValue(ctx, cb);
@@ -317,7 +338,10 @@ static void runJSWorkerThread(int workerId,
     for (auto& [id, gd] : wctx.gifs) UnloadImage(gd.img);
     wctx.gifs.clear();
 
+#ifndef RAYACT_NO_NET
     shutdownNetCtx(ctx); // stop any fetch/SSE/WS threads, free JS values
+#endif
+    rayact::shutdownModuleBus(ctx);
 
     JS_SetContextOpaque(ctx, nullptr);
     JS_FreeContext(ctx);

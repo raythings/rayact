@@ -48,6 +48,12 @@ object RayactEngine {
     fun createSurface(surface: Surface, density: Float): Int =
         nativeCreateSurface(surface, density)
 
+    fun resizeSurface(surfaceId: Int, width: Int, height: Int, density: Float) =
+        nativeResizeSurface(surfaceId, width, height, density)
+
+    fun relayoutOnSurfaceResizeEnabled(): Boolean =
+        nativeRelayoutOnSurfaceResizeEnabled()
+
     fun setSafeAreaInsets(top: Float, right: Float, bottom: Float, left: Float) =
         nativeSetSafeAreaInsets(top, right, bottom, left)
 
@@ -70,6 +76,8 @@ object RayactEngine {
     external fun nativeCreate(dataPath: String): Boolean
     external fun nativeLoadScript(mode: Int, arg: String): Boolean
     external fun nativeCreateSurface(surface: Surface, density: Float): Int
+    external fun nativeResizeSurface(surfaceId: Int, width: Int, height: Int, density: Float)
+    external fun nativeRelayoutOnSurfaceResizeEnabled(): Boolean
     external fun nativeSetSafeAreaInsets(top: Float, right: Float, bottom: Float, left: Float)
     external fun nativeSetKeyboardInsets(heightDp: Float, visible: Boolean, durationMs: Float)
     external fun nativeDestroySurface(surfaceId: Int)

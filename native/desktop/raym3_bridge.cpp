@@ -1347,7 +1347,7 @@ static std::vector<raym3::v2::BoxShadow> parseBoxShadowCss(const std::string& cs
         std::vector<float> nums;
         while (ss >> token) {
             if (token == "inset") continue;
-            nums.push_back(std::strtof(token.c_str(), nullptr));
+            nums.push_back(parseCssLengthToLayoutDp(token));
         }
         if (nums.size() > 0) shadow.offsetX = nums[0];
         if (nums.size() > 1) shadow.offsetY = nums[1];
@@ -1519,6 +1519,12 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
     else if (fd == "column")         s.flexDirection = raym3::v2::FlexDirection::Column;
     else if (fd == "row-reverse")    s.flexDirection = raym3::v2::FlexDirection::RowReverse;
     else if (fd == "column-reverse") s.flexDirection = raym3::v2::FlexDirection::ColumnReverse;
+
+    // Enum: display
+    std::string display = jsGetString(ctx, obj, "display");
+    if      (display == "flex")     s.display = raym3::v2::Display::Flex;
+    else if (display == "none")     s.display = raym3::v2::Display::None;
+    else if (display == "contents") s.display = raym3::v2::Display::Contents;
 
     // Enum: justifyContent
     std::string jc = jsGetString(ctx, obj, "justifyContent");
@@ -3324,8 +3330,14 @@ JSValue JS_setStyle(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst
         target = raym3::v2::MergeStyles(it->second->style, parsed);
         enforceNativeControlLayoutDefaults(id, target);
         target.pointerEvents = raym3::v2::PointerEvents::None;
+    } else if (jsHasProperty(ctx, argv[1], "className") &&
+               g_materialComponentKinds.find(id) == g_materialComponentKinds.end()) {
+        // A className change is a new class-derived base. Replacing here clears
+        // properties that are no longer present, e.g. bg-indigo-600 -> no bg.
+        target = parsed;
     } else {
-        // Material components, scroll views, and plain views all merge.
+        // Style-only updates merge so partial animation/layout updates preserve
+        // the current class-derived base.
         target = raym3::v2::MergeStyles(it->second->style, parsed);
     }
     // Starts/retargets CSS transitions for properties explicitly set in
