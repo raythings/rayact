@@ -4,6 +4,10 @@ export interface RayactDevServerOptions {
   port?: number;
   entry: string;
   platform?: string;
+  rayactAppKey?: string;
+  cdpPort?: number;
+  minify?: boolean;
+  bytecode?: boolean;
   onClientLog?: () => void;
 }
 
@@ -12,8 +16,14 @@ export interface RayactDevServer {
   localUrl: string;
   entry: string;
   platform: string;
+  rayactAppKey: string;
+  qrPayload: string;
   clientCount(): number;
-  broadcast(message: DebugMessage): void;
+  hmrClientCount(): number;
+  debuggerClientCount(): number;
+  broadcastHmr(message: DebugMessage): void;
+  broadcastDebugger(message: DebugMessage): void;
+  broadcastInspector(message: DebugMessage): void;
   reload(): Promise<void>;
   close(): Promise<void>;
 }

@@ -1,0 +1,30 @@
+{
+  "name": "rayact-desktop-smoke",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone Rayact desktop app — Vite + rayact dev server",
+  "scripts": {
+    "dev": "rayact dev",
+    "build": "RAYACT_MODE=release vite build",
+    "build:debug": "vite build",
+    "start": "rayact start",
+    "start:dev": "rayact start --dev",
+    "test:desktop": "bash test-desktop.sh"
+  },
+  "dependencies": {
+    "@rayact/react": "file:../../packages/rayact-react",
+    "@rayact/runtime": "file:../../packages/rayact-runtime",
+    "@rayact/shared": "file:../../packages/rayact-shared",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@rayact/cli": "file:../../packages/rayact-cli",
+    "@rayact/dev-server": "file:../../packages/rayact-dev-server",
+    "@types/react": "^19.0.0",
+    "@vitejs/plugin-react": "^5.1.1",
+    "react-refresh": "^0.18.0",
+    "typescript": "^5.8.3",
+    "vite": "^7.2.6"
+  }
+}

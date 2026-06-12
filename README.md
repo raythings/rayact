@@ -18,30 +18,24 @@ A custom React renderer using **QuickJS** as the JavaScript runtime and **raylib
 - **🌈 Color System**: Hex color format with full RGBA support
 - **🔄 Material Ready**: Architecture prepared for raym3 integration
 
-## 📊 Project Status
+## Dev Platform
 
-### Complete ✅
-- QuickJS runtime integration
-- React reconciler implementation
-- Shape component system
-- Raylib graphics backend
-- Desktop build system
-- Multiple demo applications
-- Cross-platform architecture
+Rayact includes an Expo/Tamer-class dev workflow:
 
-### In Progress 🚧
-- Desktop compilation testing
-- Native function bridge optimization
-- Input handling implementation
+- **Dev server** — Vite bundler, split WS channels (`/rayact/hmr`, `/rayact/debugger`, `/rayact/inspector`), mDNS discovery, rich QR payloads
+- **`@rayact/dev-client`** — in-app launcher (Connect / Recent / Discover) for debug Android builds
+- **HMR** — WebSocket-first hot reload with React Fast Refresh
+- **CDP** — Chrome DevTools on port 9229 (`RAYACT_DEBUG=1`, `adb reverse tcp:9229 tcp:9229`)
+- **Bytecode** — release builds emit `.qjsbc` via `rayact compile`
 
-### Planned 📅
-- Android platform support
-- WebAssembly platform support
-- Layout system (Yoga)
-- Text rendering
-- Full raym3 integration
+See [docs/dev-platform.md](docs/dev-platform.md) for CLI reference.
 
-**Overall Progress: 28%**
+### Create a new app
+
+```bash
+npx create-rayact-app my-app
+cd my-app && npm install && npm run dev
+```
 
 ## 🚀 Quick Start
 

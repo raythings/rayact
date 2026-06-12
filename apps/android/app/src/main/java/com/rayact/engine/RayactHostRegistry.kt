@@ -3,8 +3,10 @@ package com.rayact.engine
 import android.os.Handler
 import android.os.Looper
 import com.rayact.app.NavigationHost
+import com.rayact.app.RayactRenderScheduler
 import com.rayact.app.RayactScreenFragment
 import com.rayact.app.RayactSurfaceView
+import com.rayact.devclient.DevMenuOverlay
 import java.lang.ref.WeakReference
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -23,6 +25,9 @@ object RayactHostRegistry {
 
     @Volatile
     private var host: NavigationHost? = null
+
+    @Volatile
+    private var devMenuOverlay: DevMenuOverlay? = null
 
     /** The surface view that should receive IME input. Set by the focused RayactSurfaceView. */
     @Volatile
@@ -131,5 +136,21 @@ object RayactHostRegistry {
         val h = host ?: return
         val activity = (h.context as? android.app.Activity) ?: return
         Handler(Looper.getMainLooper()).post { activity.finish() }
+    }
+
+    fun attachDevMenuOverlay(h: NavigationHost) {
+        Handler(Looper.getMainLooper()).post {
+            if (devMenuOverlay == null) devMenuOverlay = DevMenuOverlay(h)
+        }
+    }
+
+    fun toggleDevMenuFromHost() {
+        Handler(Looper.getMainLooper()).post {
+            devMenuOverlay?.toggle()
+        }
+    }
+
+    fun requestRenderFrameFromHost() {
+        RayactRenderScheduler.requestFrame()
     }
 }

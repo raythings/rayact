@@ -27,11 +27,24 @@ object RayactEngine {
         return created
     }
 
+    @Synchronized
+    fun destroy() {
+        if (!created) return
+        nativeDestroy()
+        created = false
+    }
+
     /** Load app JS from a source string (bundled asset). */
     fun loadSource(source: String): Boolean = nativeLoadScript(0, source)
 
+    /** Load embedded dev-client bundle (forces reload on warm start). */
+    fun loadDevClient(source: String): Boolean = nativeLoadScript(0, source)
+
     /** Load app JS from a dev-server URL (adb reverse). */
     fun loadDevServer(url: String): Boolean = nativeLoadScript(1, url)
+
+    /** Load precompiled QuickJS bytecode (.qjsbc). */
+    fun loadBytecode(bytes: ByteArray): Boolean = nativeLoadBytecode(bytes)
 
     // Touch action codes — mirror RCORE_AS_TOUCH_* in rcore_android_surface.h
     const val TOUCH_DOWN = 0
@@ -75,6 +88,8 @@ object RayactEngine {
     // ── JNI ───────────────────────────────────────────────────────────────
     external fun nativeCreate(dataPath: String): Boolean
     external fun nativeLoadScript(mode: Int, arg: String): Boolean
+    external fun nativeToggleDevMenu()
+    external fun nativeLoadBytecode(bytes: ByteArray): Boolean
     external fun nativeCreateSurface(surface: Surface, density: Float): Int
     external fun nativeResizeSurface(surfaceId: Int, width: Int, height: Int, density: Float)
     external fun nativeRelayoutOnSurfaceResizeEnabled(): Boolean
@@ -151,6 +166,10 @@ fun orderSurfacesFromHost(surfaceIds: IntArray): Unit = RayactHostRegistry.order
 
 // Reverse-call from native when no JS BackHandler listener handled system back.
 fun finishActivityFromHost(): Unit = RayactHostRegistry.finishActivityFromHost()
+
+fun toggleDevMenuFromHost(): Unit = RayactHostRegistry.toggleDevMenuFromHost()
+
+fun requestRenderFrameFromHost(): Unit = RayactHostRegistry.requestRenderFrameFromHost()
 
 // Reverse-call from C++ onFocus lambda — show keyboard for a specific TextInput node.
 fun showSoftKeyboardFromHost(

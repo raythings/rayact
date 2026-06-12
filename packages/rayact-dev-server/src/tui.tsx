@@ -1,7 +1,5 @@
 // Ink terminal UI for `rayact dev`. Kept in its own module and dynamically
-// imported only on the dev path so the `build`/release path never loads `ink`
-// (which statically imports React; under React 19.2 Node's cjs-lexer can't see
-// ink's `import { useEffectEvent } from 'react'`, killing the CLI at startup).
+// imported only on the dev path so the `build`/release path never loads `ink`.
 
 import path from 'node:path';
 import readline from 'node:readline';
@@ -10,6 +8,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { render as inkRender, Box, Text, useApp, useInput } from 'ink';
 import qrcode from 'qrcode-terminal';
 import { startRayactDevServer } from './server.js';
+import { loadRayactConfig } from './config.js';
+import { setupAdbReverse } from './adb.js';
 import type { RayactBuildMode } from './bundler.js';
 import type { RayactDevServer } from './types.js';
 
@@ -22,6 +22,10 @@ export interface ParsedArgs {
   desktopBin: string;
   mode: RayactBuildMode;
   outDir: string;
+  minify: boolean;
+  bytecode: boolean;
+  android: boolean;
+  debug: boolean;
 }
 
 function createQr(value: string): string {
@@ -36,22 +40,23 @@ function formatTime(date = new Date()): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-// ─── Mode manager (imperative, lives outside React) ───────────────────────────
-
 type Mode = 'tui' | 'log';
 
 let mode: Mode = 'tui';
 let inkInstance: ReturnType<typeof inkRender> | null = null;
 let activeServer: RayactDevServer | null = null;
 let cliArgs: ParsedArgs;
+let devMinify = false;
+let devBytecode = false;
 
 function printLogHeader(server: RayactDevServer): void {
-  const qr = createQr(server.url);
+  const qr = createQr(server.qrPayload);
   process.stdout.write('\n');
   process.stdout.write('  Rayact Dev Server\n');
   process.stdout.write(`  URL:   ${server.url}\n`);
   process.stdout.write(`  Local: ${server.localUrl}\n`);
   process.stdout.write(`  Entry: ${server.entry}\n`);
+  process.stdout.write(`  QR:    JSON payload (scan with Rayact dev client)\n`);
   process.stdout.write('\n');
   process.stdout.write(qr + '\n');
   process.stdout.write('\n');
@@ -63,9 +68,7 @@ function onLogModeKey(str: string, key: { ctrl?: boolean; name?: string }): void
     void activeServer?.close().finally(() => process.exit(0));
     return;
   }
-  if (str === 'c' || str === 'C') {
-    enterTuiMode();
-  }
+  if (str === 'c' || str === 'C') enterTuiMode();
 }
 
 function setupLogModeStdin(): void {
@@ -76,7 +79,6 @@ function setupLogModeStdin(): void {
 
 function cleanupLogModeStdin(): void {
   process.stdin.off('keypress', onLogModeKey);
-  // Ink will re-enable raw mode when it mounts; don't fight it here.
 }
 
 function enterLogMode(): void {
@@ -92,11 +94,9 @@ function enterTuiMode(): void {
   if (mode === 'tui') return;
   mode = 'tui';
   cleanupLogModeStdin();
-  process.stdout.write('\x1b[2J\x1b[H'); // clear + cursor home
+  process.stdout.write('\x1b[2J\x1b[H');
   inkInstance = inkRender(<RayactCli args={cliArgs} onEnterLogMode={enterLogMode} />);
 }
-
-// ─── TUI component ────────────────────────────────────────────────────────────
 
 interface RayactCliProps {
   args: ParsedArgs;
@@ -108,30 +108,40 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
   const [server, setServer] = useState<RayactDevServer | null>(null);
   const [status, setStatus] = useState('Starting Rayact dev server...');
   const [desktop, setDesktop] = useState<ChildProcess | null>(null);
+  const [minify, setMinify] = useState(devMinify);
+  const [bytecode, setBytecode] = useState(devBytecode);
   const [clientCount, setClientCount] = useState(0);
 
-  const qr = useMemo(() => createQr(server?.url ?? 'rayact'), [server?.url]);
+  const qr = useMemo(() => createQr(server?.qrPayload ?? 'rayact'), [server?.qrPayload]);
 
-  useEffect(() => {
-    let active = true;
-    void startRayactDevServer({ ...args, onClientLog: onEnterLogMode })
-      .then(started => {
-        if (!active) {
-          void started.close();
-          return;
-        }
+  const startServer = useCallback(() => {
+    void startRayactDevServer({
+      ...args,
+      minify,
+      bytecode,
+      onClientLog: onEnterLogMode
+    })
+      .then(async started => {
         activeServer = started;
         setServer(started);
         setStatus(`Server ready at ${started.url}`);
+        if (args.android) {
+          const config = loadRayactConfig();
+          const ok = await setupAdbReverse(started.localUrl, config.devServer?.cdpPort ?? 9229);
+          setStatus(ok
+            ? `Server ready + adb reverse configured`
+            : `Server ready (adb reverse skipped — no device?)`);
+        }
       })
       .catch(error => {
         setStatus(error instanceof Error ? error.message : String(error));
       });
+  }, [args, minify, bytecode, onEnterLogMode]);
 
-    return () => {
-      active = false;
-    };
-  }, [args, onEnterLogMode]);
+  useEffect(() => {
+    startServer();
+    return () => { activeServer = null; };
+  }, [startServer]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -141,20 +151,15 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
   }, [server]);
 
   const launchDesktop = useCallback(() => {
-    if (!server) {
-      setStatus('Server is not ready yet');
-      return;
-    }
-    if (desktop && desktop.exitCode === null) {
-      setStatus('Desktop app is already running');
-      return;
-    }
+    if (!server) { setStatus('Server is not ready yet'); return; }
+    if (desktop && desktop.exitCode === null) { setStatus('Desktop app is already running'); return; }
 
     const bin = path.resolve(process.cwd(), args.desktopBin);
     const child = spawn(bin, ['--dev-server', server.localUrl], {
       cwd: process.cwd(),
       stdio: 'ignore',
-      detached: true
+      detached: true,
+      env: { ...process.env, RAYACT_DEBUG: '1' }
     });
     child.unref();
     setDesktop(child);
@@ -170,14 +175,23 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
   }, [args.desktopBin, desktop, server]);
 
   const reload = useCallback(() => {
-    if (!server) {
-      setStatus('Server is not ready yet');
-      return;
-    }
+    if (!server) { setStatus('Server is not ready yet'); return; }
     void server.reload()
       .then(() => setStatus(`Reload sent at ${formatTime()}`))
       .catch(error => setStatus(error instanceof Error ? error.message : String(error)));
   }, [server]);
+
+  const toggleMinify = useCallback(() => {
+    devMinify = !devMinify;
+    setMinify(devMinify);
+    setStatus(`Minify ${devMinify ? 'ON' : 'OFF'} — restart dev server to apply`);
+  }, []);
+
+  const toggleBytecode = useCallback(() => {
+    devBytecode = !devBytecode;
+    setBytecode(devBytecode);
+    setStatus(`Bytecode ${devBytecode ? 'ON' : 'OFF'} (disables Fast Refresh) — restart to apply`);
+  }, []);
 
   const quit = useCallback(() => {
     void server?.close().finally(() => exit());
@@ -187,6 +201,8 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
     if (input === 'c' || input === 'C') onEnterLogMode();
     else if (input === 'd') launchDesktop();
     else if (input === 'r') reload();
+    else if (input === 'm') toggleMinify();
+    else if (input === 'b') toggleBytecode();
     else if (input === 'q' || key.escape || (key.ctrl && input === 'c')) quit();
   });
 
@@ -197,18 +213,21 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
       <Text color="cyan" bold>Rayact Dev Server</Text>
       <Box marginTop={1} flexDirection="column">
         <Text>URL: <Text color="green">{server?.url ?? 'starting...'}</Text></Text>
-        <Text>Local desktop URL: <Text color="green">{server?.localUrl ?? 'starting...'}</Text></Text>
+        <Text>Local: <Text color="green">{server?.localUrl ?? 'starting...'}</Text></Text>
         <Text>Entry: <Text color="yellow">{server?.entry ?? args.entry}</Text></Text>
         <Text>Platform: {server?.platform ?? args.platform}   Clients: {clientCount}</Text>
+        <Text>Minify: {minify ? 'on' : 'off'}   Bytecode: {bytecode ? 'on' : 'off'}</Text>
       </Box>
       <Box marginTop={1} flexDirection="column">
         <Text>{qr}</Text>
       </Box>
       <Box marginTop={1} flexDirection="column">
         <Text>
-          <Text color="cyan">c</Text> log mode{'   '}
-          <Text color="cyan">d</Text> open desktop{'   '}
-          <Text color="cyan">r</Text> reload clients{'   '}
+          <Text color="cyan">c</Text> log{'   '}
+          <Text color="cyan">d</Text> desktop{'   '}
+          <Text color="cyan">r</Text> reload{'   '}
+          <Text color="cyan">m</Text> minify{'   '}
+          <Text color="cyan">b</Text> bytecode{'   '}
           <Text color="cyan">q</Text> quit
         </Text>
         <Text color={isError ? 'red' : 'gray'}>{status}</Text>
@@ -217,8 +236,9 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
   );
 }
 
-/** Boot the interactive dev TUI. Called only from the `dev` command path. */
 export function startDevTui(args: ParsedArgs): void {
   cliArgs = args;
+  devMinify = args.minify;
+  devBytecode = args.bytecode;
   inkInstance = inkRender(<RayactCli args={args} onEnterLogMode={enterLogMode} />);
 }

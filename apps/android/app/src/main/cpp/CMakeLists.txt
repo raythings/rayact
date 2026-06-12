@@ -137,6 +137,8 @@ set(ENGINE_SRC
     ${RAYACT}/native/desktop/module_bus.cpp
     ${RAYACT}/native/desktop/plugin_loader.cpp
     ${RAYACT}/native/desktop/devtools.cpp
+    ${RAYACT}/native/desktop/cdp_handler.cpp
+    ${RAYACT}/native/desktop/dev_client_bridge.cpp
     ${RAYACT}/native/desktop/accessibility_bridge.cpp
     ${RAYACT}/native/desktop/platform_wayland.cpp
     ${RAYACT}/native/desktop/quickjs_bridge.cpp

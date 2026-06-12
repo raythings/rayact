@@ -138,3 +138,7 @@ bool enginePopScreen();
 void engineClearScreenStack();
 void engineSetScreenStack(const std::vector<int>& ids);
 void engineForEachVisibleScreen(const std::function<void(int, const raym3::v2::NodePtr&)>& fn);
+
+std::string buildNodeTreeJson();
+void setInspectorHighlight(int nodeId);
+void drawInspectorHighlight();

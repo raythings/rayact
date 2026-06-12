@@ -5,15 +5,21 @@
   "private": true,
   "scripts": {
     "dev": "npm run rayact -- dev --host 0.0.0.0 --port 8081 --entry apps/desktop/src/App.tsx",
-    "rayact": "node packages/rayact-dev-server/dist/cli.js",
+    "rayact": "node packages/rayact-cli/dist/cli.js",
     "dev:desktop": "cd apps/desktop && npm run dev",
     "dev:android": "cd apps/android && ./gradlew --warning-mode all",
     "dev:web": "cd apps/web && npm run dev",
-    "build": "npm run build:shared && npm run build:runtime && npm run build:react && npm run build:dev-server && npm run build:core && npm run build:quickjs && npm run build:renderer",
+    "build": "npm run build:shared && npm run build:runtime && npm run build:react && npm run build:dev-client && npm run build:dev-server && npm run build:core && npm run build:quickjs && npm run build:renderer",
+    "build:dev-client": "cd packages/rayact-dev-client && npm run build",
+    "verify": "npm run rayact -- verify",
+    "verify:android": "npm run rayact -- verify --android",
+    "test:desktop-smoke": "npm run test:desktop --workspace=rayact-desktop-smoke",
     "build:core": "cd packages/rayact-core && npm run build",
     "build:runtime": "cd packages/rayact-runtime && npm run build",
     "build:react": "cd packages/rayact-react && npm run build",
     "build:dev-server": "cd packages/rayact-dev-server && npm run build",
+    "build:cli": "cd packages/rayact-cli && npm run build",
+    "build:create-app": "cd packages/create-rayact-app && npm run build",
     "build:quickjs": "cd packages/rayact-quickjs && npm run build",
     "build:renderer": "cd packages/rayact-renderer && npm run build",
     "build:shared": "cd packages/rayact-shared && npm run build",
@@ -28,7 +34,8 @@
   },
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/*",
+    "test-projects/*"
   ],
   "devDependencies": {
     "concurrently": "^8.2.2",

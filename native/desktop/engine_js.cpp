@@ -7,6 +7,7 @@
 #include "../core/config_loader.hpp"
 #include "quickjs_bridge.hpp"
 #include "raym3_bridge.hpp"
+#include "dev_client_bridge.hpp"
 #include "commit_queue.hpp"
 #include "shadow_tree.hpp"
 #include "engine_thread.hpp"
@@ -78,6 +79,7 @@ static JSValue JS_navigateBack(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_navigateForward(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_clearNavigationStack(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_registerScreen(JSContext*, JSValue, int, JSValueConst*);
+static JSValue JS_loadBytecode(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_getCurrentScreen(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_printNavigationStatus(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_resolveAssetUrl(JSContext*, JSValue, int, JSValueConst*);
@@ -550,6 +552,8 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_resolveAssetPath, "resolveAssetPath", 1));
     JS_SetPropertyStr(ctx, global, "readAssetBytes",
                       JS_NewCFunction(ctx, JS_readAssetBytes, "readAssetBytes", 1));
+    JS_SetPropertyStr(ctx, global, "loadBytecode",
+                      JS_NewCFunction(ctx, JS_loadBytecode, "loadBytecode", 1));
 
     // CSS import bridge
     JS_SetPropertyStr(ctx, global, "importCSS",
@@ -575,6 +579,7 @@ static void registerNativeFunctions(JSContext* ctx) {
     }
 #endif
     rayact::installModuleBindings(ctx, global);
+    rayact::installDevClientBridge(ctx, global);
     rayact::devtoolsInit(ctx);
     rayact::workletRuntimeInit();
 
@@ -849,7 +854,44 @@ static void injectMaterialIcons(JSContext* ctx) {
     printf("material_icons.js not found — icon names won't resolve\n");
 }
 
-// Load and execute pre-compiled QuickJS bytecode (.jsc file).
+static bool evalBytecodeBuffer(JSContext* ctx, const uint8_t* data, size_t len, const char* label) {
+    printf("Loading bytecode: %s (%zu bytes)\n", label, len);
+    JSValue obj = JS_ReadObject(ctx, data, len, JS_READ_OBJ_BYTECODE);
+    if (JS_IsException(obj)) {
+        JSValue exc = JS_GetException(ctx);
+        const char* s = JS_ToCString(ctx, exc);
+        fprintf(stderr, "Bytecode load error in '%s': %s\n", label, s ? s : "?");
+        if (s) JS_FreeCString(ctx, s);
+        JS_FreeValue(ctx, exc);
+        JS_FreeValue(ctx, obj);
+        return false;
+    }
+    JSValue result = JS_EvalFunction(ctx, obj);
+    if (JS_IsException(result)) {
+        JSValue exc = JS_GetException(ctx);
+        const char* s = JS_ToCString(ctx, exc);
+        fprintf(stderr, "Bytecode eval error in '%s': %s\n", label, s ? s : "?");
+        if (s) JS_FreeCString(ctx, s);
+        JS_FreeValue(ctx, exc);
+        JS_FreeValue(ctx, result);
+        return false;
+    }
+    JS_FreeValue(ctx, result);
+    printf("Successfully executed bytecode: %s\n", label);
+    return true;
+}
+
+static JSValue JS_loadBytecode(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "loadBytecode: expected Uint8Array");
+    size_t len = 0;
+    uint8_t* data = JS_GetArrayBuffer(ctx, &len, argv[0]);
+    if (!data) return JS_ThrowTypeError(ctx, "loadBytecode: expected ArrayBuffer");
+    injectMaterialIcons(ctx);
+    if (!evalBytecodeBuffer(ctx, data, len, "loadBytecode()")) return JS_EXCEPTION;
+    return JS_UNDEFINED;
+}
+
+// Load and execute pre-compiled QuickJS bytecode (.jsc / .qjsbc file).
 static bool loadBytecodeFile(JSContext* ctx, const char* filename) {
     FILE* f = fopen(filename, "rb");
     if (!f) return false;
@@ -860,30 +902,8 @@ static bool loadBytecodeFile(JSContext* ctx, const char* filename) {
     fread(buf.data(), 1, len, f);
     fclose(f);
 
-    printf("Loaded bytecode: %s (%ld bytes)\n", filename, len);
-    JSValue obj = JS_ReadObject(ctx, buf.data(), buf.size(), JS_READ_OBJ_BYTECODE);
-    if (JS_IsException(obj)) {
-        JSValue exc = JS_GetException(ctx);
-        const char* s = JS_ToCString(ctx, exc);
-        fprintf(stderr, "Bytecode load error in '%s': %s\n", filename, s ? s : "?");
-        if (s) JS_FreeCString(ctx, s);
-        JS_FreeValue(ctx, exc);
-        JS_FreeValue(ctx, obj);
-        return false;
-    }
-    JSValue result = JS_EvalFunction(ctx, obj); // obj ownership transferred
-    if (JS_IsException(result)) {
-        JSValue exc = JS_GetException(ctx);
-        const char* s = JS_ToCString(ctx, exc);
-        fprintf(stderr, "Bytecode eval error in '%s': %s\n", filename, s ? s : "?");
-        if (s) JS_FreeCString(ctx, s);
-        JS_FreeValue(ctx, exc);
-        JS_FreeValue(ctx, result);
-        return false;
-    }
-    JS_FreeValue(ctx, result);
-    printf("Successfully executed bytecode: %s\n", filename);
-    return true;
+    injectMaterialIcons(ctx);
+    return evalBytecodeBuffer(ctx, buf.data(), buf.size(), filename);
 }
 
 // Compile a JS source file to QuickJS bytecode and write a .jsc file.
@@ -917,7 +937,16 @@ std::string compileJSToBytecode(JSContext* ctx, const char* srcFile, const char*
     if (!bytes) { fprintf(stderr, "compile: JS_WriteObject failed\n"); return ""; }
 
     // Determine output path
-    std::string out = outFile ? std::string(outFile) : (std::string(srcFile) + "c"); // .js → .jsc
+    std::string out;
+    if (outFile) {
+        out = outFile;
+    } else {
+        out = srcFile;
+        if (out.size() >= 3 && out.substr(out.size() - 3) == ".js")
+            out = out.substr(0, out.size() - 3) + ".qjsbc";
+        else
+            out += ".qjsbc";
+    }
     FILE* of = fopen(out.c_str(), "wb");
     if (!of) {
         fprintf(stderr, "compile: cannot write %s\n", out.c_str());
@@ -933,10 +962,11 @@ std::string compileJSToBytecode(JSContext* ctx, const char* srcFile, const char*
 
 // Helper function to load and execute JavaScript (or bytecode)
 static bool loadJavaScriptFile(JSContext* ctx, const char* filename) {
-    // .jsc = pre-compiled QuickJS bytecode — skip source parsing but still inject globals
     std::string fn(filename);
+    if (fn.size() >= 6 && fn.substr(fn.size() - 6) == ".qjsbc") {
+        return loadBytecodeFile(ctx, filename);
+    }
     if (fn.size() >= 4 && fn.substr(fn.size() - 4) == ".jsc") {
-        injectMaterialIcons(ctx);
         return loadBytecodeFile(ctx, filename);
     }
 
@@ -1058,6 +1088,13 @@ static bool httpGet(const std::string& url, std::string& body, std::string& erro
 
     return true;
 }
+
+static bool httpGetBytes(const std::string& url, std::vector<uint8_t>& body, std::string& error) {
+    std::string text;
+    if (!httpGet(url, text, error)) return false;
+    body.assign(text.begin(), text.end());
+    return true;
+}
 #endif // RAYACT_NO_NET
 
 static std::string jsObjectString(JSContext* ctx, JSValue obj, const char* key) {
@@ -1146,6 +1183,21 @@ static JSValue JS_readAssetBytes(JSContext* ctx, JSValue, int argc, JSValueConst
     return JS_NewArrayBufferCopy(ctx, bytes.data(), bytes.size());
 }
 
+static std::string parseJsonStringField(const std::string& json, const std::string& field) {
+    std::string key = "\"" + field + "\"";
+    size_t pos = json.find(key);
+    if (pos == std::string::npos) return "";
+    pos = json.find(':', pos + key.size());
+    if (pos == std::string::npos) return "";
+    pos++;
+    while (pos < json.size() && std::isspace(static_cast<unsigned char>(json[pos]))) pos++;
+    if (pos >= json.size() || json[pos] != '"') return "";
+    pos++;
+    size_t end = json.find('"', pos);
+    if (end == std::string::npos) return "";
+    return json.substr(pos, end - pos);
+}
+
 static int parseJsonIntField(const std::string& json, const std::string& field) {
     std::string key = "\"" + field + "\"";
     size_t pos = json.find(key);
@@ -1231,26 +1283,74 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
 
     ensureDevWindow();
 
-    std::string bundle;
-    if (!httpGet(devServer + "/rayact/bundle", bundle, error)) {
-        showDevErrorOverlay(ctx, "Failed to fetch dev bundle:\n" + error);
-        return false;
+    std::string bundleFormat = parseJsonStringField(manifest, "bundleFormat");
+    std::string bundlePath = bundleFormat == "qjsbc" ? "/rayact/bundle.qjsbc" : "/rayact/bundle";
+    std::string hmrUrl = parseJsonStringField(manifest, "hmrUrl");
+    if (hmrUrl.empty()) {
+        std::string wsBase = devServer;
+        if (wsBase.rfind("https://", 0) == 0) wsBase.replace(0, 5, "wss");
+        else if (wsBase.rfind("http://", 0) == 0) wsBase.replace(0, 4, "ws");
+        hmrUrl = wsBase + "/rayact/hmr";
     }
 
-    JSValue result = JS_Eval(ctx, bundle.c_str(), bundle.size(), "rayact_dev_bundle.js", JS_EVAL_TYPE_GLOBAL);
-    if (JS_IsException(result)) {
-        JSValue exception = JS_GetException(ctx);
-        const char* exceptionStr = JS_ToCString(ctx, exception);
-        std::string message = exceptionStr ? exceptionStr : "Unknown JavaScript exception";
-        JS_FreeCString(ctx, exceptionStr);
-        JS_FreeValue(ctx, exception);
+    bool loaded = false;
+    if (bundleFormat == "qjsbc") {
+        std::vector<uint8_t> bytes;
+        if (!httpGetBytes(devServer + bundlePath, bytes, error)) {
+            showDevErrorOverlay(ctx, "Failed to fetch dev bytecode:\n" + error);
+            return false;
+        }
+        injectMaterialIcons(ctx);
+        loaded = evalBytecodeBuffer(ctx, bytes.data(), bytes.size(), "rayact_dev_bundle.qjsbc");
+    } else {
+        std::string bundle;
+        if (!httpGet(devServer + bundlePath, bundle, error)) {
+            showDevErrorOverlay(ctx, "Failed to fetch dev bundle:\n" + error);
+            return false;
+        }
+        JSValue result = JS_Eval(ctx, bundle.c_str(), bundle.size(), "rayact_dev_bundle.js", JS_EVAL_TYPE_GLOBAL);
+        if (JS_IsException(result)) {
+            JSValue exception = JS_GetException(ctx);
+            const char* exceptionStr = JS_ToCString(ctx, exception);
+            std::string message = exceptionStr ? exceptionStr : "Unknown JavaScript exception";
+            JS_FreeCString(ctx, exceptionStr);
+            JS_FreeValue(ctx, exception);
+            JS_FreeValue(ctx, result);
+            showDevErrorOverlay(ctx, "Failed to evaluate dev bundle:\n" + message);
+            return false;
+        }
         JS_FreeValue(ctx, result);
-        showDevErrorOverlay(ctx, "Failed to evaluate dev bundle:\n" + message);
+        loaded = true;
+        printf("Successfully loaded Rayact dev bundle (%zu bytes)\n", bundle.size());
+    }
+
+    if (!loaded) {
+        showDevErrorOverlay(ctx, "Failed to load dev bundle bytecode");
         return false;
     }
 
-    JS_FreeValue(ctx, result);
-    printf("Successfully loaded Rayact dev bundle (%zu bytes)\n", bundle.size());
+    const bool isQjsbc = bundleFormat == "qjsbc";
+    std::string hmrScript =
+        "(function(){"
+        "if(typeof WebSocket!=='function')return;"
+        "var url=" + jsQuote(hmrUrl) + ";"
+        "var bundleUrl=" + jsQuote(devServer + bundlePath) + ";"
+        "var isQjsbc=" + (isQjsbc ? "true" : "false") + ";"
+        "function reload(){"
+        "fetch(bundleUrl).then(function(r){return isQjsbc?r.arrayBuffer():r.text();})"
+        ".then(function(p){"
+        "if(isQjsbc&&typeof loadBytecode==='function'){loadBytecode(new Uint8Array(p));}"
+        "else if(typeof eval==='function'){eval(p);}"
+        "});};"
+        "var ws=new WebSocket(url);"
+        "ws.onmessage=function(e){try{var m=JSON.parse(e.data);"
+        "if(m.type==='hmr-update'||m.type==='reload')reload();"
+        "}catch(x){}};"
+        "globalThis.__RAYACT_HMR_WS__=ws;"
+        "})();";
+    JSValue hmrResult = JS_Eval(ctx, hmrScript.c_str(), hmrScript.size(), "rayact_hmr_connector.js", JS_EVAL_TYPE_GLOBAL);
+    JS_FreeValue(ctx, hmrResult);
+
     return true;
 #endif // RAYACT_NO_NET
 }
@@ -1345,6 +1445,12 @@ bool engineLoadFile(const std::string& path) {
         ? scriptPath.parent_path()
         : std::filesystem::current_path();
     return loadJavaScriptFile(g_ctx, path.c_str());
+}
+
+bool engineLoadBytecode(const uint8_t* data, size_t len, const char* label) {
+    if (!g_ctx || !data || len == 0) return false;
+    injectMaterialIcons(g_ctx);
+    return evalBytecodeBuffer(g_ctx, data, len, label ? label : "app.qjsbc");
 }
 
 bool engineLoadSource(const std::string& source, const std::string& name) {

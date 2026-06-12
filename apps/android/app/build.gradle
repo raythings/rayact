@@ -38,9 +38,16 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField "boolean", "RAYACT_DEV_CLIENT", "true"
+        }
         release {
             minifyEnabled false
+            buildConfigField "boolean", "RAYACT_DEV_CLIENT", "false"
         }
+    }
+    buildFeatures {
+        buildConfig true
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

@@ -1,0 +1,24 @@
+{
+  "name": "@rayact/dev-client",
+  "version": "0.1.0",
+  "description": "Rayact dev launcher — connect, discover, reload",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@rayact/react": "*",
+    "@rayact/runtime": "*"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "typescript": "^5.8.3"
+  },
+  "license": "MIT"
+}

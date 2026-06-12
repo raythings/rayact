@@ -449,6 +449,7 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     rlScalef(dp, dp, 1.0f);
     SetMouseScale(1.0f / dp, 1.0f / dp); // M3 components call GetMousePosition() in dp space
     raym3::v2::Render(g_root, bounds, /*layoutAlreadyComputed=*/!forceLayout);
+    drawInspectorHighlight();
     SetMouseScale(1.0f, 1.0f);
     rlPopMatrix();
 }

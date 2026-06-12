@@ -31,6 +31,7 @@ JSContext* engineContext();
 bool engineLoadDevServer(const std::string& devServerUrl);
 bool engineLoadFile(const std::string& path);          // sets release asset base dir
 bool engineLoadSource(const std::string& source, const std::string& name);
+bool engineLoadBytecode(const uint8_t* data, size_t len, const char* label = "app.qjsbc");
 
 // Load the optional app config (app.json / app.config.js / app.config.ts).
 // Idempotent. Safe to call once after engineCreate() and before

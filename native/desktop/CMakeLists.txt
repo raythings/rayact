@@ -223,6 +223,8 @@ set(SOURCES
     module_bus.cpp
     plugin_loader.cpp
     devtools.cpp
+    cdp_handler.cpp
+    dev_client_bridge.cpp
     accessibility_bridge.cpp
     platform_wayland.cpp
     quickjs_bridge.cpp

@@ -45,6 +45,7 @@
 #include "../desktop/module_bus.hpp"
 #include "../desktop/plugin_loader.hpp"
 #include "../desktop/raym3_bridge.hpp"
+#include "../desktop/dev_client_bridge.hpp"
 #include "../desktop/js_stdlib.hpp"
 #include <raym3/fonts/FontManager.h>
 #include <raym3/v2/Density.h>
@@ -85,11 +86,13 @@ struct Surface {
 
 bool g_engineReady = false;
 bool g_scriptExecuted = false;
+bool g_scriptReloadRequested = false;
 // Real Android display density (DisplayMetrics.density). Stored so safe-area
 // insets arriving as real-dp can be rescaled to layout-dp.
 static float g_realDensity = 1.0f;
-int g_pendingScriptMode = -1;          // 0 = source string, 1 = dev-server URL
+int g_pendingScriptMode = -1;          // 0 = source string, 1 = dev-server URL, 2 = bytecode
 std::string g_pendingScript;
+std::vector<uint8_t> g_pendingBytecode;
 std::string g_dataPath;                // Activity internalDataPath; used by config loader
 std::map<int, Surface> g_surfaces;     // surfaceId -> Surface
 int g_rootScreenId = 0;                // Stable process root screen; survives Activity/Surface recreation.
@@ -116,6 +119,7 @@ std::atomic<bool> g_pendingBackPress{false};
 std::atomic<bool> g_finishActivityRequested{false};
 // Set by JS calling __rayactHostExitApp. Same pattern as g_pendingBackPress.
 std::atomic<bool> g_exitAppRequested{false};
+std::atomic<bool> g_pendingDevMenuToggle{false};
 
 std::string jstr(JNIEnv* env, jstring s) {
     if (!s) return {};
@@ -203,17 +207,25 @@ float androidLayoutDensityForSurface(ANativeWindow* window, float realDensity) {
     return androidLayoutDensityForWidth(surfaceWidth, realDensity);
 }
 
-bool executePendingScript() {
-    if (g_scriptExecuted || g_pendingScriptMode < 0) return g_scriptExecuted;
+bool executePendingScript(bool forceReload = false) {
+    if (g_pendingScriptMode < 0) return g_scriptExecuted;
+    if (g_scriptExecuted && !forceReload) return true;
     rayact::enginePrepareJSThread();
-    bool ok = (g_pendingScriptMode == 1)
-        ? rayact::engineLoadDevServer(g_pendingScript)
-        : rayact::engineLoadSource(g_pendingScript, "app.js");
+    bool ok = false;
+    if (g_pendingScriptMode == 1) {
+        ok = rayact::engineLoadDevServer(g_pendingScript);
+    } else if (g_pendingScriptMode == 2) {
+        ok = rayact::engineLoadBytecode(g_pendingBytecode.data(), g_pendingBytecode.size(), "app.qjsbc");
+        g_pendingBytecode.clear();
+    } else {
+        ok = rayact::engineLoadSource(g_pendingScript, "app.js");
+    }
     if (!ok) {
         LOGE("executePendingScript(mode=%d) failed", g_pendingScriptMode);
         return false;
     }
     g_scriptExecuted = true;
+    g_scriptReloadRequested = false;
     LOGI("JS loaded on render thread: nodes=%zu root=%s",
         g_nodes.size(), g_root ? "yes" : "no");
     return true;
@@ -1010,6 +1022,24 @@ Java_com_rayact_engine_RayactEngine_nativeLoadScript(JNIEnv* env, jclass, jint m
     if (!g_engineReady) return JNI_FALSE;
     g_pendingScript = jstr(env, arg);
     g_pendingScriptMode = mode;
+    if (g_scriptExecuted) g_scriptReloadRequested = true;
+    callIntoHost_VoidMethod("requestRenderFrameFromHost");
+    return JNI_TRUE;
+}
+
+JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngine_nativeToggleDevMenu(JNIEnv*, jclass) {
+    g_pendingDevMenuToggle.store(true, std::memory_order_release);
+    callIntoHost_VoidMethod("requestRenderFrameFromHost");
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_rayact_engine_RayactEngine_nativeLoadBytecode(JNIEnv* env, jclass, jbyteArray bytes) {
+    if (!g_engineReady || !bytes) return JNI_FALSE;
+    jsize len = env->GetArrayLength(bytes);
+    g_pendingBytecode.resize((size_t)len);
+    env->GetByteArrayRegion(bytes, 0, len, reinterpret_cast<jbyte*>(g_pendingBytecode.data()));
+    g_pendingScriptMode = 2;
     return JNI_TRUE;
 }
 
@@ -1321,6 +1351,29 @@ Java_com_rayact_engine_RayactEngine_nativeRenderFrame(JNIEnv*, jclass,
     // (React's mount), silently aborting it. Re-capture the stack base on THIS
     // thread before running any JS.
     rayact::enginePrepareJSThread();
+    if (g_scriptReloadRequested && g_pendingScriptMode >= 0) {
+        executePendingScript(true);
+    }
+    if (g_pendingDevMenuToggle.exchange(false, std::memory_order_acq_rel)) {
+        JSContext* menuCtx = rayact::engineContext();
+        bool handled = false;
+        if (menuCtx) {
+            JSValue global = JS_GetGlobalObject(menuCtx);
+            JSValue fn = JS_GetPropertyStr(menuCtx, global, "__rayactToggleDevMenu");
+            if (JS_IsFunction(menuCtx, fn)) {
+                JSValue r = JS_Call(menuCtx, fn, global, 0, nullptr);
+                if (JS_IsException(r)) {
+                    JSValue e = JS_GetException(menuCtx);
+                    JS_FreeValue(menuCtx, e);
+                }
+                JS_FreeValue(menuCtx, r);
+                handled = true;
+            }
+            JS_FreeValue(menuCtx, fn);
+            JS_FreeValue(menuCtx, global);
+        }
+        if (!handled) callIntoHost_VoidMethod("toggleDevMenuFromHost");
+    }
     rayact::enginePumpJS();
 
     // Drain pending hardware-back events. g_pendingBackPress is set by the
@@ -1638,11 +1691,67 @@ Java_com_rayact_engine_RayactEngine_nativeDestroy(JNIEnv*, jclass) {
         }
         g_surfaces.clear();
     }
-    if (g_engineReady) { rayact::engineDestroy(); g_engineReady = false; }
+    if (g_engineReady) {
+        rayact::engineDestroy();
+        g_engineReady = false;
+    }
+    // A dev-client handoff intentionally creates a fresh JS runtime for the
+    // project bundle. Also drop graphics-device caches from the launcher so
+    // text/icon atlases cannot be reused as stale texture ids in the project
+    // Activity after InitWindow recreates the Android backend.
+    raym3::FontManager::ResetDeviceCache();
+    raym3::v2::IconRendererResetDeviceCache();
+    rayactResetIconSheet();
+    if (IsWindowReady()) {
+        CloseWindow();
+    }
     g_scriptExecuted = false;
+    g_scriptReloadRequested = false;
     g_pendingScriptMode = -1;
     g_pendingScript.clear();
+    g_pendingBytecode.clear();
     g_rootScreenId = 0;
 }
 
 } // extern "C"
+
+namespace rayact {
+
+std::string androidDevCall(const char* method, const char* dataJson) {
+    if (!g_jvm) return "null";
+    JNIEnv* env = nullptr;
+    bool needDetach = false;
+    jint rs = g_jvm->GetEnv((void**)&env, JNI_VERSION_1_6);
+    if (rs == JNI_EDETACHED) {
+        if (g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) return "null";
+        needDetach = true;
+    } else if (rs != JNI_OK) {
+        return "null";
+    }
+    std::string result = "null";
+    jclass cls = env->FindClass("com/rayact/devclient/DevClientBridgeKt");
+    if (cls) {
+        jmethodID m = env->GetStaticMethodID(cls, "devCallFromNative",
+            "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+        if (m) {
+            jstring jMethod = env->NewStringUTF(method ? method : "");
+            jstring jData = dataJson ? env->NewStringUTF(dataJson) : nullptr;
+            jstring jResult = (jstring)env->CallStaticObjectMethod(cls, m, jMethod, jData);
+            if (jResult) {
+                result = jstr(env, jResult);
+                env->DeleteLocalRef(jResult);
+            }
+            env->DeleteLocalRef(jMethod);
+            if (jData) env->DeleteLocalRef(jData);
+        }
+        env->DeleteLocalRef(cls);
+    }
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+    }
+    if (needDetach) g_jvm->DetachCurrentThread();
+    return result;
+}
+
+} // namespace rayact

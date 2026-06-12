@@ -191,7 +191,8 @@ export interface RayactGlobal {
   resolveAssetPath?: (asset: RayactAssetMetadata) => string;
   readAssetBytes?: (asset: RayactAssetMetadata) => Uint8Array | ArrayBuffer | number[];
   spawnWorker?: (path: string | RayactAsset | Record<string, unknown>, initialData?: unknown) => number;
-  fetch?: (url: string) => Promise<{ text(): Promise<string> }>;
+  fetch?: (url: string) => Promise<{ text(): Promise<string>; arrayBuffer(): Promise<ArrayBuffer> }>;
+  loadBytecode?: (bytes: Uint8Array) => Promise<void> | void;
   eval?: (source: string) => unknown;
   WebSocket?: new (url: string) => WebSocketLike;
   console?: Console;

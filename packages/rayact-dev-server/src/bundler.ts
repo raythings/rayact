@@ -39,6 +39,9 @@ export interface BundleOptions {
   platform: string;
   mode?: RayactBuildMode;
   outDir?: string;
+  minify?: boolean;
+  bytecode?: boolean;
+  desktopBin?: string;
 }
 
 export interface RayactAssetRecord {
@@ -54,6 +57,8 @@ export interface RayactAssetRecord {
 
 export interface RayactBuildOutput {
   code: string;
+  bytecode?: Buffer;
+  bundleFormat: 'js' | 'qjsbc';
   assets: RayactAssetRecord[];
   entry: string;
   platform: string;
@@ -205,7 +210,8 @@ const REACT_EXPORTS = [
   'unstable_act', 'useCallback', 'useContext', 'useDebugValue', 'useDeferredValue',
   'useEffect', 'useId', 'useImperativeHandle', 'useInsertionEffect', 'useLayoutEffect',
   'useMemo', 'useReducer', 'useRef', 'useState', 'useSyncExternalStore', 'useTransition',
-  'version', '__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED'
+  'version', '__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED',
+  '__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE'
 ];
 
 interface VendorSpec {
@@ -251,8 +257,50 @@ function vendorSharePlugin(): Plugin {
 
 const REFRESH_RUNTIME_SETUP_ID = 'virtual:rayact-refresh-runtime';
 const REACT_NATIVE_VIRTUAL_ID = 'virtual:rayact-react-native';
-const ENTRY_ID = 'virtual:rayact-entry';
+export const RAYACT_ENTRY_ID = 'virtual:rayact-entry';
+const ENTRY_ID = RAYACT_ENTRY_ID;
 const DEV_CLIENT_ENTRY_ID = 'virtual:rayact-dev-client-entry';
+
+const RAYACT_PKG_ALIASES: { find: RegExp; pkg: string; src: string }[] = [
+  { find: /^@rayact\/react$/, pkg: '@rayact/react', src: 'src/index.ts' },
+  { find: /^@rayact\/runtime$/, pkg: '@rayact/runtime', src: 'src/index.ts' },
+  { find: /^@rayact\/shared$/, pkg: '@rayact/shared', src: 'src/index.ts' },
+  { find: /^@rayact\/navigation$/, pkg: '@rayact/navigation', src: 'src/index.tsx' },
+  { find: /^@rayact\/navigation\/native$/, pkg: '@rayact/navigation', src: 'src/native.tsx' },
+  { find: /^@rayact\/navigation\/stack$/, pkg: '@rayact/navigation', src: 'src/stack.tsx' },
+  { find: /^@rayact\/navigation\/bottom-tabs$/, pkg: '@rayact/navigation', src: 'src/bottom-tabs.tsx' },
+  { find: /^@rayact\/crypto$/, pkg: '@rayact/crypto', src: 'src/index.ts' },
+  { find: /^@rayact\/dev-client$/, pkg: '@rayact/dev-client', src: 'src/index.ts' }
+];
+
+function resolveRayactPackage(root: string, pkg: string, srcRel: string): string {
+  const folder = pkg.replace('@rayact/', 'rayact-');
+  const monorepoSrc = path.resolve(root, 'packages', folder, srcRel);
+  if (fs.existsSync(monorepoSrc)) return normalizePath(monorepoSrc);
+
+  const projectRoot = path.resolve(root);
+  const req = createRequire(path.join(projectRoot, 'package.json'));
+  try {
+    const pkgRoot = path.dirname(req.resolve(`${pkg}/package.json`));
+    const srcPath = path.join(pkgRoot, srcRel);
+    if (fs.existsSync(srcPath)) return normalizePath(srcPath);
+    return normalizePath(req.resolve(pkg));
+  } catch {
+    const parentMono = path.resolve(projectRoot, '..', '..', 'packages', folder, srcRel);
+    if (fs.existsSync(parentMono)) return normalizePath(parentMono);
+    throw new Error(`Cannot resolve ${pkg} from ${projectRoot}`);
+  }
+}
+
+function rayactResolveAliases(root: string): { find: RegExp; replacement: string }[] {
+  return RAYACT_PKG_ALIASES.flatMap(({ find, pkg, src }) => {
+    try {
+      return [{ find, replacement: resolveRayactPackage(root, pkg, src) }];
+    } catch {
+      return [];
+    }
+  });
+}
 
 function rayactRefreshRuntimePlugin(): Plugin {
   return {
@@ -317,18 +365,7 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
           __RAYACT_PLATFORM__: JSON.stringify(options.platform)
         },
         resolve: {
-          alias: [
-            { find: /^@rayact\/react$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-react/src/index.ts')) },
-            { find: /^@rayact\/runtime$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-runtime/src/index.ts')) },
-            { find: /^@rayact\/shared$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-shared/src/index.ts')) },
-            { find: /^@rayact\/navigation$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-navigation/src/index.tsx')) },
-            { find: /^@rayact\/navigation\/native$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-navigation/src/native.tsx')) },
-            { find: /^@rayact\/navigation\/stack$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-navigation/src/stack.tsx')) },
-            { find: /^@rayact\/navigation\/bottom-tabs$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-navigation/src/bottom-tabs.tsx')) },
-            { find: /^@rayact\/crypto$/, replacement: normalizePath(path.resolve(root, 'packages/rayact-crypto/src/index.ts')) }
-            // @react-navigation/core + routers resolve through normal node
-            // resolution (npm-installed under node_modules/@react-navigation/).
-          ]
+          alias: rayactResolveAliases(root)
         }
       };
     },
@@ -368,13 +405,26 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
 
       if (id === `\0${DEV_CLIENT_ENTRY_ID}`) {
         return [
+          `import React from 'react';`,
+          `import { render } from '@rayact/react';`,
+          `import { DevLauncherProvider, DevLauncherUI, DevMenu, InspectorPanel, DevConsole, installDevConsoleCapture } from '@rayact/dev-client';`,
+          `installDevConsoleCapture();`,
           `import { createBridge, createDevClient, installConsoleForwarding } from '@rayact/runtime';`,
           `const serverUrl = globalThis.__RAYACT_DEV_SERVER__;`,
-          `if (!serverUrl) throw new Error('Rayact dev-client requires global __RAYACT_DEV_SERVER__');`,
           `const bridge = createBridge(globalThis);`,
-          `const client = createDevClient({ serverUrl, bridge, global: globalThis });`,
-          `installConsoleForwarding(client, globalThis);`,
-          `client.connect();`
+          `if (serverUrl) {`,
+          `  const client = createDevClient({ serverUrl, bridge, global: globalThis });`,
+          `  installConsoleForwarding(client, globalThis);`,
+          `  client.connect();`,
+          `}`,
+          `render(`,
+          `  React.createElement(DevLauncherProvider, null,`,
+          `    React.createElement(DevLauncherUI),`,
+          `    React.createElement(DevMenu),`,
+          `    React.createElement(InspectorPanel),`,
+          `    React.createElement(DevConsole)`,
+          `  )`,
+          `);`
         ].join('\n');
       }
 
@@ -428,24 +478,27 @@ function extractCode(result: Awaited<ReturnType<typeof build>>): string {
   return chunk.code;
 }
 
-async function runViteBuild(options: BundleOptions, registry: AssetRegistry, input: string): Promise<string> {
+function shouldMinify(options: BundleOptions): boolean {
+  if (options.minify !== undefined) return options.minify;
+  return options.mode === 'release';
+}
+
+export function createRayactViteConfig(options: BundleOptions, input = ENTRY_ID): UserConfig {
   const mode = options.mode ?? 'development';
+  const root = path.resolve(options.root);
   const isDev = mode === 'development';
-  const result = await build({
-    root: options.root,
-    configFile: false,
+  const minify = shouldMinify(options);
+  const registry = new AssetRegistry(root);
+
+  return {
+    root,
     mode: isDev ? 'development' : 'production',
-    logLevel: 'silent',
-    // Nanoid@3.x has an `exports` field that omits `nanoid/non-secure`, but
-    // @react-navigation/routers (used by @rayact/navigation) still imports
-    // it. Alias the subpath to the main entry — `nanoid()` is what callers
-    // need and it lives in the root export.
     resolve: {
       alias: [{ find: /^nanoid\/non-secure$/, replacement: 'nanoid' }]
     },
     plugins: [
       ...(isDev ? [vendorSharePlugin()] : []),
-      rayactVitePlugin(options, registry),
+      rayactVitePlugin({ ...options, root, mode }, registry),
       reactNativeShimPlugin(),
       ...(isDev ? [rayactRefreshRuntimePlugin()] : []),
       react({
@@ -458,11 +511,11 @@ async function runViteBuild(options: BundleOptions, registry: AssetRegistry, inp
       'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production')
     },
     build: {
-      write: false,
-      minify: mode === 'release',
-      sourcemap: isDev ? 'inline' : true,
+      outDir: options.outDir ? path.resolve(options.outDir) : 'dist',
+      emptyOutDir: true,
+      minify,
+      sourcemap: isDev && !minify ? 'inline' : true,
       target: 'es2020',
-      emptyOutDir: false,
       rollupOptions: {
         input,
         output: {
@@ -470,10 +523,23 @@ async function runViteBuild(options: BundleOptions, registry: AssetRegistry, inp
           name: mode === 'dev-client' ? 'RayactDevClientBundle' : 'RayactBundle',
           inlineDynamicImports: true,
           extend: true,
+          entryFileNames: mode === 'dev-client' ? 'dev-client.js' : 'bundle.js',
           banner: isDev ? REFRESH_BANNER : undefined,
           footer: isDev ? REFRESH_FOOTER : undefined
         }
       }
+    }
+  };
+}
+
+async function runViteBuild(options: BundleOptions, registry: AssetRegistry, input: string): Promise<string> {
+  const result = await build({
+    ...createRayactViteConfig({ ...options, outDir: undefined }, input),
+    configFile: false,
+    logLevel: 'silent',
+    build: {
+      ...createRayactViteConfig({ ...options, outDir: undefined }, input).build,
+      write: false
     }
   });
   return extractCode(result);
@@ -485,8 +551,21 @@ export async function buildRayactBundle(options: BundleOptions): Promise<RayactB
   const registry = new AssetRegistry(root);
   const input = mode === 'dev-client' ? DEV_CLIENT_ENTRY_ID : ENTRY_ID;
   const code = await runViteBuild({ ...options, root, mode }, registry, input);
+
+  const useBytecode = options.bytecode ?? (mode === 'release');
+  let bytecode: Buffer | undefined;
+  let bundleFormat: 'js' | 'qjsbc' = 'js';
+
+  if (useBytecode) {
+    const { compileToBytecode } = await import('./compile.js');
+    bytecode = await compileToBytecode(code, { root, desktopBin: options.desktopBin });
+    bundleFormat = 'qjsbc';
+  }
+
   return {
     code,
+    bytecode,
+    bundleFormat,
     assets: registry.all(),
     entry: normalizePath(path.relative(root, path.resolve(root, options.entry))),
     platform: options.platform,
@@ -506,7 +585,12 @@ export async function writeRayactBuild(options: BundleOptions): Promise<RayactBu
   const outDir = path.resolve(options.outDir);
   const assetDir = path.join(outDir, 'assets');
   fs.mkdirSync(assetDir, { recursive: true });
-  fs.writeFileSync(path.join(outDir, output.mode === 'dev-client' ? 'dev-client.js' : 'bundle.js'), output.code);
+  const bundleName = output.mode === 'dev-client' ? 'dev-client.js' : 'bundle.js';
+  fs.writeFileSync(path.join(outDir, bundleName), output.code);
+  if (output.bytecode) {
+    const bcName = output.mode === 'dev-client' ? 'dev-client.qjsbc' : 'bundle.qjsbc';
+    fs.writeFileSync(path.join(outDir, bcName), output.bytecode);
+  }
 
   for (const asset of output.assets) {
     const sourcePath = path.isAbsolute(asset.sourcePath)
@@ -519,7 +603,10 @@ export async function writeRayactBuild(options: BundleOptions): Promise<RayactBu
     entry: output.entry,
     platform: output.platform,
     mode: output.mode,
-    bundle: output.mode === 'dev-client' ? 'dev-client.js' : 'bundle.js',
+    bundleFormat: output.bundleFormat,
+    bundle: output.bundleFormat === 'qjsbc'
+      ? (output.mode === 'dev-client' ? 'dev-client.qjsbc' : 'bundle.qjsbc')
+      : bundleName,
     assets: output.assets.map(asset => ({
       id: asset.id,
       name: asset.name,

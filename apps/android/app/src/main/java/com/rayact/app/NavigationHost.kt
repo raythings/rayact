@@ -73,7 +73,7 @@ class NavigationHost @JvmOverloads constructor(
      * was added. It occupies the same container as the fragments; the
      * fragments are added ON TOP.
      */
-    fun installRoot(root: RayactSurfaceView) {
+    fun installRoot(root: RayactSurfaceView, onReady: ((Int) -> Unit)? = null) {
         if (indexOfChild(root) >= 0) return
         rootSurfaceView = root
         addView(root, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
@@ -85,12 +85,14 @@ class NavigationHost @JvmOverloads constructor(
         root.surfaceReadyListener = { sid ->
             rootSurfaceId = sid
             root.pushToFront()
+            onReady?.invoke(sid)
         }
         // If the surface was already created (synchronous in some host
         // paths), push now.
         if (root.surfaceId > 0) {
             rootSurfaceId = root.surfaceId
             root.pushToFront()
+            onReady?.invoke(root.surfaceId)
         }
     }
 

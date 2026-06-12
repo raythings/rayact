@@ -28,6 +28,7 @@
 #include <cstdio>
 #include <cstring>
 #include <optional>
+#include <sstream>
 #include <set>
 #include <sstream>
 #include <string>
@@ -4310,4 +4311,74 @@ void cleanupRaym3Bridge(JSContext* ctx) {
     g_iconRequests.clear();
     g_iconSheetRects.clear();
     if (g_iconSheet.id != 0) { UnloadTexture(g_iconSheet); g_iconSheet = {0}; }
+}
+
+static const char* nodeKindLabel(raym3::v2::NodeKind kind) {
+    switch (kind) {
+        case raym3::v2::NodeKind::View: return "View";
+        case raym3::v2::NodeKind::Text: return "Text";
+        case raym3::v2::NodeKind::TextInput: return "TextInput";
+        case raym3::v2::NodeKind::Button: return "Button";
+        case raym3::v2::NodeKind::Custom: return "Custom";
+        case raym3::v2::NodeKind::Slider: return "Slider";
+        case raym3::v2::NodeKind::RangeSlider: return "RangeSlider";
+        case raym3::v2::NodeKind::Switch: return "Switch";
+        case raym3::v2::NodeKind::Checkbox: return "Checkbox";
+        case raym3::v2::NodeKind::RadioButton: return "RadioButton";
+        default: return "Node";
+    }
+}
+
+static void appendNodeTree(std::ostringstream& ss, int id, const raym3::v2::NodePtr& node, bool first) {
+    if (!node) return;
+    if (!first) ss << ",";
+    ss << "{\"id\":" << id
+       << ",\"type\":\"" << nodeKindLabel(node->kind) << "\"";
+    if (!node->id.empty()) ss << ",\"name\":\"" << node->id << "\"";
+    if (!node->text.empty()) ss << ",\"text\":\"" << node->text << "\"";
+    ss << ",\"layout\":{\"x\":" << node->layout.x
+       << ",\"y\":" << node->layout.y
+       << ",\"width\":" << node->layout.width
+       << ",\"height\":" << node->layout.height << "}";
+    ss << ",\"children\":[";
+    bool childFirst = true;
+    for (const auto& child : node->children) {
+        int childId = nodeIdFor(child);
+        if (childId < 0) continue;
+        appendNodeTree(ss, childId, child, childFirst);
+        childFirst = false;
+    }
+    ss << "]}";
+}
+
+std::string buildNodeTreeJson() {
+    std::ostringstream ss;
+    ss << "[";
+    bool first = true;
+    if (g_root) {
+        int rootId = nodeIdFor(g_root);
+        if (rootId >= 0) appendNodeTree(ss, rootId, g_root, first);
+    } else {
+        for (const auto& [id, node] : g_nodes) {
+            appendNodeTree(ss, id, node, first);
+            first = false;
+        }
+    }
+    ss << "]";
+    return ss.str();
+}
+
+static int g_inspectorHighlightId = -1;
+
+void setInspectorHighlight(int nodeId) {
+    g_inspectorHighlightId = nodeId;
+}
+
+void drawInspectorHighlight() {
+    if (g_inspectorHighlightId < 0) return;
+    auto it = g_nodes.find(g_inspectorHighlightId);
+    if (it == g_nodes.end() || !it->second) return;
+    const Rectangle& r = it->second->layout;
+    if (r.width <= 0 || r.height <= 0) return;
+    DrawRectangleLinesEx(r, 2.0f, {255, 0, 255, 255});
 }
