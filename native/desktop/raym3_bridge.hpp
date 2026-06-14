@@ -21,6 +21,9 @@ extern JSContext* g_bridge_ctx;
 // panel (on the scrim). Returns true if a close callback was invoked. Intended
 // to be called only when HitTest produced no onPress target.
 bool engineTryRequestCloseOnScrimTap(Vector2 pointDp);
+// Press/request-close callbacks can mutate the React tree. Queue them while
+// raym3 is resolving input and drain after the input traversal completes.
+void rayactDrainDeferredInputCallbacks();
 
 JSValue JS_createView(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createText(JSContext*, JSValue, int, JSValueConst*);
@@ -60,6 +63,9 @@ JSValue JS_rayactRegisterAnimatedNode(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_rayactStartStyleAnimation(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_rayactStopStyleAnimation(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_rayactSetAnimatedStyle(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_rayactCreateNodeFast(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_rayactUpdateNodeFast(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_rayactBatchMutations(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createImage(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createIcon(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setIconProps(JSContext*, JSValue, int, JSValueConst*);
@@ -98,11 +104,30 @@ void buildIconSpriteSheet();
 // Drop GPU icon-sheet state without unloading (device re-init invalidated the
 // ids); sheet rebuilds from retained registrations via buildIconSpriteSheet().
 void rayactResetIconSheet();
-void cleanupRaym3Bridge(JSContext* ctx);
+// unloadGpuCaches: free the process-global GPU caches (icon fonts/sheet,
+// image textures). Only safe when this teardown also owns the live graphics
+// device (desktop full shutdown). Android per-instance teardown must pass
+// false: the device is either already closed (stale ids) or owned by another
+// engine instance — unloading would destroy ITS live textures (icons turned
+// to tofu after a project session was destroyed under a live launcher).
+void cleanupRaym3Bridge(JSContext* ctx, bool unloadGpuCaches = true);
+
+#ifdef RAYACT_ANDROID
+struct Raym3RuntimeStorage;
+Raym3RuntimeStorage* raym3BridgeNewRuntimeStorage();
+void raym3BridgeDeleteRuntimeStorage(Raym3RuntimeStorage* storage);
+void raym3BridgeExportRuntimeStorage(Raym3RuntimeStorage& out);
+void raym3BridgeImportRuntimeStorage(const Raym3RuntimeStorage& in);
+void raym3BridgeClearRuntimeGlobals();
+#endif
 void refreshStylesForColorScheme(JSContext* ctx);
 void setSafeAreaInsets(float top, float right, float bottom, float left);
 void resolvePopoverAnchors();
 void installAnimatedStyleBuffer(JSContext* ctx, JSValue global);
+// Binary command buffer: per-commit structural-mutation stream decoded linearly
+// in native (no per-field JS reads). Opcodes mirror packages/rayact-react/src/protocol.ts.
+void installCommandBuffer(JSContext* ctx, JSValue global);
+JSValue JS_rayactFlushCommands(JSContext*, JSValue, int, JSValueConst*);
 void tickAnimatedStyles(JSContext* ctx);
 bool hasActiveStyleAnimations();
 void applyAnimatedStylesToNodes();

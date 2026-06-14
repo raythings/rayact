@@ -25,7 +25,9 @@ android {
                           "-DRAYACT_ANDROID_WASM=${project.findProperty('rayactWasm') ?: 'OFF'}",
                           '-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384'
                 cppFlags '-std=c++17'
-                targets 'rayact'   // only our shared lib — not yoga/raym3 test exes
+                // Engine + bundled native plugins (Expo-Go-style host). Plugins
+                // land in jniLibs and are dlopen'd by the module bus at runtime.
+                targets 'rayact', 'rayact_mmkv', 'rayact_secure_store'
             }
         }
     }
@@ -43,11 +45,23 @@ android {
         }
         release {
             minifyEnabled false
+            // Debug-signed so `rayact build --release --android --install` produces an
+            // installable APK; swap in a real keystore for store distribution.
+            signingConfig signingConfigs.debug
             buildConfigField "boolean", "RAYACT_DEV_CLIENT", "false"
         }
     }
     buildFeatures {
         buildConfig true
+    }
+    // Extract native libs to the app's nativeLibraryDir so the module bus can
+    // dlopen the bundled plugin .so files at runtime (loadPlugins scans that
+    // dir). With the modern default (extractNativeLibs=false) libs live inside
+    // the APK and only System.loadLibrary can reach them — not a path dlopen.
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -59,4 +73,7 @@ android {
 dependencies {
     implementation 'androidx.core:core-ktx:1.13.1'
     implementation 'androidx.appcompat:appcompat:1.7.0'
+    // ML Kit Google Code Scanner — QR scan delegated to Play services, no CAMERA
+    // permission required. Used by DevClientBridge.scanQR.
+    implementation 'com.google.android.gms:play-services-code-scanner:16.1.0'
 }

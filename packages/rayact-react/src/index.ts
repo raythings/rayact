@@ -7,9 +7,10 @@ import { RayactThemeProvider } from './theme/RayactThemeProvider';
 import type { RayactContainer, RayactRoot } from './types';
 
 export type {
+  ActivityIndicatorProps,
+  AppBarProps,
   AvoidKeyboardProps,
   BaseProps,
-  ActivityIndicatorProps,
   BadgeProps,
   ButtonProps,
   ColorValue,
@@ -18,13 +19,18 @@ export type {
   ListProps,
   MaterialComponentProps,
   ModalProps,
+  NavigationBarProps,
   RayactContainer,
   RayactRoot,
+  SafeAreaEdge,
+  SafeAreaProps,
   ScrollViewProps,
   SearchBarProps,
   StatusBarProps,
   Style,
   StyleProp,
+  TabBarProps,
+  TabsProps,
   TextInputProps,
   TextProps
 } from './types';
@@ -70,6 +76,7 @@ export {
   RadioButton,
   RangeSlider,
   SafeArea,
+  SafeAreaView,
   ScrollView,
   Search,
   SearchBar,
@@ -80,6 +87,7 @@ export {
   SplitButton,
   StatusBar,
   Switch,
+  TabBar,
   Tabs,
   Text,
   TextField,

@@ -73,6 +73,20 @@ echo "========================================"
 echo -e "${GREEN}  ✓ Build complete!${NC}"
 echo "========================================"
 echo ""
+
+# Build bundled native plugins (librayact_*.dylib) into build/modules so the CLI
+# can package them next to the host (Expo-Go-style prebuilt dev app).
+echo -e "${YELLOW}Building bundled native plugins...${NC}"
+cmake -B build/plugins -S native/plugins \
+  -DCMAKE_LIBRARY_OUTPUT_DIRECTORY="$(pwd)/build/modules" -DCMAKE_BUILD_TYPE=Release
+cmake --build build/plugins --parallel
+if [ $? -ne 0 ]; then
+    echo -e "${RED}✗ Plugin build failed!${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✓ Plugins in build/modules:${NC}"
+ls build/modules 2>/dev/null || true
+echo ""
 echo "Running rayact_desktop..."
 echo ""
 

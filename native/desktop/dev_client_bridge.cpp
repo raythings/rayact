@@ -147,7 +147,16 @@ static JSValue JS_devCall(JSContext* ctx, JSValue, int argc, JSValueConst* argv)
         if (resultJson == "null") {
             arg = JS_NULL;
         } else if (!resultJson.empty() && resultJson.front() == '"') {
-            arg = JS_NewString(ctx, resultJson.substr(1, resultJson.size() - 2).c_str());
+            // Parse as JSON so escapes are decoded. The Android side quotes
+            // strings with org.json's JSONObject.quote(), which escapes '/'
+            // as '\/'; stripping the outer quotes verbatim used to leak the
+            // backslashes into JS (URLs showed as http:\/\/host).
+            arg = JS_ParseJSON(ctx, resultJson.c_str(), resultJson.size(), "<devCall>");
+            if (JS_IsException(arg)) {
+                JSValue exc = JS_GetException(ctx);
+                JS_FreeValue(ctx, exc);
+                arg = JS_NewString(ctx, resultJson.substr(1, resultJson.size() - 2).c_str());
+            }
         } else if (!resultJson.empty() && (resultJson.front() == '[' || resultJson.front() == '{')) {
             arg = JS_ParseJSON(ctx, resultJson.c_str(), resultJson.size(), "<devCall>");
             if (JS_IsException(arg)) {

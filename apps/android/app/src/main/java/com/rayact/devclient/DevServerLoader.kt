@@ -1,7 +1,7 @@
 package com.rayact.devclient
 
 import android.util.Log
-import com.rayact.engine.RayactEngine
+import com.rayact.engine.RayactEngineSession
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
@@ -32,7 +32,7 @@ object DevServerLoader {
     var lastSuccessUrl: String? = null
         private set
 
-    fun loadAsync(baseUrl: String, onSuccess: (() -> Unit)? = null) {
+    fun loadAsync(baseUrl: String, session: RayactEngineSession, onSuccess: (() -> Unit)? = null) {
         val normalized = baseUrl.trimEnd('/')
         loading = true
         lastError = null
@@ -41,9 +41,9 @@ object DevServerLoader {
             try {
                 val payload = fetchBundle(normalized)
                 val ok = if (payload.bundleFormat == "qjsbc") {
-                    RayactEngine.loadBytecode(payload.bytes)
+                    session.loadBytecode(payload.bytes)
                 } else {
-                    RayactEngine.loadSource(payload.bytes.toString(Charsets.UTF_8))
+                    session.loadSource(payload.bytes.toString(Charsets.UTF_8))
                 }
                 if (!ok) {
                     lastError = "Native engine rejected dev bundle"
@@ -62,8 +62,41 @@ object DevServerLoader {
         }
     }
 
+    /** Ensure a scheme so java.net.URL doesn't throw "no protocol". */
+    fun normalizeBase(baseUrl: String): String {
+        var s = baseUrl.trim().replace("\\/", "/").trimEnd('/')
+        if (!s.startsWith("http://", true) && !s.startsWith("https://", true)) s = "http://$s"
+        return s
+    }
+
+    /**
+     * Quick reachability + validity probe: returns true when the candidate serves
+     * a parseable Rayact manifest within [timeoutMs]. Used to pick the fastest
+     * reachable host from a multi-interface QR payload.
+     */
+    fun probeManifest(baseUrl: String, timeoutMs: Int = 2500): Boolean {
+        val url = "${normalizeBase(baseUrl)}/rayact/manifest.json"
+        return try {
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                connectTimeout = timeoutMs
+                readTimeout = timeoutMs
+                instanceFollowRedirects = true
+                requestMethod = "GET"
+            }
+            try {
+                if (conn.responseCode !in 200..299) return false
+                JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+                true
+            } finally {
+                conn.disconnect()
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun fetchBundle(baseUrl: String): BundlePayload {
-        val normalized = baseUrl.trimEnd('/')
+        val normalized = normalizeBase(baseUrl)
         val manifest = JSONObject(httpGet("$normalized/rayact/manifest.json"))
         val bundleFormat = manifest.optString("bundleFormat", "js")
         val bundlePath = if (bundleFormat == "qjsbc") "/rayact/bundle.qjsbc" else "/rayact/bundle"

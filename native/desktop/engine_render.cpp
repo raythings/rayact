@@ -437,6 +437,7 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
         raym3::v2::ResolveTextInput(g_root);
         raym3::v2::ResolveScrollInput(g_root);
         inputDebugOnFrame(mouseDp, pressed, released, preActive);
+        rayactDrainDeferredInputCallbacks();
 #if defined(RAYACT_ANDROID)
         if (released) {
             std::lock_guard<std::mutex> lock(g_touchMutex);

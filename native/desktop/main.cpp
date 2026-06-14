@@ -18,6 +18,10 @@
 #include <functional>
 #include <iostream>
 #include <string>
+#ifndef _WIN32
+#include <climits>
+#include <cstdlib>
+#endif
 
 static std::string getArgValue(int argc, char** argv, const std::string& name) {
     for (int i = 1; i + 1 < argc; i++) {
@@ -174,6 +178,22 @@ void mainLoop(JSContext* ctx) {
 int main(int argc, char** argv) {
     setvbuf(stdout, nullptr, _IOLBF, 0);
     setvbuf(stderr, nullptr, _IONBF, 0);
+
+#ifndef _WIN32
+    // A packaged desktop app ships bundled native plugins in <exeDir>/modules.
+    // Point the plugin loader there (without clobbering a user-set value) before
+    // engineCreate() boots the module bus and scans RAYACT_MODULE_PATH.
+    if (!std::getenv("RAYACT_MODULE_PATH") && argc > 0 && argv[0]) {
+        char resolved[PATH_MAX];
+        if (realpath(argv[0], resolved)) {
+            std::string p(resolved);
+            auto slash = p.rfind('/');
+            std::string dir = slash == std::string::npos ? "." : p.substr(0, slash);
+            std::string mod = dir + "/modules";
+            setenv("RAYACT_MODULE_PATH", mod.c_str(), 0);
+        }
+    }
+#endif
 
     std::cout << "========================================" << std::endl;
     std::cout << "  Rayact - QuickJS Desktop Renderer" << std::endl;

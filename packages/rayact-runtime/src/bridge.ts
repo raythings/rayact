@@ -258,8 +258,13 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
 
       switch (type) {
         case 'root':
-        case 'view':
-          return registerAnimatedHostNode(asHostNode(requireFunction(native.createView, 'createView')(style), type), style);
+        case 'view': {
+          // appBarTitle marks the AppBar title slot so the native renderer can
+          // recenter it (centerTitle). It is not a style key, so forward it
+          // alongside style on the create payload.
+          const viewArg = props.appBarTitle ? { ...style, appBarTitle: true } : style;
+          return registerAnimatedHostNode(asHostNode(requireFunction(native.createView, 'createView')(viewArg), type), style);
+        }
         case 'text': {
           const text = String(props.text ?? props.children ?? '');
           return registerAnimatedHostNode(asHostNode(requireFunction(native.createText, 'createText')(text, style), type), style);

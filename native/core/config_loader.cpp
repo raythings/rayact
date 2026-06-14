@@ -14,6 +14,7 @@ namespace rayact {
 namespace {
 
 AppConfig g_config;   // last-loaded config (defaults until loadAppConfig is called)
+static std::string g_assetsPath;
 
 std::string readFileText(const char* path)
 {
@@ -208,6 +209,7 @@ bool parseColorValue(JSContext* ctx, JSValue v, uint8_t out[4])
 AppConfig loadAppConfig(JSContext* ctx, const char* assetsPath)
 {
     AppConfig cfg;  // start from defaults
+    g_assetsPath = (assetsPath && *assetsPath) ? assetsPath : "";
     if (!assetsPath || !*assetsPath) return cfg;
 
     // Try each file in priority order. The first one that parses AND has a
@@ -249,5 +251,7 @@ AppConfig loadAppConfig(JSContext* ctx, const char* assetsPath)
 }
 
 const AppConfig& appConfig() { return g_config; }
+
+const char* appAssetsPath() { return g_assetsPath.c_str(); }
 
 } // namespace rayact

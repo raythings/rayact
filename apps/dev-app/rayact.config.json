@@ -1,0 +1,27 @@
+{
+  "rayactAppKey": "rayact-dev-app",
+  "devServer": {
+    "host": "0.0.0.0",
+    "port": 8083,
+    "cdpPort": 9231
+  },
+  "entry": "src/App.tsx",
+  "platform": "desktop",
+  "android": {
+    "projectDir": "../android",
+    "package": "com.rayact.app",
+    "activity": ".DevLauncherActivity",
+    "appName": "Rayact Dev App",
+    "packageName": "com.rayact.devapp",
+    "icon": "src/assets/icon.png"
+  },
+  "nativeModules": [
+    { "name": "kv", "lib": "", "jsPackage": "@rayact/runtime" },
+    { "name": "mmkv", "lib": "rayact_mmkv", "jsPackage": "@rayact/mmkv" },
+    { "name": "secure-store", "lib": "rayact_secure_store", "jsPackage": "@rayact/secure-store" }
+  ],
+  "transform": {
+    "minify": { "dev": false, "debug": false, "release": true },
+    "bytecode": { "dev": false, "debug": false, "release": false }
+  }
+}

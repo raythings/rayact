@@ -3,6 +3,7 @@
 #include "color_parse.hpp"
 #include "commit_queue.hpp"
 #include "shadow_tree.hpp"
+#include "../core/config_loader.hpp"
 
 #include <raym3/v2/View.h>
 #include <raym3/v2/Renderer.h>
@@ -10,6 +11,7 @@
 #include <raym3/v2/Components.h>
 #include <raym3/v2/Density.h>
 #include <raym3/v2/IconRenderer.h>
+#include <raym3/v2/Input.h>
 #include <raym3/v2/MaterialDefaults.h>
 #include <raym3/v2/MaterialTokens.h>
 #include <raym3/v2/TextInput.h>
@@ -41,6 +43,7 @@
 // so a logcat capture during back-nav reveals which fault fires first.
 #ifdef RAYACT_ANDROID
 #include <android/log.h>
+#include <sys/system_properties.h>
 #define RAYACT_NAV_LOG(...) __android_log_print(ANDROID_LOG_WARN, "RayactNav", __VA_ARGS__)
 #define RAYACT_IME_LOG(...) __android_log_print(ANDROID_LOG_WARN, "RayactIME", __VA_ARGS__)
 #else
@@ -119,7 +122,19 @@ JSContext* g_bridge_ctx = nullptr;
 
 static std::map<int, std::string> g_nodeClassNames;
 static std::map<int, int> g_nodeParents;
-static int g_nextNodeId = 1;
+static std::vector<int> g_deferredPressCallbacks;
+static std::vector<int> g_deferredRequestCloseCallbacks;
+// Native-allocated node ids are ODD; JS-owned (command-buffer) ids are EVEN
+// (allocNodeId in commandBuffer.ts). Disjoint by parity so the two id spaces
+// never collide — robust against per-instance resets that set g_nextNodeId back
+// to 1 (raym3BridgeClearRuntimeGlobals / ImportRuntimeStorage). Both stay
+// low/dense so the animated style slab (indexed by id) holds them.
+static int g_nextNodeId = 1;  // odd; stepped by 2 via nextNativeNodeId()
+static inline int nextNativeNodeId() {
+    int id = g_nextNodeId;
+    g_nextNodeId += 2;
+    return id;
+}
 
 // ─── native animated render-only styles ───────────────────────────────────
 
@@ -630,10 +645,29 @@ static int iconPixelSize(int sizeDp) {
 }
 
 static const char* findIconFontPath(bool filled) {
+    static std::string s_found;
+    auto tryPath = [&](const std::string& p) -> const char* {
+        FILE* f = fopen(p.c_str(), "rb");
+        if (f) { fclose(f); s_found = p; return s_found.c_str(); }
+        return nullptr;
+    };
+    const char* assets = rayact::appAssetsPath();
+    if (assets && *assets) {
+        const char* rels[] = {
+            filled ? "resources/fonts/MaterialSymbolsRounded-Filled.ttf"
+                   : "resources/fonts/MaterialSymbolsRounded.ttf",
+            filled ? "resources/fonts/MaterialSymbolsRounded.ttf"
+                   : "resources/fonts/MaterialSymbolsRounded-Filled.ttf",
+            "resources/fonts/MaterialIcons-Regular.ttf",
+            nullptr
+        };
+        for (int i = 0; rels[i]; i++) {
+            if (auto hit = tryPath(std::string(assets) + "/" + rels[i])) return hit;
+        }
+    }
     const char** candidates = filled ? kFilledIconFontCandidates : kOutlinedIconFontCandidates;
     for (int i = 0; candidates[i]; i++) {
-        FILE* f = fopen(candidates[i], "rb");
-        if (f) { fclose(f); return candidates[i]; }
+        if (auto hit = tryPath(candidates[i])) return hit;
     }
     return nullptr;
 }
@@ -641,6 +675,7 @@ static const char* findIconFontPath(bool filled) {
 // Register a (codepoint, size) pair. Also invalidates font cache if new CP.
 static void requireIcon(int cp, int size, bool filled) {
     g_iconRequests.insert({cp, size, filled});
+    raym3::v2::RegisterMaterialIcon(cp, size, filled);
     if (!g_iconCPSet.count(cp)) {
         g_iconCPSet.insert(cp);
         g_iconCPSetVer++;
@@ -695,6 +730,14 @@ void rayactResetIconSheet() {
 // Called once after JS finishes executing, before the render loop starts.
 // After this, all icon render lambdas use DrawTextureRec instead of DrawTextEx.
 void buildIconSpriteSheet() {
+    // g_iconRequests travels with the runtime (per-runtime storage), but
+    // g_iconCPSet is process-global and gets reset when another engine
+    // runtime bootstraps. Re-derive it here so a post-re-init rebuild loads
+    // the real icon font instead of falling back to the default font (which
+    // baked "?" tofu glyphs into the sheet).
+    for (const auto& key : g_iconRequests) {
+        if (g_iconCPSet.insert(key.cp).second) g_iconCPSetVer++;
+    }
     if (g_iconRequests.empty() || !IsWindowReady()) return;
 
     const int PAD = 2;
@@ -984,6 +1027,8 @@ static raym3::v2::ComponentProps parseMaterialProps(JSContext* ctx, JSValue obj)
     if (auto z = jsGetFloat(ctx, obj, "zIndex")) props.zIndex = (int)roundf(*z);
     if (jsHasProperty(ctx, obj, "capturesInput"))
         props.capturesInput = jsGetBool(ctx, obj, "capturesInput", false);
+    if (jsHasProperty(ctx, obj, "centerTitle"))
+        props.appBarCenterTitle = jsGetBool(ctx, obj, "centerTitle", false);
     if (auto progress = jsGetFloat(ctx, obj, "progress")) props.progress = *progress;
     if (auto start = jsGetFloat(ctx, obj, "startProgress")) props.startProgress = *start;
     if (auto end = jsGetFloat(ctx, obj, "endProgress")) props.endProgress = *end;
@@ -1092,7 +1137,7 @@ static std::optional<NativeControlKind> nativeControlKindFromString(const std::s
     return std::nullopt;
 }
 
-static void invokePressCallback(int id) {
+static void invokePressCallbackNow(int id) {
     auto it = g_pressCallbacks.find(id);
     if (it == g_pressCallbacks.end() || !g_bridge_ctx) return;
     JSValue result = JS_Call(g_bridge_ctx, it->second, JS_UNDEFINED, 0, nullptr);
@@ -1106,7 +1151,7 @@ static void invokePressCallback(int id) {
     JS_FreeValue(g_bridge_ctx, result);
 }
 
-static void invokeRequestClose(int id) {
+static void invokeRequestCloseNow(int id) {
     auto it = g_requestCloseCallbacks.find(id);
     if (it == g_requestCloseCallbacks.end() || !g_bridge_ctx) return;
     JSValue result = JS_Call(g_bridge_ctx, it->second, JS_UNDEFINED, 0, nullptr);
@@ -1118,6 +1163,40 @@ static void invokeRequestClose(int id) {
         JS_FreeValue(g_bridge_ctx, exc);
     }
     JS_FreeValue(g_bridge_ctx, result);
+}
+
+static void queuePressCallback(int id) {
+    g_deferredPressCallbacks.push_back(id);
+}
+
+static void queueRequestCloseCallback(int id) {
+    g_deferredRequestCloseCallbacks.push_back(id);
+}
+
+static void clearTransientInputCapture() {
+    // raym3 input stores Node* values in hover/active/pendingPress. A press
+    // callback can synchronously replace or dispose the scene, so drop those
+    // transient captures before the next input frame dereferences them.
+    raym3::v2::SetHoveredId(0);
+    raym3::v2::SetActiveId(0);
+    raym3::v2::SetPendingPressId(0);
+}
+
+void rayactDrainDeferredInputCallbacks() {
+    if (!g_bridge_ctx) {
+        g_deferredPressCallbacks.clear();
+        g_deferredRequestCloseCallbacks.clear();
+        clearTransientInputCapture();
+        return;
+    }
+    std::vector<int> requestCloseIds;
+    std::vector<int> pressIds;
+    requestCloseIds.swap(g_deferredRequestCloseCallbacks);
+    pressIds.swap(g_deferredPressCallbacks);
+
+    for (int id : requestCloseIds) invokeRequestCloseNow(id);
+    for (int id : pressIds) invokePressCallbackNow(id);
+    if (!requestCloseIds.empty() || !pressIds.empty()) clearTransientInputCapture();
 }
 
 static std::map<int, JSValue> g_changeValueCallbacks;
@@ -1243,7 +1322,7 @@ bool engineTryRequestCloseOnScrimTap(Vector2 pointDp) {
     int id = nodeIdFor(modal);
     if (id < 0) return false;
     if (g_requestCloseCallbacks.find(id) == g_requestCloseCallbacks.end()) return false;
-    invokeRequestClose(id);
+    queueRequestCloseCallback(id);
     return true;
 }
 
@@ -1587,16 +1666,73 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
         if (hasInset) s.inset = inset;
     }
 
-    // text sub-object — only override fields that are present
+    // text sub-object — nested style.text.* first, then RN-style flat fallback
+    bool hasNestedFontSize = false;
+    bool hasNestedColor = false;
+    bool hasNestedLineHeight = false;
+    bool hasNestedLetterSpacing = false;
+    bool hasNestedWeight = false;
+    bool hasNestedFontFamily = false;
+
     JSValue textObj = JS_GetPropertyStr(ctx, obj, "text");
     if (JS_IsObject(textObj)) {
-        if (auto v = jsGetFloat(ctx, textObj, "fontSize"))     s.text.fontSize     = v;
-        if (auto v = jsGetColor(ctx, textObj, "color"))        s.text.color        = v;
-        if (auto v = jsGetFloat(ctx, textObj, "lineHeight"))   s.text.lineHeight   = v;
-        if (auto v = jsGetFloat(ctx, textObj, "letterSpacing")) s.text.letterSpacing = v;
-        if (auto v = jsGetFontWeight(ctx, textObj, "weight")) s.text.weight = v;
-        if (auto v = jsGetFontWeight(ctx, textObj, "fontWeight")) s.text.weight = v;
+        if (auto v = jsGetFloat(ctx, textObj, "fontSize")) {
+            s.text.fontSize = v;
+            hasNestedFontSize = true;
+        }
+        if (auto v = jsGetColor(ctx, textObj, "color")) {
+            s.text.color = v;
+            hasNestedColor = true;
+        }
+        if (auto v = jsGetFloat(ctx, textObj, "lineHeight")) {
+            s.text.lineHeight = v;
+            hasNestedLineHeight = true;
+        }
+        if (auto v = jsGetFloat(ctx, textObj, "letterSpacing")) {
+            s.text.letterSpacing = v;
+            hasNestedLetterSpacing = true;
+        }
+        if (auto v = jsGetFontWeight(ctx, textObj, "weight")) {
+            s.text.weight = v;
+            hasNestedWeight = true;
+        }
+        if (!hasNestedWeight) {
+            if (auto v = jsGetFontWeight(ctx, textObj, "fontWeight")) {
+                s.text.weight = v;
+                hasNestedWeight = true;
+            }
+        }
         JSValue fv = JS_GetPropertyStr(ctx, textObj, "fontFamily");
+        if (!JS_IsUndefined(fv)) {
+            const char* fname = JS_ToCString(ctx, fv);
+            if (fname && fname[0]) {
+                s.text.fontFamily = std::string(fname);
+                hasNestedFontFamily = true;
+            }
+            JS_FreeCString(ctx, fname);
+        }
+        JS_FreeValue(ctx, fv);
+    }
+    JS_FreeValue(ctx, textObj);
+
+    if (!hasNestedFontSize) {
+        if (auto v = jsGetFloat(ctx, obj, "fontSize")) s.text.fontSize = v;
+    }
+    if (!hasNestedColor) {
+        if (auto v = jsGetColor(ctx, obj, "color")) s.text.color = v;
+    }
+    if (!hasNestedLineHeight) {
+        if (auto v = jsGetFloat(ctx, obj, "lineHeight")) s.text.lineHeight = v;
+    }
+    if (!hasNestedLetterSpacing) {
+        if (auto v = jsGetFloat(ctx, obj, "letterSpacing")) s.text.letterSpacing = v;
+    }
+    if (!hasNestedWeight) {
+        if (auto v = jsGetFontWeight(ctx, obj, "weight")) s.text.weight = v;
+        else if (auto v = jsGetFontWeight(ctx, obj, "fontWeight")) s.text.weight = v;
+    }
+    if (!hasNestedFontFamily) {
+        JSValue fv = JS_GetPropertyStr(ctx, obj, "fontFamily");
         if (!JS_IsUndefined(fv)) {
             const char* fname = JS_ToCString(ctx, fv);
             if (fname && fname[0]) s.text.fontFamily = std::string(fname);
@@ -1604,7 +1740,6 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
         }
         JS_FreeValue(ctx, fv);
     }
-    JS_FreeValue(ctx, textObj);
 
     // CSS transitions: `transition` shorthand string (from a class rule via
     // buildStyleObject, or inline — 'none' cancels), then an optional numeric
@@ -1897,10 +2032,12 @@ JSValue JS_createView(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
         if (auto z = jsGetFloat(ctx, argv[0], "zIndex")) props.zIndex = (int)roundf(*z);
         if (jsHasProperty(ctx, argv[0], "capturesInput"))
             props.capturesInput = jsGetBool(ctx, argv[0], "capturesInput", false);
+        if (jsHasProperty(ctx, argv[0], "appBarTitle"))
+            props.appBarTitle = jsGetBool(ctx, argv[0], "appBarTitle", false);
     }
 
     auto node = raym3::v2::View(props);
-    int id = g_nextNodeId++;
+    int id = nextNativeNodeId();
     g_nodes[id] = node;
     rayact::shadowTree().createNode((uint32_t)id, props.style);
     if (argc >= 1 && JS_IsObject(argv[0])) captureNodeClassName(ctx, id, argv[0]);
@@ -1919,7 +2056,7 @@ JSValue JS_createText(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
     auto node = raym3::v2::Text(str, props);
     JS_FreeCString(ctx, str);
 
-    int id = g_nextNodeId++;
+    int id = nextNativeNodeId();
     g_nodes[id] = node;
     if (argc >= 2 && JS_IsObject(argv[1])) captureNodeClassName(ctx, id, argv[1]);
     return JS_NewInt32(ctx, id);
@@ -1940,7 +2077,7 @@ JSValue JS_createButton(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueC
     // Route through MaterialComponent so M3 defaults (primary bg, 40dp height,
     // 20dp radius, labelLarge text) are applied before user style overrides.
     auto node = raym3::v2::MaterialComponent(raym3::v2::M3Component::Button, props, {});
-    int id = g_nextNodeId++;
+    int id = nextNativeNodeId();
     g_nodes[id] = node;
     g_materialComponentKinds[id] = raym3::v2::M3Component::Button;
     if (argc >= 2 && JS_IsObject(argv[1])) captureNodeClassName(ctx, id, argv[1]);
@@ -2059,7 +2196,7 @@ JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSVal
         JS_FreeValue(g_bridge_ctx, result);
     };
 
-    int id = g_nextNodeId++;
+    int id = nextNativeNodeId();
     g_nodes[id] = node;
     if (argc >= 1 && JS_IsObject(argv[0])) captureNodeClassName(ctx, id, argv[0]);
     return JS_NewInt32(ctx, id);
@@ -2076,7 +2213,7 @@ JSValue JS_createScrollView(JSContext* ctx, JSValue, int argc, JSValueConst* arg
 #if defined(RAYACT_ANDROID) || defined(__ANDROID__)
     node->scrollMomentumEnabled = true;
 #endif
-    int id = g_nextNodeId++;
+    int id = nextNativeNodeId();
     g_nodes[id] = node;
     g_scrollViewIds.insert(id);
     if (argc >= 1 && JS_IsObject(argv[0])) captureNodeClassName(ctx, id, argv[0]);
@@ -2093,7 +2230,7 @@ JSValue JS_createModal(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
         props.style = raym3::v2::MergeStyles(props.style, parseStyle(ctx, argv[0]));
     }
     auto node = raym3::v2::View(props);
-    int id = g_nextNodeId++;
+    int id = nextNativeNodeId();
     g_nodes[id] = node;
     if (argc >= 1 && JS_IsObject(argv[0])) captureNodeClassName(ctx, id, argv[0]);
     return JS_NewInt32(ctx, id);
@@ -2212,7 +2349,7 @@ JSValue JS_createExternalView(JSContext* ctx, JSValue, int argc, JSValueConst* a
         if (auto z = jsGetFloat(ctx, argv[1], "zIndex")) props.zIndex = (int)roundf(*z);
     }
 
-    const int id = g_nextNodeId++;
+    const int id = nextNativeNodeId();
     auto layoutRect = std::make_shared<Rectangle>(Rectangle{0, 0, 0, 0});
     const bool isStub = (kind == "stub");
 
@@ -2325,7 +2462,7 @@ JSValue JS_createSafeArea(JSContext* ctx, JSValue, int argc, JSValueConst* argv)
     }
     props.style = applySafeAreaPadding(baseStyle);
     auto node = raym3::v2::View(props);
-    int id = g_nextNodeId++;
+    int id = nextNativeNodeId();
     g_nodes[id] = node;
     g_safeAreaBaseStyles[id] = baseStyle;
     if (argc >= 1 && JS_IsObject(argv[0])) captureNodeClassName(ctx, id, argv[0]);
@@ -2338,7 +2475,7 @@ JSValue JS_createStatusBar(JSContext* ctx, JSValue, int argc, JSValueConst* argv
     if (argc >= 1 && JS_IsObject(argv[0]))
         props.style = raym3::v2::MergeStyles(props.style, parseStyle(ctx, argv[0]));
     auto node = raym3::v2::View(props);
-    int id = g_nextNodeId++;
+    int id = nextNativeNodeId();
     g_nodes[id] = node;
     if (argc >= 1 && JS_IsObject(argv[0])) captureNodeClassName(ctx, id, argv[0]);
     return JS_NewInt32(ctx, id);
@@ -2418,7 +2555,7 @@ JSValue JS_createActivityIndicator(JSContext* ctx, JSValue, int argc, JSValueCon
             cap(start + sweep, c);
         }
     });
-    int id = g_nextNodeId++;
+    int id = nextNativeNodeId();
     g_nodes[id] = node;
     if (argc >= 1 && JS_IsObject(argv[0])) captureNodeClassName(ctx, id, argv[0]);
     return JS_NewInt32(ctx, id);
@@ -2443,7 +2580,7 @@ JSValue JS_createMaterialComponent(JSContext* ctx, JSValue, int argc, JSValueCon
 
     if (nativeControl) {
         raym3::v2::ViewProps controlProps;
-        int id = g_nextNodeId++;
+        int id = nextNativeNodeId();
         g_nativeControlStates[id] = {.kind = *nativeControl};
         controlProps.style.pointerEvents = raym3::v2::PointerEvents::None;
 
@@ -2681,7 +2818,7 @@ JSValue JS_createMaterialComponent(JSContext* ctx, JSValue, int argc, JSValueCon
 
             if (changed && !state.disabled) {
                 state.checked = value;
-                invokePressCallback(id);
+                queuePressCallback(id);
             }
         });
 
@@ -2710,7 +2847,7 @@ JSValue JS_createMaterialComponent(JSContext* ctx, JSValue, int argc, JSValueCon
         node->onToggle = [id](bool checked) {
             auto sit = g_nativeControlStates.find(id);
             if (sit != g_nativeControlStates.end()) sit->second.checked = checked;
-            invokePressCallback(id);
+            queuePressCallback(id);
         };
         g_nodes[id] = node;
         syncControlNodeFromState(id);
@@ -2720,7 +2857,7 @@ JSValue JS_createMaterialComponent(JSContext* ctx, JSValue, int argc, JSValueCon
     raym3::v2::ComponentProps props;
     if (argc >= 2 && JS_IsObject(argv[1])) props = parseMaterialProps(ctx, argv[1]);
 
-    int id = g_nextNodeId++;
+    int id = nextNativeNodeId();
     // onPress is intentionally left null here. JS_setOnPress sets it only when
     // a real JS callback is registered, so containers without handlers stay
     // non-interactive (ComputeState + HitTest both gate on node->onPress).
@@ -2948,6 +3085,22 @@ static void appendChildPreservingNavLabel(const raym3::v2::NodePtr& parent,
     children.push_back(child);
 }
 
+// React moves (re-append / insertBefore of an already-mounted node) arrive
+// without an explicit removeChild from the old parent. Detach the child from
+// whatever parent currently holds it — otherwise it sits in two children
+// vectors and the per-frame Yoga rebuild inserts the same YGNode twice,
+// aborting with "Child already has a owner, it must be removed first."
+// Tolerant of stale ids for the same reason as JS_removeChild.
+static void detachFromCurrentParent(int childId, const raym3::v2::NodePtr& child) {
+    auto parentIt = g_nodeParents.find(childId);
+    if (parentIt == g_nodeParents.end()) return;
+    auto oldPit = g_nodes.find(parentIt->second);
+    if (oldPit == g_nodes.end() || !oldPit->second) return;
+    auto& oldChildren = oldPit->second->children;
+    oldChildren.erase(std::remove(oldChildren.begin(), oldChildren.end(), child),
+                      oldChildren.end());
+}
+
 JSValue JS_appendChild(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
     if (argc < 2) return JS_ThrowTypeError(ctx, "appendChild: expected (parentId, childId)");
     int parentId, childId;
@@ -2959,6 +3112,7 @@ JSValue JS_appendChild(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     if (pit == g_nodes.end()) return JS_ThrowTypeError(ctx, "appendChild: invalid parent id");
     if (cit == g_nodes.end()) return JS_ThrowTypeError(ctx, "appendChild: invalid child id");
 
+    detachFromCurrentParent(childId, cit->second);
     appendChildPreservingNavLabel(pit->second, cit->second);
     g_nodeParents[childId] = parentId;
     {
@@ -3011,6 +3165,7 @@ JSValue JS_removeChild(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     auto& children = pit->second->children;
     children.erase(std::remove(children.begin(), children.end(), cit->second), children.end());
     g_nodeParents.erase(childId);
+    rayact::shadowTree().removeChild((uint32_t)parentId, (uint32_t)childId);
     return JS_UNDEFINED;
 }
 
@@ -3038,6 +3193,7 @@ JSValue JS_insertBefore(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueC
                        beforeChildId, parentId, childId, g_currentScreenId);
     }
 
+    detachFromCurrentParent(childId, cit->second);
     auto& children = pit->second->children;
     children.erase(std::remove(children.begin(), children.end(), cit->second), children.end());
     auto beforeIt = (bit == g_nodes.end())
@@ -3049,6 +3205,9 @@ JSValue JS_insertBefore(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueC
         children.insert(beforeIt, cit->second);
     }
     g_nodeParents[childId] = parentId;
+    // Shadow tree has no ordered insert; append keeps Yoga ownership and the
+    // parent bookkeeping consistent (its layout pass is threaded-mode only).
+    rayact::shadowTree().appendChild((uint32_t)parentId, (uint32_t)childId);
     return JS_UNDEFINED;
 }
 
@@ -3058,6 +3217,7 @@ JSValue JS_insertBefore(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueC
 // screen (e.g. an async React unmount of a popped route) can no longer
 // null the live root of the currently-rendered screen.
 static inline void writeRootThrough(const raym3::v2::NodePtr& node) {
+    if (!node) clearTransientInputCapture();
     g_root = node;
     if (!g_screens.count(g_currentScreenId)) {
         g_screens[g_currentScreenId] = ScreenState{};
@@ -3112,20 +3272,7 @@ JSValue JS_setOnPress(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
     }
 
     g_pressCallbacks[id] = JS_DupValue(ctx, argv[1]);
-    it->second->onPress = [id]() {
-        auto cit = g_pressCallbacks.find(id);
-        if (cit == g_pressCallbacks.end() || !g_bridge_ctx) return;
-        JSValue result = JS_Call(g_bridge_ctx, cit->second, JS_UNDEFINED, 0, nullptr);
-        if (JS_IsException(result)) {
-            JSValue exc = JS_GetException(g_bridge_ctx);
-            const char* s = JS_ToCString(g_bridge_ctx, exc);
-            fprintf(stderr, "onPress error: %s\n", s ? s : "(unknown)");
-            TraceLog(LOG_ERROR, "RAYACT_PRESS_CALLBACK_ERROR node=%d error=%s", id, s ? s : "(unknown)");
-            if (s) JS_FreeCString(g_bridge_ctx, s);
-            JS_FreeValue(g_bridge_ctx, exc);
-        }
-        JS_FreeValue(g_bridge_ctx, result);
-    };
+    it->second->onPress = [id]() { queuePressCallback(id); };
     return JS_UNDEFINED;
 }
 
@@ -3197,7 +3344,7 @@ JSValue JS_setOnRequestClose(JSContext* ctx, JSValue, int argc, JSValueConst* ar
     // Core ResolveInput fires this when a scrim/backdrop tap dismisses the
     // overlay (z-order occlusion — no modal special-casing).
     if (JS_IsFunction(ctx, argv[1]) && it->second)
-        it->second->onRequestClose = [id]() { invokeRequestClose(id); };
+        it->second->onRequestClose = [id]() { queueRequestCloseCallback(id); };
     else if (it->second)
         it->second->onRequestClose = nullptr;
     return JS_UNDEFINED;
@@ -3437,7 +3584,17 @@ JSValue JS_disposeNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     if (argc < 1) return JS_ThrowTypeError(ctx, "disposeNode: expected (nodeId)");
     int id;
     JS_ToInt32(ctx, &id, argv[0]);
+    // Drop any input state (hover/active/focus/pending) pointing at this node
+    // BEFORE it is freed — input stores raw Node* as NodeId, so a stale ref is a
+    // use-after-free on the next input frame (the crash navigating away from a
+    // screen whose touched node gets disposed).
+    {
+        auto nodeIt = g_nodes.find(id);
+        if (nodeIt != g_nodes.end() && nodeIt->second)
+            raym3::v2::ForgetInputNode(nodeIt->second.get());
+    }
     clearAnimatedNode(ctx, id);
+    rayact::shadowTree().disposeNode((uint32_t)id);
 
     auto evIt = g_externalViews.find(id);
     if (evIt != g_externalViews.end()) {
@@ -3622,7 +3779,7 @@ JSValue JS_createIcon(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
     if (!props.style.minHeight) props.style.minHeight = props.style.height;
     if (!props.style.flexShrink) props.style.flexShrink = 0.0f;
 
-    int id = g_nextNodeId++;
+    int id = nextNativeNodeId();
     g_iconRenderStates[id] = IconRenderState{glyphStr, resolvedCp, size, color, filled, variantStr};
 
     auto node = raym3::v2::Custom(props, [id](Rectangle layout) {
@@ -3646,12 +3803,10 @@ JSValue JS_createIcon(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
                 return;
             }
         }
-        // Fallback: direct glyph draw (before sprite sheet is built or for raw UTF-8).
-        Font f = getIconFont((int)icon.size, icon.filled);
-        Vector2 textSize = MeasureTextEx(f, icon.glyph.c_str(), icon.size, 0);
-        float x = layout.x + (layout.width  - textSize.x) * 0.5f;
-        float y = layout.y + (layout.height - textSize.y) * 0.5f;
-        DrawTextEx(f, icon.glyph.c_str(), {x, y}, icon.size, 0, icon.color);
+        if (icon.codepoint != 0) {
+            raym3::v2::DrawMaterialIcon(icon.codepoint, layout, icon.color,
+                                        (int)roundf(icon.size), icon.filled);
+        }
     });
 
     g_nodes[id] = node;
@@ -3761,7 +3916,7 @@ JSValue JS_createImage(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
         DrawTextureEx(capturedTex, {drawX, drawY}, 0.0f, scale, WHITE);
     });
 
-    int id = g_nextNodeId++;
+    int id = nextNativeNodeId();
     g_nodes[id] = node;
     if (argc >= 2 && JS_IsObject(argv[1])) captureNodeClassName(ctx, id, argv[1]);
     return JS_NewInt32(ctx, id);
@@ -4243,7 +4398,168 @@ extern "C" void rayactMacImeCaretRect(float* x, float* y, float* w, float* h) {
     *h = input.height;
 }
 
-void cleanupRaym3Bridge(JSContext* ctx) {
+#ifdef RAYACT_ANDROID
+struct Raym3RuntimeStorage {
+    std::map<int, ScreenState> screens;
+    int currentScreenId = 0;
+    int nextScreenId = 1;
+    int nextNodeId = 1;
+    std::vector<int> screenStack;
+    std::map<int, raym3::v2::NodePtr> nodes;
+    raym3::v2::NodePtr root;
+    std::map<int, JSValue> pressCallbacks;
+    std::map<int, std::string> nodeClassNames;
+    std::map<int, int> nodeParents;
+    std::vector<float> animatedStyleBuffer;
+    std::set<int> animatedNodes;
+    std::unordered_map<int, StyleAnimation> styleAnimations;
+    std::map<int, JSValue> changeTextCallbacks;
+    std::map<int, JSValue> focusCallbacks;
+    std::map<int, JSValue> blurCallbacks;
+    std::map<int, JSValue> scrollCallbacks;
+    std::map<int, JSValue> requestCloseCallbacks;
+    std::map<int, JSValue> dragStartCallbacks;
+    std::map<int, JSValue> dragMoveCallbacks;
+    std::map<int, JSValue> dragEndCallbacks;
+    std::map<int, JSValue> layoutCallbacks;
+    std::map<int, NativeControlState> nativeControlStates;
+    std::map<int, raym3::v2::M3Component> materialComponentKinds;
+    std::set<int> scrollViewIds;
+    SafeAreaInsets safeAreaInsets;
+    std::map<int, raym3::v2::Style> safeAreaBaseStyles;
+    std::map<int, IconRenderState> iconRenderStates;
+    std::set<IconKey> iconRequests;
+};
+
+static void raym3UnloadGpuCaches() {
+    for (auto& tex : g_textures) UnloadTexture(tex);
+    g_textures.clear();
+    for (auto& [size, font] : g_iconFonts)
+        if (font.texture.id != 0) ::UnloadFont(font);
+    g_iconFonts.clear();
+    g_iconFontVer.clear();
+    g_iconCPSet.clear();
+    g_iconCPSetVer = 0;
+    g_iconSheetRects.clear();
+    if (g_iconSheet.id != 0) { UnloadTexture(g_iconSheet); g_iconSheet = {0}; }
+}
+
+Raym3RuntimeStorage* raym3BridgeNewRuntimeStorage() {
+    return new Raym3RuntimeStorage();
+}
+
+void raym3BridgeDeleteRuntimeStorage(Raym3RuntimeStorage* storage) {
+    delete storage;
+}
+
+void raym3BridgeExportRuntimeStorage(Raym3RuntimeStorage& out) {
+    raym3UnloadGpuCaches();
+    out.screens = std::move(g_screens);
+    out.currentScreenId = g_currentScreenId;
+    out.nextScreenId = g_nextScreenId;
+    out.nextNodeId = g_nextNodeId;
+    out.screenStack = std::move(g_screenStack);
+    out.nodes = std::move(g_nodes);
+    out.root = std::move(g_root);
+    out.pressCallbacks = std::move(g_pressCallbacks);
+    out.nodeClassNames = std::move(g_nodeClassNames);
+    out.nodeParents = std::move(g_nodeParents);
+    out.animatedStyleBuffer = std::move(g_animatedStyleBuffer);
+    out.animatedNodes = std::move(g_animatedNodes);
+    out.styleAnimations = std::move(g_styleAnimations);
+    out.changeTextCallbacks = std::move(g_changeTextCallbacks);
+    out.focusCallbacks = std::move(g_focusCallbacks);
+    out.blurCallbacks = std::move(g_blurCallbacks);
+    out.scrollCallbacks = std::move(g_scrollCallbacks);
+    out.requestCloseCallbacks = std::move(g_requestCloseCallbacks);
+    out.dragStartCallbacks = std::move(g_dragStartCallbacks);
+    out.dragMoveCallbacks = std::move(g_dragMoveCallbacks);
+    out.dragEndCallbacks = std::move(g_dragEndCallbacks);
+    out.layoutCallbacks = std::move(g_layoutCallbacks);
+    out.nativeControlStates = std::move(g_nativeControlStates);
+    out.materialComponentKinds = std::move(g_materialComponentKinds);
+    out.scrollViewIds = std::move(g_scrollViewIds);
+    out.safeAreaInsets = g_safeAreaInsets;
+    out.safeAreaBaseStyles = std::move(g_safeAreaBaseStyles);
+    out.iconRenderStates = std::move(g_iconRenderStates);
+    out.iconRequests = std::move(g_iconRequests);
+    raym3BridgeClearRuntimeGlobals();
+}
+
+void raym3BridgeImportRuntimeStorage(const Raym3RuntimeStorage& in) {
+    raym3BridgeClearRuntimeGlobals();
+    g_screens = in.screens;
+    g_currentScreenId = in.currentScreenId;
+    g_nextScreenId = in.nextScreenId;
+    g_nextNodeId = in.nextNodeId;
+    g_screenStack = in.screenStack;
+    g_nodes = in.nodes;
+    g_root = in.root;
+    g_pressCallbacks = in.pressCallbacks;
+    g_nodeClassNames = in.nodeClassNames;
+    g_nodeParents = in.nodeParents;
+    if (!in.animatedStyleBuffer.empty()) {
+        g_animatedStyleBuffer = in.animatedStyleBuffer;
+    } else {
+        g_animatedStyleBuffer.assign(
+            (size_t)kAnimatedStyleMaxNodes * (size_t)kAnimatedStyleSlots, 0.0f);
+    }
+    g_animatedNodes = in.animatedNodes;
+    g_styleAnimations = in.styleAnimations;
+    g_changeTextCallbacks = in.changeTextCallbacks;
+    g_focusCallbacks = in.focusCallbacks;
+    g_blurCallbacks = in.blurCallbacks;
+    g_scrollCallbacks = in.scrollCallbacks;
+    g_requestCloseCallbacks = in.requestCloseCallbacks;
+    g_dragStartCallbacks = in.dragStartCallbacks;
+    g_dragMoveCallbacks = in.dragMoveCallbacks;
+    g_dragEndCallbacks = in.dragEndCallbacks;
+    g_layoutCallbacks = in.layoutCallbacks;
+    g_nativeControlStates = in.nativeControlStates;
+    g_materialComponentKinds = in.materialComponentKinds;
+    g_scrollViewIds = in.scrollViewIds;
+    g_safeAreaInsets = in.safeAreaInsets;
+    g_safeAreaBaseStyles = in.safeAreaBaseStyles;
+    g_iconRenderStates = in.iconRenderStates;
+    g_iconRequests = in.iconRequests;
+}
+
+void raym3BridgeClearRuntimeGlobals() {
+    g_screens.clear();
+    g_currentScreenId = 0;
+    g_nextScreenId = 1;
+    g_nextNodeId = 1;
+    g_screenStack.clear();
+    g_nodes.clear();
+    g_root = nullptr;
+    g_pressCallbacks.clear();
+    g_nodeClassNames.clear();
+    g_nodeParents.clear();
+    g_animatedStyleBuffer.assign(
+        (size_t)kAnimatedStyleMaxNodes * (size_t)kAnimatedStyleSlots, 0.0f);
+    g_animatedNodes.clear();
+    g_styleAnimations.clear();
+    g_changeTextCallbacks.clear();
+    g_focusCallbacks.clear();
+    g_blurCallbacks.clear();
+    g_scrollCallbacks.clear();
+    g_requestCloseCallbacks.clear();
+    g_dragStartCallbacks.clear();
+    g_dragMoveCallbacks.clear();
+    g_dragEndCallbacks.clear();
+    g_layoutCallbacks.clear();
+    g_nativeControlStates.clear();
+    g_materialComponentKinds.clear();
+    g_scrollViewIds.clear();
+    g_safeAreaInsets = SafeAreaInsets{};
+    g_safeAreaBaseStyles.clear();
+    g_iconRenderStates.clear();
+    g_iconRequests.clear();
+    raym3UnloadGpuCaches();
+}
+#endif
+
+void cleanupRaym3Bridge(JSContext* ctx, bool unloadGpuCaches) {
     for (auto& [id, anim] : g_styleAnimations) {
         if (!JS_IsUndefined(anim.onComplete)) JS_FreeValue(ctx, anim.onComplete);
     }
@@ -4300,17 +4616,21 @@ void cleanupRaym3Bridge(JSContext* ctx) {
     g_screenStack.clear();
     g_root = nullptr;
     g_bridge_ctx = nullptr;
-    for (auto& tex : g_textures) UnloadTexture(tex);
-    g_textures.clear();
-    for (auto& [size, font] : g_iconFonts)
-        if (font.texture.id != 0) ::UnloadFont(font);
-    g_iconFonts.clear();
-    g_iconFontVer.clear();
-    g_iconCPSet.clear();
-    g_iconCPSetVer = 0;
-    g_iconRequests.clear();
-    g_iconSheetRects.clear();
-    if (g_iconSheet.id != 0) { UnloadTexture(g_iconSheet); g_iconSheet = {0}; }
+    if (unloadGpuCaches) {
+        for (auto& tex : g_textures) UnloadTexture(tex);
+        g_textures.clear();
+        for (auto& [size, font] : g_iconFonts)
+            if (font.texture.id != 0) ::UnloadFont(font);
+        g_iconFonts.clear();
+        g_iconFontVer.clear();
+        g_iconCPSet.clear();
+        g_iconCPSetVer = 0;
+        g_iconRequests.clear();
+        g_iconSheetRects.clear();
+        if (g_iconSheet.id != 0) { UnloadTexture(g_iconSheet); g_iconSheet = {0}; }
+    }
+    // else: the GPU caches stay attached to the live graphics device (owned
+    // by another engine instance, or already dropped with the device).
 }
 
 static const char* nodeKindLabel(raym3::v2::NodeKind kind) {
@@ -4381,4 +4701,1277 @@ void drawInspectorHighlight() {
     const Rectangle& r = it->second->layout;
     if (r.width <= 0 || r.height <= 0) return;
     DrawRectangleLinesEx(r, 2.0f, {255, 0, 255, 255});
+}
+
+// ─── Reconciler fast path ─────────────────────────────────────────────────────
+
+static bool fastPathIsSharedValue(JSContext* ctx, JSValue val) {
+    if (!JS_IsObject(val)) return false;
+    JSValue bind = JS_GetPropertyStr(ctx, val, "bindToNode");
+    bool isFn = JS_IsFunction(ctx, bind);
+    JS_FreeValue(ctx, bind);
+    return isFn;
+}
+
+static bool fastPathHasEventPropName(const char* key) {
+    static const char* kEventProps[] = {
+        "onPress", "onClick", "onChangeText", "onValueChange", "onScroll",
+        "onRequestClose", "onFocus", "onBlur", "onLayout",
+        "onDragStart", "onDragMove", "onDragEnd", nullptr
+    };
+    for (int i = 0; kEventProps[i]; ++i) {
+        if (strcmp(key, kEventProps[i]) == 0) return true;
+    }
+    return false;
+}
+
+static std::optional<float> fastPathParseAngle(JSContext* ctx, JSValue val) {
+    if (JS_IsNumber(val)) {
+        double d = 0;
+        JS_ToFloat64(ctx, &d, val);
+        return (float)d;
+    }
+    if (!JS_IsString(val)) return std::nullopt;
+    const char* s = JS_ToCString(ctx, val);
+    if (!s) return std::nullopt;
+    std::string str(s);
+    JS_FreeCString(ctx, s);
+    char* end = nullptr;
+    float n = strtof(str.c_str(), &end);
+    if (end == str.c_str()) return std::nullopt;
+    if (str.find("rad") != std::string::npos) return (float)((n * 180.0) / M_PI);
+    return n;
+}
+
+static bool fastPathFlattenTransformInto(JSContext* ctx, JSValue styleObj, bool isCreate, bool* unsupported) {
+    JSValue transform = JS_GetPropertyStr(ctx, styleObj, "transform");
+    if (!JS_IsArray(transform)) {
+        JS_FreeValue(ctx, transform);
+        return false;
+    }
+    int len = 0;
+    JSValue lenVal = JS_GetPropertyStr(ctx, transform, "length");
+    JS_ToInt32(ctx, &len, lenVal);
+    JS_FreeValue(ctx, lenVal);
+
+    for (int i = 0; i < len; ++i) {
+        JSValue entry = JS_GetPropertyUint32(ctx, transform, (uint32_t)i);
+        if (!JS_IsObject(entry)) { JS_FreeValue(ctx, entry); continue; }
+        JSPropertyEnum* props = nullptr;
+        uint32_t propCount = 0;
+        if (JS_GetOwnPropertyNames(ctx, &props, &propCount, entry, JS_GPN_STRING_MASK) != 0) {
+            JS_FreeValue(ctx, entry);
+            continue;
+        }
+        for (uint32_t pi = 0; pi < propCount; ++pi) {
+            const char* key = props[pi].atom ? JS_AtomToCString(ctx, props[pi].atom) : nullptr;
+            if (!key) continue;
+            JSValue raw = JS_GetProperty(ctx, entry, props[pi].atom);
+            if (strcmp(key, "translateX") == 0 || strcmp(key, "translateY") == 0 || strcmp(key, "scale") == 0) {
+                if (fastPathIsSharedValue(ctx, raw)) {
+                    if (isCreate) {
+                        JSValue sv = JS_GetPropertyStr(ctx, raw, "value");
+                        JS_SetPropertyStr(ctx, styleObj, key, sv);
+                        JS_FreeValue(ctx, sv);
+                    } else if (unsupported) {
+                        *unsupported = true;
+                    }
+                } else if (JS_IsNumber(raw)) {
+                    if (isCreate) JS_SetPropertyStr(ctx, styleObj, key, JS_DupValue(ctx, raw));
+                }
+            } else if (strcmp(key, "rotate") == 0 || strcmp(key, "rotation") == 0) {
+                if (fastPathIsSharedValue(ctx, raw)) {
+                    if (isCreate) {
+                        JSValue sv = JS_GetPropertyStr(ctx, raw, "value");
+                        auto deg = fastPathParseAngle(ctx, sv);
+                        JS_FreeValue(ctx, sv);
+                        if (deg) JS_SetPropertyStr(ctx, styleObj, "rotation", JS_NewFloat64(ctx, *deg));
+                    } else if (unsupported) {
+                        *unsupported = true;
+                    }
+                } else {
+                    auto deg = fastPathParseAngle(ctx, raw);
+                    if (deg && isCreate) JS_SetPropertyStr(ctx, styleObj, "rotation", JS_NewFloat64(ctx, *deg));
+                    else if (deg && !isCreate && unsupported) *unsupported = true;
+                }
+            }
+            JS_FreeValue(ctx, raw);
+            JS_FreeCString(ctx, key);
+        }
+        js_free(ctx, props);
+        JS_FreeValue(ctx, entry);
+    }
+    JSAtom transformAtom = JS_NewAtom(ctx, "transform");
+    JS_DeleteProperty(ctx, styleObj, transformAtom, 0);
+    JS_FreeAtom(ctx, transformAtom);
+    JS_FreeValue(ctx, transform);
+    return true;
+}
+
+static void fastPathMergeStyleInto(JSContext* ctx, JSValue dest, JSValue src, bool isCreate, bool* unsupported) {
+    if (JS_IsArray(src)) {
+        int len = 0;
+        JSValue lenVal = JS_GetPropertyStr(ctx, src, "length");
+        JS_ToInt32(ctx, &len, lenVal);
+        JS_FreeValue(ctx, lenVal);
+        for (int i = 0; i < len; ++i) {
+            JSValue item = JS_GetPropertyUint32(ctx, src, (uint32_t)i);
+            fastPathMergeStyleInto(ctx, dest, item, isCreate, unsupported);
+            JS_FreeValue(ctx, item);
+        }
+        return;
+    }
+    if (!JS_IsObject(src)) return;
+
+    JSPropertyEnum* props = nullptr;
+    uint32_t propCount = 0;
+    if (JS_GetOwnPropertyNames(ctx, &props, &propCount, src, JS_GPN_STRING_MASK) != 0) return;
+
+    for (uint32_t i = 0; i < propCount; ++i) {
+        const char* key = props[i].atom ? JS_AtomToCString(ctx, props[i].atom) : nullptr;
+        if (!key) continue;
+        JSValue value = JS_GetProperty(ctx, src, props[i].atom);
+        if (JS_IsNull(value) || JS_IsUndefined(value)) {
+            JS_FreeValue(ctx, value);
+            JS_FreeCString(ctx, key);
+            continue;
+        }
+        if (strcmp(key, "transform") == 0) {
+            JS_SetPropertyStr(ctx, dest, key, JS_DupValue(ctx, value));
+        } else if (fastPathIsSharedValue(ctx, value)) {
+            if (isCreate) {
+                JSValue sv = JS_GetPropertyStr(ctx, value, "value");
+                JS_SetPropertyStr(ctx, dest, key, sv);
+            } else if (unsupported) {
+                *unsupported = true;
+            }
+        } else if (strcmp(key, "translateX") == 0 || strcmp(key, "translateY") == 0 ||
+                   strcmp(key, "scale") == 0 || strcmp(key, "opacity") == 0 ||
+                   strcmp(key, "rotation") == 0) {
+            if (isCreate) {
+                JS_SetPropertyStr(ctx, dest, key, JS_DupValue(ctx, value));
+            } else if (JS_IsNumber(value)) {
+                if (unsupported) *unsupported = true;
+            }
+        } else {
+            JS_SetPropertyStr(ctx, dest, key, JS_DupValue(ctx, value));
+        }
+        JS_FreeValue(ctx, value);
+        JS_FreeCString(ctx, key);
+    }
+    js_free(ctx, props);
+}
+
+static JSValue fastPathBuildStyleProps(JSContext* ctx, JSValue props, bool isCreate, bool* unsupported) {
+    JSValue styleObj = JS_NewObject(ctx);
+    JSValue styleVal = JS_GetPropertyStr(ctx, props, "style");
+    if (!JS_IsUndefined(styleVal) && !JS_IsNull(styleVal)) {
+        fastPathMergeStyleInto(ctx, styleObj, styleVal, isCreate, unsupported);
+    }
+    JS_FreeValue(ctx, styleVal);
+    fastPathFlattenTransformInto(ctx, styleObj, isCreate, unsupported);
+
+    JSValue className = JS_GetPropertyStr(ctx, props, "className");
+    if (!JS_IsUndefined(className) && !JS_IsNull(className)) {
+        JS_SetPropertyStr(ctx, styleObj, "className", JS_DupValue(ctx, className));
+    }
+    JS_FreeValue(ctx, className);
+    return styleObj;
+}
+
+static std::string fastPathGetPropString(JSContext* ctx, JSValue props, const char* key) {
+    JSValue val = JS_GetPropertyStr(ctx, props, key);
+    std::string out;
+    if (!JS_IsUndefined(val) && !JS_IsNull(val)) {
+        const char* s = JS_ToCString(ctx, val);
+        if (s) { out = s; JS_FreeCString(ctx, s); }
+    }
+    JS_FreeValue(ctx, val);
+    return out;
+}
+
+static JSValue fastPathBuildMergedProps(JSContext* ctx, JSValue props, const char* componentType, bool isCreate, bool* unsupported) {
+    JSValue merged = fastPathBuildStyleProps(ctx, props, isCreate, unsupported);
+    JSPropertyEnum* enumProps = nullptr;
+    uint32_t propCount = 0;
+    if (JS_GetOwnPropertyNames(ctx, &enumProps, &propCount, props, JS_GPN_STRING_MASK) == 0) {
+        for (uint32_t i = 0; i < propCount; ++i) {
+            const char* key = enumProps[i].atom ? JS_AtomToCString(ctx, enumProps[i].atom) : nullptr;
+            if (!key || strcmp(key, "style") == 0) {
+                if (key) JS_FreeCString(ctx, key);
+                continue;
+            }
+            if (JS_IsFunction(ctx, JS_GetProperty(ctx, props, enumProps[i].atom))) {
+                if (key) JS_FreeCString(ctx, key);
+                continue;
+            }
+            JSValue value = JS_GetProperty(ctx, props, enumProps[i].atom);
+            JS_SetPropertyStr(ctx, merged, key, JS_DupValue(ctx, value));
+            JS_FreeValue(ctx, value);
+            if (key) JS_FreeCString(ctx, key);
+        }
+        js_free(ctx, enumProps);
+    }
+    JS_SetPropertyStr(ctx, merged, "component", JS_NewString(ctx, componentType));
+    std::string label = fastPathGetPropString(ctx, props, "label");
+    if (label.empty()) label = fastPathGetPropString(ctx, props, "text");
+    if (label.empty()) label = fastPathGetPropString(ctx, props, "title");
+    if (label.empty()) {
+        JSValue children = JS_GetPropertyStr(ctx, props, "children");
+        if (JS_IsString(children) || JS_IsNumber(children)) {
+            const char* s = JS_ToCString(ctx, children);
+            if (s) { label = s; JS_FreeCString(ctx, s); }
+        }
+        JS_FreeValue(ctx, children);
+    }
+    if (!label.empty()) JS_SetPropertyStr(ctx, merged, "label", JS_NewString(ctx, label.c_str()));
+    return merged;
+}
+
+static bool fastPathPropsEqualSemantic(JSContext* ctx, JSValue a, JSValue b) {
+    if (JS_IsStrictEqual(ctx, a, b)) return true;
+    if (JS_IsNull(a) || JS_IsUndefined(a)) return JS_IsNull(b) || JS_IsUndefined(b);
+    if (JS_IsNull(b) || JS_IsUndefined(b)) return false;
+    if (JS_IsNumber(a) && JS_IsNumber(b)) {
+        double da = 0, db = 0;
+        JS_ToFloat64(ctx, &da, a);
+        JS_ToFloat64(ctx, &db, b);
+        return da == db;
+    }
+    if (JS_IsString(a) && JS_IsString(b)) {
+        const char* sa = JS_ToCString(ctx, a);
+        const char* sb = JS_ToCString(ctx, b);
+        bool eq = sa && sb && strcmp(sa, sb) == 0;
+        if (sa) JS_FreeCString(ctx, sa);
+        if (sb) JS_FreeCString(ctx, sb);
+        return eq;
+    }
+    if (JS_IsBool(a) && JS_IsBool(b)) return JS_ToBool(ctx, a) == JS_ToBool(ctx, b);
+    if (JS_IsArray(a) || JS_IsArray(b)) {
+        if (!JS_IsArray(a) || !JS_IsArray(b)) return false;
+        int la = 0, lb = 0;
+        JSValue lva = JS_GetPropertyStr(ctx, a, "length");
+        JSValue lvb = JS_GetPropertyStr(ctx, b, "length");
+        JS_ToInt32(ctx, &la, lva);
+        JS_ToInt32(ctx, &lb, lvb);
+        JS_FreeValue(ctx, lva);
+        JS_FreeValue(ctx, lvb);
+        if (la != lb) return false;
+        for (int i = 0; i < la; ++i) {
+            JSValue ia = JS_GetPropertyUint32(ctx, a, (uint32_t)i);
+            JSValue ib = JS_GetPropertyUint32(ctx, b, (uint32_t)i);
+            bool eq = fastPathPropsEqualSemantic(ctx, ia, ib);
+            JS_FreeValue(ctx, ia);
+            JS_FreeValue(ctx, ib);
+            if (!eq) return false;
+        }
+        return true;
+    }
+    if (!JS_IsObject(a) || !JS_IsObject(b)) return false;
+    if (JS_IsFunction(ctx, a) || JS_IsFunction(ctx, b)) return false;
+
+    JSPropertyEnum* props = nullptr;
+    uint32_t propCount = 0;
+    if (JS_GetOwnPropertyNames(ctx, &props, &propCount, a, JS_GPN_STRING_MASK) != 0) return false;
+    for (uint32_t i = 0; i < propCount; ++i) {
+        const char* key = props[i].atom ? JS_AtomToCString(ctx, props[i].atom) : nullptr;
+        if (!key) continue;
+        JSValue av = JS_GetProperty(ctx, a, props[i].atom);
+        JSValue bv = JS_GetPropertyStr(ctx, b, key);
+        if (JS_IsUndefined(av) || JS_IsNull(av)) {
+            JS_FreeValue(ctx, av);
+            JS_FreeValue(ctx, bv);
+            JS_FreeCString(ctx, key);
+            continue;
+        }
+        bool eq = fastPathPropsEqualSemantic(ctx, av, bv);
+        JS_FreeValue(ctx, av);
+        JS_FreeValue(ctx, bv);
+        JS_FreeCString(ctx, key);
+        if (!eq) { js_free(ctx, props); return false; }
+    }
+    js_free(ctx, props);
+    return true;
+}
+
+static bool fastPathIsMaterialType(const std::string& type) {
+    return materialComponentFromString(type).has_value();
+}
+
+static void batchAppendChildTolerant(int parentId, int childId) {
+    auto pit = g_nodes.find(parentId);
+    auto cit = g_nodes.find(childId);
+    if (pit == g_nodes.end() || cit == g_nodes.end()) {
+        RAYACT_NAV_LOG("batch appendChild stale id: parent=%d child=%d screen=%d",
+                       parentId, childId, g_currentScreenId);
+        return;
+    }
+    detachFromCurrentParent(childId, cit->second);
+    appendChildPreservingNavLabel(pit->second, cit->second);
+    g_nodeParents[childId] = parentId;
+    rayact::shadowTree().appendChild((uint32_t)parentId, (uint32_t)childId);
+}
+
+static void batchRemoveChildTolerant(int parentId, int childId) {
+    auto pit = g_nodes.find(parentId);
+    auto cit = g_nodes.find(childId);
+    if (pit == g_nodes.end() || cit == g_nodes.end()) {
+        RAYACT_NAV_LOG("batch removeChild stale id: parent=%d child=%d screen=%d",
+                       parentId, childId, g_currentScreenId);
+        if (cit != g_nodes.end()) g_nodeParents.erase(childId);
+        return;
+    }
+    auto& children = pit->second->children;
+    children.erase(std::remove(children.begin(), children.end(), cit->second), children.end());
+    g_nodeParents.erase(childId);
+    rayact::shadowTree().removeChild((uint32_t)parentId, (uint32_t)childId);
+}
+
+static void batchInsertBeforeTolerant(int parentId, int childId, int beforeChildId) {
+    auto pit = g_nodes.find(parentId);
+    auto cit = g_nodes.find(childId);
+    if (pit == g_nodes.end() || cit == g_nodes.end()) {
+        RAYACT_NAV_LOG("batch insertBefore stale id: parent=%d child=%d screen=%d",
+                       parentId, childId, g_currentScreenId);
+        return;
+    }
+    auto bit = g_nodes.find(beforeChildId);
+    if (bit == g_nodes.end()) {
+        batchAppendChildTolerant(parentId, childId);
+        return;
+    }
+    detachFromCurrentParent(childId, cit->second);
+    auto& children = pit->second->children;
+    auto insertIt = std::find(children.begin(), children.end(), bit->second);
+    if (insertIt == children.end()) {
+        children.push_back(cit->second);
+    } else {
+        children.insert(insertIt, cit->second);
+    }
+    g_nodeParents[childId] = parentId;
+    rayact::shadowTree().appendChild((uint32_t)parentId, (uint32_t)childId);
+}
+
+static void batchDisposeNodeTolerant(int nodeId) {
+    JSValueConst argv[1];
+    argv[0] = JS_NewInt32(g_bridge_ctx, nodeId);
+    JS_disposeNode(g_bridge_ctx, JS_UNDEFINED, 1, argv);
+    JS_FreeValue(g_bridge_ctx, argv[0]);
+}
+
+static void batchSetRootTolerant(int nodeId) {
+    JSValueConst argv[1];
+    argv[0] = JS_NewInt32(g_bridge_ctx, nodeId);
+    JS_setRootNode(g_bridge_ctx, JS_UNDEFINED, 1, argv);
+    JS_FreeValue(g_bridge_ctx, argv[0]);
+}
+
+JSValue JS_rayactCreateNodeFast(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "__rayactCreateNodeFast: expected (type, props)");
+    const char* typeC = JS_ToCString(ctx, argv[0]);
+    if (!typeC) return JS_ThrowTypeError(ctx, "__rayactCreateNodeFast: invalid type");
+    std::string type(typeC);
+    JS_FreeCString(ctx, typeC);
+    if (!JS_IsObject(argv[1])) return JS_ThrowTypeError(ctx, "__rayactCreateNodeFast: props must be object");
+
+    bool unsupported = false;
+    JSValue styleObj = fastPathBuildStyleProps(ctx, argv[1], true, &unsupported);
+    if (unsupported) {
+        JS_FreeValue(ctx, styleObj);
+        return JS_ThrowTypeError(ctx, "__rayactCreateNodeFast: unsupported animated props on create");
+    }
+
+    JSValue result = JS_EXCEPTION;
+    if (type == "view" || type == "root") {
+        if (jsHasProperty(ctx, argv[1], "appBarTitle")) {
+            JS_SetPropertyStr(ctx, styleObj, "appBarTitle", JS_NewBool(ctx, jsGetBool(ctx, argv[1], "appBarTitle", false)));
+        }
+        JSValue args[] = { styleObj };
+        result = JS_createView(ctx, JS_UNDEFINED, 1, args);
+    } else if (type == "text") {
+        std::string text = fastPathGetPropString(ctx, argv[1], "text");
+        if (text.empty()) text = fastPathGetPropString(ctx, argv[1], "children");
+        JSValue args[] = { JS_NewString(ctx, text.c_str()), styleObj };
+        result = JS_createText(ctx, JS_UNDEFINED, 2, args);
+        JS_FreeValue(ctx, args[0]);
+    } else if (type == "button") {
+        std::string label = fastPathGetPropString(ctx, argv[1], "label");
+        if (label.empty()) label = fastPathGetPropString(ctx, argv[1], "text");
+        if (label.empty()) label = fastPathGetPropString(ctx, argv[1], "children");
+        JSValue args[] = { JS_NewString(ctx, label.c_str()), styleObj };
+        result = JS_createButton(ctx, JS_UNDEFINED, 2, args);
+        JS_FreeValue(ctx, args[0]);
+    } else if (type == "image") {
+        std::string src = fastPathGetPropString(ctx, argv[1], "source");
+        if (src.empty()) src = fastPathGetPropString(ctx, argv[1], "src");
+        JSValue args[] = { JS_NewString(ctx, src.c_str()), styleObj };
+        result = JS_createImage(ctx, JS_UNDEFINED, 2, args);
+        JS_FreeValue(ctx, args[0]);
+    } else if (type == "icon") {
+        std::string name = fastPathGetPropString(ctx, argv[1], "name");
+        if (name.empty()) name = fastPathGetPropString(ctx, argv[1], "icon");
+        JSValue args[6];
+        args[0] = JS_NewString(ctx, name.c_str());
+        JSValue sizeVal = JS_GetPropertyStr(ctx, argv[1], "size");
+        args[1] = JS_IsNumber(sizeVal) ? JS_DupValue(ctx, sizeVal) : JS_UNDEFINED;
+        JS_FreeValue(ctx, sizeVal);
+        JSValue colorVal = JS_GetPropertyStr(ctx, argv[1], "color");
+        args[2] = (!JS_IsUndefined(colorVal) && !JS_IsNull(colorVal)) ? JS_DupValue(ctx, colorVal) : JS_UNDEFINED;
+        JS_FreeValue(ctx, colorVal);
+        args[3] = styleObj;
+        JSValue variantVal = JS_GetPropertyStr(ctx, argv[1], "variant");
+        args[4] = JS_IsString(variantVal) ? JS_DupValue(ctx, variantVal) : JS_UNDEFINED;
+        JS_FreeValue(ctx, variantVal);
+        JSValue filledVal = JS_GetPropertyStr(ctx, argv[1], "filled");
+        args[5] = JS_IsBool(filledVal) ? JS_DupValue(ctx, filledVal) : JS_UNDEFINED;
+        JS_FreeValue(ctx, filledVal);
+        result = JS_createIcon(ctx, JS_UNDEFINED, 6, args);
+        JS_FreeValue(ctx, args[0]);
+        if (!JS_IsUndefined(args[1])) JS_FreeValue(ctx, args[1]);
+        if (!JS_IsUndefined(args[2])) JS_FreeValue(ctx, args[2]);
+        if (!JS_IsUndefined(args[4])) JS_FreeValue(ctx, args[4]);
+        if (!JS_IsUndefined(args[5])) JS_FreeValue(ctx, args[5]);
+    } else if (type == "textInput") {
+        std::string value = fastPathGetPropString(ctx, argv[1], "value");
+        if (value.empty()) value = fastPathGetPropString(ctx, argv[1], "defaultValue");
+        JSValue merged = fastPathBuildMergedProps(ctx, argv[1], type.c_str(), true, &unsupported);
+        JSValue args[] = { JS_NewString(ctx, value.c_str()), merged };
+        result = JS_createTextInput(ctx, JS_UNDEFINED, 2, args);
+        JS_FreeValue(ctx, args[0]);
+        JS_FreeValue(ctx, merged);
+    } else if (type == "scrollView" || type == "modal" || type == "safeArea" ||
+               type == "statusBar" || type == "activityIndicator") {
+        JSValue merged = fastPathBuildMergedProps(ctx, argv[1], type.c_str(), true, &unsupported);
+        JSValue args[] = { merged };
+        if (type == "scrollView") result = JS_createScrollView(ctx, JS_UNDEFINED, 1, args);
+        else if (type == "modal") result = JS_createModal(ctx, JS_UNDEFINED, 1, args);
+        else if (type == "safeArea") result = JS_createSafeArea(ctx, JS_UNDEFINED, 1, args);
+        else if (type == "statusBar") result = JS_createStatusBar(ctx, JS_UNDEFINED, 1, args);
+        else result = JS_createActivityIndicator(ctx, JS_UNDEFINED, 1, args);
+        JS_FreeValue(ctx, merged);
+    } else if (type == "externalView") {
+        std::string kind = fastPathGetPropString(ctx, argv[1], "kind");
+        if (kind.empty()) kind = "stub";
+        JSValue merged = fastPathBuildMergedProps(ctx, argv[1], type.c_str(), true, &unsupported);
+        JSValue args[] = { JS_NewString(ctx, kind.c_str()), merged };
+        result = JS_createExternalView(ctx, JS_UNDEFINED, 2, args);
+        JS_FreeValue(ctx, args[0]);
+        JS_FreeValue(ctx, merged);
+    } else if (fastPathIsMaterialType(type)) {
+        JSValue merged = fastPathBuildMergedProps(ctx, argv[1], type.c_str(), true, &unsupported);
+        JSValue args[] = { JS_NewString(ctx, type.c_str()), merged };
+        result = JS_createMaterialComponent(ctx, JS_UNDEFINED, 2, args);
+        JS_FreeValue(ctx, args[0]);
+        JS_FreeValue(ctx, merged);
+    } else {
+        JS_FreeValue(ctx, styleObj);
+        return JS_ThrowTypeError(ctx, "__rayactCreateNodeFast: unsupported type");
+    }
+
+    JS_FreeValue(ctx, styleObj);
+    return result;
+}
+
+JSValue JS_rayactUpdateNodeFast(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 4) return JS_ThrowTypeError(ctx, "__rayactUpdateNodeFast: expected (nodeId, type, oldProps, newProps)");
+    int nodeId = 0;
+    JS_ToInt32(ctx, &nodeId, argv[0]);
+    if (g_nodes.find(nodeId) == g_nodes.end()) return JS_FALSE;
+
+    const char* typeC = JS_ToCString(ctx, argv[1]);
+    if (!typeC) return JS_FALSE;
+    std::string type(typeC);
+    JS_FreeCString(ctx, typeC);
+
+    if (!JS_IsObject(argv[2]) || !JS_IsObject(argv[3])) return JS_FALSE;
+
+    bool unsupported = false;
+    bool styleChanged = false;
+    bool textChanged = false;
+    bool valueChanged = false;
+    bool iconChanged = false;
+    bool materialChanged = false;
+
+    JSPropertyEnum* props = nullptr;
+    uint32_t propCount = 0;
+    if (JS_GetOwnPropertyNames(ctx, &props, &propCount, argv[3], JS_GPN_STRING_MASK) != 0) return JS_FALSE;
+
+    for (uint32_t i = 0; i < propCount; ++i) {
+        const char* key = props[i].atom ? JS_AtomToCString(ctx, props[i].atom) : nullptr;
+        if (!key) continue;
+        if (strcmp(key, "children") == 0 || fastPathHasEventPropName(key)) {
+            JS_FreeCString(ctx, key);
+            continue;
+        }
+        JSValue oldVal = JS_GetProperty(ctx, argv[2], props[i].atom);
+        JSValue newVal = JS_GetProperty(ctx, argv[3], props[i].atom);
+        if (JS_IsFunction(ctx, newVal) || JS_IsFunction(ctx, oldVal)) {
+            unsupported = true;
+            JS_FreeValue(ctx, oldVal);
+            JS_FreeValue(ctx, newVal);
+            JS_FreeCString(ctx, key);
+            break;
+        }
+        if (strcmp(key, "style") == 0) {
+            if (!fastPathPropsEqualSemantic(ctx, oldVal, newVal)) styleChanged = true;
+        } else if (type == "externalView") {
+            unsupported = true;
+        } else if (strcmp(key, "className") == 0) {
+            if (!fastPathPropsEqualSemantic(ctx, oldVal, newVal)) styleChanged = true;
+        } else if (!fastPathPropsEqualSemantic(ctx, oldVal, newVal)) {
+            if (type == "text" || type == "button") {
+                if (strcmp(key, "text") == 0 || strcmp(key, "label") == 0 ||
+                    strcmp(key, "title") == 0 || strcmp(key, "children") == 0) {
+                    textChanged = true;
+                }
+            } else if (type == "textInput" && strcmp(key, "value") == 0) {
+                valueChanged = true;
+            } else if (type == "icon" && (strcmp(key, "name") == 0 || strcmp(key, "icon") == 0 ||
+                       strcmp(key, "size") == 0 || strcmp(key, "color") == 0 ||
+                       strcmp(key, "variant") == 0 || strcmp(key, "filled") == 0)) {
+                iconChanged = true;
+            } else if (fastPathIsMaterialType(type)) {
+                materialChanged = true;
+            } else if (strcmp(key, "style") != 0) {
+                unsupported = true;
+            }
+        }
+        JS_FreeValue(ctx, oldVal);
+        JS_FreeValue(ctx, newVal);
+        JS_FreeCString(ctx, key);
+    }
+    js_free(ctx, props);
+
+    if (unsupported) return JS_FALSE;
+    if (!styleChanged && !textChanged && !valueChanged && !iconChanged && !materialChanged) {
+        return JS_TRUE;
+    }
+
+    if (styleChanged) {
+        bool styleUnsupported = false;
+        JSValue styleObj = fastPathBuildStyleProps(ctx, argv[3], false, &styleUnsupported);
+        if (styleUnsupported) {
+            JS_FreeValue(ctx, styleObj);
+            return JS_FALSE;
+        }
+        JSValue args[] = { JS_NewInt32(ctx, nodeId), styleObj };
+        JS_setStyle(ctx, JS_UNDEFINED, 2, args);
+        JS_FreeValue(ctx, args[0]);
+        JS_FreeValue(ctx, styleObj);
+    }
+
+    if (textChanged) {
+        std::string text = fastPathGetPropString(ctx, argv[3], "text");
+        if (text.empty()) text = fastPathGetPropString(ctx, argv[3], "label");
+        if (text.empty()) text = fastPathGetPropString(ctx, argv[3], "title");
+        if (text.empty()) text = fastPathGetPropString(ctx, argv[3], "children");
+        JSValue args[] = { JS_NewInt32(ctx, nodeId), JS_NewString(ctx, text.c_str()) };
+        JS_setText(ctx, JS_UNDEFINED, 2, args);
+        JS_FreeValue(ctx, args[0]);
+        JS_FreeValue(ctx, args[1]);
+    }
+
+    if (valueChanged) {
+        std::string value = fastPathGetPropString(ctx, argv[3], "value");
+        JSValue args[] = { JS_NewInt32(ctx, nodeId), JS_NewString(ctx, value.c_str()) };
+        JS_setValue(ctx, JS_UNDEFINED, 2, args);
+        JS_FreeValue(ctx, args[0]);
+        JS_FreeValue(ctx, args[1]);
+    }
+
+    if (iconChanged) {
+        JSValue args[6];
+        args[0] = JS_NewInt32(ctx, nodeId);
+        JSValue sizeVal = JS_GetPropertyStr(ctx, argv[3], "size");
+        args[1] = JS_IsNumber(sizeVal) ? JS_DupValue(ctx, sizeVal) : JS_UNDEFINED;
+        JS_FreeValue(ctx, sizeVal);
+        JSValue colorVal = JS_GetPropertyStr(ctx, argv[3], "color");
+        args[2] = (!JS_IsUndefined(colorVal) && !JS_IsNull(colorVal)) ? JS_DupValue(ctx, colorVal) : JS_UNDEFINED;
+        JS_FreeValue(ctx, colorVal);
+        args[3] = JS_UNDEFINED;
+        JSValue variantVal = JS_GetPropertyStr(ctx, argv[3], "variant");
+        args[4] = JS_IsString(variantVal) ? JS_DupValue(ctx, variantVal) : JS_UNDEFINED;
+        JS_FreeValue(ctx, variantVal);
+        std::string name = fastPathGetPropString(ctx, argv[3], "name");
+        if (name.empty()) name = fastPathGetPropString(ctx, argv[3], "icon");
+        args[5] = name.empty() ? JS_UNDEFINED : JS_NewString(ctx, name.c_str());
+        JSValue filledVal = JS_GetPropertyStr(ctx, argv[3], "filled");
+        // setIconProps signature: (nodeId, size?, color?, variant?, name?, filled?)
+        JSValue iconArgs[6] = {
+            args[0],
+            args[1],
+            args[2],
+            args[4],
+            args[5],
+            JS_IsBool(filledVal) ? JS_DupValue(ctx, filledVal) : JS_UNDEFINED,
+        };
+        JS_FreeValue(ctx, filledVal);
+        JS_setIconProps(ctx, JS_UNDEFINED, 6, iconArgs);
+        if (!JS_IsUndefined(iconArgs[1])) JS_FreeValue(ctx, iconArgs[1]);
+        if (!JS_IsUndefined(iconArgs[2])) JS_FreeValue(ctx, iconArgs[2]);
+        if (!JS_IsUndefined(iconArgs[3])) JS_FreeValue(ctx, iconArgs[3]);
+        if (!JS_IsUndefined(iconArgs[4])) JS_FreeValue(ctx, iconArgs[4]);
+        if (!JS_IsUndefined(iconArgs[5])) JS_FreeValue(ctx, iconArgs[5]);
+        JS_FreeValue(ctx, iconArgs[0]);
+    }
+
+    if (materialChanged || (styleChanged && fastPathIsMaterialType(type))) {
+        bool matUnsupported = false;
+        JSValue merged = fastPathBuildMergedProps(ctx, argv[3], type.c_str(), false, &matUnsupported);
+        if (matUnsupported) {
+            JS_FreeValue(ctx, merged);
+            return JS_FALSE;
+        }
+        JSValue args[] = { JS_NewInt32(ctx, nodeId), merged };
+        JS_setMaterialComponentProps(ctx, JS_UNDEFINED, 2, args);
+        JS_FreeValue(ctx, args[0]);
+        JS_FreeValue(ctx, merged);
+    }
+
+    return JS_TRUE;
+}
+
+JSValue JS_rayactBatchMutations(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1 || !JS_IsArray(argv[0])) {
+        return JS_ThrowTypeError(ctx, "__rayactBatchMutations: expected (ops[])");
+    }
+    int len = 0;
+    JSValue lenVal = JS_GetPropertyStr(ctx, argv[0], "length");
+    JS_ToInt32(ctx, &len, lenVal);
+    JS_FreeValue(ctx, lenVal);
+
+    for (int i = 0; i < len; ++i) {
+        JSValue op = JS_GetPropertyUint32(ctx, argv[0], (uint32_t)i);
+        if (!JS_IsObject(op)) {
+            JS_FreeValue(ctx, op);
+            continue;
+        }
+        std::string opName = fastPathGetPropString(ctx, op, "op");
+        if (opName == "appendChild") {
+            int parentId = 0, childId = 0;
+            JSValue p = JS_GetPropertyStr(ctx, op, "parentId");
+            JSValue c = JS_GetPropertyStr(ctx, op, "childId");
+            JS_ToInt32(ctx, &parentId, p);
+            JS_ToInt32(ctx, &childId, c);
+            JS_FreeValue(ctx, p);
+            JS_FreeValue(ctx, c);
+            batchAppendChildTolerant(parentId, childId);
+        } else if (opName == "removeChild") {
+            int parentId = 0, childId = 0;
+            JSValue p = JS_GetPropertyStr(ctx, op, "parentId");
+            JSValue c = JS_GetPropertyStr(ctx, op, "childId");
+            JS_ToInt32(ctx, &parentId, p);
+            JS_ToInt32(ctx, &childId, c);
+            JS_FreeValue(ctx, p);
+            JS_FreeValue(ctx, c);
+            batchRemoveChildTolerant(parentId, childId);
+        } else if (opName == "insertBefore") {
+            int parentId = 0, childId = 0, beforeChildId = 0;
+            JSValue p = JS_GetPropertyStr(ctx, op, "parentId");
+            JSValue c = JS_GetPropertyStr(ctx, op, "childId");
+            JSValue b = JS_GetPropertyStr(ctx, op, "beforeChildId");
+            JS_ToInt32(ctx, &parentId, p);
+            JS_ToInt32(ctx, &childId, c);
+            JS_ToInt32(ctx, &beforeChildId, b);
+            JS_FreeValue(ctx, p);
+            JS_FreeValue(ctx, c);
+            JS_FreeValue(ctx, b);
+            batchInsertBeforeTolerant(parentId, childId, beforeChildId);
+        } else if (opName == "disposeNode") {
+            int nodeId = 0;
+            JSValue n = JS_GetPropertyStr(ctx, op, "nodeId");
+            JS_ToInt32(ctx, &nodeId, n);
+            JS_FreeValue(ctx, n);
+            batchDisposeNodeTolerant(nodeId);
+        } else if (opName == "setRoot") {
+            int nodeId = 0;
+            JSValue n = JS_GetPropertyStr(ctx, op, "nodeId");
+            JS_ToInt32(ctx, &nodeId, n);
+            JS_FreeValue(ctx, n);
+            batchSetRootTolerant(nodeId);
+        } else if (opName == "setText") {
+            int nodeId = 0;
+            JSValue n = JS_GetPropertyStr(ctx, op, "nodeId");
+            JS_ToInt32(ctx, &nodeId, n);
+            std::string text = fastPathGetPropString(ctx, op, "text");
+            JS_FreeValue(ctx, n);
+            JSValue args[] = { JS_NewInt32(ctx, nodeId), JS_NewString(ctx, text.c_str()) };
+            JS_setText(ctx, JS_UNDEFINED, 2, args);
+            JS_FreeValue(ctx, args[0]);
+            JS_FreeValue(ctx, args[1]);
+        } else if (opName == "setValue") {
+            int nodeId = 0;
+            JSValue n = JS_GetPropertyStr(ctx, op, "nodeId");
+            JS_ToInt32(ctx, &nodeId, n);
+            std::string value = fastPathGetPropString(ctx, op, "value");
+            JS_FreeValue(ctx, n);
+            JSValue args[] = { JS_NewInt32(ctx, nodeId), JS_NewString(ctx, value.c_str()) };
+            JS_setValue(ctx, JS_UNDEFINED, 2, args);
+            JS_FreeValue(ctx, args[0]);
+            JS_FreeValue(ctx, args[1]);
+        } else if (opName == "setStyle") {
+            int nodeId = 0;
+            JSValue n = JS_GetPropertyStr(ctx, op, "nodeId");
+            JS_ToInt32(ctx, &nodeId, n);
+            JSValue style = JS_GetPropertyStr(ctx, op, "style");
+            JSValue args[] = { JS_NewInt32(ctx, nodeId), style };
+            JS_setStyle(ctx, JS_UNDEFINED, 2, args);
+            JS_FreeValue(ctx, args[0]);
+            JS_FreeValue(ctx, style);
+            JS_FreeValue(ctx, n);
+        } else if (opName == "setMaterialProps") {
+            int nodeId = 0;
+            JSValue n = JS_GetPropertyStr(ctx, op, "nodeId");
+            JS_ToInt32(ctx, &nodeId, n);
+            JSValue matProps = JS_GetPropertyStr(ctx, op, "props");
+            JSValue args[] = { JS_NewInt32(ctx, nodeId), matProps };
+            JS_setMaterialComponentProps(ctx, JS_UNDEFINED, 2, args);
+            JS_FreeValue(ctx, args[0]);
+            JS_FreeValue(ctx, matProps);
+            JS_FreeValue(ctx, n);
+        }
+        JS_FreeValue(ctx, op);
+    }
+    return JS_UNDEFINED;
+}
+
+// === Binary command buffer (structural ops) =============================
+// Zero-allocation per-commit mutation stream. JS encodes opcodes + int32 args
+// (little-endian) into a shared ArrayBuffer (packages/rayact-react/src/
+// commandBuffer.ts) and calls __rayactFlushCommands(byteLen) ONCE per commit.
+// We decode it linearly here — no per-field JS property reads, no per-op
+// boundary crossing. Opcodes MUST stay in sync with protocol.ts.
+namespace {
+enum RayactCmdOp : int32_t {
+    RCMD_APPEND     = 1,   // parentId, childId
+    RCMD_INSERT     = 2,   // parentId, childId, beforeChildId
+    RCMD_REMOVE     = 3,   // parentId, childId
+    RCMD_DISPOSE    = 4,   // nodeId
+    RCMD_SET_ROOT   = 5,   // nodeId
+    RCMD_CREATE     = 10,  // nodeId, typeId, styleRun
+    RCMD_CREATE_PARAM = 11, // nodeId, typeId, stringId, flags, size, color, variantId, styleRun
+    RCMD_SET_STYLE  = 12,  // nodeId, styleRun
+    RCMD_NEW_STRING = 13,  // stringId, byteLen, <utf8 padded>
+    RCMD_SET_TEXT   = 14,  // nodeId, stringId
+};
+enum RayactCmdType : int32_t {
+    RTYPE_VIEW = 1,
+    RTYPE_TEXT = 2,
+    RTYPE_BUTTON = 3,
+    RTYPE_IMAGE = 4,
+    RTYPE_ICON = 5,
+    RTYPE_SCROLL_VIEW = 6,
+    RTYPE_TEXT_INPUT = 7,
+    RTYPE_SAFE_AREA = 8,
+    RTYPE_STATUS_BAR = 9,
+};
+enum RayactCreateParamFlags : int32_t {
+    RPARAM_HAS_SIZE = 1 << 0,
+    RPARAM_HAS_COLOR = 1 << 1,
+    RPARAM_FILLED = 1 << 2,
+    RPARAM_HAS_FILLED = 1 << 3,
+};
+
+constexpr size_t kCommandArenaBytes = 4u * 1024u * 1024u;  // 1M int32 slots
+std::vector<uint8_t> g_commandArena;
+std::map<int32_t, std::string> g_cmdStrings;  // interned strings, keyed by JS-assigned id
+
+inline int32_t cmdReadI32(const uint8_t* p) {
+    int32_t v;
+    std::memcpy(&v, p, sizeof(int32_t));
+    return v;
+}
+inline uint32_t cmdReadU32(const uint8_t* p) {
+    uint32_t v;
+    std::memcpy(&v, p, sizeof(uint32_t));
+    return v;
+}
+inline float cmdReadF64(const uint8_t* p) {
+    double d;
+    std::memcpy(&d, p, sizeof(double));
+    return (float)d;
+}
+
+// Apply one binary style entry to `s`. Returns the value width in bytes (4 or 8)
+// or 0 for an unknown key (treated as a stream desync). keyIds MUST match
+// packages/rayact-react/src/protocol.ts (SK).
+size_t applyStyleEntryBinary(int32_t keyId, const uint8_t* val, raym3::v2::Style& s) {
+    switch (keyId) {
+        case 1:  s.width      = cmdReadF64(val); return 8;
+        case 2:  s.height     = cmdReadF64(val); return 8;
+        case 3:  s.minWidth   = cmdReadF64(val); return 8;
+        case 4:  s.minHeight  = cmdReadF64(val); return 8;
+        case 5:  s.maxWidth   = cmdReadF64(val); return 8;
+        case 6:  s.maxHeight  = cmdReadF64(val); return 8;
+        case 7:  s.flexGrow   = cmdReadF64(val); return 8;
+        case 8:  s.flexShrink = cmdReadF64(val); return 8;
+        case 9:  s.flexBasis  = cmdReadF64(val); return 8;
+        case 10: { // flex shorthand (mirror applyStyleProps)
+            float v = cmdReadF64(val);
+            if (v > 0.0f)      { s.flexGrow = v; s.flexShrink = 1.0f; s.flexBasis = 0.0f; }
+            else if (v == 0.0f){ s.flexGrow = 0.0f; s.flexShrink = 0.0f; }
+            else               { s.flexGrow = 0.0f; s.flexShrink = -v; }
+            return 8;
+        }
+        case 11: s.gap       = cmdReadF64(val); return 8;
+        case 12: s.rowGap    = cmdReadF64(val); return 8;
+        case 13: s.columnGap = cmdReadF64(val); return 8;
+        case 14: s.padding.all        = cmdReadF64(val); return 8;
+        case 15: s.padding.top        = cmdReadF64(val); return 8;
+        case 16: s.padding.right      = cmdReadF64(val); return 8;
+        case 17: s.padding.bottom     = cmdReadF64(val); return 8;
+        case 18: s.padding.left       = cmdReadF64(val); return 8;
+        case 19: s.padding.horizontal = cmdReadF64(val); return 8;
+        case 20: s.padding.vertical   = cmdReadF64(val); return 8;
+        case 21: s.margin.all         = cmdReadF64(val); return 8;
+        case 22: s.margin.top         = cmdReadF64(val); return 8;
+        case 23: s.margin.right       = cmdReadF64(val); return 8;
+        case 24: s.margin.bottom      = cmdReadF64(val); return 8;
+        case 25: s.margin.left        = cmdReadF64(val); return 8;
+        case 26: s.margin.horizontal  = cmdReadF64(val); return 8;
+        case 27: s.margin.vertical    = cmdReadF64(val); return 8;
+        case 28: s.opacity      = cmdReadF64(val); return 8;
+        case 29: s.borderRadius = cmdReadF64(val); return 8;
+        case 30: s.borderWidth  = cmdReadF64(val); return 8;
+        case 31: s.elevation    = cmdReadF64(val); return 8;
+        case 36: s.translateX   = cmdReadF64(val); return 8;
+        case 37: s.translateY   = cmdReadF64(val); return 8;
+        case 38: s.scale        = cmdReadF64(val); return 8;
+        case 39: s.rotation     = cmdReadF64(val); return 8;
+        case 40: s.text.fontSize      = cmdReadF64(val); return 8;
+        case 41: s.text.lineHeight    = cmdReadF64(val); return 8;
+        case 42: s.text.letterSpacing = cmdReadF64(val); return 8;
+        case 50: s.backgroundColor = colorFromUint(cmdReadU32(val)); return 4;
+        case 51: s.borderColor     = colorFromUint(cmdReadU32(val)); return 4;
+        case 52: s.text.color      = colorFromUint(cmdReadU32(val)); return 4;
+        case 60: switch (cmdReadI32(val)) {
+            case 0: s.flexDirection = raym3::v2::FlexDirection::Row; break;
+            case 1: s.flexDirection = raym3::v2::FlexDirection::Column; break;
+            case 2: s.flexDirection = raym3::v2::FlexDirection::RowReverse; break;
+            case 3: s.flexDirection = raym3::v2::FlexDirection::ColumnReverse; break;
+        } return 4;
+        case 61: switch (cmdReadI32(val)) {
+            case 0: s.justifyContent = raym3::v2::Justify::FlexStart; break;
+            case 1: s.justifyContent = raym3::v2::Justify::FlexEnd; break;
+            case 2: s.justifyContent = raym3::v2::Justify::Center; break;
+            case 3: s.justifyContent = raym3::v2::Justify::SpaceBetween; break;
+            case 4: s.justifyContent = raym3::v2::Justify::SpaceAround; break;
+            case 5: s.justifyContent = raym3::v2::Justify::SpaceEvenly; break;
+        } return 4;
+        case 62: switch (cmdReadI32(val)) {
+            case 0: s.alignItems = raym3::v2::Align::FlexStart; break;
+            case 1: s.alignItems = raym3::v2::Align::FlexEnd; break;
+            case 2: s.alignItems = raym3::v2::Align::Center; break;
+            case 3: s.alignItems = raym3::v2::Align::Stretch; break;
+            case 4: s.alignItems = raym3::v2::Align::Baseline; break;
+        } return 4;
+        case 63: switch (cmdReadI32(val)) {
+            case 0: s.alignSelf = raym3::v2::Align::FlexStart; break;
+            case 1: s.alignSelf = raym3::v2::Align::FlexEnd; break;
+            case 2: s.alignSelf = raym3::v2::Align::Center; break;
+            case 3: s.alignSelf = raym3::v2::Align::Stretch; break;
+        } return 4;
+        case 64: switch (cmdReadI32(val)) {
+            case 0: s.display = raym3::v2::Display::Flex; break;
+            case 1: s.display = raym3::v2::Display::None; break;
+            case 2: s.display = raym3::v2::Display::Contents; break;
+        } return 4;
+        case 65: switch (cmdReadI32(val)) {
+            case 0: s.position = raym3::v2::PositionType::Absolute; break;
+            case 1: s.position = raym3::v2::PositionType::Relative; break;
+            case 2: s.position = raym3::v2::PositionType::Fixed; break;
+        } return 4;
+        case 66: switch (cmdReadI32(val)) {
+            case 0: s.overflow = raym3::v2::Overflow::Hidden; break;
+            case 1: s.overflow = raym3::v2::Overflow::Scroll; break;
+            case 2: s.overflow = raym3::v2::Overflow::Visible; break;
+        } return 4;
+        case 67: switch (cmdReadI32(val)) {
+            case 0: s.pointerEvents = raym3::v2::PointerEvents::None; break;
+            case 1: s.pointerEvents = raym3::v2::PointerEvents::Auto; break;
+        } return 4;
+        default: return 0;  // unknown key — desync guard (JS validates before emit)
+    }
+}
+
+// Read a style run (count + entries) into `s`. Returns the new offset, or `len`
+// on any truncation/desync.
+size_t readStyleRun(const uint8_t* base, size_t off, size_t len, raym3::v2::Style& s) {
+    if (off + 4 > len) return len;
+    int32_t count = cmdReadI32(base + off);
+    off += 4;
+    for (int32_t i = 0; i < count; ++i) {
+        if (off + 4 > len) return len;
+        int32_t keyId = cmdReadI32(base + off);
+        off += 4;
+        size_t vbytes = applyStyleEntryBinary(keyId, base + off, s);
+        if (vbytes == 0 || off + vbytes > len) return len;
+        off += vbytes;
+    }
+    return off;
+}
+
+void createNodeFromBuffer(int id, int typeId, const raym3::v2::Style& style) {
+    if (typeId == RTYPE_TEXT) {
+        raym3::v2::TextProps props;
+        props.style = style;
+        g_nodes[id] = raym3::v2::Text("", props);  // content arrives via RCMD_SET_TEXT
+    } else if (typeId == RTYPE_SCROLL_VIEW) {
+        raym3::v2::ViewProps props;
+        props.style = style;
+        props.style.overflow = raym3::v2::Overflow::Scroll;
+        auto node = raym3::v2::View(props);
+#if defined(RAYACT_ANDROID) || defined(__ANDROID__)
+        node->scrollMomentumEnabled = true;
+#endif
+        g_nodes[id] = node;
+        g_scrollViewIds.insert(id);
+    } else if (typeId == RTYPE_SAFE_AREA) {
+        raym3::v2::ViewProps props;
+        g_safeAreaBaseStyles[id] = style;
+        props.style = applySafeAreaPadding(style);
+        g_nodes[id] = raym3::v2::View(props);
+    } else if (typeId == RTYPE_STATUS_BAR) {
+        raym3::v2::ViewProps props;
+        props.style.display = raym3::v2::Display::None;
+        props.style = raym3::v2::MergeStyles(props.style, style);
+        g_nodes[id] = raym3::v2::View(props);
+    } else {  // RTYPE_VIEW (and root)
+        raym3::v2::ViewProps props;
+        props.style = style;
+        auto node = raym3::v2::View(props);
+        g_nodes[id] = node;
+        rayact::shadowTree().createNode((uint32_t)id, props.style);
+    }
+}
+
+static std::string iconGlyphFromNameBinary(const std::string& name, int size, bool filled, int& resolvedCp) {
+    resolvedCp = 0;
+    bool looksLikeName = !name.empty();
+    for (unsigned char c : name) {
+        if (c > 127) { looksLikeName = false; break; }
+    }
+    if (!looksLikeName || !g_bridge_ctx) return name;
+
+    JSValue globalObj = JS_GetGlobalObject(g_bridge_ctx);
+    JSValue iconsMap = JS_GetPropertyStr(g_bridge_ctx, globalObj, "Icons");
+    if (JS_IsObject(iconsMap)) {
+        JSValue cpVal = JS_GetPropertyStr(g_bridge_ctx, iconsMap, name.c_str());
+        uint32_t cp = 0;
+        if (!JS_IsUndefined(cpVal) && JS_ToUint32(g_bridge_ctx, &cp, cpVal) == 0 && cp > 0) {
+            resolvedCp = (int)cp;
+            requireIcon(resolvedCp, (int)roundf((float)size), filled);
+            char utf8[5] = {};
+            if (cp < 0x80) {
+                utf8[0] = (char)cp;
+            } else if (cp < 0x800) {
+                utf8[0] = (char)(0xC0 | (cp >> 6));
+                utf8[1] = (char)(0x80 | (cp & 0x3F));
+            } else if (cp < 0x10000) {
+                utf8[0] = (char)(0xE0 | (cp >> 12));
+                utf8[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+                utf8[2] = (char)(0x80 | (cp & 0x3F));
+            } else {
+                utf8[0] = (char)(0xF0 | (cp >> 18));
+                utf8[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+                utf8[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+                utf8[3] = (char)(0x80 | (cp & 0x3F));
+            }
+            JS_FreeValue(g_bridge_ctx, cpVal);
+            JS_FreeValue(g_bridge_ctx, iconsMap);
+            JS_FreeValue(g_bridge_ctx, globalObj);
+            return std::string(utf8);
+        }
+        JS_FreeValue(g_bridge_ctx, cpVal);
+    }
+    JS_FreeValue(g_bridge_ctx, iconsMap);
+    JS_FreeValue(g_bridge_ctx, globalObj);
+    return name;
+}
+
+void createParamNodeFromBuffer(
+    int id,
+    int typeId,
+    const std::string& param,
+    int flags,
+    float sizeArg,
+    uint32_t colorArg,
+    const std::string& variant,
+    const raym3::v2::Style& style
+) {
+    if (typeId == RTYPE_BUTTON) {
+        raym3::v2::ComponentProps props;
+        props.label = param;
+        props.style = style;
+        g_nodes[id] = raym3::v2::MaterialComponent(raym3::v2::M3Component::Button, props, {});
+        g_materialComponentKinds[id] = raym3::v2::M3Component::Button;
+    } else if (typeId == RTYPE_IMAGE) {
+        Texture2D tex = LoadTexture(param.c_str());
+        if (tex.id == 0) {
+            raym3::v2::ViewProps props;
+            props.style = style;
+            g_nodes[id] = raym3::v2::View(props);
+            return;
+        }
+        g_textures.push_back(tex);
+        Texture2D capturedTex = tex;
+        raym3::v2::ViewProps props;
+        props.style = style;
+        g_nodes[id] = raym3::v2::Custom(props, [capturedTex](Rectangle layout) {
+            float scaleX = layout.width / (float)capturedTex.width;
+            float scaleY = layout.height / (float)capturedTex.height;
+            float scale = (scaleX > scaleY) ? scaleX : scaleY;
+            float drawW = capturedTex.width * scale;
+            float drawH = capturedTex.height * scale;
+            float drawX = layout.x + (layout.width - drawW) * 0.5f;
+            float drawY = layout.y + (layout.height - drawH) * 0.5f;
+            DrawTextureEx(capturedTex, {drawX, drawY}, 0.0f, scale, WHITE);
+        });
+    } else if (typeId == RTYPE_ICON) {
+        float iconSize = (flags & RPARAM_HAS_SIZE) ? sizeArg : 16.0f;
+        bool filled = (flags & RPARAM_HAS_FILLED) ? ((flags & RPARAM_FILLED) != 0) : true;
+        int resolvedCp = 0;
+        std::string glyph = iconGlyphFromNameBinary(param, (int)roundf(iconSize), filled, resolvedCp);
+        Color color = (flags & RPARAM_HAS_COLOR)
+            ? colorFromUint(colorArg)
+            : raym3::Theme::GetColorScheme().onSurfaceVariant;
+        std::string variantStr = variant.empty() ? "rounded" : variant;
+        raym3::v2::ViewProps props;
+        props.style = style;
+        if (!props.style.width) props.style.width = iconSize;
+        if (!props.style.height) props.style.height = iconSize;
+        if (!props.style.minWidth) props.style.minWidth = props.style.width;
+        if (!props.style.minHeight) props.style.minHeight = props.style.height;
+        if (!props.style.flexShrink) props.style.flexShrink = 0.0f;
+        g_iconRenderStates[id] = IconRenderState{glyph, resolvedCp, iconSize, color, filled, variantStr};
+        g_nodes[id] = raym3::v2::Custom(props, [id](Rectangle layout) {
+            auto stateIt = g_iconRenderStates.find(id);
+            if (stateIt == g_iconRenderStates.end()) return;
+            const IconRenderState& icon = stateIt->second;
+            if (icon.codepoint != 0 && g_iconSheet.id != 0) {
+                IconKey key{icon.codepoint, (int)roundf(icon.size), icon.filled};
+                auto it = g_iconSheetRects.find(key);
+                if (it != g_iconSheetRects.end()) {
+                    Rectangle src = it->second;
+                    Rectangle dest = {layout.x + (layout.width - icon.size) * 0.5f,
+                                      layout.y + (layout.height - icon.size) * 0.5f,
+                                      icon.size, icon.size};
+                    DrawTexturePro(g_iconSheet, src, dest, {0.0f, 0.0f}, 0.0f, icon.color);
+                    return;
+                }
+            }
+            if (icon.codepoint != 0) {
+                raym3::v2::DrawMaterialIcon(icon.codepoint, layout, icon.color,
+                                            (int)roundf(icon.size), icon.filled);
+            }
+        });
+    } else if (typeId == RTYPE_TEXT_INPUT) {
+#ifdef __ANDROID__
+        registerImeStateCallbackOnce();
+#endif
+        raym3::v2::TextInputProps props;
+        props.value = nullptr;
+        props.style = style;
+        auto node = raym3::v2::TextInput(props);
+        node->inputScratch = param;
+        node->inputBuffer.assign(1024, '\0');
+        std::strncpy(node->inputBuffer.data(), node->inputScratch.c_str(), node->inputBuffer.size() - 1);
+        node->textInput.buffer = node->inputBuffer.data();
+        node->textInput.bufferSize = (int)node->inputBuffer.size();
+        node->textInput.value = &node->inputScratch;
+        node->textInput.onChange = [id](const std::string& text) {
+            auto it = g_changeTextCallbacks.find(id);
+            if (it == g_changeTextCallbacks.end() || !g_bridge_ctx) return;
+            JSValue arg = JS_NewString(g_bridge_ctx, text.c_str());
+            JSValue result = JS_Call(g_bridge_ctx, it->second, JS_UNDEFINED, 1, &arg);
+            if (JS_IsException(result)) JS_FreeValue(g_bridge_ctx, JS_GetException(g_bridge_ctx));
+            JS_FreeValue(g_bridge_ctx, result);
+            JS_FreeValue(g_bridge_ctx, arg);
+        };
+        node->textInput.onFocus = [id]() {
+#ifdef __ANDROID__
+            AndroidKeyboard_ShowForNode(id, "", false, false, "");
+#endif
+            auto it = g_focusCallbacks.find(id);
+            if (it == g_focusCallbacks.end() || !g_bridge_ctx) return;
+            JSValue result = JS_Call(g_bridge_ctx, it->second, JS_UNDEFINED, 0, nullptr);
+            if (JS_IsException(result)) JS_FreeValue(g_bridge_ctx, JS_GetException(g_bridge_ctx));
+            JS_FreeValue(g_bridge_ctx, result);
+        };
+        node->textInput.onBlur = [id]() {
+#ifdef __ANDROID__
+            AndroidKeyboard_Hide();
+#endif
+            auto it = g_blurCallbacks.find(id);
+            if (it == g_blurCallbacks.end() || !g_bridge_ctx) return;
+            JSValue result = JS_Call(g_bridge_ctx, it->second, JS_UNDEFINED, 0, nullptr);
+            if (JS_IsException(result)) JS_FreeValue(g_bridge_ctx, JS_GetException(g_bridge_ctx));
+            JS_FreeValue(g_bridge_ctx, result);
+        };
+        g_nodes[id] = node;
+    }
+}
+
+void applyCommandBuffer(const uint8_t* base, size_t len) {
+    size_t off = 0;
+    while (off + 4 <= len) {
+        int32_t op = cmdReadI32(base + off);
+        off += 4;
+        switch (op) {
+            case RCMD_APPEND: {
+                if (off + 8 > len) return;
+                int p = cmdReadI32(base + off);
+                int c = cmdReadI32(base + off + 4);
+                off += 8;
+                batchAppendChildTolerant(p, c);
+                break;
+            }
+            case RCMD_INSERT: {
+                if (off + 12 > len) return;
+                int p = cmdReadI32(base + off);
+                int c = cmdReadI32(base + off + 4);
+                int b = cmdReadI32(base + off + 8);
+                off += 12;
+                batchInsertBeforeTolerant(p, c, b);
+                break;
+            }
+            case RCMD_REMOVE: {
+                if (off + 8 > len) return;
+                int p = cmdReadI32(base + off);
+                int c = cmdReadI32(base + off + 4);
+                off += 8;
+                batchRemoveChildTolerant(p, c);
+                break;
+            }
+            case RCMD_DISPOSE: {
+                if (off + 4 > len) return;
+                int n = cmdReadI32(base + off);
+                off += 4;
+                batchDisposeNodeTolerant(n);
+                break;
+            }
+            case RCMD_SET_ROOT: {
+                if (off + 4 > len) return;
+                int n = cmdReadI32(base + off);
+                off += 4;
+                batchSetRootTolerant(n);
+                break;
+            }
+            case RCMD_CREATE: {
+                if (off + 8 > len) return;
+                int id = cmdReadI32(base + off);
+                int typeId = cmdReadI32(base + off + 4);
+                off += 8;
+                raym3::v2::Style style;
+                off = readStyleRun(base, off, len, style);
+                createNodeFromBuffer(id, typeId, style);
+                break;
+            }
+            case RCMD_CREATE_PARAM: {
+                if (off + 32 > len) return;
+                int id = cmdReadI32(base + off);
+                int typeId = cmdReadI32(base + off + 4);
+                int strId = cmdReadI32(base + off + 8);
+                int flags = cmdReadI32(base + off + 12);
+                float sizeArg = cmdReadF64(base + off + 16);
+                uint32_t colorArg = cmdReadU32(base + off + 24);
+                int variantId = cmdReadI32(base + off + 28);
+                off += 32;
+                raym3::v2::Style style;
+                off = readStyleRun(base, off, len, style);
+                auto sit = g_cmdStrings.find(strId);
+                std::string param = sit != g_cmdStrings.end() ? sit->second : "";
+                auto vit = g_cmdStrings.find(variantId);
+                std::string variant = vit != g_cmdStrings.end() ? vit->second : "";
+                createParamNodeFromBuffer(id, typeId, param, flags, sizeArg, colorArg, variant, style);
+                break;
+            }
+            case RCMD_SET_STYLE: {
+                if (off + 4 > len) return;
+                int id = cmdReadI32(base + off);
+                off += 4;
+                raym3::v2::Style delta;
+                off = readStyleRun(base, off, len, delta);
+                auto it = g_nodes.find(id);
+                if (it != g_nodes.end() && it->second) {
+                    it->second->style = raym3::v2::MergeStyles(it->second->style, delta);
+                    rayact::shadowTree().setStyle((uint32_t)id, it->second->style);
+                }
+                break;
+            }
+            case RCMD_NEW_STRING: {
+                if (off + 8 > len) return;
+                int strId = cmdReadI32(base + off);
+                int byteLen = cmdReadI32(base + off + 4);
+                off += 8;
+                if (byteLen < 0 || off + (size_t)byteLen > len) return;
+                g_cmdStrings[strId] = std::string(reinterpret_cast<const char*>(base + off), (size_t)byteLen);
+                off += ((size_t)byteLen + 3) & ~size_t(3);  // 4-byte padded
+                break;
+            }
+            case RCMD_SET_TEXT: {
+                if (off + 8 > len) return;
+                int id = cmdReadI32(base + off);
+                int strId = cmdReadI32(base + off + 4);
+                off += 8;
+                auto it = g_nodes.find(id);
+                auto sit = g_cmdStrings.find(strId);
+                if (it != g_nodes.end() && it->second && sit != g_cmdStrings.end()) {
+                    it->second->text = sit->second;
+                    it->second->preparedTextCache.reset();
+                }
+                break;
+            }
+            default:
+                // Unknown opcode → stream desync; stop rather than misread.
+                return;
+        }
+    }
+}
+}  // namespace
+
+JSValue JS_rayactFlushCommands(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    int32_t len = 0;
+    JS_ToInt32(ctx, &len, argv[0]);
+    if (len <= 0 || g_commandArena.empty()) return JS_UNDEFINED;
+    if ((size_t)len > g_commandArena.size()) len = (int32_t)g_commandArena.size();
+    applyCommandBuffer(g_commandArena.data(), (size_t)len);
+    return JS_UNDEFINED;
+}
+
+void installCommandBuffer(JSContext* ctx, JSValue global) {
+    if (g_commandArena.empty()) g_commandArena.resize(kCommandArenaBytes);
+    // External-backed ArrayBuffer over the arena (same pattern as the animated
+    // style buffer). The vector is process-lived and never reallocated while the
+    // buffer is referenced.
+    JSValue buffer = JS_NewArrayBuffer(
+        ctx,
+        g_commandArena.data(),
+        g_commandArena.size(),
+        nullptr,
+        nullptr,
+        false);
+    JS_SetPropertyStr(ctx, global, "__rayactCommandBuffer", buffer);
+    // Enabled by default; keep an adb/env rollback switch for A/B against the
+    // legacy per-op / object-batch path:
+    //   desktop → env RAYACT_BINARY=1
+    //   android → adb shell setprop debug.rayact.binary 0
+    bool enable = true;
+    if (const char* env = std::getenv("RAYACT_BINARY")) {
+        enable = env[0] != '\0' && env[0] != '0';
+    }
+#if defined(RAYACT_ANDROID) || defined(__ANDROID__)
+    {
+        char prop[PROP_VALUE_MAX] = {0};
+        if (__system_property_get("debug.rayact.binary", prop) > 0 && prop[0] != '\0') {
+            enable = prop[0] != '0';
+        }
+    }
+#endif
+    if (enable) {
+        JS_SetPropertyStr(ctx, global, "__RAYACT_USE_BINARY", JS_TRUE);
+        // Id-space separation is by parity (native odd / JS even), not a base
+        // offset — see nextNativeNodeId(). Nothing to set here.
+    }
 }

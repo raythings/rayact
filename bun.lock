@@ -11,6 +11,7 @@
         "react-reconciler": "^0.31.0",
       },
       "devDependencies": {
+        "babel-plugin-react-compiler": "^1.0.0",
         "concurrently": "^8.2.2",
         "esbuild": "^0.28.0",
         "typescript": "^5.8.3",
@@ -20,6 +21,25 @@
       "name": "rayact-desktop-app",
       "version": "0.1.0",
       "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+    },
+    "apps/dev-app": {
+      "name": "@rayact/dev-app",
+      "version": "0.1.0",
+      "dependencies": {
+        "@rayact/dev-client": "file:../../packages/rayact-dev-client",
+        "@rayact/mmkv": "file:../../packages/rayact-mmkv",
+        "@rayact/react": "file:../../packages/rayact-react",
+        "@rayact/runtime": "file:../../packages/rayact-runtime",
+        "@rayact/secure-store": "file:../../packages/rayact-secure-store",
+        "@rayact/shared": "file:../../packages/rayact-shared",
+        "react": "^19.0.0",
+      },
+      "devDependencies": {
+        "@rayact/cli": "file:../../packages/rayact-cli",
+        "@rayact/dev-server": "file:../../packages/rayact-dev-server",
+        "@types/react": "^19.0.0",
         "typescript": "^5.8.3",
       },
     },
@@ -115,6 +135,13 @@
         "typescript": "^5.8.3",
       },
     },
+    "packages/rayact-mmkv": {
+      "name": "@rayact/mmkv",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+    },
     "packages/rayact-navigation": {
       "name": "@rayact/navigation",
       "version": "0.1.0",
@@ -172,6 +199,13 @@
     },
     "packages/rayact-runtime": {
       "name": "@rayact/runtime",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+    },
+    "packages/rayact-secure-store": {
+      "name": "@rayact/secure-store",
       "version": "0.1.0",
       "devDependencies": {
         "typescript": "^5.8.3",
@@ -337,9 +371,13 @@
 
     "@rayact/crypto": ["@rayact/crypto@workspace:packages/rayact-crypto"],
 
+    "@rayact/dev-app": ["@rayact/dev-app@workspace:apps/dev-app"],
+
     "@rayact/dev-client": ["@rayact/dev-client@workspace:packages/rayact-dev-client"],
 
     "@rayact/dev-server": ["@rayact/dev-server@workspace:packages/rayact-dev-server"],
+
+    "@rayact/mmkv": ["@rayact/mmkv@workspace:packages/rayact-mmkv"],
 
     "@rayact/navigation": ["@rayact/navigation@workspace:packages/rayact-navigation"],
 
@@ -350,6 +388,8 @@
     "@rayact/renderer": ["@rayact/renderer@workspace:packages/rayact-renderer"],
 
     "@rayact/runtime": ["@rayact/runtime@workspace:packages/rayact-runtime"],
+
+    "@rayact/secure-store": ["@rayact/secure-store@workspace:packages/rayact-secure-store"],
 
     "@rayact/shared": ["@rayact/shared@workspace:packages/rayact-shared"],
 
@@ -442,6 +482,8 @@
     "ansi-styles": ["ansi-styles@6.2.3", "", {}, "sha512-4Dj6M28JB+oAH8kFkTLUo+a2jwOFkuqb3yucU0CANcRRUbxS0cP0nZYCGjcc3BNXwRIsUVmDGgzawme7zvJHvg=="],
 
     "auto-bind": ["auto-bind@5.0.1", "", {}, "sha512-ooviqdwwgfIfNmDwo94wlshcdzfO64XV0Cg6oDsDYBJfITDz1EngD2z7DkbvCWn+XIMsIqW27sEVF6qcpJrRcg=="],
+
+    "babel-plugin-react-compiler": ["babel-plugin-react-compiler@1.0.0", "", { "dependencies": { "@babel/types": "^7.26.0" } }, "sha512-Ixm8tFfoKKIPYdCCKYTsqv+Fd4IJ0DQqMyEimo+pxUOMUR9cVPlwTrFt9Avu+3cb6Zp3mAzl+t1MrG2fxxKsxw=="],
 
     "baseline-browser-mapping": ["baseline-browser-mapping@2.10.36", "", { "bin": { "baseline-browser-mapping": "dist/cli.cjs" } }, "sha512-lVq/Df7LXlO79MVaaUHztSwWiG9oXoWHlgvNS51v8Dpd4+G4/VIy6qYePTw31nAVls33nUtnfezYeLkYAak9dg=="],
 
@@ -654,6 +696,8 @@
     "yargs-parser": ["yargs-parser@21.1.1", "", {}, "sha512-tVpsJW7DdjecAiFpbIB1e3qxIQsE6NoPc5/eTdrbbIC4h0LVsWhnoa3g+m2HclBIujHzsxZ4VJVA+GUuc2/LBw=="],
 
     "yoga-layout": ["yoga-layout@3.2.1", "", {}, "sha512-0LPOt3AxKqMdFBZA3HBAt/t/8vIKq7VaQYbuA8WxCgung+p9TVyKRYdpvCb80HcdTN2NkbIKbhNwKUfm3tQywQ=="],
+
+    "@rayact/dev-app/@rayact/dev-client": ["@rayact/dev-client@file:packages/rayact-dev-client", { "dependencies": { "@rayact/react": "*", "@rayact/runtime": "*" }, "devDependencies": { "@types/react": "^19.0.0", "typescript": "^5.8.3" }, "peerDependencies": { "react": "^19.0.0" } }],
 
     "chalk/ansi-styles": ["ansi-styles@4.3.0", "", { "dependencies": { "color-convert": "^2.0.1" } }, "sha512-zbB9rCJAT1rbjiVDb2hqKFHNYLxgtk8NURxZ3IZwD3F6NtxbXZQCnnSi1Lkx+IDohdPlFp222wVALIheZJQSEg=="],
 

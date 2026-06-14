@@ -12,6 +12,8 @@ Commands:
   run:desktop           Start desktop host (dev server or dist/bundle.js)
   run:android           Start Android with adb reverse + optional install
   build                 Build release/debug bundle
+  build --android       Build bundle + Android APK (add --install to deploy)
+  build --desktop       Build bundle + package self-contained desktop app
   export                Build production bundle (alias for build --release)
   compile <in> <out>    Compile JS bundle to QuickJS bytecode (.qjsbc)
   verify                Run desktop verification script
@@ -25,7 +27,8 @@ Options:
   --template <name>     init template: default | blank
   --dev                 start: connect to dev server instead of bundle
   --android             dev/run: adb reverse ports; build: assemble APK
-  --install             build android: install APK after build
+  --desktop             build: copy native host + runtime files into out dir
+  --install             build android: install + launch APK after build
   --minify / --no-minify
   --bytecode / --no-bytecode
   --release / --debug
@@ -38,6 +41,8 @@ Examples:
   rayact start --dev
   rayact run:desktop
   rayact build --release
+  rayact build --release --desktop
+  rayact build --release --android --install
   rayact export
 `.trim());
 }

@@ -1,5 +1,4 @@
-// Populate globalThis.Icons (name → codepoint) for icon rendering.
-import '../../resources/fonts/material_icons.js';
+import '@rayact/shared/material-icons';
 
 import React, { useState } from 'react';
 import {

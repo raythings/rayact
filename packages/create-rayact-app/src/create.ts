@@ -142,10 +142,13 @@ export function createRayactApp(options: CreateOptions): void {
     description: 'Rayact app',
     scripts: {
       dev: 'rayact dev',
+      build: 'rayact build --release',
+      'build:desktop': 'rayact build --release --desktop',
+      'build:android': 'rayact build --release --android',
+      'build:android:install': 'rayact build --release --android --install',
+      'build:debug': 'vite build',
       start: 'rayact start',
-      'start:dev': 'rayact start --dev',
-      build: 'RAYACT_MODE=release vite build',
-      android: 'rayact run:android --dev'
+      'start:dev': 'rayact start --dev'
     },
     dependencies: deps.dependencies,
     devDependencies: deps.devDependencies

@@ -1,39 +1,57 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { createBridge, createDevClient, installConsoleForwarding } from '@rayact/runtime';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { DevLauncherTheme } from './devLauncherTheme.js';
+import { FALLBACK_THEME } from './devLauncherTheme.js';
 import {
-  getConnectError,
+  checkManifestCompatibility,
+  devServerProbeBase,
+  expandDevUrlCandidates,
+  persistedDevServerUrl,
+  networkProbesAvailable,
+  pickFastestReachable,
+  probeRecentMetaMatch,
+  validateDevServerUrl,
+  type RequiredModule,
+} from './devServerUrl.js';
+import type { DiscoveredServer, RecentEntry } from './components/CombinedServerList.js';
+import {
   getDevServerUrl,
   getDiscoveredServers,
   getRecentEntries,
-  isConnectLoading,
-  parseUrl,
+  openProjectDirect,
+  parseUrl as parseUrlNative,
   reloadWithProjectBundle,
   removeRecentUrl,
-  setDevServerUrl,
+  scanQR,
   startDiscovery,
   stopDiscovery,
-  type DiscoveredServer,
-  type RecentEntry
 } from './native.js';
 
-export type Reachability = 'checking' | 'matched' | 'offline' | 'stale';
+export type RecentReachability = 'checking' | 'matched' | 'mismatch' | 'stale' | 'offline';
+
+const INVALID_SERVER_URL_MESSAGE = 'Invalid server URL';
 
 export interface DevLauncherContextValue {
   url: string;
-  setUrl: (url: string) => void;
+  setUrl: (u: string) => void;
+  theme: DevLauncherTheme | null;
   recentEntries: RecentEntry[];
+  recentReachability: Record<string, RecentReachability>;
   discoveredServers: DiscoveredServer[];
-  recentReachability: Record<string, Reachability>;
+  incompatibleModalVisible: boolean;
+  setIncompatibleModalVisible: (v: boolean) => void;
+  incompatibleModules: RequiredModule[];
   connectError: string;
   connecting: boolean;
   clearConnectError: () => void;
-  connectToUrl: (raw: string) => void;
-  onSelectRecent: (url: string) => void;
-  onScanQR: () => void;
   refreshRecent: () => void;
   removeRecentItem: (url: string) => void;
+  connectToUrl: (parsed: string) => void;
+  openProject: (rawUrl: string) => void;
+  showIncompatibleModalForUrl: (parsed: string) => void;
+  onSelectRecent: (u: string) => void;
+  onScanQR: () => void;
+  parseUrl: (input: string) => string;
   reload: () => void;
-  projectLoaded: boolean;
   devMenuOpen: boolean;
   setDevMenuOpen: (open: boolean) => void;
   inspectorOpen: boolean;
@@ -42,28 +60,49 @@ export interface DevLauncherContextValue {
 
 const DevLauncherContext = createContext<DevLauncherContextValue | null>(null);
 
-async function checkReachability(url: string, appKey?: string): Promise<Reachability> {
-  try {
-    const response = await fetch(`${url}/rayact/manifest.json`);
-    if (!response.ok) return 'offline';
-    const manifest = await response.json() as { rayactAppKey?: string };
-    if (appKey && manifest.rayactAppKey && manifest.rayactAppKey !== appKey) return 'stale';
-    return 'matched';
-  } catch {
-    return 'offline';
+function normalizeDiscovered(raw: unknown): DiscoveredServer[] {
+  if (!Array.isArray(raw)) return [];
+  const out: DiscoveredServer[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const url = o.url != null ? String(o.url) : '';
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    out.push({
+      url,
+      name: o.name != null ? String(o.name) : '',
+      appKey: o.appKey != null ? String(o.appKey) : undefined,
+      compatible: typeof o.compatible === 'boolean' ? o.compatible : true,
+    });
   }
+  return out;
 }
 
 export function DevLauncherProvider({ children }: { children: React.ReactNode }) {
   const [url, setUrlState] = useState('');
+  const [theme] = useState<DevLauncherTheme | null>(FALLBACK_THEME);
   const [recentEntries, setRecentEntries] = useState<RecentEntry[]>([]);
+  const recentEntriesRef = useRef(recentEntries);
+  recentEntriesRef.current = recentEntries;
+  const recentListKey = useMemo(
+    () => recentEntries.map(e => `${e.url}|${e.appKey ?? ''}`).join(';'),
+    [recentEntries]
+  );
+  const [recentReachability, setRecentReachability] = useState<Record<string, RecentReachability>>({});
   const [discoveredServers, setDiscoveredServers] = useState<DiscoveredServer[]>([]);
-  const [recentReachability, setRecentReachability] = useState<Record<string, Reachability>>({});
+  const [incompatibleModalVisible, setIncompatibleModalVisible] = useState(false);
+  const [incompatibleModules, setIncompatibleModules] = useState<RequiredModule[]>([]);
   const [connectError, setConnectError] = useState('');
   const [connecting, setConnecting] = useState(false);
-  const [projectLoaded, setProjectLoaded] = useState(false);
   const [devMenuOpen, setDevMenuOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+
+  const setUrl = useCallback((u: string) => {
+    setUrlState(u);
+    setConnectError('');
+  }, []);
 
   const refreshRecent = useCallback(() => {
     void getRecentEntries().then(setRecentEntries).catch(() => {});
@@ -84,87 +123,174 @@ export function DevLauncherProvider({ children }: { children: React.ReactNode })
     refreshRecent();
     void startDiscovery().catch(() => {});
     const timer = setInterval(() => {
-      void getDiscoveredServers().then(setDiscoveredServers).catch(() => {});
-    }, 3000);
+      void getDiscoveredServers()
+        .then(raw => setDiscoveredServers(normalizeDiscovered(raw)))
+        .catch(() => {});
+    }, 2000);
     return () => {
       clearInterval(timer);
       void stopDiscovery().catch(() => {});
     };
   }, [refreshRecent]);
 
+  const probeAllRecents = useCallback((entries: RecentEntry[], initial: boolean) => {
+    if (entries.length === 0) {
+      setRecentReachability({});
+      return () => {};
+    }
+    if (!networkProbesAvailable()) {
+      setRecentReachability(
+        Object.fromEntries(
+          entries.map((e) => {
+            const v = validateDevServerUrl(e.url);
+            return [e.url, v.ok ? 'matched' as RecentReachability : 'offline' as RecentReachability];
+          })
+        )
+      );
+      return () => {};
+    }
+    if (initial) {
+      setRecentReachability(
+        Object.fromEntries(entries.map(e => [e.url, 'checking' as RecentReachability]))
+      );
+    }
+    let cancelled = false;
+    void (async () => {
+      const results = await Promise.all(
+        entries.map(async (e) => {
+          const v = validateDevServerUrl(e.url);
+          if (!v.ok) return [e.url, 'offline' as RecentReachability] as const;
+          const st = await probeRecentMetaMatch(devServerProbeBase(e.url), e.appKey);
+          return [e.url, st] as const;
+        })
+      );
+      if (cancelled) return;
+      setRecentReachability(prev => ({ ...prev, ...Object.fromEntries(results) }));
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
-    for (const entry of recentEntries) {
-      setRecentReachability(prev => ({ ...prev, [entry.url]: 'checking' }));
-      void checkReachability(entry.url, entry.label).then(status => {
-        setRecentReachability(prev => ({ ...prev, [entry.url]: status }));
-      });
-    }
-  }, [recentEntries]);
-
-  const ensureDevClient = useCallback((serverUrl: string) => {
-    const g = globalThis as {
-      __RAYACT_DEV_SERVER__?: string;
-      __rayactDevClient?: ReturnType<typeof createDevClient>;
+    const cancel = probeAllRecents(recentEntries, true);
+    const id = setInterval(() => {
+      probeAllRecents(recentEntriesRef.current, false);
+    }, 5000);
+    return () => {
+      cancel();
+      clearInterval(id);
     };
-    g.__RAYACT_DEV_SERVER__ = serverUrl;
-    if (g.__rayactDevClient) return;
-    const bridge = createBridge(g);
-    const client = createDevClient({ serverUrl, bridge, global: g });
-    installConsoleForwarding(client, g);
-    client.connect();
-    g.__rayactDevClient = client;
+  }, [recentListKey, probeAllRecents]);
+
+  const parseUrl = useCallback((input: string): string => persistedDevServerUrl(input), []);
+
+  const removeRecentItem = useCallback((u: string) => {
+    void removeRecentUrl(u).then(() => {
+      setRecentReachability(prev => {
+        const next = { ...prev };
+        delete next[u];
+        return next;
+      });
+      refreshRecent();
+    });
+  }, [refreshRecent]);
+
+  const connectToUrl = useCallback((parsed: string) => {
+    void (async () => {
+      setConnecting(true);
+      setConnectError('');
+      try {
+        const openResult = await openProjectDirect(parsed);
+        if (!openResult?.ok) {
+          throw new Error(INVALID_SERVER_URL_MESSAGE);
+        }
+        setUrlState(openResult.url ?? parsed);
+        refreshRecent();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setConnectError(message === INVALID_SERVER_URL_MESSAGE ? message : INVALID_SERVER_URL_MESSAGE);
+      } finally {
+        setConnecting(false);
+      }
+    })();
+  }, [refreshRecent]);
+
+  const showIncompatibleModalForUrl = useCallback((parsed: string) => {
+    void (async () => {
+      const { compatible, modules } = await checkManifestCompatibility(parsed);
+      if (!compatible && modules.length > 0) {
+        setIncompatibleModules(modules);
+        setIncompatibleModalVisible(true);
+      }
+    })();
   }, []);
 
-  const waitForConnect = useCallback(async () => {
-    await new Promise(r => setTimeout(r, 50));
-    for (let i = 0; i < 120; i++) {
-      const err = await getConnectError();
-      if (err) throw new Error(err);
-      if (!(await isConnectLoading())) return;
-      await new Promise(r => setTimeout(r, 500));
-    }
-    throw new Error('Timed out waiting for dev server bundle');
-  }, []);
-
-  const connectToUrl = useCallback((raw: string) => {
-    const parsed = parseUrl(raw);
+  const openProject = useCallback((rawUrl: string) => {
+    // A scanned/pasted payload may carry several host:port candidates (one per
+    // LAN interface). Expand them all and pick the fastest reachable instead of
+    // blindly taking the first.
+    const candidates = expandDevUrlCandidates(rawUrl);
     setConnectError('');
-    setConnecting(true);
-    void setDevServerUrl(parsed)
-      .then(() => {
-        setUrlState(parsed);
-        return reloadWithProjectBundle();
-      })
-      .then(() => waitForConnect())
-      .then(() => {
-        ensureDevClient(parsed);
-        setProjectLoaded(true);
-      })
-      .catch(err => setConnectError(err instanceof Error ? err.message : String(err)))
-      .finally(() => setConnecting(false));
-  }, [ensureDevClient, waitForConnect]);
+    if (!networkProbesAvailable()) {
+      const validated = validateDevServerUrl(candidates[0] ?? rawUrl);
+      if (!validated.ok) {
+        setConnectError(INVALID_SERVER_URL_MESSAGE);
+        return;
+      }
+      connectToUrl(devServerProbeBase(validated.parsed));
+      return;
+    }
+    void (async () => {
+      if (candidates.length > 1) {
+        const best = await pickFastestReachable(candidates);
+        if (!best) {
+          setConnectError(INVALID_SERVER_URL_MESSAGE);
+          return;
+        }
+        connectToUrl(devServerProbeBase(best));
+        return;
+      }
+      const validated = validateDevServerUrl(candidates[0] ?? rawUrl);
+      if (!validated.ok) {
+        setConnectError(INVALID_SERVER_URL_MESSAGE);
+        return;
+      }
+      const parsed = devServerProbeBase(validated.parsed);
+      connectToUrl(parsed);
+    })();
+  }, [connectToUrl]);
 
   const value = useMemo<DevLauncherContextValue>(() => ({
     url,
-    setUrl: setUrlState,
+    setUrl,
+    theme,
     recentEntries,
-    discoveredServers,
     recentReachability,
+    discoveredServers,
+    incompatibleModalVisible,
+    setIncompatibleModalVisible,
+    incompatibleModules,
     connectError,
     connecting,
     clearConnectError: () => setConnectError(''),
-    connectToUrl,
-    onSelectRecent: connectToUrl,
-    onScanQR: () => { void import('./native.js').then(m => m.scanQR()); },
     refreshRecent,
-    removeRecentItem: (u: string) => { void removeRecentUrl(u).then(refreshRecent); },
+    removeRecentItem,
+    connectToUrl,
+    openProject,
+    showIncompatibleModalForUrl,
+    onSelectRecent: (u: string) => setUrlState(u),
+    onScanQR: () => { void scanQR(); },
+    parseUrl,
     reload: () => { void reloadWithProjectBundle(); },
-    projectLoaded,
     devMenuOpen,
     setDevMenuOpen,
     inspectorOpen,
-    setInspectorOpen
-  }), [url, recentEntries, discoveredServers, recentReachability, connectError, connecting, connectToUrl, refreshRecent, projectLoaded, devMenuOpen, inspectorOpen]);
+    setInspectorOpen,
+  }), [
+    url, setUrl, theme, recentEntries, recentReachability, discoveredServers,
+    incompatibleModalVisible, incompatibleModules, connectError, connecting,
+    refreshRecent, removeRecentItem, connectToUrl, openProject, showIncompatibleModalForUrl,
+    parseUrl, devMenuOpen, inspectorOpen,
+  ]);
 
   return (
     <DevLauncherContext.Provider value={value}>
@@ -178,3 +304,5 @@ export function useDevLauncher(): DevLauncherContextValue {
   if (!ctx) throw new Error('useDevLauncher must be used within DevLauncherProvider');
   return ctx;
 }
+
+export { validateDevServerUrl, parseUrlNative as parseUrlFromNative };

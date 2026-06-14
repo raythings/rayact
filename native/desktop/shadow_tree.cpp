@@ -43,7 +43,21 @@ ShadowNode *ShadowTree::createNode(uint32_t id, const raym3::v2::Style &style) {
 
 void ShadowTree::disposeNode(uint32_t id) {
   if (auto *node = find(id)) {
-    if (node->yoga) YGNodeFree(node->yoga);
+    if (node->yoga) {
+      // Freeing an owned Yoga node would leave a dangling child pointer in
+      // its parent; detach first.
+      if (YGNodeRef owner = YGNodeGetOwner(node->yoga)) {
+        YGNodeRemoveChild(owner, node->yoga);
+      }
+      YGNodeFree(node->yoga);
+    }
+    if (node->parentId != 0) {
+      if (ShadowNode *prev = find(node->parentId)) {
+        auto &prevChildren = prev->children;
+        prevChildren.erase(std::remove(prevChildren.begin(), prevChildren.end(), id),
+                           prevChildren.end());
+      }
+    }
   }
   nodes_.erase(id);
 }
@@ -52,7 +66,23 @@ void ShadowTree::appendChild(uint32_t parentId, uint32_t childId) {
   ShadowNode *parent = find(parentId);
   ShadowNode *child = find(childId);
   if (!parent || !child || !parent->yoga || !child->yoga) return;
-  parent->children.push_back(childId);
+  // React moves re-append a mounted node without an explicit removeChild
+  // first. Yoga aborts ("Child already has a owner, it must be removed
+  // first.") when inserting an owned child — detach from the previous owner
+  // and drop the stale bookkeeping before inserting.
+  if (YGNodeRef owner = YGNodeGetOwner(child->yoga)) {
+    YGNodeRemoveChild(owner, child->yoga);
+  }
+  if (child->parentId != 0 && child->parentId != parentId) {
+    if (ShadowNode *prev = find(child->parentId)) {
+      auto &prevChildren = prev->children;
+      prevChildren.erase(std::remove(prevChildren.begin(), prevChildren.end(), childId),
+                         prevChildren.end());
+    }
+  }
+  auto &children = parent->children;
+  children.erase(std::remove(children.begin(), children.end(), childId), children.end());
+  children.push_back(childId);
   child->parentId = parentId;
   YGNodeInsertChild(parent->yoga, child->yoga, YGNodeGetChildCount(parent->yoga));
 }

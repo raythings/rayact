@@ -20,108 +20,8 @@ import android.view.inputmethod.ExtractedText
 import android.view.inputmethod.ExtractedTextRequest
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import com.rayact.engine.RayactEngine
-import com.rayact.engine.RayactHostRegistry
+import com.rayact.engine.RayactEngineSession
 import java.util.concurrent.atomic.AtomicInteger
-
-internal object RayactRenderScheduler {
-    private val surfaceCount = AtomicInteger(0)
-    @Volatile private var renderThread: RenderThread? = null
-
-    fun retainSurface() {
-        if (surfaceCount.incrementAndGet() == 1) {
-            synchronized(this) {
-                if (renderThread == null) {
-                    renderThread = RenderThread().also { it.start() }
-                }
-            }
-        }
-    }
-
-    fun releaseSurface() {
-        val remaining = surfaceCount.updateAndGet { count -> (count - 1).coerceAtLeast(0) }
-        if (remaining == 0) {
-            synchronized(this) {
-                renderThread?.quitAndWait()
-                renderThread = null
-            }
-        }
-    }
-
-    fun requestFrame() {
-        renderThread?.requestFrame()
-    }
-
-    private class RenderThread : Thread(null, null, "RayactRender", 8L * 1024 * 1024) {
-        @Volatile private var running = false
-        @Volatile private var looper: android.os.Looper? = null
-        @Volatile private var handler: android.os.Handler? = null
-        @Volatile private var choreographer: Choreographer? = null
-        @Volatile private var framePending = false
-        @Volatile private var continuous = false
-        @Volatile private var lastFrameTimeNanos = 0L
-
-        private val timerWakeup = Runnable {
-            if (running) scheduleNextFrame()
-        }
-
-        private val frameCallback = object : Choreographer.FrameCallback {
-            override fun doFrame(frameTimeNanos: Long) {
-                if (!running) return
-                framePending = false
-                val prev = lastFrameTimeNanos
-                lastFrameTimeNanos = frameTimeNanos
-                val deltaNanos = if (prev > 0L) frameTimeNanos - prev else 16_666_667L
-                continuous = RayactEngine.nativeRenderFrame(frameTimeNanos, deltaNanos)
-                if (continuous) {
-                    handler?.removeCallbacks(timerWakeup)
-                    scheduleNextFrame()
-                } else {
-                    // Loop is stopping: if a JS timer is pending, wake up at its
-                    // deadline so it can fire inside that frame's JS pump.
-                    val delayMs = RayactEngine.nativeNextJSTimerDelayMs()
-                    handler?.removeCallbacks(timerWakeup)
-                    if (delayMs >= 0f) {
-                        handler?.postDelayed(timerWakeup, delayMs.toLong().coerceAtLeast(1L))
-                    }
-                }
-            }
-        }
-
-        override fun run() {
-            android.os.Looper.prepare()
-            looper = android.os.Looper.myLooper()
-            handler = android.os.Handler(android.os.Looper.myLooper()!!)
-            choreographer = Choreographer.getInstance()
-            running = true
-            scheduleNextFrame()
-            android.os.Looper.loop()
-        }
-
-        private fun scheduleNextFrame() {
-            if (!running || framePending) return
-            framePending = true
-            choreographer?.postFrameCallback(frameCallback)
-        }
-
-        fun requestFrame() {
-            handler?.post {
-                if (running) scheduleNextFrame()
-            }
-        }
-
-        fun quitAndWait() {
-            running = false
-            looper?.let { l ->
-                android.os.Handler(l).post {
-                    choreographer?.removeFrameCallback(frameCallback)
-                    l.quitSafely()
-                }
-            }
-            try { join(1000) } catch (_: InterruptedException) {}
-        }
-    }
-}
 
 /**
  * One render surface in the Rayact multi-surface model. Each instance owns:
@@ -138,7 +38,9 @@ internal object RayactRenderScheduler {
  * a higher layer is above them.
  */
 class RayactSurfaceView @JvmOverloads constructor(
-    context: Context, attrs: AttributeSet? = null
+    context: Context,
+    private val session: RayactEngineSession,
+    attrs: AttributeSet? = null
 ) : SurfaceView(context, attrs), SurfaceHolder.Callback {
 
     /** Native surfaceId == engine screenId, or 0 if not yet created. */
@@ -416,7 +318,7 @@ class RayactSurfaceView @JvmOverloads constructor(
                 return true
             }
             if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_ENTER) {
-                RayactEngine.nativeBlurTextInput()
+                session.nativeBlurTextInput()
                 clearIme()
                 return true
             }
@@ -428,7 +330,7 @@ class RayactSurfaceView @JvmOverloads constructor(
         override fun performEditorAction(actionCode: Int): Boolean {
             if (actionCode == EditorInfo.IME_ACTION_DONE || actionCode == EditorInfo.IME_ACTION_GO ||
                 actionCode == EditorInfo.IME_ACTION_NEXT || actionCode == EditorInfo.IME_ACTION_SEND) {
-                RayactEngine.nativeBlurTextInput()
+                session.nativeBlurTextInput()
                 clearIme()
                 return true
             }
@@ -461,7 +363,7 @@ class RayactSurfaceView @JvmOverloads constructor(
             lastSelEnd = selEnd
             lastCompStart = compStart
             lastCompEnd = compEnd
-            RayactEngine.nativeSetTextInputContent(
+            session.nativeSetTextInputContent(
                 imeNodeId,
                 text,
                 selStart,
@@ -471,7 +373,7 @@ class RayactSurfaceView @JvmOverloads constructor(
             )
             // IME commits arrive without a touch event — request a frame so the
             // render thread drains the update and repaints immediately.
-            RayactRenderScheduler.requestFrame()
+            session.host.renderScheduler.requestFrame()
         }
     }
 
@@ -486,7 +388,7 @@ class RayactSurfaceView @JvmOverloads constructor(
             reportSafeAreaInsets(insets.top, insets.right, insets.bottom, insets.left)
             reportKeyboardInsets(windowInsets)
             if (!windowInsets.isVisible(WindowInsetsCompat.Type.ime()) && imeNodeId >= 0) {
-                RayactEngine.nativeImeHiddenBySystem()
+                session.nativeImeHiddenBySystem()
                 imeNodeId = -1
                 imeText.clear()
                 activeInputConnection = null
@@ -503,13 +405,13 @@ class RayactSurfaceView @JvmOverloads constructor(
     private fun reportSafeAreaInsets(topPx: Int, rightPx: Int, bottomPx: Int, leftPx: Int) {
         val density = resources.displayMetrics.density
         if (density <= 0f) return
-        RayactEngine.setSafeAreaInsets(
+        session.setSafeAreaInsets(
             topPx / density,
             rightPx / density,
             bottomPx / density,
             leftPx / density
         )
-        RayactRenderScheduler.requestFrame()
+        session.host.renderScheduler.requestFrame()
     }
 
     private var lastImeHeightDp = -1f
@@ -527,8 +429,8 @@ class RayactSurfaceView @JvmOverloads constructor(
         if (visible == lastImeVisible && heightDp == lastImeHeightDp) return
         lastImeVisible = visible
         lastImeHeightDp = heightDp
-        RayactEngine.setKeyboardInsets(heightDp, visible, 250f)
-        RayactRenderScheduler.requestFrame()
+        session.setKeyboardInsets(heightDp, visible, 250f)
+        session.host.renderScheduler.requestFrame()
     }
 
     private fun updateSafeAreaInsets() {
@@ -541,7 +443,7 @@ class RayactSurfaceView @JvmOverloads constructor(
     override fun surfaceCreated(holder: SurfaceHolder) {
         updateSafeAreaInsets()
         val density = resources.displayMetrics.density
-        val sid = RayactEngine.createSurface(holder.surface, density)
+        val sid = session.createSurface(holder.surface, density)
         if (sid <= 0) {
             android.util.Log.e("RayactSurfaceView", "createSurface failed")
             return
@@ -549,9 +451,9 @@ class RayactSurfaceView @JvmOverloads constructor(
         surfaceId = sid
         surfaceReadyListener?.invoke(sid)
         surfaceReadyListener = null
-        RayactHostRegistry.registerImeView(this)
-        RayactRenderScheduler.retainSurface()
-        RayactRenderScheduler.requestFrame()
+        session.host.registerImeView(this)
+        session.host.renderScheduler.retainSurface()
+        session.host.renderScheduler.requestFrame()
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -561,11 +463,11 @@ class RayactSurfaceView @JvmOverloads constructor(
     override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
         super.onSizeChanged(width, height, oldWidth, oldHeight)
         if (width <= 0 || height <= 0 || (width == oldWidth && height == oldHeight)) return
-        if (RayactEngine.relayoutOnSurfaceResizeEnabled()) reportSurfaceResize(width, height)
+        if (session.relayoutOnSurfaceResizeEnabled()) reportSurfaceResize(width, height)
     }
 
     fun syncSurfaceSizeFromLayout() {
-        if (!RayactEngine.relayoutOnSurfaceResizeEnabled()) return
+        if (!session.relayoutOnSurfaceResizeEnabled()) return
         requestLayout()
         post {
             if (width > 0 && height > 0) reportSurfaceResize(width, height)
@@ -575,34 +477,34 @@ class RayactSurfaceView @JvmOverloads constructor(
     private fun reportSurfaceResize(width: Int, height: Int) {
         if (surfaceId <= 0 || width <= 0 || height <= 0) return
         updateSafeAreaInsets()
-        RayactEngine.resizeSurface(surfaceId, width, height, resources.displayMetrics.density)
-        RayactRenderScheduler.requestFrame()
+        session.resizeSurface(surfaceId, width, height, resources.displayMetrics.density)
+        session.host.renderScheduler.requestFrame()
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         if (surfaceId > 0) {
-            RayactHostRegistry.unregisterImeView(this)
-            RayactEngine.destroySurface(surfaceId)
+            session.host.unregisterImeView(this)
+            session.destroySurface(surfaceId)
             surfaceId = 0
-            RayactRenderScheduler.releaseSurface()
+            session.host.renderScheduler.releaseSurface()
         }
     }
 
     /** Push this surface to the top of the focus stack. Call after addView. */
     fun pushToFront() {
-        if (surfaceId > 0) RayactEngine.pushSurface(surfaceId)
+        if (surfaceId > 0) session.pushSurface(surfaceId)
     }
 
     /** Pop this surface from the focus stack if it's on top. */
     fun popFromFront(): Boolean {
-        if (surfaceId > 0 && RayactEngine.getFocusedSurfaceId() == surfaceId) {
-            return RayactEngine.popSurface() != 0
+        if (surfaceId > 0 && session.getFocusedSurfaceId() == surfaceId) {
+            return session.popSurface() != 0
         }
         return false
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (surfaceId <= 0 || RayactEngine.getFocusedSurfaceId() != surfaceId) {
+        if (surfaceId <= 0 || session.getFocusedSurfaceId() != surfaceId) {
             return false
         }
         // Gestures starting inside a platform-view field route wholesale into
@@ -611,13 +513,13 @@ class RayactSurfaceView @JvmOverloads constructor(
             return true
         }
         val action = when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> RayactEngine.TOUCH_DOWN
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> RayactEngine.TOUCH_UP
-            else -> RayactEngine.TOUCH_MOVE
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> RayactEngineSession.TOUCH_DOWN
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> RayactEngineSession.TOUCH_UP
+            else -> RayactEngineSession.TOUCH_MOVE
         }
         val idx = event.actionIndex
-        RayactEngine.nativeTouch(action, event.getPointerId(idx), event.getX(idx), event.getY(idx))
-        RayactRenderScheduler.requestFrame()
+        session.nativeTouch(action, event.getPointerId(idx), event.getX(idx), event.getY(idx))
+        session.host.renderScheduler.requestFrame()
         return true
     }
 }

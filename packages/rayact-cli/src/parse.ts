@@ -14,6 +14,8 @@ export interface CliFlags {
   minify: boolean | null;
   bytecode: boolean | null;
   android: boolean;
+  desktopApp: boolean;
+  install: boolean;
   debug: boolean;
   dev: boolean;
   template: string;
@@ -36,6 +38,8 @@ export function parseCli(argv: string[]): CliFlags {
     minify: null,
     bytecode: null,
     android: false,
+    desktopApp: false,
+    install: false,
     debug: true,
     dev: false,
     template: 'default',
@@ -92,10 +96,11 @@ export function parseCli(argv: string[]): CliFlags {
     else if (arg === '--bytecode') flags.bytecode = true;
     else if (arg === '--no-bytecode') flags.bytecode = false;
     else if (arg === '--android') flags.android = true;
+    else if (arg === '--desktop') flags.desktopApp = true;
     else if (arg === '--dev') flags.dev = true;
     else if (arg === '--debug') flags.debug = true;
     else if (arg === '--release') { flags.debug = false; flags.mode = 'release'; }
-    else if (arg === '--install') flags.android = true;
+    else if (arg === '--install') { flags.install = true; flags.android = true; }
     else if (!arg.startsWith('-')) flags.positional.push(arg);
     else throw new Error(`Unknown flag: ${arg}`);
   }

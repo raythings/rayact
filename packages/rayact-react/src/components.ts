@@ -1,19 +1,27 @@
 import React from 'react';
 import type {
   ActivityIndicatorProps,
+  AppBarProps,
   AvoidKeyboardProps,
   BaseProps,
   BadgeProps,
   ButtonProps,
+  ColorValue,
   IconProps,
   ImageProps,
   ListProps,
   MaterialComponentProps,
   ModalProps,
+  NavigationBarProps,
+  SafeAreaProps,
   ScrollViewProps,
   SearchBarProps,
   SliderProps,
   StatusBarProps,
+  Style,
+  StyleProp,
+  TabBarProps,
+  TabsProps,
   TextInputProps,
   TextProps,
   DatePickerProps,
@@ -24,6 +32,34 @@ import { useKeyboard } from './hooks/useKeyboard';
 import { useSafeAreaInsets } from './hooks/useSafeAreaInsets';
 
 const searchIconSlotStyle = { width: 24, height: 24 };
+
+function asStyleObject(style: StyleProp | undefined): Style {
+  if (!style) return {};
+  if (Array.isArray(style)) {
+    return style.reduce<Style>((acc, item) => ({ ...acc, ...asStyleObject(item) }), {});
+  }
+  return { ...style };
+}
+
+function edgePadding(explicit: unknown, inset: number): number {
+  return Math.max(typeof explicit === 'number' ? explicit : 0, inset);
+}
+
+function BottomSafeAreaSpacer({ height, backgroundColor }: { height: number; backgroundColor: ColorValue }) {
+  if (height <= 0) return null;
+  return React.createElement(View, {
+    pointerEvents: 'none',
+    style: { height, backgroundColor },
+  });
+}
+
+function TopSafeAreaSpacer({ height, backgroundColor }: { height: number; backgroundColor: ColorValue }) {
+  if (height <= 0) return null;
+  return React.createElement(View, {
+    pointerEvents: 'none',
+    style: { height, backgroundColor },
+  });
+}
 
 function withSearchIconSlot(node: React.ReactNode, style?: unknown): React.ReactNode {
   if (node && React.isValidElement(node) && node.type === Icon) {
@@ -83,9 +119,26 @@ export function Modal(props: ModalProps): React.ReactElement | null {
   return React.createElement('rayact-modal', props);
 }
 
-export function SafeArea(props: BaseProps): React.ReactElement {
-  return React.createElement('rayact-safe-area', props);
+export function SafeArea(props: SafeAreaProps): React.ReactElement {
+  const { edges, style, children, ...rest } = props;
+  if (!edges) {
+    return React.createElement('rayact-safe-area', props);
+  }
+  const insets = useSafeAreaInsets();
+  const base = asStyleObject(style);
+  const resolved: Style = { flexGrow: 1, ...base };
+  if (edges.includes('top')) resolved.paddingTop = edgePadding(base.paddingTop, insets.top);
+  else if (base.paddingTop != null) resolved.paddingTop = base.paddingTop;
+  if (edges.includes('right')) resolved.paddingRight = edgePadding(base.paddingRight, insets.right);
+  else if (base.paddingRight != null) resolved.paddingRight = base.paddingRight;
+  if (edges.includes('bottom')) resolved.paddingBottom = edgePadding(base.paddingBottom, insets.bottom);
+  else if (base.paddingBottom != null) resolved.paddingBottom = base.paddingBottom;
+  if (edges.includes('left')) resolved.paddingLeft = edgePadding(base.paddingLeft, insets.left);
+  else if (base.paddingLeft != null) resolved.paddingLeft = base.paddingLeft;
+  return React.createElement(View, { ...rest, style: resolved }, children);
 }
+
+export const SafeAreaView = SafeArea;
 
 export function StatusBar(props: StatusBarProps): React.ReactElement {
   return React.createElement('rayact-status-bar', props);
@@ -204,7 +257,223 @@ function createMaterialComponent(tag: string) {
   };
 }
 
-export const AppBar = createMaterialComponent('rayact-app-bar');
+// True on Apple platforms (iOS/macOS). Used so AppBar defaults to a centered
+// title there — matching Flutter's platform-derived AppBar.centerTitle — while
+// Android/other stays start-aligned (M3 default). Reads the platform global the
+// native layer injects at context init.
+function isApplePlatform(): boolean {
+  const os = (globalThis as { __rayactPlatform?: { os?: string } }).__rayactPlatform?.os;
+  return os === 'ios' || os === 'macos';
+}
+
+// M3 top-app-bar variant metrics. Heights are the full collapsed size; medium
+// and large stack the title on a second row below the action row.
+const APP_BAR_VARIANTS = {
+  small:  { height: 64,  titleSize: 22, titleLineHeight: 28, titleBottomPadding: 0,  twoRow: false },
+  center: { height: 64,  titleSize: 22, titleLineHeight: 28, titleBottomPadding: 0,  twoRow: false },
+  medium: { height: 112, titleSize: 24, titleLineHeight: 32, titleBottomPadding: 20, twoRow: true  },
+  large:  { height: 152, titleSize: 28, titleLineHeight: 36, titleBottomPadding: 28, twoRow: true  },
+} as const;
+
+type AppBarVariant = keyof typeof APP_BAR_VARIANTS;
+
+const NAVIGATION_BAR_HEIGHT = 80;
+
+// M3 content inset: 16dp from the screen edge to the title (and to body
+// content), so the title lines up with the list below it. A 48dp leading
+// IconButton centres its 24dp icon, so the bar pads 4dp on that side and the
+// icon still lands at 16dp.
+const APP_BAR_CONTENT_INSET = 16;
+const APP_BAR_LEADING_PADDING = 4;
+
+function AppBarTitleSlot({
+  title, color, fontSize, lineHeight, align, flexGrow, marginLeft,
+}: {
+  title: React.ReactNode;
+  color: ColorValue;
+  fontSize: number;
+  lineHeight: number;
+  align: 'start' | 'center';
+  flexGrow: number;
+  marginLeft: number;
+}): React.ReactElement {
+  const content = typeof title === 'string' || typeof title === 'number'
+    ? React.createElement(Text, {
+        text: String(title),
+        style: { text: { color, fontSize, lineHeight, weight: 'normal', letterSpacing: 0 } },
+      })
+    : title;
+  // appBarTitle marks this node so the native renderer can recenter it across
+  // the full bar width when centerTitle is active (Flutter centerMiddle).
+  return React.createElement(
+    View,
+    {
+      appBarTitle: true,
+      style: {
+        flexGrow,
+        flexShrink: 1,
+        minWidth: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: align === 'center' ? 'center' : 'flex-start',
+        marginLeft,
+      },
+    } as BaseProps,
+    content
+  );
+}
+
+export function AppBar(props: AppBarProps): React.ReactElement {
+  const {
+    extendTopPaddingToAppBar, ignoreSafeAreaView,
+    title, leading, actions, centerTitle, variant = 'small',
+    titleStyle, style, children, ...rest
+  } = props;
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const extend = ignoreSafeAreaView || extendTopPaddingToAppBar;
+  // Honour a caller-supplied backgroundColor (so it also fills the status-bar
+  // spacer); fall back to the surface token.
+  const backgroundColor =
+    (asStyleObject(style).backgroundColor as ColorValue | undefined) ?? theme.surface;
+
+  const v: AppBarVariant = (variant in APP_BAR_VARIANTS ? variant : 'small') as AppBarVariant;
+  const cfg = APP_BAR_VARIANTS[v];
+  // Default: center on Apple or the center-aligned variant; start elsewhere (M3).
+  const resolvedCenter = centerTitle ?? (v === 'center' ? true : isApplePlatform());
+  // Title color via style passthrough: explicit titleStyle.text.color wins, then
+  // the bar's own style.text.color, then the theme token.
+  const titleTextColor = (s: StyleProp | undefined): ColorValue | undefined =>
+    (asStyleObject(s) as { text?: { color?: ColorValue } }).text?.color;
+  const titleColor = titleTextColor(titleStyle) ?? titleTextColor(style) ?? theme.onSurface;
+  const titleTextStyle = (asStyleObject(titleStyle) as { text?: { fontSize?: number; lineHeight?: number } }).text;
+  const titleFontSize =
+    titleTextStyle?.fontSize ?? cfg.titleSize;
+  const titleLineHeight =
+    titleTextStyle?.lineHeight ?? cfg.titleLineHeight;
+  const topInset = extend ? Math.max(0, insets.top) : 0;
+  const leftInset = extend ? Math.max(0, insets.left) : 0;
+  const rightInset = extend ? Math.max(0, insets.right) : 0;
+
+  const useSlots = title != null || leading != null || actions != null;
+
+  // Legacy path: no slot props → behave as a bare row container around children.
+  // `barInternalStyle` is the bar's OWN computed layout (height/row/padding); the
+  // caller's `style` is kept separate so — like NavigationBar — it rides the
+  // outer wrapper when extended (positioning the whole unit) instead of being
+  // reinterpreted against the bar's flex axis.
+  let barChildren: React.ReactNode;
+  let barInternalStyle: StyleProp;
+
+  if (useSlots) {
+    const hasLeading = leading != null;
+    const hasActions = actions != null && !(Array.isArray(actions) && actions.length === 0);
+    const leadingBox = React.createElement(
+      View,
+      { style: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 } },
+      leading ?? null
+    );
+    const actionsBox = React.createElement(
+      View,
+      { style: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 } },
+      Array.isArray(actions) ? actions : (actions ?? null)
+    );
+
+    if (cfg.twoRow) {
+      // medium/large: [action row] over [title row], title start-aligned and
+      // inset to the 16dp content line. Bar pads 4dp so a leading IconButton's
+      // icon lands at 16dp; the title row adds 12dp to reach the same 16dp.
+      barChildren = [
+        React.createElement(
+          View,
+          { key: 'row', style: { height: 64, flexDirection: 'row', alignItems: 'center', flexShrink: 0 } },
+          leadingBox,
+          React.createElement(View, { key: 'sp', style: { flexGrow: 1 } }),
+          actionsBox
+        ),
+        React.createElement(
+          View,
+          { key: 'title', style: { flexGrow: 1, justifyContent: 'flex-end', paddingBottom: cfg.titleBottomPadding } },
+          AppBarTitleSlot({
+            title, color: titleColor, fontSize: titleFontSize, lineHeight: titleLineHeight, align: 'start',
+            flexGrow: 0, marginLeft: APP_BAR_CONTENT_INSET - APP_BAR_LEADING_PADDING,
+          })
+        ),
+      ];
+      // alignItems stretch: the AppBar default is center (for the small row);
+      // a two-row column must stretch so the title row spans full width and
+      // its start-aligned title lands at the bottom-left (M3 medium/large).
+      barInternalStyle = {
+        height: cfg.height, minHeight: cfg.height,
+        flexDirection: 'column', alignItems: 'stretch',
+        paddingLeft: APP_BAR_LEADING_PADDING + leftInset,
+        paddingRight: APP_BAR_LEADING_PADDING + rightInset,
+        backgroundColor,
+      };
+    } else {
+      // small/center: single row [leading][title][actions]. Title aligns to the
+      // 16dp content inset: with a leading button the bar pads 4dp and the title
+      // adds an 8dp gap after the 48dp button; with no leading the bar itself
+      // pads 16dp and the title needs no extra margin.
+      const titleSlot = AppBarTitleSlot({
+        title, color: titleColor, fontSize: titleFontSize, lineHeight: titleLineHeight,
+        align: resolvedCenter ? 'center' : 'start',
+        flexGrow: resolvedCenter ? 0 : 1,
+        marginLeft: resolvedCenter ? 0 : (hasLeading ? 8 : 0),
+      });
+      barChildren = [
+        React.cloneElement(leadingBox, { key: 'lead' }),
+        React.cloneElement(titleSlot, { key: 'title' }),
+        React.cloneElement(actionsBox, { key: 'act' }),
+      ];
+      barInternalStyle = {
+        height: cfg.height,
+        minHeight: cfg.height,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: resolvedCenter ? 'space-between' : 'flex-start',
+        paddingLeft: (hasLeading ? APP_BAR_LEADING_PADDING : APP_BAR_CONTENT_INSET) + leftInset,
+        paddingRight: (hasActions ? APP_BAR_LEADING_PADDING : APP_BAR_CONTENT_INSET) + rightInset,
+        backgroundColor,
+      };
+    }
+  } else {
+    // Legacy bare-row path: still push the resolved bg so the bar matches the
+    // wrapper + spacer when extended.
+    barChildren = children;
+    barInternalStyle = extend
+      ? {
+          height: cfg.height,
+          minHeight: cfg.height,
+          paddingLeft: leftInset,
+          paddingRight: rightInset,
+          backgroundColor,
+        }
+      : { backgroundColor };
+  }
+
+  // When extended, the caller's `style` rides the wrapper (positions the whole
+  // status-spacer + bar unit); the bar keeps only its internal layout. When not
+  // extended, there is no wrapper, so the caller's `style` merges onto the bar.
+  const bar = React.createElement(
+    'rayact-app-bar',
+    {
+      ...rest,
+      centerTitle: resolvedCenter && !cfg.twoRow,
+      style: extend ? barInternalStyle : [barInternalStyle, style],
+    },
+    barChildren
+  );
+
+  if (!extend) return bar;
+
+  return React.createElement(
+    View,
+    { style: [style, { backgroundColor }] },
+    React.createElement(TopSafeAreaSpacer, { height: topInset, backgroundColor }),
+    bar
+  );
+}
 export function Badge(props: BadgeProps): React.ReactElement {
   return React.createElement('rayact-badge', {
     ...props,
@@ -495,7 +764,7 @@ interface ClockDialProps {
   mode: 'hour' | 'minute';
   hour12: number;
   minute: number;
-  primaryColor: number;
+  primaryColor: ColorValue;
   onHourChange: (hour12: number) => void;
   onMinuteChange: (minute: number) => void;
   onHourSelected: () => void;
@@ -896,7 +1165,29 @@ export function MenuItem(props: MaterialComponentProps & { label?: string; trail
     trailing
   );
 }
-export const NavigationBar = createMaterialComponent('rayact-navigation-bar');
+export function NavigationBar(props: NavigationBarProps): React.ReactElement {
+  const { extendBottomPaddingToNavigationBar, ignoreSafeAreaView, style, ...rest } = props;
+  const extend = ignoreSafeAreaView || extendBottomPaddingToNavigationBar;
+  const insets = useSafeAreaInsets();
+  const theme = useTheme();
+  if (!extend) {
+    return React.createElement('rayact-navigation-bar', { ...rest, style });
+  }
+  const bottomInset = Math.max(0, insets.bottom);
+  const leftInset = Math.max(0, insets.left);
+  const rightInset = Math.max(0, insets.right);
+  const backgroundColor =
+    (asStyleObject(style).backgroundColor as ColorValue | undefined) ?? theme.surfaceContainer;
+  const barStyle: Style = {
+    height: NAVIGATION_BAR_HEIGHT + bottomInset,
+    minHeight: NAVIGATION_BAR_HEIGHT + bottomInset,
+    paddingBottom: bottomInset,
+    paddingLeft: leftInset,
+    paddingRight: rightInset,
+    backgroundColor,
+  };
+  return React.createElement('rayact-navigation-bar', { ...rest, style: [style, barStyle] });
+}
 export const NavigationBarItem = createMaterialComponent('rayact-navigation-bar-item');
 export const NavigationDrawer = createMaterialComponent('rayact-navigation-drawer');
 export const NavigationRail = createMaterialComponent('rayact-navigation-rail');
@@ -939,10 +1230,47 @@ export const SideSheet = createMaterialComponent('rayact-side-sheet');
 export function Slider(props: SliderProps): React.ReactElement {
   return React.createElement('rayact-slider', props);
 }
+export function TabBar(props: TabBarProps): React.ReactElement {
+  const { extendBottomPaddingToNavigationBar, ignoreSafeAreaView, style, children, ...rest } = props;
+  const extend = ignoreSafeAreaView || extendBottomPaddingToNavigationBar;
+  const insets = useSafeAreaInsets();
+  const theme = useTheme();
+  if (!extend) {
+    return React.createElement(View, { ...rest, style }, children);
+  }
+  const backgroundColor = theme.surfaceContainerHigh;
+  return React.createElement(
+    View,
+    { ...rest, style: [style, { backgroundColor }] },
+    children,
+    React.createElement(BottomSafeAreaSpacer, {
+      height: Math.max(0, insets.bottom),
+      backgroundColor,
+    })
+  );
+}
 export const Snackbar = createMaterialComponent('rayact-snackbar');
 export const SplitButton = createMaterialComponent('rayact-split-button');
 export const Switch = createMaterialComponent('rayact-switch');
-export const Tabs = createMaterialComponent('rayact-tabs');
+export function Tabs(props: TabsProps): React.ReactElement {
+  const { extendTopPaddingToStatusBar, ignoreSafeAreaView, style, ...rest } = props;
+  const extend = ignoreSafeAreaView || extendTopPaddingToStatusBar;
+  const insets = useSafeAreaInsets();
+  const theme = useTheme();
+  if (!extend) {
+    return React.createElement('rayact-tabs', { ...rest, style });
+  }
+  const backgroundColor = theme.surfaceContainer;
+  return React.createElement(
+    View,
+    { style: [style, { backgroundColor }] },
+    React.createElement(TopSafeAreaSpacer, {
+      height: Math.max(0, insets.top),
+      backgroundColor,
+    }),
+    React.createElement('rayact-tabs', rest)
+  );
+}
 export function TextField(props: TextInputProps & { label?: string }): React.ReactElement {
   const { label, placeholder, style, variant, drawBackground, ...rest } = props;
   const resolvedVariant = variant ?? 'filled';

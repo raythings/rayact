@@ -74,4 +74,12 @@ void engineQueueTouch(int action, int id, float x, float y);
 // Tear down JS subsystems, context and runtime.
 void engineDestroy();
 
+#ifdef RAYACT_ANDROID
+class EngineRuntime;
+bool engineRuntimeBootstrap(EngineRuntime* runtime);
+void engineRuntimeTeardown(EngineRuntime* runtime);
+void engineRuntimeSaveJsGlobals(EngineRuntime* runtime);
+void engineRuntimeRestoreJsGlobals(EngineRuntime* runtime);
+#endif
+
 } // namespace rayact

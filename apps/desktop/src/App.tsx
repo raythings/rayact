@@ -34,8 +34,7 @@ import {
   useColorSchemePreference
 } from '@rayact/react';
 import smokeAsset from './assets/smoke-note.txt';
-// Populate globalThis.Icons (name → codepoint) for icon rendering.
-import '../../../resources/fonts/material_icons.js';
+import '@rayact/shared/material-icons';
 import '../styles.css';
 
 type WorkerMessage = {

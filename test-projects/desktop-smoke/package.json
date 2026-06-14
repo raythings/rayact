@@ -6,7 +6,10 @@
   "description": "Standalone Rayact desktop app — Vite + rayact dev server",
   "scripts": {
     "dev": "rayact dev",
-    "build": "RAYACT_MODE=release vite build",
+    "build": "rayact build --release",
+    "build:desktop": "rayact build --release --desktop",
+    "build:android": "rayact build --release --android",
+    "build:android:install": "rayact build --release --android --install",
     "build:debug": "vite build",
     "start": "rayact start",
     "start:dev": "rayact start --dev",

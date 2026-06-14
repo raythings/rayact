@@ -1,0 +1,23 @@
+{
+  "displayName": "Rayact Dev App",
+  "packageLabel": "Rayact Dev App",
+  "source": "official",
+  "androidPackageId": "com.rayact.devapp",
+  "creditTitle": "The official Rayact development client",
+  "links": [
+    {
+      "id": "github",
+      "icon": "github",
+      "set": "fab",
+      "label": "GitHub",
+      "url": "https://github.com/rayact/rayact"
+    },
+    {
+      "id": "email",
+      "icon": "envelope",
+      "set": "fa",
+      "label": "ramnadroj@gmail.com",
+      "url": "mailto:ramnadroj@gmail.com"
+    }
+  ]
+}

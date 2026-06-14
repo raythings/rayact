@@ -9,6 +9,7 @@ export type {
   RayactAssetMetadata,
   RayactDevClient,
   RayactGlobal,
+  RayactMutationOp,
   RayactRuntime,
   RayactRuntimeOptions
 } from './types';

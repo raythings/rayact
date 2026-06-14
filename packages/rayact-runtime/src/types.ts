@@ -1,3 +1,14 @@
+export type RayactMutationOp =
+  | { op: 'appendChild'; parentId: number; childId: number }
+  | { op: 'removeChild'; parentId: number; childId: number }
+  | { op: 'insertBefore'; parentId: number; childId: number; beforeChildId: number }
+  | { op: 'disposeNode'; nodeId: number }
+  | { op: 'setRoot'; nodeId: number }
+  | { op: 'setText'; nodeId: number; text: string }
+  | { op: 'setValue'; nodeId: number; value: string }
+  | { op: 'setStyle'; nodeId: number; style: Record<string, unknown> }
+  | { op: 'setMaterialProps'; nodeId: number; component: string; props: Record<string, unknown> };
+
 export type HostNodeType =
   | 'root'
   | 'view'
@@ -163,6 +174,15 @@ export interface RayactGlobal {
   setRootNode?: (nodeId: number | null) => void;
   setStyle?: (nodeId: number, props: Record<string, unknown>) => void;
   __rayactRegisterAnimatedNode?: (nodeId: number, initialStyle?: Record<string, number>) => void;
+  __rayactCreateNodeFast?: (type: string, props: Record<string, unknown>) => number;
+  __rayactUpdateNodeFast?: (
+    nodeId: number,
+    type: string,
+    oldProps: Record<string, unknown>,
+    newProps: Record<string, unknown>
+  ) => boolean;
+  __rayactBatchMutations?: (ops: RayactMutationOp[]) => void;
+  __RAYACT_PERF_LOG?: boolean;
   __rayactStartStyleAnimation?: (
     nodeId: number,
     targetStyle: Record<string, number>,

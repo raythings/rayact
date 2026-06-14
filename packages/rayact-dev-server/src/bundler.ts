@@ -63,7 +63,13 @@ export interface RayactBuildOutput {
   entry: string;
   platform: string;
   mode: RayactBuildMode;
+  compiler: 'react-compiler';
+  binaryCommands: boolean;
 }
+
+export const RAYACT_REACT_COMPILER = 'react-compiler' as const;
+export const RAYACT_BINARY_COMMANDS = true;
+const reactCompilerBabelPlugin = ['babel-plugin-react-compiler', { target: '19' }] as const;
 
 function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
@@ -265,6 +271,7 @@ const RAYACT_PKG_ALIASES: { find: RegExp; pkg: string; src: string }[] = [
   { find: /^@rayact\/react$/, pkg: '@rayact/react', src: 'src/index.ts' },
   { find: /^@rayact\/runtime$/, pkg: '@rayact/runtime', src: 'src/index.ts' },
   { find: /^@rayact\/shared$/, pkg: '@rayact/shared', src: 'src/index.ts' },
+  { find: /^@rayact\/shared\/material-icons$/, pkg: '@rayact/shared', src: 'src/material_icons.js' },
   { find: /^@rayact\/navigation$/, pkg: '@rayact/navigation', src: 'src/index.tsx' },
   { find: /^@rayact\/navigation\/native$/, pkg: '@rayact/navigation', src: 'src/native.tsx' },
   { find: /^@rayact\/navigation\/stack$/, pkg: '@rayact/navigation', src: 'src/stack.tsx' },
@@ -407,6 +414,7 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
         return [
           `import React from 'react';`,
           `import { render } from '@rayact/react';`,
+          `import '@rayact/shared/material-icons';`,
           `import { DevLauncherProvider, DevLauncherUI, DevMenu, InspectorPanel, DevConsole, installDevConsoleCapture } from '@rayact/dev-client';`,
           `installDevConsoleCapture();`,
           `import { createBridge, createDevClient, installConsoleForwarding } from '@rayact/runtime';`,
@@ -502,13 +510,27 @@ export function createRayactViteConfig(options: BundleOptions, input = ENTRY_ID)
       reactNativeShimPlugin(),
       ...(isDev ? [rayactRefreshRuntimePlugin()] : []),
       react({
-        babel: isDev
-          ? { plugins: [['react-refresh/babel', { skipEnvCheck: true }]] }
-          : undefined
+        babel: {
+          plugins: [
+            // React Compiler — auto-memoizes components + JSX so unchanged
+            // subtrees skip re-render/reconciliation (the dominant update cost in
+            // QuickJS). Must run first; target 19 uses React 19's built-in
+            // compiler runtime (react/compiler-runtime).
+            reactCompilerBabelPlugin,
+            ...(isDev ? [['react-refresh/babel', { skipEnvCheck: true }]] : [])
+          ]
+        }
       })
     ],
     define: {
-      'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production')
+      'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
+      // Branding + bundled-module list for a prebuilt dev app. The env values are
+      // already JSON text, so they inline as object/array literals the dev client
+      // reads via officialApp.ts. Default to empty when building a normal app.
+      __RAYACT_OFFICIAL_APP__:
+        process.env.RAYACT_DEV_CLIENT_OFFICIAL_APP_METADATA_JSON || '{}',
+      __RAYACT_BUNDLED_MODULES__:
+        process.env.RAYACT_DEV_CLIENT_BUNDLED_MODULES_JSON || '[]'
     },
     build: {
       outDir: options.outDir ? path.resolve(options.outDir) : 'dist',
@@ -569,7 +591,9 @@ export async function buildRayactBundle(options: BundleOptions): Promise<RayactB
     assets: registry.all(),
     entry: normalizePath(path.relative(root, path.resolve(root, options.entry))),
     platform: options.platform,
-    mode
+    mode,
+    compiler: RAYACT_REACT_COMPILER,
+    binaryCommands: RAYACT_BINARY_COMMANDS
   };
 }
 
@@ -603,6 +627,8 @@ export async function writeRayactBuild(options: BundleOptions): Promise<RayactBu
     entry: output.entry,
     platform: output.platform,
     mode: output.mode,
+    compiler: output.compiler,
+    binaryCommands: output.binaryCommands,
     bundleFormat: output.bundleFormat,
     bundle: output.bundleFormat === 'qjsbc'
       ? (output.mode === 'dev-client' ? 'dev-client.qjsbc' : 'bundle.qjsbc')

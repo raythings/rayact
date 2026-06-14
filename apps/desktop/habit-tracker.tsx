@@ -1,21 +1,20 @@
 // Habit Tracker — raym3 M3 + @rayact/navigation demo
 // Screens: Today (habits list), Stats, Settings, AddHabit (stack push)
 
-// Populate globalThis.Icons (name → codepoint) for icon rendering.
-import '../../resources/fonts/material_icons.js';
+import '@rayact/shared/material-icons';
 
 import React, { useState } from 'react';
 import {
-  View, Text, SafeArea, StatusBar, ScrollView,
-  Card, Fab, NavigationBar, NavigationBarItem,
+  View, Text, StatusBar, ScrollView,
+  Card, Fab, NavigationBar, NavigationBarItem, AppBar,
   Icon, Switch, Slider, Input, Button, Divider,
   IconButton, ProgressIndicator, SegmentedButton,
-  useTheme, render, setColorSchemePreference, useColorSchemePreference,
+  useTheme, useSafeAreaInsets, render, setColorSchemePreference, useColorSchemePreference,
   BackHandler,
 } from '@rayact/react';
 import {
   NavigationContainer, createStackNavigator,
-  useNavigation, useIsFocused,
+  useNavigation, useIsFocused, StackActions,
 } from '@rayact/navigation';
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -50,12 +49,6 @@ const TABS = [
   { name: 'Settings', icon: 'settings'  },
 ] as const;
 
-const titleBarStyle = (t: ReturnType<typeof useTheme>) => ({
-  minHeight: 76,
-  paddingTop: 14,
-  backgroundColor: t.surfaceContainerLowest,
-});
-
 const settingsSectionTitleStyle = (t: ReturnType<typeof useTheme>) => ({
   color: t.primary,
   fontSize: 11,
@@ -72,16 +65,54 @@ const settingsCardStyle = {
   marginBottom: 10,
 };
 
-function TitleBar({ title }: { title: string }) {
+const appBarBackground = 0xffffffff;
+const appBarTitleColor = 0x1b1b1fff;
+
+function ScreenAppBar({ title, onBack }: { title: string; onBack?: () => void }) {
+  const t = useTheme();
+  const large = onBack == null;
+  return (
+    <AppBar
+      extendTopPaddingToAppBar
+      ignoreSafeAreaView
+      variant={large ? 'large' : 'small'}
+      title={title}
+      style={{ flexShrink: 0, backgroundColor: appBarBackground }}
+      titleStyle={{ text: { color: appBarTitleColor } }}
+      leading={
+        onBack ? (
+          <IconButton onPress={onBack}>
+            <Icon name="arrow_back" size={24} color={t.onSurface} />
+          </IconButton>
+        ) : undefined
+      }
+    />
+  );
+}
+
+function InsetContent({ children, style }: { children: React.ReactNode; style?: Record<string, unknown> }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View
+      style={{
+        flexGrow: 1,
+        flexShrink: 1,
+        minHeight: 0,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+        ...style,
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+function Screen({ children, style }: { children: React.ReactNode; style?: Record<string, unknown> }) {
   const t = useTheme();
   return (
-    <View style={{
-      ...titleBarStyle(t),
-      justifyContent: 'center',
-      paddingLeft: 32,
-      paddingRight: 16,
-    }}>
-      <Text text={title} style={{ text: { color: t.onSurface, fontSize: 30, weight: 'bold' } }} />
+    <View style={{ flex: 1, backgroundColor: t.surface, ...style }}>
+      {children}
     </View>
   );
 }
@@ -93,15 +124,10 @@ const BottomNav = React.memo(function BottomNav({
   current: string;
   onNavigate: (name: string) => void;
 }) {
-  const [activeTab, setActiveTab] = React.useState(current);
-  React.useEffect(() => {
-    setActiveTab(current);
-  }, [current]);
-
   return (
-    <NavigationBar>
+    <NavigationBar extendBottomPaddingToNavigationBar ignoreSafeAreaView style={{ flexShrink: 0 }}>
       {TABS.map(tab => {
-        const sel = activeTab === tab.name;
+        const sel = current === tab.name;
         return (
           <NavigationBarItem
             key={tab.name}
@@ -109,7 +135,6 @@ const BottomNav = React.memo(function BottomNav({
             selected={sel}
             onPress={() => {
               if (sel) return;
-              setActiveTab(tab.name);
               onNavigate(tab.name);
             }}
           >
@@ -160,14 +185,14 @@ function TodayScreen() {
   };
 
   return (
-    <SafeArea style={{ flex: 1, backgroundColor: t.surface }}>
-      <StatusBar barStyle={t.dark ? 'light' : 'dark'} backgroundColor={t.surfaceContainerLowest} />
-      <TitleBar title="Habit Tracker" />
-
-      <ScrollView style={{ flex: 1, paddingHorizontal: 16 }}>
+    <Screen>
+      <ScreenAppBar title="Habit Tracker" />
+      <InsetContent>
+      <ScrollView style={{ flexGrow: 1, flexShrink: 1, minHeight: 0 }}>
+        <View style={{ paddingHorizontal: 16, flexShrink: 0 }}>
 
         {/* Progress card */}
-        <Card style={{ margin: 8, padding: 20, gap: 8 }}>
+        <Card style={{ margin: 8, padding: 20, gap: 8, flexShrink: 0 }}>
           <Text text="Today's Progress" style={{ color: t.onSurface, fontSize: 18 }} />
           <Text
             text={`${completed} of ${habits.length} completed`}
@@ -181,7 +206,7 @@ function TodayScreen() {
 
         {/* Habit list */}
         {habits.map(habit => (
-          <Card key={habit.id} style={{ margin: 8, padding: 16, minHeight: 48 }} onPress={() => toggle(habit.id)}>
+          <Card key={habit.id} style={{ margin: 8, padding: 16, minHeight: 48, flexShrink: 0 }} onPress={() => toggle(habit.id)}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <Icon
                 name={habit.icon}
@@ -205,7 +230,9 @@ function TodayScreen() {
         ))}
 
         <View style={{ height: 100 }} />
+        </View>
       </ScrollView>
+      </InsetContent>
 
       <Fab
         style={{ position: 'absolute', bottom: 116, right: 20 }}
@@ -213,7 +240,7 @@ function TodayScreen() {
       >
         <Icon name="add" size={24} color={t.onPrimaryContainer} />
       </Fab>
-    </SafeArea>
+    </Screen>
   );
 }
 
@@ -233,11 +260,11 @@ function StatsScreen() {
   const doneToday   = habits.filter(h => h.completedToday).length;
 
   return (
-    <SafeArea style={{ flex: 1, backgroundColor: t.surface }}>
-      <StatusBar barStyle={t.dark ? 'light' : 'dark'} backgroundColor={t.surfaceContainerLowest} />
-      <TitleBar title="Stats" />
-
-      <ScrollView style={{ flex: 1, paddingHorizontal: 16 }}>
+    <Screen>
+      <ScreenAppBar title="Stats" />
+      <InsetContent>
+      <ScrollView style={{ flexGrow: 1, flexShrink: 1, minHeight: 0 }}>
+        <View style={{ paddingHorizontal: 16, flexShrink: 0 }}>
 
         {/* Summary row */}
         <View style={{ flexDirection: 'row', gap: 8, margin: 8 }}>
@@ -273,8 +300,10 @@ function StatsScreen() {
         </View>
 
         <View style={{ height: 16 }} />
+        </View>
       </ScrollView>
-    </SafeArea>
+      </InsetContent>
+    </Screen>
   );
 }
 
@@ -286,11 +315,11 @@ function SettingsScreen() {
   const [goal, setGoal]       = useState(store.goalCount);
 
   return (
-    <SafeArea style={{ flex: 1, backgroundColor: t.surface }}>
-      <StatusBar barStyle={t.dark ? 'light' : 'dark'} backgroundColor={t.surfaceContainerLowest} />
-      <TitleBar title="Settings" />
-
-      <ScrollView style={{ flex: 1 }}>
+    <Screen>
+      <ScreenAppBar title="Settings" />
+      <InsetContent>
+      <ScrollView style={{ flexGrow: 1, flexShrink: 1, minHeight: 0 }}>
+        <View style={{ flexShrink: 0 }}>
 
         <Text text="APPEARANCE" style={settingsSectionTitleStyle(t)} />
         <Card style={settingsCardStyle}>
@@ -342,8 +371,10 @@ function SettingsScreen() {
         </Card>
 
         <View style={{ height: 16 }} />
+        </View>
       </ScrollView>
-    </SafeArea>
+      </InsetContent>
+    </Screen>
   );
 }
 
@@ -381,27 +412,11 @@ function AddHabitScreen() {
   };
 
   return (
-    <SafeArea style={{ flex: 1, backgroundColor: t.surface }}>
-      <StatusBar barStyle={t.dark ? 'light' : 'dark'} backgroundColor={t.surfaceContainerLowest} />
-
-      {/* Custom app bar with back button */}
-      <View style={{
-        minHeight: 76,
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingLeft: 4,
-        paddingRight: 4,
-        paddingTop: 14,
-        backgroundColor: t.surfaceContainerLowest,
-        gap: 4,
-      }}>
-        <IconButton onPress={() => nav.goBack()}>
-          <Icon name="arrow_back" size={24} color={t.onSurface} />
-        </IconButton>
-        <Text text="New Habit" style={{ color: t.onSurface, fontSize: 22, flex: 1, paddingLeft: 8 }} />
-      </View>
-
-      <ScrollView style={{ flex: 1, padding: 16 }}>
+    <Screen>
+      <ScreenAppBar title="New Habit" onBack={() => nav.goBack()} />
+      <InsetContent>
+      <ScrollView style={{ flexGrow: 1, flexShrink: 1, minHeight: 0 }}>
+        <View style={{ padding: 16, flexShrink: 0 }}>
 
         <Text text="Habit name" style={{ color: t.onSurface, fontSize: 14, marginBottom: 8 }} />
         <Input
@@ -440,8 +455,10 @@ function AddHabitScreen() {
         <Button label="Create Habit" onPress={save} disabled={!name.trim()} />
 
         <View style={{ height: 32 }} />
+        </View>
       </ScrollView>
-    </SafeArea>
+      </InsetContent>
+    </Screen>
   );
 }
 
@@ -469,12 +486,13 @@ function App() {
   }, [colorSchemePreference, t.dark]);
 
   const navigateTab = React.useCallback((name: string) => {
-    navigationRef.current?.navigate(name);
+    navigationRef.current?.dispatch(StackActions.replace(name));
   }, []);
 
   return (
-    <View style={{ flex: 1 }}>
-      <View style={{ flex: 1 }}>
+    <View style={{ flexGrow: 1, backgroundColor: t.surface }}>
+      <StatusBar barStyle={t.dark ? 'light' : 'dark'} backgroundColor={appBarBackground} />
+      <View style={{ flexGrow: 1, flexShrink: 1, minHeight: 0 }}>
         <NavigationContainer
           ref={navigationRef as never}
           onStateChange={syncRoute}
@@ -482,7 +500,7 @@ function App() {
         >
           <Stack.Navigator
             initialRouteName="Today"
-            screenOptions={{ animation: 'fade', animationDuration: 220 }}
+            screenOptions={{ animation: 'none' }}
           >
             <Stack.Screen name="Today"    component={TodayScreen}    />
             <Stack.Screen name="Stats"    component={StatsScreen}    />

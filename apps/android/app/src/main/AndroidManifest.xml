@@ -11,8 +11,14 @@
         android:theme="@style/Theme.Rayact"
         tools:targetApi="31"
         xmlns:tools="http://schemas.android.com/tools">
+        <!-- Have Play services install the ML Kit barcode scanner module so the
+             code scanner is ready the first time the user taps "Scan QR code". -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="barcode_ui" />
         <activity
             android:name=".DevLauncherActivity"
+            android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|density|uiMode"
             android:exported="true">
             <intent-filter>
@@ -20,10 +26,5 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity
-            android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|density|uiMode"
-            android:exported="true"
-            android:process=":rayact_project" />
     </application>
 </manifest>

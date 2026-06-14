@@ -1,5 +1,8 @@
 /**
- * Shared types and utilities for Rayact
+ * Shared types and utilities for Rayact.
+ *
+ * Material icon name → codepoint map: import '@rayact/shared/material-icons'
+ * (sets `globalThis.Icons` as a side effect).
  */
 
 /**

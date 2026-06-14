@@ -149,6 +149,8 @@ set(ENGINE_SRC
     ${RAYACT}/native/desktop/window_manager.cpp
     ${RAYACT}/native/android/platform_android.cpp
     ${RAYACT}/native/android/system_appearance_android.cpp
+    ${RAYACT}/native/android/engine_runtime.cpp
+    ${RAYACT}/native/android/android_engine_instance.cpp
     ${RAYACT}/native/android/jni_bridge.cpp
 )
 
@@ -203,6 +205,7 @@ endif()
 target_include_directories(rayact PRIVATE
     ${RAYACT}/native/desktop
     ${RAYACT}/native/core
+    ${RAYACT}/native/android
     ${RAYLIB_DIR}/src
     ${RAYLIB_DIR}/src/platforms
     ${RAYM3_DIR}/include
@@ -219,3 +222,20 @@ if (RAYACT_ANDROID_USE_RLVK)
         ${WGVK_DIR}/src
     )
 endif()
+
+# ---------------------------------------------------------------------------
+# Bundled native plugins (Expo-Go-style prebuilt dev app). Built as standalone
+# shared libs so the NDK packages them into the APK jniLibs; at runtime the
+# module bus's plugin loader dlopen's them from the app's nativeLibraryDir
+# (loadPlugins(libDir) in jni_bridge.cpp) — adding a module needs no rebuild of
+# the engine, only a relink of the plugin. Each depends only on the stable ABI
+# header in native/core.
+# ---------------------------------------------------------------------------
+add_library(rayact_mmkv SHARED ${RAYACT}/native/plugins/mmkv/mmkv_plugin.cpp)
+target_include_directories(rayact_mmkv PRIVATE ${RAYACT}/native/core)
+target_link_libraries(rayact_mmkv log)
+
+add_library(rayact_secure_store SHARED
+    ${RAYACT}/native/plugins/secure-store/secure_store_plugin.cpp)
+target_include_directories(rayact_secure_store PRIVATE ${RAYACT}/native/core)
+target_link_libraries(rayact_secure_store log)

@@ -6,6 +6,18 @@ export interface RayactTransformConfig {
   bytecode?: { dev?: boolean; debug?: boolean; release?: boolean };
 }
 
+/**
+ * A native plugin module bundled into a prebuilt host (Expo-Go-style dev app).
+ * `name` is the bus module id JS reaches via __rayact_invoke(name, ...);
+ * `lib` is the dlopen library base name (librayact_<lib>.{so,dylib});
+ * `jsPackage` is the npm wrapper that exposes the typed API.
+ */
+export interface RayactNativeModule {
+  name: string;
+  lib: string;
+  jsPackage?: string;
+}
+
 export interface RayactConfig {
   rayactAppKey?: string;
   devServer?: {
@@ -17,7 +29,18 @@ export interface RayactConfig {
   platform?: string;
   android?: {
     package?: string;
+    /** Gradle project dir (contains gradlew). Relative to project root. */
+    projectDir?: string;
+    activity?: string;
+    /** Display name patched into the host (prebuilt dev app). */
+    appName?: string;
+    /** Application id patched into the host (prebuilt dev app). */
+    packageName?: string;
+    /** Launcher icon source, relative to project root. */
+    icon?: string;
   };
+  /** Native plugin modules the host bundles / the project requires. */
+  nativeModules?: RayactNativeModule[];
   transform?: RayactTransformConfig;
 }
 

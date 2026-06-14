@@ -89,5 +89,5 @@ if [[ -d "$BUNDLE_DIR/assets" ]]; then
   done
 fi
 
-adb shell am start -n com.rayact.app/.MainActivity | tail -1
+adb shell am start -n com.rayact.app/.DevLauncherActivity | tail -1
 echo "Done. adb logcat -s raylib:I RayactJNI:I JS: to follow the run."

@@ -52,6 +52,9 @@ struct QueuedTouch {
 
 // The engine's JS context (owned by engine_js.cpp; read by main.cpp).
 extern JSContext* g_ctx;
+#ifdef RAYACT_ANDROID
+extern JSRuntime* g_rt;
+#endif
 
 extern std::vector<Shape> g_shapes;
 

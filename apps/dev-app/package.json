@@ -1,0 +1,29 @@
+{
+  "name": "@rayact/dev-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Standalone Rayact dev app — Expo-Go-style prebuilt host bundling native plugins + the dev client launcher (QR scan, HMR).",
+  "scripts": {
+    "build:android": "node scripts/with-branding.cjs build --android",
+    "build:android:install": "node scripts/with-branding.cjs build --android --install",
+    "build:android:install:release": "node scripts/with-branding.cjs build --android --install --release",
+    "build:desktop": "node scripts/with-branding.cjs build --release --desktop",
+    "start:dev": "rayact start --dev"
+  },
+  "dependencies": {
+    "@rayact/react": "file:../../packages/rayact-react",
+    "@rayact/runtime": "file:../../packages/rayact-runtime",
+    "@rayact/shared": "file:../../packages/rayact-shared",
+    "@rayact/dev-client": "file:../../packages/rayact-dev-client",
+    "@rayact/mmkv": "file:../../packages/rayact-mmkv",
+    "@rayact/secure-store": "file:../../packages/rayact-secure-store",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@rayact/cli": "file:../../packages/rayact-cli",
+    "@rayact/dev-server": "file:../../packages/rayact-dev-server",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.8.3"
+  }
+}

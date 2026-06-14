@@ -53,6 +53,10 @@ AppConfig loadAppConfig(JSContext* ctx, const char* assetsPath);
 // loadAppConfig has not been called). Cheap — just returns a const ref.
 const AppConfig& appConfig();
 
+// Assets root passed to loadAppConfig (e.g. Android internalDataPath).
+// Empty string if unset.
+const char* appAssetsPath();
+
 // Parse a color from a JS value. Accepts:
 //   - "#RRGGBB" / "#RRGGBBAA"
 //   - 0xRRGGBB / 0xRRGGBBAA (uint32)

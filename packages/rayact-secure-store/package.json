@@ -1,0 +1,17 @@
+{
+  "name": "@rayact/secure-store",
+  "version": "0.1.0",
+  "description": "Encrypted key/value storage backed by the librayact_secure_store native plugin (Keychain / Keystore)",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "keywords": ["secure-store", "keychain", "keystore", "rayact", "native-module"],
+  "license": "MIT"
+}

@@ -8,9 +8,12 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.rayact.app.NavigationHost
-import com.rayact.engine.RayactEngine
+import com.rayact.engine.RayactEngineSession
 
-class DevMenuOverlay(private val host: NavigationHost) {
+class DevMenuOverlay(
+    private val host: NavigationHost,
+    private val session: RayactEngineSession
+) {
     private val panel = LinearLayout(host.context).apply {
         orientation = LinearLayout.VERTICAL
         setBackgroundColor(0xEE1E1E1E.toInt())
@@ -32,9 +35,12 @@ class DevMenuOverlay(private val host: NavigationHost) {
         panel.addView(title)
         panel.addView(serverLabel)
         panel.addView(makeButton("Reload") {
-            val url = DevClientBridge.savedDevServerUrl()
-            if (!url.isNullOrEmpty()) RayactEngine.loadDevServer(url)
             hide()
+            DevClientBridge.reloadCurrentProject()
+        })
+        panel.addView(makeButton("Back to launcher") {
+            hide()
+            DevClientBridge.showLauncher()
         })
         panel.addView(makeButton("Close") { hide() })
 

@@ -56,7 +56,7 @@ function printLogHeader(server: RayactDevServer): void {
   process.stdout.write(`  URL:   ${server.url}\n`);
   process.stdout.write(`  Local: ${server.localUrl}\n`);
   process.stdout.write(`  Entry: ${server.entry}\n`);
-  process.stdout.write(`  QR:    JSON payload (scan with Rayact dev client)\n`);
+  process.stdout.write(`  QR:    server address list (scan with Rayact dev client)\n`);
   process.stdout.write('\n');
   process.stdout.write(qr + '\n');
   process.stdout.write('\n');

@@ -4,7 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { WebSocketServer } from 'ws';
 import chokidar from 'chokidar';
-import { buildRayactBundle, type RayactBuildOutput } from './bundler.js';
+import {
+  buildRayactBundle,
+  RAYACT_BINARY_COMMANDS,
+  RAYACT_REACT_COMPILER,
+  type RayactBuildOutput
+} from './bundler.js';
 import { loadRayactConfig } from './config.js';
 import { advertiseRayactServer } from './mdns.js';
 import { buildQrPayload } from './qr.js';
@@ -102,29 +107,39 @@ function createWsBroadcast(wss: WebSocketServer) {
 
 export async function startRayactDevServer(rawOptions: RayactDevServerOptions): Promise<RayactDevServer> {
   const options = normalizeOptions(rawOptions);
+  // Native plugin modules this project declares — published in the manifest so a
+  // prebuilt dev app can check them against what it bundles (native-modules.json).
+  const nativeModules = loadRayactConfig(options.root).nativeModules ?? [];
   let lastBuild: RayactBuildOutput | null = null;
   let lastBundleError: Error | null = null;
   let revision = 1;
   let hmrActive = true;
+  let buildInFlight: Promise<RayactBuildOutput> | null = null;
 
-  const buildBundle = async () => {
+  const rebuildBundle = async () => {
+    if (buildInFlight) return buildInFlight;
     const useBytecode = options.bytecode && !hmrActive;
-    try {
-      lastBuild = await buildRayactBundle({
-        ...options,
-        mode: 'development',
-        minify: options.minify,
-        bytecode: useBytecode
-      });
-      lastBundleError = null;
-      return lastBuild;
-    } catch (error) {
-      lastBundleError = error instanceof Error ? error : new Error(String(error));
-      throw lastBundleError;
-    }
+    buildInFlight = (async () => {
+      try {
+        lastBuild = await buildRayactBundle({
+          ...options,
+          mode: 'development',
+          minify: options.minify,
+          bytecode: useBytecode
+        });
+        lastBundleError = null;
+        return lastBuild;
+      } catch (error) {
+        lastBundleError = error instanceof Error ? error : new Error(String(error));
+        throw lastBundleError;
+      } finally {
+        buildInFlight = null;
+      }
+    })();
+    return buildInFlight;
   };
 
-  await buildBundle();
+  await rebuildBundle();
 
   const server = http.createServer(async (request, response) => {
     const requestUrl = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
@@ -139,6 +154,8 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
         platform: options.platform,
         revision,
         bundleFormat: lastBuild?.bundleFormat ?? 'js',
+        compiler: lastBuild?.compiler ?? RAYACT_REACT_COMPILER,
+        binaryCommands: lastBuild?.binaryCommands ?? RAYACT_BINARY_COMMANDS,
         error: lastBundleError?.message
       });
       return;
@@ -164,6 +181,8 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
         mode: 'development',
         revision,
         bundleFormat,
+        compiler: lastBuild?.compiler ?? RAYACT_REACT_COMPILER,
+        binaryCommands: lastBuild?.binaryCommands ?? RAYACT_BINARY_COMMANDS,
         bundleUrl: `${baseUrl}${bundlePath}`,
         hmrUrl: `${wsBase}/rayact/hmr`,
         debuggerUrl: `${wsBase}/rayact/debugger`,
@@ -171,6 +190,7 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
         websocketUrl: `${wsBase}/rayact/debugger`,
         cdpPort: options.cdpPort,
         assets,
+        nativeModules,
         capabilities: ['hmr', 'cdp', 'react-devtools', 'inspector']
       });
       return;
@@ -213,7 +233,7 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
 
     if (requestUrl.pathname === '/rayact/bundle' || requestUrl.pathname === '/rayact/bundle.qjsbc') {
       try {
-        const output = await buildBundle();
+        const output = lastBuild ?? await rebuildBundle();
         if (output.bundleFormat === 'qjsbc' && output.bytecode) {
           sendBuffer(response, 200, output.bytecode, 'application/octet-stream');
         } else {
@@ -302,7 +322,7 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     if (rebuildTimer) clearTimeout(rebuildTimer);
     rebuildTimer = setTimeout(async () => {
       try {
-        await buildBundle();
+        await rebuildBundle();
         revision++;
         broadcastHmr({ type: 'hmr-update', payload: { revision } });
       } catch (error) {
@@ -327,9 +347,7 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
   const entry = path.relative(options.root, path.resolve(options.root, options.entry));
   const qrPayload = JSON.stringify(buildQrPayload({
     url,
-    port: options.port,
-    rayactAppKey: options.rayactAppKey,
-    cdpPort: options.cdpPort
+    port: options.port
   }));
 
   const mdns = advertiseRayactServer({
@@ -359,7 +377,7 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     broadcastDebugger,
     broadcastInspector,
     async reload() {
-      await buildBundle();
+      await rebuildBundle();
       revision++;
       broadcastHmr({ type: 'reload', payload: { revision } });
     },

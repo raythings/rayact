@@ -103,6 +103,8 @@ export interface BaseProps {
   capturesInput?: boolean;
   /** CSS pointer-events. Use 'none' to let taps pass through this node. */
   pointerEvents?: 'none' | 'auto';
+  /** Internal: marks the AppBar title slot so the renderer can recenter it. */
+  appBarTitle?: boolean;
   onPress?: () => void;
   onClick?: () => void;
   onDragStart?: (event: { x: number; y: number }) => void;
@@ -123,6 +125,13 @@ export interface AvoidKeyboardProps extends BaseProps {
   behavior?: 'padding' | 'position';
   /** Animate offset changes via CSS layout transitions. Default: `true`. */
   animate?: boolean;
+}
+
+export type SafeAreaEdge = 'top' | 'right' | 'bottom' | 'left';
+
+export interface SafeAreaProps extends BaseProps {
+  /** When set, only these edges receive system inset padding. Default: all four. */
+  edges?: SafeAreaEdge[];
 }
 
 export interface TextProps extends BaseProps {
@@ -244,6 +253,69 @@ export interface MaterialComponentProps extends BaseProps {
   wavelength?: number;
 }
 
+/**
+ * Top app bar.
+ *
+ * Color is set through `style` passthrough (no dedicated color props):
+ * - `style.backgroundColor` fills the bar AND the status-bar safe-area spacer.
+ * - `style.text.color` sets the (string) title color; `titleStyle.text.color`
+ *   overrides it. A node `title` is rendered as-is — color it yourself.
+ * - Leading/action icons are caller-colored (`<Icon color=… />`), as in
+ *   `NavigationBar`.
+ */
+export interface AppBarProps extends Omit<MaterialComponentProps, 'title'> {
+  /**
+   * Extends the app bar background behind the OS status area when it sits
+   * outside `SafeAreaView`. Alias: `ignoreSafeAreaView`. Mirrors
+   * `NavigationBar`'s `extendBottomPaddingToNavigationBar`, at the top.
+   */
+  extendTopPaddingToAppBar?: boolean;
+  ignoreSafeAreaView?: boolean;
+  /** M3 top-app-bar variant. Default `'small'`. */
+  variant?: 'small' | 'center' | 'medium' | 'large';
+  /** Title slot. String renders M3 title typography; a node is used as-is. */
+  title?: React.ReactNode;
+  /** Leading slot (e.g. back/menu IconButton), pinned to the start. */
+  leading?: React.ReactNode;
+  /** Trailing action slot(s), pinned to the end. */
+  actions?: React.ReactNode | React.ReactNode[];
+  /**
+   * Center the title across the full bar width (Flutter `centerTitle`).
+   * Defaults to `true` on Apple platforms and for the `center` variant,
+   * `false` (start-aligned, M3) otherwise.
+   */
+  centerTitle?: boolean;
+  /** Style override for the title text (e.g. `{ text: { fontSize } }`). */
+  titleStyle?: StyleProp;
+}
+
+export interface NavigationBarProps extends MaterialComponentProps {
+  /**
+   * Extends the bar background behind the OS navigation area when it sits
+   * outside `SafeAreaView`. Alias: `ignoreSafeAreaView`.
+   */
+  extendBottomPaddingToNavigationBar?: boolean;
+  ignoreSafeAreaView?: boolean;
+}
+
+export interface TabBarProps extends BaseProps {
+  /**
+   * Extends the bar background behind the OS navigation area when it sits
+   * outside `SafeAreaView`. Alias: `ignoreSafeAreaView`.
+   */
+  extendBottomPaddingToNavigationBar?: boolean;
+  ignoreSafeAreaView?: boolean;
+}
+
+export interface TabsProps extends MaterialComponentProps {
+  /**
+   * Extends the tab background behind the OS status area when it sits outside
+   * `SafeAreaView`. Alias: `ignoreSafeAreaView`.
+   */
+  extendTopPaddingToStatusBar?: boolean;
+  ignoreSafeAreaView?: boolean;
+}
+
 export interface BadgeProps extends MaterialComponentProps {
   value?: string | number;
 }
@@ -302,11 +374,12 @@ declare global {
       TextInput: TextInputProps;
       ScrollView: ScrollViewProps;
       Modal: ModalProps;
-      SafeArea: BaseProps;
+      SafeArea: SafeAreaProps;
+      TabBar: TabBarProps;
       StatusBar: StatusBarProps;
       ActivityIndicator: ActivityIndicatorProps;
       AvoidKeyboard: AvoidKeyboardProps;
-      AppBar: MaterialComponentProps;
+      AppBar: AppBarProps;
       Badge: BadgeProps;
       BottomSheet: MaterialComponentProps;
       ButtonGroup: MaterialComponentProps;
@@ -323,7 +396,7 @@ declare global {
       IconButton: MaterialComponentProps;
       LoadingIndicator: MaterialComponentProps;
       Menu: MaterialComponentProps;
-      NavigationBar: MaterialComponentProps;
+      NavigationBar: NavigationBarProps;
       NavigationBarItem: MaterialComponentProps;
       NavigationDrawer: MaterialComponentProps;
       NavigationRail: MaterialComponentProps;
@@ -336,7 +409,7 @@ declare global {
       Snackbar: MaterialComponentProps;
       SplitButton: MaterialComponentProps;
       Switch: MaterialComponentProps;
-      Tabs: MaterialComponentProps;
+      Tabs: TabsProps;
       TimePicker: TimePickerProps;
       Toolbar: MaterialComponentProps;
       Tooltip: MaterialComponentProps;

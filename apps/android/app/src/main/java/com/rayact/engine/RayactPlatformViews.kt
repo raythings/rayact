@@ -55,6 +55,15 @@ object RayactPlatformViews {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val hosts = ConcurrentHashMap<Int, TextFieldHost>()
 
+    @Volatile
+    private var boundSession: RayactEngineSession? = null
+
+    fun bindSession(session: RayactEngineSession) {
+        boundSession = session
+    }
+
+    private fun session(): RayactEngineSession? = boundSession
+
     /** The embedded EditText that should receive IME input, if any. */
     @Volatile
     var focusedEditText: EditText? = null
@@ -121,7 +130,7 @@ object RayactPlatformViews {
     fun onRect(nodeId: Int, kind: String, x: Float, y: Float, w: Float, h: Float) {
         if (kind != "textfield") return
         mainHandler.post {
-            val ctx = RayactHostRegistry.imeView?.context ?: run {
+            val ctx = session()?.host?.imeView?.context ?: run {
                 Log.e(TAG, "no context for platform view $nodeId")
                 return@post
             }
@@ -269,7 +278,7 @@ object RayactPlatformViews {
             if (wPx == widthPx && hPx == heightPx && virtualDisplay != null) return
             widthPx = wPx
             heightPx = hPx
-            RayactEngine.nativeSetExternalViewInsets(nodeId, padLeft, padTop, padRight, padBottom)
+            session()?.nativeSetExternalViewInsets(nodeId, padLeft, padTop, padRight, padBottom)
 
             val newReader = ImageReader.newInstance(
                 wPx, hPx, android.graphics.ImageFormat.PRIVATE, 4,
@@ -280,13 +289,13 @@ object RayactPlatformViews {
                     ?: return@setOnImageAvailableListener
                 val hb = image.hardwareBuffer
                 if (hb != null) {
-                    RayactEngine.nativePushExternalViewFrame(nodeId, hb)
+                    session()?.nativePushExternalViewFrame(nodeId, hb)
                     hb.close()
                 }
                 prevImage?.close()
                 prevImage = liveImage
                 liveImage = image
-                com.rayact.app.RayactRenderScheduler.requestFrame()
+                session()?.host?.renderScheduler?.requestFrame()
             }, mainHandler)
 
             val vd = virtualDisplay
@@ -341,8 +350,8 @@ object RayactPlatformViews {
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun afterTextChanged(s: Editable?) {
                     if (suppressWatcher) return
-                    RayactEngine.nativeExternalViewTextChanged(nodeId, s?.toString() ?: "")
-                    com.rayact.app.RayactRenderScheduler.requestFrame()
+                    session()?.nativeExternalViewTextChanged(nodeId, s?.toString() ?: "")
+                    session()?.host?.renderScheduler?.requestFrame()
                 }
             })
 
@@ -389,7 +398,7 @@ object RayactPlatformViews {
                 toolbar?.visibility == View.VISIBLE && toolbarShownByLongPress
             if (editText?.hasSelection() != true && !keepLongPressToolbar) hideToolbar()
             val et = editText ?: return
-            val surfaceView = RayactHostRegistry.imeView ?: return
+            val surfaceView = session()?.host?.imeView ?: return
             et.requestFocus()
             setFocused(et)
             surfaceView.requestFocus()

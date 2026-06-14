@@ -27,12 +27,17 @@ RAYACT_DEV_SERVER=http://127.0.0.1:8082 npm start
 RAYACT_DEV_SERVER=http://127.0.0.1:8082 ../../build/bin/rayact_desktop
 ```
 
-## Build (Vite)
+## Build
 
 ```bash
-npm run build        # release IIFE → dist/bundle.js
-npm run build:debug  # dev bundle with Fast Refresh footer
+npm run build                  # release bundle → dist/bundle.js
+npm run build:desktop          # bundle + native host + CSS/fonts → self-contained dist/
+npm run build:android          # bundle + release APK (debug-signed) → dist/app-release.apk
+npm run build:android:install  # same + adb install + launch
+npm run build:debug            # dev bundle with Fast Refresh footer (Vite direct)
 ```
+
+`build:desktop` output runs anywhere: `cd dist && ./rayact_desktop bundle.js`.
 
 `vite.config.ts` uses `createRayactViteConfig` from `@rayact/dev-server`.
 

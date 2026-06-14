@@ -8,6 +8,7 @@
 #include "quickjs_bridge.hpp"
 #include "raym3_bridge.hpp"
 #include "dev_client_bridge.hpp"
+#include <raym3/v2/IconRenderer.h>
 #include "commit_queue.hpp"
 #include "shadow_tree.hpp"
 #include "engine_thread.hpp"
@@ -63,6 +64,10 @@ extern "C" {
 #include <string>
 #include <filesystem>
 
+#ifdef RAYACT_ANDROID
+#include "../android/engine_runtime.hpp"
+#endif
+
 // Forward declarations
 static JSValue JS_initRaylib(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_renderRect(JSContext*, JSValue, int, JSValueConst*);
@@ -87,7 +92,11 @@ static JSValue JS_resolveAssetPath(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_readAssetBytes(JSContext*, JSValue, int, JSValueConst*);
 
 // Global variables
+#ifdef RAYACT_ANDROID
+JSRuntime* g_rt = nullptr;
+#else
 static JSRuntime* g_rt = nullptr;
+#endif
 JSContext* g_ctx = nullptr;
 static bool g_running = false;
 static std::filesystem::path g_releaseAssetBaseDir;
@@ -407,6 +416,7 @@ static void registerNativeFunctions(JSContext* ctx) {
     // raym3 v2 bridge
     g_bridge_ctx = ctx;
     installAnimatedStyleBuffer(ctx, global);
+    installCommandBuffer(ctx, global);
     JS_SetPropertyStr(ctx, global, "createView",
                       JS_NewCFunction(ctx, JS_createView,   "createView",   1));
     JS_SetPropertyStr(ctx, global, "createText",
@@ -538,6 +548,14 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_rayactStopStyleAnimation, "__rayactStopStyleAnimation", 2));
     JS_SetPropertyStr(ctx, global, "__rayactSetAnimatedStyle",
                       JS_NewCFunction(ctx, JS_rayactSetAnimatedStyle, "__rayactSetAnimatedStyle", 2));
+    JS_SetPropertyStr(ctx, global, "__rayactCreateNodeFast",
+                      JS_NewCFunction(ctx, JS_rayactCreateNodeFast, "__rayactCreateNodeFast", 2));
+    JS_SetPropertyStr(ctx, global, "__rayactUpdateNodeFast",
+                      JS_NewCFunction(ctx, JS_rayactUpdateNodeFast, "__rayactUpdateNodeFast", 4));
+    JS_SetPropertyStr(ctx, global, "__rayactBatchMutations",
+                      JS_NewCFunction(ctx, JS_rayactBatchMutations, "__rayactBatchMutations", 1));
+    JS_SetPropertyStr(ctx, global, "__rayactFlushCommands",
+                      JS_NewCFunction(ctx, JS_rayactFlushCommands, "__rayactFlushCommands", 1));
     JS_SetPropertyStr(ctx, global, "createImage",
                       JS_NewCFunction(ctx, JS_createImage,  "createImage",  2));
     JS_SetPropertyStr(ctx, global, "createIcon",
@@ -792,46 +810,9 @@ static void injectMaterialIcons(JSContext* ctx) {
     if (injected) return;
     injected = true;
 
-    // Try bytecode first (pre-compiled with: rayact_desktop --compile material_icons.js)
-    const char* jscCandidates[] = {
-        "./resources/fonts/material_icons.jsc",
-        "resources/fonts/material_icons.jsc",
-        nullptr
-    };
-    for (int i = 0; jscCandidates[i]; i++) {
-        FILE* f = fopen(jscCandidates[i], "rb");
-        if (!f) continue;
-        fseek(f, 0, SEEK_END);
-        long len = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        std::vector<uint8_t> buf(len);
-        fread(buf.data(), 1, len, f);
-        fclose(f);
-        JSValue obj = JS_ReadObject(ctx, buf.data(), buf.size(), JS_READ_OBJ_BYTECODE);
-        if (!JS_IsException(obj)) {
-            JSValue r = JS_EvalFunction(ctx, obj);
-            if (!JS_IsException(r)) {
-                printf("Material Icons loaded from bytecode (%ld bytes)\n", len);
-                JS_FreeValue(ctx, r);
-                return;
-            }
-            JS_FreeValue(ctx, r);
-        } else {
-            JS_FreeValue(ctx, obj);
-        }
-        JSValue exc = JS_GetException(ctx);
-        JS_FreeValue(ctx, exc); // clear exception, fall through to source
-    }
-
-    // Fall back to source JS
-    const char* candidates[] = {
-        "./resources/fonts/material_icons.js",
-        "resources/fonts/material_icons.js",
-        nullptr
-    };
-    for (int i = 0; candidates[i]; i++) {
-        FILE* f = fopen(candidates[i], "r");
-        if (!f) continue;
+    auto tryEvalSource = [&](const char* path) -> bool {
+        FILE* f = fopen(path, "r");
+        if (!f) return false;
         fseek(f, 0, SEEK_END);
         long len = ftell(f);
         fseek(f, 0, SEEK_SET);
@@ -842,14 +823,74 @@ static void injectMaterialIcons(JSContext* ctx) {
         if (JS_IsException(r)) {
             JSValue exc = JS_GetException(ctx);
             const char* s = JS_ToCString(ctx, exc);
-            fprintf(stderr, "material_icons.js error: %s\n", s ? s : "?");
+            fprintf(stderr, "material_icons.js error (%s): %s\n", path, s ? s : "?");
             if (s) JS_FreeCString(ctx, s);
             JS_FreeValue(ctx, exc);
-        } else {
-            printf("Material Icons loaded from source (%ld bytes)\n", len);
+            JS_FreeValue(ctx, r);
+            return false;
         }
+        printf("Material Icons loaded from source %s (%ld bytes)\n", path, len);
         JS_FreeValue(ctx, r);
-        return;
+        return true;
+    };
+
+    auto tryEvalBytecode = [&](const char* path) -> bool {
+        FILE* f = fopen(path, "rb");
+        if (!f) return false;
+        fseek(f, 0, SEEK_END);
+        long len = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        std::vector<uint8_t> buf(len);
+        fread(buf.data(), 1, len, f);
+        fclose(f);
+        JSValue obj = JS_ReadObject(ctx, buf.data(), buf.size(), JS_READ_OBJ_BYTECODE);
+        if (JS_IsException(obj)) {
+            JS_FreeValue(ctx, obj);
+            JSValue exc = JS_GetException(ctx);
+            JS_FreeValue(ctx, exc);
+            return false;
+        }
+        JSValue r = JS_EvalFunction(ctx, obj);
+        if (JS_IsException(r)) {
+            JS_FreeValue(ctx, r);
+            return false;
+        }
+        printf("Material Icons loaded from bytecode %s (%ld bytes)\n", path, len);
+        JS_FreeValue(ctx, r);
+        return true;
+    };
+
+    const char* assets = rayact::appAssetsPath();
+    if (assets && *assets) {
+        char path[1024];
+        snprintf(path, sizeof(path), "%s/resources/fonts/material_icons.jsc", assets);
+        if (tryEvalBytecode(path)) return;
+        snprintf(path, sizeof(path), "%s/node_modules/@rayact/shared/dist/material_icons.js", assets);
+        if (tryEvalSource(path)) return;
+    }
+
+    const char* jscCandidates[] = {
+        "./packages/rayact-shared/dist/material_icons.jsc",
+        "packages/rayact-shared/dist/material_icons.jsc",
+        "./resources/fonts/material_icons.jsc",
+        "resources/fonts/material_icons.jsc",
+        nullptr
+    };
+    for (int i = 0; jscCandidates[i]; i++) {
+        if (tryEvalBytecode(jscCandidates[i])) return;
+    }
+
+    const char* candidates[] = {
+        "./packages/rayact-shared/src/material_icons.js",
+        "packages/rayact-shared/src/material_icons.js",
+        "./packages/rayact-shared/dist/material_icons.js",
+        "packages/rayact-shared/dist/material_icons.js",
+        "./node_modules/@rayact/shared/dist/material_icons.js",
+        "node_modules/@rayact/shared/dist/material_icons.js",
+        nullptr
+    };
+    for (int i = 0; candidates[i]; i++) {
+        if (tryEvalSource(candidates[i])) return;
     }
     printf("material_icons.js not found — icon names won't resolve\n");
 }
@@ -1471,7 +1512,9 @@ bool engineLoadSource(const std::string& source, const std::string& name) {
 }
 
 bool engineLoadConfig(const char* assetsPath) {
-    return rayact::loadAppConfig(g_ctx, assetsPath), true;
+    rayact::loadAppConfig(g_ctx, assetsPath);
+    raym3::v2::SetIconFontSearchPrefix(assetsPath);
+    return true;
 }
 
 const AppConfig& engineAppConfig() { return rayact::appConfig(); }
@@ -1530,6 +1573,7 @@ void engineFinishLoad() {
 
 void enginePumpJS() {
     JSContext* ctx = g_ctx;
+    if (!ctx) return;
     // js_std_loop_once: drains pending jobs + fires expired QJS os.timers
     // without blocking. js_std_loop (infinite poll) must not be used here.
     js_std_loop_once(ctx);
@@ -1604,5 +1648,122 @@ void engineDestroy() {
     g_ctx = nullptr;
     g_rt = nullptr;
 }
+
+#ifdef RAYACT_ANDROID
+
+bool engineRuntimeBootstrap(EngineRuntime* runtime) {
+    if (!runtime) return false;
+    JSRuntime* rt = initRuntime();
+    if (!rt) return false;
+    JSContext* ctx = initContext(rt);
+    if (!ctx) {
+        js_std_free_handlers(rt);
+        JS_FreeRuntime(rt);
+        return false;
+    }
+    registerNativeFunctions(ctx);
+    runtime->setRtCtx(rt, ctx);
+    return true;
+}
+
+void engineRuntimeTeardown(EngineRuntime* runtime) {
+    if (!runtime) return;
+    JSContext* ctx = runtime->ctx();
+    JSRuntime* rt = runtime->rt();
+    if (runtime->jsStorage()) {
+        EngineRuntimeJsStorage& s = *runtime->jsStorage();
+        if (ctx) {
+            if (!JS_IsUndefined(s.frameUpdateFunction))
+                JS_FreeValue(ctx, s.frameUpdateFunction);
+            if (!JS_IsUndefined(s.renderFrameFunction))
+                JS_FreeValue(ctx, s.renderFrameFunction);
+        }
+        s.frameUpdateFunction = JS_UNDEFINED;
+        s.renderFrameFunction = JS_UNDEFINED;
+    }
+    if (ctx) {
+        // Per-instance teardown: the process-global GPU caches belong to the
+        // graphics device, which is either already closed or owned by another
+        // live engine instance — never unload them here (see raym3_bridge.hpp).
+        cleanupRaym3Bridge(ctx, /*unloadGpuCaches=*/false);
+        cleanupCSSBridge(ctx);
+        cleanupJSStdlib(ctx);
+        JS_FreeContext(ctx);
+    }
+    if (rt) {
+        js_std_free_handlers(rt);
+        JS_FreeRuntime(rt);
+    }
+    runtime->setRtCtx(nullptr, nullptr);
+}
+
+void engineRuntimeSaveJsGlobals(EngineRuntime* runtime) {
+    if (!runtime || !runtime->jsStorage()) return;
+    EngineRuntimeJsStorage& s = *runtime->jsStorage();
+    JSContext* ctx = runtime->ctx();
+    s.running = g_running;
+    s.shapes = g_shapes;
+    s.devServerUrl = g_devServerUrl;
+    s.devRevision = g_devRevision;
+    if (ctx) {
+        if (!JS_IsUndefined(frameUpdateFunction)) {
+            s.frameUpdateFunction = JS_DupValue(ctx, frameUpdateFunction);
+        } else {
+            s.frameUpdateFunction = JS_UNDEFINED;
+        }
+        if (!JS_IsUndefined(renderFrameFunction)) {
+            s.renderFrameFunction = JS_DupValue(ctx, renderFrameFunction);
+        } else {
+            s.renderFrameFunction = JS_UNDEFINED;
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_touchMutex);
+        s.queuedTouch = g_queuedTouch;
+        s.touchPressFired = g_touchPressFired;
+    }
+    g_shapes.clear();
+    g_running = false;
+    g_devServerUrl.clear();
+    g_devRevision = 0;
+    if (ctx) {
+        if (!JS_IsUndefined(frameUpdateFunction)) JS_FreeValue(ctx, frameUpdateFunction);
+        if (!JS_IsUndefined(renderFrameFunction)) JS_FreeValue(ctx, renderFrameFunction);
+    }
+    frameUpdateFunction = JS_UNDEFINED;
+    renderFrameFunction = JS_UNDEFINED;
+    {
+        std::lock_guard<std::mutex> lock(g_touchMutex);
+        g_queuedTouch = {};
+        g_touchPressFired = false;
+    }
+}
+
+void engineRuntimeRestoreJsGlobals(EngineRuntime* runtime) {
+    if (!runtime || !runtime->jsStorage()) return;
+    const EngineRuntimeJsStorage& s = *runtime->jsStorage();
+    JSContext* ctx = runtime->ctx();
+    g_running = s.running;
+    g_shapes = s.shapes;
+    g_devServerUrl = s.devServerUrl;
+    g_devRevision = s.devRevision;
+    if (ctx) {
+        frameUpdateFunction = JS_IsUndefined(s.frameUpdateFunction)
+            ? JS_UNDEFINED
+            : JS_DupValue(ctx, s.frameUpdateFunction);
+        renderFrameFunction = JS_IsUndefined(s.renderFrameFunction)
+            ? JS_UNDEFINED
+            : JS_DupValue(ctx, s.renderFrameFunction);
+    } else {
+        frameUpdateFunction = JS_UNDEFINED;
+        renderFrameFunction = JS_UNDEFINED;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_touchMutex);
+        g_queuedTouch = s.queuedTouch;
+        g_touchPressFired = s.touchPressFired;
+    }
+}
+#endif
 
 } // namespace rayact

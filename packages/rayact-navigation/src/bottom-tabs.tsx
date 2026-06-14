@@ -8,10 +8,18 @@ import {
   type TabNavigationState,
 } from '@react-navigation/core';
 import { TabActions, TabRouter, type TabRouterOptions } from '@react-navigation/routers';
-import { BackHandler, Text, View, useTheme } from '@rayact/react';
+import { BackHandler, Text, View, useSafeAreaInsets, useTheme } from '@rayact/react';
 
 type TabNavigationOptions = {
   tabBarLabel?: string;
+  /** Mount on first focus; keep mounted after. Default true. */
+  lazy?: boolean;
+};
+
+type TabBarProps = {
+  state: TabNavigationState<ParamListBase>;
+  descriptors: Record<string, DescriptorWithKey>;
+  navigation: { navigate: (name: string) => void };
 };
 
 type Props = DefaultNavigatorOptions<
@@ -24,6 +32,8 @@ type Props = DefaultNavigatorOptions<
 > &
   TabRouterOptions & {
     tabBarPosition?: 'bottom' | 'top';
+    tabBarExtendPaddingToSafeArea?: boolean;
+    tabBar?: (props: TabBarProps) => React.ReactNode;
   };
 
 type DescriptorWithKey = Descriptor<TabNavigationOptions, any, any>;
@@ -34,19 +44,29 @@ function DefaultTabBar({
   state,
   descriptors,
   navigation,
+  position,
+  extendPaddingToSafeArea,
 }: {
   state: TabNavigationState<ParamListBase>;
   descriptors: Record<string, DescriptorWithKey>;
   navigation: { navigate: (name: string) => void };
+  position: 'bottom' | 'top';
+  extendPaddingToSafeArea: boolean;
 }) {
   const theme = useTheme();
-  return (
+  const insets = useSafeAreaInsets();
+  const inset = extendPaddingToSafeArea
+    ? Math.max(0, position === 'top' ? insets.top : insets.bottom)
+    : 0;
+  const row = (
     <View
       style={{
         flexDirection: 'row',
         backgroundColor: theme.surfaceContainerHigh,
-        borderTopWidth: 1,
+        borderTopWidth: position === 'bottom' ? 1 : 0,
         borderTopColor: theme.outlineVariant,
+        borderBottomWidth: position === 'top' ? 1 : 0,
+        borderBottomColor: theme.outlineVariant,
       }}
     >
       {state.routes.map((route, index) => {
@@ -75,6 +95,18 @@ function DefaultTabBar({
       })}
     </View>
   );
+  if (inset <= 0) return row;
+  return (
+    <View style={{ backgroundColor: theme.surfaceContainerHigh }}>
+      {position === 'top' ? (
+        <View pointerEvents="none" style={{ height: inset, backgroundColor: theme.surfaceContainerHigh }} />
+      ) : null}
+      {row}
+      {position === 'bottom' ? (
+        <View pointerEvents="none" style={{ height: inset, backgroundColor: theme.surfaceContainerHigh }} />
+      ) : null}
+    </View>
+  );
 }
 
 function BottomTabsNavigator({
@@ -85,6 +117,8 @@ function BottomTabsNavigator({
   screenListeners,
   screenOptions,
   screenLayout,
+  tabBarPosition = 'bottom',
+  tabBarExtendPaddingToSafeArea = false,
   ...rest
 }: Props) {
   const { state, descriptors, navigation, NavigationContent } =
@@ -113,12 +147,32 @@ function BottomTabsNavigator({
     return () => sub.remove();
   }, [navigation, state.history.length]);
 
+  const mountedTabsRef = React.useRef<Set<string>>(
+    new Set(initialRouteName ? [initialRouteName] : []),
+  );
+
+  React.useLayoutEffect(() => {
+    const name = state.routes[state.index]?.name;
+    if (name) mountedTabsRef.current.add(name);
+  }, [state.index, state.routes]);
+
   return (
     <NavigationContent>
       <View style={{ flex: 1 }}>
+        {tabBarPosition === 'top' ? (
+          <DefaultTabBar
+            state={state}
+            descriptors={descriptors as Record<string, DescriptorWithKey>}
+            navigation={navigation}
+            position={tabBarPosition}
+            extendPaddingToSafeArea={tabBarExtendPaddingToSafeArea}
+          />
+        ) : null}
         <View style={{ flex: 1 }}>
           {state.routes.map((route, index) => {
             const descriptor = descriptors[route.key] as DescriptorWithKey;
+            const lazy = descriptor.options.lazy !== false;
+            if (lazy && !mountedTabsRef.current.has(route.name)) return null;
             return (
               <View
                 key={route.key}
@@ -134,7 +188,15 @@ function BottomTabsNavigator({
             );
           })}
         </View>
-        <DefaultTabBar state={state} descriptors={descriptors as Record<string, DescriptorWithKey>} navigation={navigation} />
+        {tabBarPosition === 'bottom' ? (
+          <DefaultTabBar
+            state={state}
+            descriptors={descriptors as Record<string, DescriptorWithKey>}
+            navigation={navigation}
+            position={tabBarPosition}
+            extendPaddingToSafeArea={tabBarExtendPaddingToSafeArea}
+          />
+        ) : null}
       </View>
     </NavigationContent>
   );

@@ -5,10 +5,13 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import com.rayact.engine.RayactEngine
+import com.rayact.engine.RayactEngineSession
 import kotlin.math.sqrt
 
-class DevShakeDetector(context: Context) : SensorEventListener {
+class DevShakeDetector(
+    context: Context,
+    private val session: RayactEngineSession
+) : SensorEventListener {
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private var lastShakeAt = 0L
@@ -46,7 +49,7 @@ class DevShakeDetector(context: Context) : SensorEventListener {
         val now = System.currentTimeMillis()
         if (now - lastShakeAt < 800) return
         lastShakeAt = now
-        RayactEngine.nativeToggleDevMenu()
+        session.nativeToggleDevMenu()
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
