@@ -59,6 +59,10 @@ private:
     JSContext* ctx_ = nullptr;
     Raym3RuntimeStorage* raym3Storage_ = nullptr;
     std::unique_ptr<EngineRuntimeJsStorage> jsStorage_;
+    // Parked js-stdlib state (timers / rAF callbacks) while this runtime is not
+    // the active one. Owned here; moved into/out of the process globals by
+    // activate()/deactivate(). Non-null only while deactivated.
+    void* stdlibState_ = nullptr;
 };
 
 EngineRuntime* engineRuntimeActive();

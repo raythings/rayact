@@ -87,6 +87,11 @@ export type HostEventName =
   | 'requestClose'
   | 'focus'
   | 'blur'
+  | 'submitEditing'
+  | 'endEditing'
+  | 'selectionChange'
+  | 'keyPress'
+  | 'contentSizeChange'
   | 'dragStart'
   | 'dragMove'
   | 'dragEnd'
@@ -204,6 +209,16 @@ export interface RayactGlobal {
   setOnLayout?: (
     nodeId: number,
     handler?: ((event: { nativeEvent: { layout: { x: number; y: number; width: number; height: number } } }) => void) | null
+  ) => void;
+  setOnFocus?: (nodeId: number, handler?: (() => void) | null) => void;
+  setOnBlur?: (nodeId: number, handler?: (() => void) | null) => void;
+  // TextInput (react-native parity). Submit/end-editing carry the final text;
+  // selectionChange carries the new caret/selection range.
+  setOnSubmitEditing?: (nodeId: number, handler?: ((e: { nativeEvent: { text: string } }) => void) | null) => void;
+  setOnEndEditing?: (nodeId: number, handler?: ((e: { nativeEvent: { text: string } }) => void) | null) => void;
+  setOnSelectionChange?: (
+    nodeId: number,
+    handler?: ((e: { nativeEvent: { selection: { start: number; end: number } } }) => void) | null
   ) => void;
   disposeNode?: (nodeId: number) => void;
   clearRootNode?: () => void;

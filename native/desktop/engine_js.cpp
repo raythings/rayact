@@ -526,6 +526,12 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_setOnFocus, "setOnFocus", 2));
     JS_SetPropertyStr(ctx, global, "setOnBlur",
                       JS_NewCFunction(ctx, JS_setOnBlur, "setOnBlur", 2));
+    JS_SetPropertyStr(ctx, global, "setOnSubmitEditing",
+                      JS_NewCFunction(ctx, JS_setOnSubmitEditing, "setOnSubmitEditing", 2));
+    JS_SetPropertyStr(ctx, global, "setOnEndEditing",
+                      JS_NewCFunction(ctx, JS_setOnEndEditing, "setOnEndEditing", 2));
+    JS_SetPropertyStr(ctx, global, "setOnSelectionChange",
+                      JS_NewCFunction(ctx, JS_setOnSelectionChange, "setOnSelectionChange", 2));
     JS_SetPropertyStr(ctx, global, "setOnChangeValue",
                       JS_NewCFunction(ctx, JS_setOnChangeValue, "setOnChangeValue", 2));
     JS_SetPropertyStr(ctx, global, "setOnScroll",

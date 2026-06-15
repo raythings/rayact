@@ -86,6 +86,9 @@ type Child = RayactHostInstance | RayactTextInstance;
 const eventProps = [
   'onPress', 'onClick', 'onChangeText', 'onValueChange', 'onScroll', 'onRequestClose',
   'onFocus', 'onBlur', 'onLayout', 'onDragStart', 'onDragMove', 'onDragEnd',
+  // TextInput (react-native parity). keyPress/contentSizeChange are accepted and
+  // stripped from the payload but not yet fired by the host.
+  'onSubmitEditing', 'onEndEditing', 'onSelectionChange', 'onKeyPress', 'onContentSizeChange',
 ] as const;
 const eventPropSet = new Set<string>(eventProps);
 
@@ -299,6 +302,11 @@ function eventNameForProp(prop: typeof eventProps[number]): HostEventName {
   if (prop === 'onRequestClose') return 'requestClose';
   if (prop === 'onFocus') return 'focus';
   if (prop === 'onBlur') return 'blur';
+  if (prop === 'onSubmitEditing') return 'submitEditing';
+  if (prop === 'onEndEditing') return 'endEditing';
+  if (prop === 'onSelectionChange') return 'selectionChange';
+  if (prop === 'onKeyPress') return 'keyPress';
+  if (prop === 'onContentSizeChange') return 'contentSizeChange';
   if (prop === 'onDragStart') return 'dragStart';
   if (prop === 'onDragMove') return 'dragMove';
   if (prop === 'onDragEnd') return 'dragEnd';

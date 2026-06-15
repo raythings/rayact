@@ -406,6 +406,15 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
         native.setOnFocus(node.id, handler ?? null);
       } else if (eventName === 'blur' && typeof native.setOnBlur === 'function') {
         native.setOnBlur(node.id, handler ?? null);
+      } else if (eventName === 'submitEditing' && typeof native.setOnSubmitEditing === 'function') {
+        native.setOnSubmitEditing(node.id, handler as ((e: { nativeEvent: { text: string } }) => void) | null);
+      } else if (eventName === 'endEditing' && typeof native.setOnEndEditing === 'function') {
+        native.setOnEndEditing(node.id, handler as ((e: { nativeEvent: { text: string } }) => void) | null);
+      } else if (eventName === 'selectionChange' && typeof native.setOnSelectionChange === 'function') {
+        native.setOnSelectionChange(node.id, handler as ((e: { nativeEvent: { selection: { start: number; end: number } } }) => void) | null);
+      } else if (eventName === 'keyPress' || eventName === 'contentSizeChange') {
+        // Accepted for RN parity; not yet fired by the host. No-op so the
+        // reconciler can register/strip them without error.
       } else if (eventName === 'dragStart' && typeof native.setOnDragStart === 'function') {
         native.setOnDragStart(node.id, handler as ((event: { x: number; y: number }) => void) | null);
       } else if (eventName === 'dragMove' && typeof native.setOnDragMove === 'function') {

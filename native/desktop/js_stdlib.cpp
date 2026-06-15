@@ -642,3 +642,46 @@ void cleanupJSStdlib(JSContext* ctx) {
     s_consoleCounts.clear();
     s_groupDepth = 0;
 }
+
+// Per-runtime parking of the JSValue-bearing global stdlib state. The timer and
+// rAF lists are process-global (one active runtime at a time), but their
+// callbacks belong to a specific JSContext. When the active runtime switches
+// (Android launcher↔project), the outgoing runtime must MOVE its timers/rafs
+// aside without freeing them — freeing through the wrong runtime's ctx, or
+// concurrently with that runtime's render thread, corrupts the heap (SIGSEGV in
+// JS_FreeValue during a second engine instance's creation).
+struct JSStdlibState {
+    std::vector<JSTimer> timers;
+    std::vector<RafCallback> rafQueue;
+    std::set<int> cancelledRafIds;
+    int nextTimerId = 1;
+    int nextRafId = 1;
+};
+
+void* saveJSStdlibState() {
+    auto* st = new JSStdlibState();
+    st->timers.swap(s_timers);
+    st->rafQueue.swap(s_rafQueue);
+    st->cancelledRafIds.swap(s_cancelledRafIds);
+    st->nextTimerId = s_nextTimerId;
+    st->nextRafId = s_nextRafId;
+    // Globals are now empty; counters keep advancing per-runtime on restore.
+    return st;
+}
+
+void restoreJSStdlibState(void* state) {
+    // Whatever is currently in the globals belongs to no one now (the caller is
+    // about to overwrite the active runtime) — it must already have been parked
+    // via saveJSStdlibState. Clear defensively so a stale list can't leak.
+    s_timers.clear();
+    s_rafQueue.clear();
+    s_cancelledRafIds.clear();
+    if (!state) return;
+    auto* st = static_cast<JSStdlibState*>(state);
+    s_timers.swap(st->timers);
+    s_rafQueue.swap(st->rafQueue);
+    s_cancelledRafIds.swap(st->cancelledRafIds);
+    s_nextTimerId = st->nextTimerId;
+    s_nextRafId = st->nextRafId;
+    delete st;
+}

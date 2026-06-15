@@ -330,7 +330,14 @@ class DevLauncherActivity : AppCompatActivity() {
         if (activePane == ActivePane.PROJECT) {
             if (now < projectBackBlockedUntilMs) return true
             projectBackBlockedUntilMs = now + 600L
-            projectSession?.nativeOnBackPressed()
+            projectSession?.let { session ->
+                session.nativeOnBackPressed()
+                // The pending back-press is only drained inside the per-frame JS
+                // pump. When the render loop is idle (no animation in flight) the
+                // press would otherwise sit forever — so back-to-launcher silently
+                // does nothing. Kick a frame to drain it.
+                session.host.renderScheduler.requestFrame()
+            }
             return true
         }
         if (now < launcherBackBlockedUntilMs) return true

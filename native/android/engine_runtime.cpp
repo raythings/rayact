@@ -40,6 +40,9 @@ void EngineRuntime::destroy() {
     // reach them, so JS_FreeRuntime aborted on the leaked GC objects when a
     // ProjectActivity session was destroyed.
     activate();
+    // activate() moved any parked stdlib state back into the globals, so
+    // engineRuntimeTeardown's cleanupJSStdlib(ctx_) frees the timers/rafs with
+    // the correct context. (stdlibState_ is null again after activate().)
     engineRuntimeTeardown(this);
     if (raym3Storage_) {
         raym3BridgeDeleteRuntimeStorage(raym3Storage_);
@@ -63,12 +66,19 @@ void EngineRuntime::activate() {
     g_bridge_ctx = ctx_;
     if (raym3Storage_) raym3BridgeImportRuntimeStorage(*raym3Storage_);
     engineRuntimeRestoreJsGlobals(this);
+    // Move this runtime's parked timers/rafs back into the process globals.
+    restoreJSStdlibState(stdlibState_);
+    stdlibState_ = nullptr;
     g_activeRuntime = this;
 }
 
 void EngineRuntime::deactivate() {
     if (g_activeRuntime != this) return;
-    if (ctx_) cleanupJSStdlib(ctx_);
+    // Park the stdlib timer/rAF callbacks in this runtime's blob (move, no free)
+    // rather than destroying them — they must survive a launcher↔project switch,
+    // and freeing them here (esp. through another runtime's ctx, or while this
+    // runtime's render thread is mid-pump) corrupts the heap.
+    stdlibState_ = saveJSStdlibState();
     if (raym3Storage_) raym3BridgeExportRuntimeStorage(*raym3Storage_);
     engineRuntimeSaveJsGlobals(this);
     g_rt = nullptr;

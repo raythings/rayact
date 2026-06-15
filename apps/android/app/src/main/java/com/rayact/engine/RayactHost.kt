@@ -2,7 +2,6 @@ package com.rayact.engine
 
 import android.os.Handler
 import android.os.Looper
-import com.rayact.app.BuildConfig
 import com.rayact.app.NavigationHost
 import com.rayact.app.RayactRenderScheduler
 import com.rayact.app.RayactScreenFragment
@@ -88,7 +87,15 @@ class RayactHost(
     }
 
     override fun finishActivity() {
-        if (BuildConfig.RAYACT_DEV_CLIENT && DevClientBridge.tryShowLauncherFromFinishActivity()) {
+        // Return to the in-app dev launcher instead of finishing the Activity
+        // whenever a project pane is actually open over a launcher session. This
+        // is gated purely at runtime (tryShowLauncherFromFinishActivity checks a
+        // dev host is registered and the active session isn't the launcher) — a
+        // plain app is always in the launcher pane, so it still finishes. The old
+        // BuildConfig.RAYACT_DEV_CLIENT compile gate disabled this in release
+        // builds, so the release dev-app exited (and crashed in the two-session
+        // onDestroy teardown) instead of going back to the launcher.
+        if (DevClientBridge.tryShowLauncherFromFinishActivity()) {
             return
         }
         val h = navigationHost?.get() ?: return

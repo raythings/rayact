@@ -157,29 +157,109 @@ export interface IconProps extends BaseProps {
   filled?: boolean;
 }
 
+/** react-native TextInput.keyboardType (cross-platform subset + common iOS/Android values). */
+export type KeyboardType =
+  | 'default'
+  | 'number-pad'
+  | 'decimal-pad'
+  | 'numeric'
+  | 'email-address'
+  | 'phone-pad'
+  | 'url'
+  | 'ascii-capable'
+  | 'visible-password';
+
+/** react-native TextInput.returnKeyType (cross-platform subset). */
+export type ReturnKeyType = 'done' | 'go' | 'next' | 'search' | 'send' | 'default';
+
+export type AutoCapitalize = 'none' | 'sentences' | 'words' | 'characters';
+
+export interface TextInputSelection {
+  start: number;
+  end?: number;
+}
+
+export interface TextInputChangeEvent {
+  nativeEvent: { text: string; target?: number; eventCount?: number };
+}
+export interface TextInputSubmitEvent {
+  nativeEvent: { text: string; target?: number };
+}
+export interface TextInputEndEditingEvent {
+  nativeEvent: { text: string; target?: number };
+}
+export interface TextInputFocusEvent {
+  nativeEvent: { text?: string; target?: number };
+}
+export interface TextInputSelectionChangeEvent {
+  nativeEvent: { selection: { start: number; end: number }; target?: number };
+}
+export interface TextInputKeyPressEvent {
+  nativeEvent: { key: string };
+}
+export interface TextInputContentSizeChangeEvent {
+  nativeEvent: { contentSize: { width: number; height: number } };
+}
+
+/**
+ * Props mirror react-native's TextInput (https://reactnative.dev/docs/textinput).
+ * The field is rendered + edited entirely by the raym3 engine (Flutter model:
+ * caret/selection/composing/handles/clipboard live in native; the OS only
+ * proxies the IME), so behaviour is 1:1 with Flutter's EditableText while the
+ * surface matches RN.
+ */
 export interface TextInputProps extends BaseProps {
+  // ── Value ────────────────────────────────────────────────────────────────
   value?: string;
   defaultValue?: string;
   placeholder?: string;
-  inputType?: 'text' | 'email' | 'number' | 'phone' | 'password' | 'multiline' | string;
-  autocorrect?: boolean;
-  secure?: boolean;
-  imeAction?: 'done' | 'go' | 'next' | 'send' | 'search' | string;
+  placeholderTextColor?: ColorValue;
+  maxLength?: number;
+
+  // ── Keyboard / input behaviour ─────────────────────────────────────────────
+  keyboardType?: KeyboardType;
+  returnKeyType?: ReturnKeyType;
+  autoCapitalize?: AutoCapitalize;
+  autoCorrect?: boolean;
+  autoComplete?: string;
+  autoFocus?: boolean;
   secureTextEntry?: boolean;
-  readOnly?: boolean;
-  disabled?: boolean;
+  /** false === RN's editable={false}. */
+  editable?: boolean;
+  /** Multiline field (textarea). */
+  multiline?: boolean;
+  numberOfLines?: number;
+  /** Blur (and not insert a newline) when the return key is pressed. Default: !multiline. */
+  blurOnSubmit?: boolean;
+  selectTextOnFocus?: boolean;
+  caretHidden?: boolean;
+  contextMenuHidden?: boolean;
+
+  // ── Appearance ─────────────────────────────────────────────────────────────
+  selectionColor?: ColorValue;
+  cursorColor?: ColorValue;
+  textAlign?: 'left' | 'center' | 'right' | 'auto';
+  /** Controlled selection range. */
+  selection?: TextInputSelection;
+
+  // ── Callbacks ──────────────────────────────────────────────────────────────
   onChangeText?: (value: string) => void;
-  onFocus?: (e?: unknown) => void;
-  onBlur?: (e?: unknown) => void;
-  // M3 text-field rendering controls (used e.g. by SearchBar for a borderless field).
+  onChange?: (e: TextInputChangeEvent) => void;
+  onSubmitEditing?: (e: TextInputSubmitEvent) => void;
+  onEndEditing?: (e: TextInputEndEditingEvent) => void;
+  onSelectionChange?: (e: TextInputSelectionChangeEvent) => void;
+  onKeyPress?: (e: TextInputKeyPressEvent) => void;
+  onContentSizeChange?: (e: TextInputContentSizeChangeEvent) => void;
+  onFocus?: (e?: TextInputFocusEvent) => void;
+  onBlur?: (e?: TextInputFocusEvent) => void;
+
+  // ── raym3/M3 rendering controls (not in RN; advanced) ──────────────────────
   variant?: 'filled' | 'outlined' | 'underline';
   drawOutline?: boolean;
   drawBackground?: boolean;
-  // When false, the field paints no own hover/focus highlight; the parent (e.g.
-  // SearchBar) owns the single state layer spanning the whole element.
+  /** When false, the field paints no own hover/focus highlight (parent owns it). */
   drawStateLayer?: boolean;
-  multiline?: boolean;
-  numberOfLines?: number;
+  label?: string;
 }
 
 export interface SliderProps extends BaseProps {

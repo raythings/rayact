@@ -98,6 +98,9 @@ struct ScreenState {
     std::map<int, JSValue> changeTextCallbacks;
     std::map<int, JSValue> focusCallbacks;
     std::map<int, JSValue> blurCallbacks;
+    std::map<int, JSValue> submitEditingCallbacks;
+    std::map<int, JSValue> endEditingCallbacks;
+    std::map<int, JSValue> selectionChangeCallbacks;
     std::map<int, JSValue> changeValueCallbacks;
     std::map<int, JSValue> scrollCallbacks;
     std::map<int, JSValue> requestCloseCallbacks;
@@ -194,9 +197,22 @@ static float animatedDefaultForOffset(int offset) {
     return (offset == kAnimatedScale || offset == kAnimatedOpacity) ? 1.0f : 0.0f;
 }
 
+// Seed identity defaults (scale=1, opacity=1) the first time a node becomes
+// animated. The style buffer is zero-initialized, but applyAnimatedStylesToNodes
+// applies ALL five slots every frame — so a partial animation (e.g. the stack's
+// slide_from_right sets only translateX) would otherwise stamp scale=0/opacity=0
+// onto the node and render it invisible (the "offscreen animation → black
+// screen" bug).
+static void ensureAnimatedDefaults(int nodeId, size_t base) {
+    if (g_animatedNodes.find(nodeId) != g_animatedNodes.end()) return;
+    g_animatedStyleBuffer[base + kAnimatedScale] = 1.0f;
+    g_animatedStyleBuffer[base + kAnimatedOpacity] = 1.0f;
+}
+
 static void setAnimatedStyleValue(int nodeId, int offset, float value) {
     size_t base = 0;
     if (!animatedNodeIndex(nodeId, base) || offset < 0 || offset >= 5) return;
+    ensureAnimatedDefaults(nodeId, base);
     g_animatedStyleBuffer[base + (size_t)offset] = value;
     g_animatedStyleBuffer[base + kAnimatedDirty] = 1.0f;
     g_animatedNodes.insert(nodeId);
@@ -250,6 +266,10 @@ static std::vector<Texture2D> g_textures;
 static std::map<int, JSValue> g_changeTextCallbacks;
 static std::map<int, JSValue> g_focusCallbacks;
 static std::map<int, JSValue> g_blurCallbacks;
+// TextInput react-native parity callbacks.
+static std::map<int, JSValue> g_submitEditingCallbacks;
+static std::map<int, JSValue> g_endEditingCallbacks;
+static std::map<int, JSValue> g_selectionChangeCallbacks;
 static std::map<int, JSValue> g_scrollCallbacks;
 static std::map<int, JSValue> g_requestCloseCallbacks;
 static std::map<int, JSValue> g_dragStartCallbacks;
@@ -937,6 +957,16 @@ static std::optional<raym3::FontWeight> jsGetFontWeight(JSContext* ctx, JSValue 
 static raym3::v2::Style preserveLayoutStyle(const raym3::v2::Style& visualStyle,
                                             const raym3::v2::Style& previousStyle) {
     raym3::v2::Style result = visualStyle;
+    // Preserve the caller-set background across a partial (style-less) material
+    // update. React sends DIFF payloads, so an AppBar that re-renders because a
+    // child/title changed omits its unchanged style — and `visualStyle` is the
+    // freshly-rebuilt M3 default (backgroundColor = theme.surface). Without this,
+    // an AppBar with a custom backgroundColor (e.g. surfaceVariant) reverted to
+    // surface on every such update, so only the JS-level status-bar spacer kept
+    // the intended colour ("AppBar only shows the background colour on the status
+    // bar"). A real colour change always carries `style`, taking the other branch.
+    result.backgroundColor = previousStyle.backgroundColor;
+    result.backgroundGradient = previousStyle.backgroundGradient;
     result.display = previousStyle.display;
     result.flexDirection = previousStyle.flexDirection;
     result.justifyContent = previousStyle.justifyContent;
@@ -1929,6 +1959,9 @@ JSValue JS_rayactStartStyleAnimation(JSContext* ctx, JSValue, int argc, JSValueC
     JS_ToInt32(ctx, &nodeId, argv[0]);
     size_t base = 0;
     if (!animatedNodeIndex(nodeId, base)) return JS_UNDEFINED;
+    // Seed identity defaults before reading `from` / inserting the node, so an
+    // animation that doesn't drive scale/opacity never leaves them at 0.
+    ensureAnimatedDefaults(nodeId, base);
 
     JSValue durationValue = JS_GetPropertyStr(ctx, argv[2], "duration");
     double duration = 300.0;
@@ -2108,6 +2141,27 @@ static void registerImeStateCallbackOnce() {
 }
 #endif
 
+// Fire a react-native style text callback: cb({ nativeEvent: { text } }) with the
+// node's current text. Used for onSubmitEditing / onEndEditing.
+static void fireTextInputTextEvent(std::map<int, JSValue>& callbacks, int nodeId) {
+    auto cbIt = callbacks.find(nodeId);
+    if (cbIt == callbacks.end() || !g_bridge_ctx) return;
+    std::string text;
+    auto nodeIt = g_nodes.find(nodeId);
+    if (nodeIt != g_nodes.end() && nodeIt->second) {
+        if (nodeIt->second->textInput.value) text = *nodeIt->second->textInput.value;
+        else text = nodeIt->second->inputScratch;
+    }
+    JSValue ev = JS_NewObject(g_bridge_ctx);
+    JSValue ne = JS_NewObject(g_bridge_ctx);
+    JS_SetPropertyStr(g_bridge_ctx, ne, "text", JS_NewString(g_bridge_ctx, text.c_str()));
+    JS_SetPropertyStr(g_bridge_ctx, ev, "nativeEvent", ne);
+    JSValue r = JS_Call(g_bridge_ctx, cbIt->second, JS_UNDEFINED, 1, &ev);
+    if (JS_IsException(r)) JS_FreeValue(g_bridge_ctx, JS_GetException(g_bridge_ctx));
+    JS_FreeValue(g_bridge_ctx, r);
+    JS_FreeValue(g_bridge_ctx, ev);
+}
+
 JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
 #ifdef __ANDROID__
     registerImeStateCallbackOnce();
@@ -2140,6 +2194,26 @@ JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSVal
         props.drawBackground = jsGetBool(ctx, argv[1], "drawBackground", true);
         props.drawOutline = jsGetBool(ctx, argv[1], "drawOutline", true);
         props.drawStateLayer = jsGetBool(ctx, argv[1], "drawStateLayer", true);
+        // react-native parity props.
+        if (auto m = jsGetFloat(ctx, argv[1], "maxLength")) props.maxLength = (int)*m;
+        props.multiline = jsGetBool(ctx, argv[1], "multiline", false);
+        props.caretHidden = jsGetBool(ctx, argv[1], "caretHidden", false);
+        props.blurOnSubmit = jsGetBool(ctx, argv[1], "blurOnSubmit", !props.multiline);
+        props.selectTextOnFocus = jsGetBool(ctx, argv[1], "selectTextOnFocus", false);
+        props.autoFocus = jsGetBool(ctx, argv[1], "autoFocus", false);
+        { std::string ac = jsGetString(ctx, argv[1], "autoCapitalize");
+          if (!ac.empty()) props.autoCapitalize = ac; }
+        { std::string ta = jsGetString(ctx, argv[1], "textAlign");
+          if (!ta.empty()) props.textAlign = ta; }
+        if (auto c = jsGetColor(ctx, argv[1], "selectionColor")) {
+            props.hasSelectionColor = true; props.selectionColor = *c;
+        }
+        if (auto c = jsGetColor(ctx, argv[1], "cursorColor")) {
+            props.hasCursorColor = true; props.cursorColor = *c;
+        }
+        if (auto c = jsGetColor(ctx, argv[1], "placeholderTextColor")) {
+            props.hasPlaceholderColor = true; props.placeholderColor = *c;
+        }
     }
 
     auto node = raym3::v2::TextInput(props);
@@ -2189,16 +2263,26 @@ JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSVal
         }
         AndroidKeyboard_Hide();
 #endif
+        // react-native onEndEditing: fires with the final text when editing ends.
+        fireTextInputTextEvent(g_endEditingCallbacks, id);
         auto it = g_blurCallbacks.find(id);
         if (it == g_blurCallbacks.end() || !g_bridge_ctx) return;
         JSValue result = JS_Call(g_bridge_ctx, it->second, JS_UNDEFINED, 0, nullptr);
         if (JS_IsException(result)) JS_FreeValue(g_bridge_ctx, JS_GetException(g_bridge_ctx));
         JS_FreeValue(g_bridge_ctx, result);
     };
+    // react-native onSubmitEditing: fired by the engine on the return/IME action.
+    node->textInput.onSubmit = [id = g_nextNodeId](const std::string&) {
+        fireTextInputTextEvent(g_submitEditingCallbacks, id);
+    };
 
     int id = nextNativeNodeId();
     g_nodes[id] = node;
     if (argc >= 1 && JS_IsObject(argv[0])) captureNodeClassName(ctx, id, argv[0]);
+    // react-native autoFocus: focus the field as soon as it mounts.
+    if (argc >= 2 && JS_IsObject(argv[1]) && jsGetBool(ctx, argv[1], "autoFocus", false)) {
+        raym3::v2::SetFocusedId(raym3::v2::IdOf(node));
+    }
     return JS_NewInt32(ctx, id);
 }
 
@@ -3308,6 +3392,30 @@ JSValue JS_setOnBlur(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     return setStoredCallback(ctx, id, argv[1], g_blurCallbacks);
 }
 
+JSValue JS_setOnSubmitEditing(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setOnSubmitEditing: expected (nodeId, fn)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    if (g_nodes.find(id) == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnSubmitEditing: invalid node id");
+    return setStoredCallback(ctx, id, argv[1], g_submitEditingCallbacks);
+}
+
+JSValue JS_setOnEndEditing(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setOnEndEditing: expected (nodeId, fn)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    if (g_nodes.find(id) == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnEndEditing: invalid node id");
+    return setStoredCallback(ctx, id, argv[1], g_endEditingCallbacks);
+}
+
+JSValue JS_setOnSelectionChange(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setOnSelectionChange: expected (nodeId, fn)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    if (g_nodes.find(id) == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnSelectionChange: invalid node id");
+    return setStoredCallback(ctx, id, argv[1], g_selectionChangeCallbacks);
+}
+
 JSValue JS_setOnChangeValue(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (argc < 2) return JS_ThrowTypeError(ctx, "setOnChangeValue: expected (nodeId, fn)");
     int id;
@@ -3556,6 +3664,25 @@ void rayactSetTextInputContent(int nodeId, const char* text, int selectionStart,
                        nodeId, text);
         return;
     }
+    // react-native maxLength: the IME (Android/macOS) sets text through here,
+    // bypassing the desktop key path's enforcement, so clamp by codepoint count.
+    std::string clamped;
+    int maxLen = it->second->textInput.maxLength;
+    if (maxLen > 0) {
+        int cp = 0;
+        const char* p = text;
+        while (*p) {
+            if (((unsigned char)*p & 0xC0) != 0x80) {
+                if (cp == maxLen) break;
+                cp++;
+            }
+            p++;
+        }
+        if (*p) {
+            clamped.assign(text, static_cast<size_t>(p - text));
+            text = clamped.c_str();
+        }
+    }
     it->second->inputScratch = text;
     if (it->second->inputBuffer.empty()) it->second->inputBuffer.assign(1024, '\0');
     std::fill(it->second->inputBuffer.begin(), it->second->inputBuffer.end(), '\0');
@@ -3624,6 +3751,10 @@ JSValue JS_disposeNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     if (blurCb != g_blurCallbacks.end()) {
         JS_FreeValue(ctx, blurCb->second);
         g_blurCallbacks.erase(blurCb);
+    }
+    for (auto* m : {&g_submitEditingCallbacks, &g_endEditingCallbacks, &g_selectionChangeCallbacks}) {
+        auto cb = m->find(id);
+        if (cb != m->end()) { JS_FreeValue(ctx, cb->second); m->erase(cb); }
     }
     auto changeValCb = g_changeValueCallbacks.find(id);
     if (changeValCb != g_changeValueCallbacks.end()) {
@@ -4416,6 +4547,9 @@ struct Raym3RuntimeStorage {
     std::map<int, JSValue> changeTextCallbacks;
     std::map<int, JSValue> focusCallbacks;
     std::map<int, JSValue> blurCallbacks;
+    std::map<int, JSValue> submitEditingCallbacks;
+    std::map<int, JSValue> endEditingCallbacks;
+    std::map<int, JSValue> selectionChangeCallbacks;
     std::map<int, JSValue> scrollCallbacks;
     std::map<int, JSValue> requestCloseCallbacks;
     std::map<int, JSValue> dragStartCallbacks;
@@ -4470,6 +4604,9 @@ void raym3BridgeExportRuntimeStorage(Raym3RuntimeStorage& out) {
     out.changeTextCallbacks = std::move(g_changeTextCallbacks);
     out.focusCallbacks = std::move(g_focusCallbacks);
     out.blurCallbacks = std::move(g_blurCallbacks);
+    out.submitEditingCallbacks = std::move(g_submitEditingCallbacks);
+    out.endEditingCallbacks = std::move(g_endEditingCallbacks);
+    out.selectionChangeCallbacks = std::move(g_selectionChangeCallbacks);
     out.scrollCallbacks = std::move(g_scrollCallbacks);
     out.requestCloseCallbacks = std::move(g_requestCloseCallbacks);
     out.dragStartCallbacks = std::move(g_dragStartCallbacks);
@@ -4509,6 +4646,9 @@ void raym3BridgeImportRuntimeStorage(const Raym3RuntimeStorage& in) {
     g_changeTextCallbacks = in.changeTextCallbacks;
     g_focusCallbacks = in.focusCallbacks;
     g_blurCallbacks = in.blurCallbacks;
+    g_submitEditingCallbacks = in.submitEditingCallbacks;
+    g_endEditingCallbacks = in.endEditingCallbacks;
+    g_selectionChangeCallbacks = in.selectionChangeCallbacks;
     g_scrollCallbacks = in.scrollCallbacks;
     g_requestCloseCallbacks = in.requestCloseCallbacks;
     g_dragStartCallbacks = in.dragStartCallbacks;
@@ -4542,6 +4682,9 @@ void raym3BridgeClearRuntimeGlobals() {
     g_changeTextCallbacks.clear();
     g_focusCallbacks.clear();
     g_blurCallbacks.clear();
+    g_submitEditingCallbacks.clear();
+    g_endEditingCallbacks.clear();
+    g_selectionChangeCallbacks.clear();
     g_scrollCallbacks.clear();
     g_requestCloseCallbacks.clear();
     g_dragStartCallbacks.clear();
@@ -4572,6 +4715,9 @@ void cleanupRaym3Bridge(JSContext* ctx, bool unloadGpuCaches) {
         for (auto& [k, v] : s.changeTextCallbacks) JS_FreeValue(ctx, v);
         for (auto& [k, v] : s.focusCallbacks) JS_FreeValue(ctx, v);
         for (auto& [k, v] : s.blurCallbacks) JS_FreeValue(ctx, v);
+        for (auto& [k, v] : s.submitEditingCallbacks) JS_FreeValue(ctx, v);
+        for (auto& [k, v] : s.endEditingCallbacks) JS_FreeValue(ctx, v);
+        for (auto& [k, v] : s.selectionChangeCallbacks) JS_FreeValue(ctx, v);
         for (auto& [k, v] : s.changeValueCallbacks) JS_FreeValue(ctx, v);
         for (auto& [k, v] : s.scrollCallbacks) JS_FreeValue(ctx, v);
         for (auto& [k, v] : s.requestCloseCallbacks) JS_FreeValue(ctx, v);
@@ -4585,6 +4731,9 @@ void cleanupRaym3Bridge(JSContext* ctx, bool unloadGpuCaches) {
     for (auto& [id, fn] : g_changeTextCallbacks) JS_FreeValue(ctx, fn);
     for (auto& [id, fn] : g_focusCallbacks) JS_FreeValue(ctx, fn);
     for (auto& [id, fn] : g_blurCallbacks) JS_FreeValue(ctx, fn);
+    for (auto& [id, fn] : g_submitEditingCallbacks) JS_FreeValue(ctx, fn);
+    for (auto& [id, fn] : g_endEditingCallbacks) JS_FreeValue(ctx, fn);
+    for (auto& [id, fn] : g_selectionChangeCallbacks) JS_FreeValue(ctx, fn);
     for (auto& [id, fn] : g_changeValueCallbacks) JS_FreeValue(ctx, fn);
     for (auto& [id, fn] : g_scrollCallbacks) JS_FreeValue(ctx, fn);
     for (auto& [id, fn] : g_requestCloseCallbacks) JS_FreeValue(ctx, fn);
@@ -4595,6 +4744,9 @@ void cleanupRaym3Bridge(JSContext* ctx, bool unloadGpuCaches) {
     g_changeTextCallbacks.clear();
     g_focusCallbacks.clear();
     g_blurCallbacks.clear();
+    g_submitEditingCallbacks.clear();
+    g_endEditingCallbacks.clear();
+    g_selectionChangeCallbacks.clear();
     g_changeValueCallbacks.clear();
     g_scrollCallbacks.clear();
     g_requestCloseCallbacks.clear();
@@ -4609,6 +4761,9 @@ void cleanupRaym3Bridge(JSContext* ctx, bool unloadGpuCaches) {
     g_changeTextCallbacks.clear();
     g_focusCallbacks.clear();
     g_blurCallbacks.clear();
+    g_submitEditingCallbacks.clear();
+    g_endEditingCallbacks.clear();
+    g_selectionChangeCallbacks.clear();
     g_changeValueCallbacks.clear();
     g_scrollCallbacks.clear();
     g_requestCloseCallbacks.clear();

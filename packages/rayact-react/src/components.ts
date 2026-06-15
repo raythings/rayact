@@ -91,8 +91,63 @@ export function Icon(props: IconProps): React.ReactElement {
   return React.createElement('rayact-icon', props);
 }
 
+// RN keyboardType → raym3 wire inputType. The engine masks (password) and the
+// OS keyboard layout (email/number/phone) are driven by this single token.
+function inputTypeFromKeyboardType(
+  keyboardType: TextInputProps['keyboardType'],
+  multiline: boolean | undefined,
+  secure: boolean | undefined,
+): string {
+  if (secure) return 'password';
+  if (multiline) return 'multiline';
+  switch (keyboardType) {
+    case 'email-address': return 'email';
+    case 'numeric':
+    case 'number-pad':
+    case 'decimal-pad': return 'number';
+    case 'phone-pad': return 'phone';
+    case 'url': return 'url';
+    default: return 'text';
+  }
+}
+
+/**
+ * react-native TextInput. Maps the RN prop surface onto the raym3 native text
+ * field (Flutter editing model). See TextInputProps.
+ */
 export function TextInput(props: TextInputProps): React.ReactElement {
-  return React.createElement('rayact-text-input', props);
+  const {
+    // RN names mapped onto wire props:
+    keyboardType,
+    returnKeyType,
+    autoCorrect,
+    secureTextEntry,
+    editable,
+    multiline,
+    // passthrough / renamed below:
+    selection,
+    ...rest
+  } = props;
+
+  const wire: Record<string, unknown> = {
+    ...rest,
+    inputType: inputTypeFromKeyboardType(keyboardType, multiline, secureTextEntry),
+    imeAction: returnKeyType && returnKeyType !== 'default' ? returnKeyType : 'done',
+    secure: !!secureTextEntry,
+    secureTextEntry: !!secureTextEntry,
+    autocorrect: autoCorrect !== false,
+    readOnly: editable === false,
+    multiline: !!multiline,
+    // blurOnSubmit defaults to single-line behaviour (RN parity).
+    blurOnSubmit: props.blurOnSubmit ?? !multiline,
+  };
+  // Controlled selection → flat wire keys the bridge reads.
+  if (selection) {
+    wire.selectionStart = selection.start;
+    wire.selectionEnd = selection.end ?? selection.start;
+  }
+
+  return React.createElement('rayact-text-input', wire);
 }
 
 export const Input = TextInput;
@@ -1274,7 +1329,9 @@ export function Tabs(props: TabsProps): React.ReactElement {
 export function TextField(props: TextInputProps & { label?: string }): React.ReactElement {
   const { label, placeholder, style, variant, drawBackground, ...rest } = props;
   const resolvedVariant = variant ?? 'filled';
-  return React.createElement('rayact-text-input', {
+  // Route through TextInput so the react-native prop surface (keyboardType,
+  // secureTextEntry, editable, …) is mapped to the native wire protocol.
+  return React.createElement(TextInput, {
     ...rest,
     label,
     placeholder,

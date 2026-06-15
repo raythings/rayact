@@ -356,7 +356,20 @@ bool androidEngineAcquireGraphics(jlong handle) {
 jlong androidEngineInstanceCreate(const std::string& dataPath) {
     auto inst = std::make_unique<AndroidEngineInstance>();
     inst->dataPath = dataPath;
-    if (!inst->runtime.create(dataPath)) return 0;
+    {
+        // EngineRuntime::create() flips the process-global active-runtime slot
+        // (its activate()/deactivate() round-trip to seed storage) and touches
+        // the shared js-stdlib timer/rAF lists. That MUST be serialized against
+        // the render loop — a render thread holds g_engineMutex for the whole
+        // frame — or the second instance's creation races the first instance's
+        // JS pump and crashes in JS_FreeValue (SIGSEGV on first launcher→project
+        // open). Restore the previously-active runtime afterward so the visible
+        // pane keeps its live JS context.
+        std::lock_guard<std::mutex> lock(g_engineMutex);
+        rayact::EngineRuntime* prev = rayact::engineRuntimeActive();
+        if (!inst->runtime.create(dataPath)) return 0;
+        if (prev) prev->activate();
+    }
     inst->engineReady = true;
     std::lock_guard<std::mutex> lock(g_instancesMutex);
     inst->id = g_nextInstanceId++;

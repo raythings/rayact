@@ -24,3 +24,12 @@ double nextJSTimerDelayMs();
 
 // Free all pending timer callbacks. Call before JS_FreeContext.
 void cleanupJSStdlib(JSContext* ctx);
+
+// Park / restore the JSValue-bearing global stdlib state (timer + rAF queues)
+// across an engine-runtime switch. saveJSStdlibState() moves the globals into an
+// opaque blob WITHOUT freeing the callbacks; restoreJSStdlibState() moves a blob
+// back into the globals (and deletes it; nullptr just clears the globals). A
+// runtime's parked state is always brought back into the globals (via activate)
+// before teardown, so cleanupJSStdlib frees it with the correct context.
+void* saveJSStdlibState();
+void restoreJSStdlibState(void* state);
