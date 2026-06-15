@@ -24,6 +24,14 @@ export {
 } from './assets';
 export { createBridge } from './bridge';
 export { createDevClient, installConsoleForwarding } from './devClient';
+export {
+  installModuleHmrRuntime,
+  ModuleHmrRuntime,
+  normalizeModuleUrl,
+  resolveModuleUrl,
+  toRayactModuleUrl
+} from './moduleHmr';
+export type { DevManifestModule, ModuleHmrOptions } from './moduleHmr';
 
 import { createBridge } from './bridge';
 import { createDevClient, installConsoleForwarding } from './devClient';

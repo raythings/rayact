@@ -189,7 +189,7 @@ function TodayScreen() {
 
   return (
     <Screen>
-      <ScreenAppBar title="Habit Tracker" />
+      <ScreenAppBar title="HMR Works!" />
       <InsetContent>
       <ScrollView style={{ flexGrow: 1, flexShrink: 1, minHeight: 0 }}>
         <View style={{ paddingHorizontal: 16, flexShrink: 0 }}>

@@ -16,6 +16,7 @@ import androidx.core.view.WindowCompat
 import com.rayact.devclient.DevClientBridge
 import com.rayact.devclient.DevServerLoader
 import com.rayact.devclient.DevShakeDetector
+import com.rayact.devclient.ProjectHmrClient
 import com.rayact.engine.RayactEngineSession
 import org.json.JSONObject
 
@@ -164,7 +165,7 @@ class DevLauncherActivity : AppCompatActivity() {
 
         Thread {
             val result = traceSection("bundle.fetch") {
-                runCatching { DevServerLoader.fetchBundle(normalized) }
+                runCatching { DevServerLoader.fetchBootstrap(normalized) }
             }
             if (destroyed || generation != projectLoadGeneration) return@Thread
             val loaded = traceSection("bundle.eval") {
@@ -173,7 +174,7 @@ class DevLauncherActivity : AppCompatActivity() {
                     if (payload.bundleFormat == "qjsbc") {
                         session.loadBytecode(payload.bytes)
                     } else {
-                        session.loadSource(payload.bytes.toString(Charsets.UTF_8))
+                        session.loadDevBootstrap(normalized, payload.bytes.toString(Charsets.UTF_8))
                     }
                 } else {
                     val message = result.exceptionOrNull()?.message ?: "Failed to load dev server"
@@ -193,6 +194,7 @@ class DevLauncherActivity : AppCompatActivity() {
                 if (destroyed || generation != projectLoadGeneration) return@runOnUiThread
                 traceInstant("project.root.ready")
                 switchToProjectPane(session)
+                ProjectHmrClient.start(normalized, session)
             }
         }.start()
     }
@@ -202,6 +204,7 @@ class DevLauncherActivity : AppCompatActivity() {
         if (url.isNullOrBlank()) return
         val session = projectSession
         if (activePane == ActivePane.PROJECT && session != null && session.isAlive()) {
+            ProjectHmrClient.stop()
             reloadProjectInPlace(url, session)
         } else {
             openProject(url)
@@ -209,9 +212,21 @@ class DevLauncherActivity : AppCompatActivity() {
     }
 
     private fun reloadProjectInPlace(url: String, session: RayactEngineSession) {
-        session.loadDevServer(url)
-        projectHost?.syncSurfacesToCurrentLayout()
-        session.host.renderScheduler.requestFrame()
+        Thread {
+            runCatching {
+                val payload = DevServerLoader.fetchBootstrap(url)
+                if (payload.bundleFormat == "qjsbc") {
+                    session.loadBytecode(payload.bytes)
+                } else {
+                    session.loadDevBootstrap(url, payload.bytes.toString(Charsets.UTF_8))
+                }
+            }
+            runOnUiThread {
+                ProjectHmrClient.start(url, session)
+                projectHost?.syncSurfacesToCurrentLayout()
+                session.host.renderScheduler.requestFrame()
+            }
+        }.start()
     }
 
     private fun switchToProjectPane(session: RayactEngineSession) {
@@ -304,6 +319,7 @@ class DevLauncherActivity : AppCompatActivity() {
     }
 
     private fun stopProjectDebugTools() {
+        ProjectHmrClient.stop()
         shakeDetector?.stop()
         shakeDetector = null
         projectBackBlockedUntilMs = 0L

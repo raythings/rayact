@@ -96,6 +96,9 @@ static float g_realDensity = 1.0f;
 int g_pendingScriptMode = -1;          // 0 = source string, 1 = dev-server URL, 2 = bytecode
 std::string g_pendingScript;
 std::vector<uint8_t> g_pendingBytecode;
+static std::atomic<bool> g_pendingModuleUpdate{false};
+static std::string g_pendingModulePath;
+static std::string g_pendingModuleSource;
 std::string g_dataPath;                // Activity internalDataPath; used by config loader
 std::map<int, Surface> g_surfaces;     // surfaceId -> Surface
 int g_rootScreenId = 0;                // Stable process root screen; survives Activity/Surface recreation.
@@ -975,6 +978,20 @@ Java_com_rayact_engine_RayactEngineSession_nativeLoadBytecode(JNIEnv* env, jclas
     return JNI_TRUE;
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_rayact_engine_RayactEngineSession_nativeApplyModuleUpdate(
+    JNIEnv* env, jclass, jlong handle, jstring jPath, jstring jSource) {
+    InstanceScope scope(handle);
+    std::lock_guard<std::mutex> lock(g_engineMutex);
+    if (!g_engineReady) return JNI_FALSE;
+    g_pendingModulePath = jstr(env, jPath);
+    g_pendingModuleSource = jstr(env, jSource);
+    if (g_pendingModuleSource.empty()) return JNI_FALSE;
+    g_pendingModuleUpdate.store(true, std::memory_order_release);
+    callIntoHost_VoidMethod("requestRenderFrameFromHost");
+    return JNI_TRUE;
+}
+
 // Create a new EGL surface + engine screen. Returns the surfaceId (== screenId)
 // on success, or 0 on failure. The first call (no surfaces yet) brings up the
 // EGL context via the legacy InitWindow path. Subsequent calls allocate extra
@@ -1311,6 +1328,13 @@ Java_com_rayact_engine_RayactEngineSession_nativeRenderFrame(JNIEnv*, jclass, jl
     rayact::enginePrepareJSThread();
     if (g_scriptReloadRequested && g_pendingScriptMode >= 0) {
         executePendingScript(true);
+    }
+    if (g_pendingModuleUpdate.exchange(false, std::memory_order_acq_rel)) {
+        if (!g_pendingModulePath.empty() && !g_pendingModuleSource.empty()) {
+            rayact::engineApplyModuleUpdate(g_pendingModulePath, g_pendingModuleSource);
+            g_pendingModulePath.clear();
+            g_pendingModuleSource.clear();
+        }
     }
     if (!rayact::engineContext()) return JNI_FALSE;
     if (g_pendingDevMenuToggle.exchange(false, std::memory_order_acq_rel)) {
@@ -1680,6 +1704,41 @@ std::string androidDevCall(const char* method, const char* dataJson) {
             }
             env->DeleteLocalRef(jMethod);
             if (jData) env->DeleteLocalRef(jData);
+        }
+        env->DeleteLocalRef(cls);
+    }
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+    }
+    if (needDetach) g_jvm->DetachCurrentThread();
+    return result;
+}
+
+std::string androidDevFetch(const char* url) {
+    if (!g_jvm || !url) return "";
+    JNIEnv* env = nullptr;
+    bool needDetach = false;
+    jint rs = g_jvm->GetEnv((void**)&env, JNI_VERSION_1_6);
+    if (rs == JNI_EDETACHED) {
+        if (g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) return "";
+        needDetach = true;
+    } else if (rs != JNI_OK) {
+        return "";
+    }
+    std::string result;
+    jclass cls = env->FindClass("com/rayact/devclient/DevServerLoader");
+    if (cls) {
+        jmethodID m = env->GetStaticMethodID(cls, "devFetchFromNative",
+            "(Ljava/lang/String;)Ljava/lang/String;");
+        if (m) {
+            jstring jUrl = env->NewStringUTF(url);
+            jstring jResult = (jstring)env->CallStaticObjectMethod(cls, m, jUrl);
+            if (jResult) {
+                result = jstr(env, jResult);
+                env->DeleteLocalRef(jResult);
+            }
+            env->DeleteLocalRef(jUrl);
         }
         env->DeleteLocalRef(cls);
     }

@@ -209,7 +209,12 @@ export function render(element: React.ReactNode): RayactRoot {
   // here would create a reconciler update with the new function references
   // BEFORE Refresh patches the fiber types, causing React to unmount+remount
   // and lose component state. Skip the render and let Refresh drive updates.
-  if ((globalThis as Record<string, unknown>).__RAYACT_HMR_ACTIVE__) {
+  // Skip the initial render only on a GENUINE hot reload — i.e. a root was
+  // already created and mounted. Module HMR sets __RAYACT_HMR_ACTIVE__ (via the
+  // dev-bundle footer) before the project entry's first render(<App/>) runs, so
+  // gating purely on that flag skips the initial mount and the pane stays black.
+  const alreadyMounted = !!(globalThis as GlobalWithRoot).__rayactReactRoot;
+  if ((globalThis as Record<string, unknown>).__RAYACT_HMR_ACTIVE__ && alreadyMounted) {
     return getOrCreateRoot();
   }
   const root = getOrCreateRoot();

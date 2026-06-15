@@ -2,10 +2,12 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { ViteDevServer } from 'vite';
 import { WebSocketServer } from 'ws';
-import chokidar from 'chokidar';
 import {
-  buildRayactBundle,
+  buildRayactBootstrap,
+  createRayactViteDevServer,
+  RAYACT_ENTRY_ID,
   RAYACT_BINARY_COMMANDS,
   RAYACT_REACT_COMPILER,
   type RayactBuildOutput
@@ -13,6 +15,7 @@ import {
 import { loadRayactConfig } from './config.js';
 import { advertiseRayactServer } from './mdns.js';
 import { buildQrPayload } from './qr.js';
+import { createRayactModuleMiddleware, wrapRayactModule } from './rayactHostModule.js';
 import type { DebugMessage, RayactDevServer, RayactDevServerOptions } from './types.js';
 
 const MIME_TYPES: Record<string, string> = {
@@ -28,6 +31,8 @@ const MIME_TYPES: Record<string, string> = {
   '.woff': 'font/woff',
   '.woff2': 'font/woff2'
 };
+
+const ENTRY_MODULE_PATH = '/rayact/entry.js';
 
 function sendJson(response: http.ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, {
@@ -107,92 +112,182 @@ function createWsBroadcast(wss: WebSocketServer) {
 
 export async function startRayactDevServer(rawOptions: RayactDevServerOptions): Promise<RayactDevServer> {
   const options = normalizeOptions(rawOptions);
-  // Native plugin modules this project declares — published in the manifest so a
-  // prebuilt dev app can check them against what it bundles (native-modules.json).
   const nativeModules = loadRayactConfig(options.root).nativeModules ?? [];
-  let lastBuild: RayactBuildOutput | null = null;
-  let lastBundleError: Error | null = null;
-  let revision = 1;
-  let hmrActive = true;
-  let buildInFlight: Promise<RayactBuildOutput> | null = null;
 
-  const rebuildBundle = async () => {
-    if (buildInFlight) return buildInFlight;
-    const useBytecode = options.bytecode && !hmrActive;
-    buildInFlight = (async () => {
-      try {
-        lastBuild = await buildRayactBundle({
-          ...options,
-          mode: 'development',
-          minify: options.minify,
-          bytecode: useBytecode
-        });
-        lastBundleError = null;
-        return lastBuild;
-      } catch (error) {
-        lastBundleError = error instanceof Error ? error : new Error(String(error));
-        throw lastBundleError;
-      } finally {
-        buildInFlight = null;
-      }
-    })();
-    return buildInFlight;
+  let bootstrapCode: string | null = null;
+  let bootstrapError: Error | null = null;
+  let bootstrapInFlight: Promise<string> | null = null;
+  let revision = 1;
+  let assetRegistry: RayactBuildOutput['assets'] = [];
+
+  const bundleOptions = {
+    root: options.root,
+    entry: options.entry,
+    platform: options.platform,
+    mode: 'development' as const,
+    minify: options.minify,
+    bytecode: false
   };
 
-  await rebuildBundle();
+  const rebuildBootstrap = async () => {
+    if (bootstrapInFlight) return bootstrapInFlight;
+    bootstrapInFlight = (async () => {
+      try {
+        bootstrapCode = await buildRayactBootstrap(bundleOptions);
+        bootstrapError = null;
+        revision++;
+        return bootstrapCode;
+      } catch (error) {
+        bootstrapError = error instanceof Error ? error : new Error(String(error));
+        throw bootstrapError;
+      } finally {
+        bootstrapInFlight = null;
+      }
+    })();
+    return bootstrapInFlight;
+  };
 
-  const server = http.createServer(async (request, response) => {
+  await rebuildBootstrap();
+
+  const server = http.createServer();
+  const moduleHmrWss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
+  const debuggerWss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
+  const inspectorWss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
+  const broadcastModuleHmr = createWsBroadcast(moduleHmrWss);
+
+  moduleHmrWss.on('connection', socket => {
+    socket.send(JSON.stringify({ type: 'connected' }));
+  });
+
+  server.on('upgrade', (request, socket, head) => {
+    const pathname = new URL(request.url ?? '/', 'http://rayact.local').pathname;
+    const route =
+      pathname === '/rayact/hmr'
+        ? moduleHmrWss
+        : pathname === '/rayact/debugger'
+          ? debuggerWss
+          : pathname === '/rayact/inspector'
+            ? inspectorWss
+            : null;
+    if (!route) {
+      socket.destroy();
+      return;
+    }
+    route.handleUpgrade(request, socket, head, ws => {
+      route.emit('connection', ws, request);
+    });
+  });
+
+  let vite: ViteDevServer | null = null;
+
+  vite = await createRayactViteDevServer(bundleOptions, server);
+
+  const broadcastModuleUpdates = (file: string, event: 'change' | 'add' | 'unlink') => {
+    if (!vite) return;
+    const root = options.root;
+    const normalized = file.split(path.sep).join('/');
+    const rel = path.relative(root, file).split(path.sep).join('/');
+    if (rel.startsWith('..')) return;
+
+    if (event === 'unlink' || normalized.endsWith('rayact.config.json') || normalized.includes('/native/')) {
+      broadcastModuleHmr({ type: 'full-reload' });
+      return;
+    }
+
+    const mods = vite.moduleGraph.getModulesByFile(file);
+    const updates: Array<{ type: 'js-update'; path: string; acceptedPath: string; timestamp: number }> = [];
+    const timestamp = Date.now();
+
+    if (mods?.size) {
+      for (const mod of mods) {
+        const hmrPath = mod.url?.startsWith('/') ? mod.url : `/${rel}`;
+        updates.push({ type: 'js-update', path: hmrPath, acceptedPath: hmrPath, timestamp });
+      }
+    } else if (/\.(?:[cm]?[jt]sx?)$/.test(file)) {
+      updates.push({ type: 'js-update', path: `/${rel}`, acceptedPath: `/${rel}`, timestamp });
+    }
+
+    if (updates.length) {
+      broadcastModuleHmr({ type: 'update', updates } as DebugMessage);
+    }
+  };
+
+  vite.watcher.on('change', file => broadcastModuleUpdates(file, 'change'));
+  vite.watcher.on('add', file => broadcastModuleUpdates(file, 'add'));
+  vite.watcher.on('unlink', file => broadcastModuleUpdates(file, 'unlink'));
+
+  const rayactModuleMiddleware = createRayactModuleMiddleware(() => vite);
+
+  server.on('request', (request, response) => {
+    void handleRequest(request, response);
+  });
+
+  async function handleRequest(request: http.IncomingMessage, response: http.ServerResponse): Promise<void> {
     const requestUrl = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
     const baseUrl = `http://${publicHost(options.host)}:${options.port}`;
     const wsBase = baseUrl.replace(/^http/, 'ws');
 
     if (requestUrl.pathname === '/rayact/status') {
-      sendJson(response, lastBundleError ? 500 : 200, {
-        ok: !lastBundleError,
+      sendJson(response, bootstrapError ? 500 : 200, {
+        ok: !bootstrapError,
         rayactAppKey: options.rayactAppKey,
         entry: options.entry,
         platform: options.platform,
         revision,
-        bundleFormat: lastBuild?.bundleFormat ?? 'js',
-        compiler: lastBuild?.compiler ?? RAYACT_REACT_COMPILER,
-        binaryCommands: lastBuild?.binaryCommands ?? RAYACT_BINARY_COMMANDS,
-        error: lastBundleError?.message
+        hmrMode: 'module',
+        bundleFormat: 'js',
+        compiler: RAYACT_REACT_COMPILER,
+        binaryCommands: RAYACT_BINARY_COMMANDS,
+        error: bootstrapError?.message
       });
       return;
     }
 
     if (requestUrl.pathname === '/rayact/manifest.json') {
-      const assets = (lastBuild?.assets ?? []).map(asset => ({
-        id: asset.id,
-        name: asset.name,
-        type: asset.type,
-        hash: asset.hash,
-        size: asset.size,
-        outputName: asset.outputName,
-        kind: asset.kind,
-        url: `${baseUrl}/rayact/assets/${encodeURIComponent(asset.id)}/${encodeURIComponent(asset.name)}`
-      }));
-      const bundleFormat = lastBuild?.bundleFormat ?? 'js';
-      const bundlePath = bundleFormat === 'qjsbc' ? '/rayact/bundle.qjsbc' : '/rayact/bundle';
+      const entryModuleUrl = `${baseUrl}${ENTRY_MODULE_PATH}`;
+      const bootstrapUrl = `${baseUrl}/rayact/bootstrap.js`;
       sendJson(response, 200, {
         rayactAppKey: options.rayactAppKey,
         entry: options.entry,
         platform: options.platform,
         mode: 'development',
         revision,
-        bundleFormat,
-        compiler: lastBuild?.compiler ?? RAYACT_REACT_COMPILER,
-        binaryCommands: lastBuild?.binaryCommands ?? RAYACT_BINARY_COMMANDS,
-        bundleUrl: `${baseUrl}${bundlePath}`,
+        hmrMode: 'module',
+        bundleFormat: 'js',
+        compiler: RAYACT_REACT_COMPILER,
+        binaryCommands: RAYACT_BINARY_COMMANDS,
+        bootstrapUrl,
+        entryModuleUrl,
+        bundleUrl: bootstrapUrl,
         hmrUrl: `${wsBase}/rayact/hmr`,
         debuggerUrl: `${wsBase}/rayact/debugger`,
         inspectorUrl: `${wsBase}/rayact/inspector`,
         websocketUrl: `${wsBase}/rayact/debugger`,
         cdpPort: options.cdpPort,
-        assets,
+        assets: assetRegistry.map(asset => ({
+          id: asset.id,
+          name: asset.name,
+          type: asset.type,
+          hash: asset.hash,
+          size: asset.size,
+          outputName: asset.outputName,
+          kind: asset.kind,
+          url: `${baseUrl}/rayact/assets/${encodeURIComponent(asset.id)}/${encodeURIComponent(asset.name)}`
+        })),
         nativeModules,
-        capabilities: ['hmr', 'cdp', 'react-devtools', 'inspector']
+        capabilities: ['hmr', 'cdp', 'react-devtools', 'inspector', 'module-hmr']
       });
+      return;
+    }
+
+    if (requestUrl.pathname === '/rayact/bootstrap.js' || requestUrl.pathname === '/rayact/bundle') {
+      try {
+        const code = bootstrapCode ?? await rebuildBootstrap();
+        sendText(response, 200, code, 'application/javascript; charset=utf-8');
+      } catch (error) {
+        const message = error instanceof Error ? error.stack ?? error.message : String(error);
+        sendText(response, 500, message);
+      }
       return;
     }
 
@@ -213,47 +308,52 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     }
 
     if (requestUrl.pathname.startsWith('/rayact/assets/')) {
-      const [, , , encodedId] = requestUrl.pathname.split('/');
-      const id = encodedId ? decodeURIComponent(encodedId) : '';
-      const asset = lastBuild?.assets.find(item => item.id === id);
-      if (!asset) {
-        sendJson(response, 404, { error: 'Asset not found' });
+      sendJson(response, 404, { error: 'Asset not found' });
+      return;
+    }
+
+    if (requestUrl.pathname === '/rayact/entry.js') {
+      if (!vite) {
+        sendText(response, 503, 'Vite dev server not ready');
         return;
       }
-      const sourcePath = path.isAbsolute(asset.sourcePath)
-        ? asset.sourcePath
-        : path.resolve(options.root, asset.sourcePath);
       try {
-        sendBuffer(response, 200, await fs.promises.readFile(sourcePath), asset.type);
+        const result = await vite.transformRequest(RAYACT_ENTRY_ID, { ssr: true });
+        if (!result?.code) {
+          sendText(response, 404, 'Entry module not found');
+          return;
+        }
+        sendText(response, 200, wrapRayactModule('/rayact/entry.js', result.code, RAYACT_ENTRY_ID), 'application/javascript; charset=utf-8');
       } catch (error) {
-        sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) });
+        sendText(response, 500, error instanceof Error ? error.message : String(error));
       }
       return;
     }
 
-    if (requestUrl.pathname === '/rayact/bundle' || requestUrl.pathname === '/rayact/bundle.qjsbc') {
-      try {
-        const output = lastBuild ?? await rebuildBundle();
-        if (output.bundleFormat === 'qjsbc' && output.bytecode) {
-          sendBuffer(response, 200, output.bytecode, 'application/octet-stream');
-        } else {
-          sendText(response, 200, output.code, 'application/javascript; charset=utf-8');
+    if (requestUrl.pathname.startsWith('/rayact/m/') || requestUrl.pathname === '/rayact/resolve') {
+      await new Promise<void>((resolve, reject) => {
+        rayactModuleMiddleware(request, response, err => {
+          if (err) reject(err);
+          else resolve();
+        });
+      }).catch(error => {
+        if (!response.headersSent) {
+          sendText(response, 500, error instanceof Error ? error.message : String(error));
         }
-      } catch (error) {
-        const message = error instanceof Error ? error.stack ?? error.message : String(error);
-        sendText(response, 500, message);
-      }
+      });
+      return;
+    }
+
+    if (vite) {
+      vite.middlewares(request, response, () => {
+        sendJson(response, 404, { error: 'Not found' });
+      });
       return;
     }
 
     sendJson(response, 404, { error: 'Not found' });
-  });
+  }
 
-  const hmrWss = new WebSocketServer({ server, path: '/rayact/hmr' });
-  const debuggerWss = new WebSocketServer({ server, path: '/rayact/debugger' });
-  const inspectorWss = new WebSocketServer({ server, path: '/rayact/inspector' });
-
-  const broadcastHmr = createWsBroadcast(hmrWss);
   const broadcastDebugger = createWsBroadcast(debuggerWss);
   const broadcastInspector = createWsBroadcast(inspectorWss);
 
@@ -284,13 +384,6 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     });
   });
 
-  hmrWss.on('connection', socket => {
-    socket.send(JSON.stringify({
-      type: 'server:hello',
-      payload: { entry: options.entry, platform: options.platform, channel: 'hmr', revision }
-    }));
-  });
-
   inspectorWss.on('connection', socket => {
     socket.send(JSON.stringify({ type: 'server:hello', payload: { channel: 'inspector' } }));
     socket.on('message', data => {
@@ -303,35 +396,6 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
         // ignore
       }
     });
-  });
-
-  const appDir = path.dirname(path.resolve(options.root, options.entry));
-  const appRoot = path.resolve(options.root, appDir.includes(`${path.sep}src`) ? path.dirname(appDir) : appDir);
-  const watcher = chokidar.watch([
-    appRoot,
-    path.resolve(options.root, 'packages/rayact-react/src'),
-    path.resolve(options.root, 'packages/rayact-runtime/src'),
-    path.resolve(options.root, 'packages/rayact-dev-client/src')
-  ], {
-    ignored: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.DS_Store'],
-    ignoreInitial: true
-  });
-
-  let rebuildTimer: ReturnType<typeof setTimeout> | null = null;
-  watcher.on('all', () => {
-    if (rebuildTimer) clearTimeout(rebuildTimer);
-    rebuildTimer = setTimeout(async () => {
-      try {
-        await rebuildBundle();
-        revision++;
-        broadcastHmr({ type: 'hmr-update', payload: { revision } });
-      } catch (error) {
-        const serialized = error instanceof Error
-          ? { message: error.message, stack: error.stack }
-          : { message: String(error) };
-        broadcastHmr({ type: 'build:error', payload: serialized });
-      }
-    }, 200);
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -357,6 +421,10 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     cdpPort: options.cdpPort
   });
 
+  const broadcastHmr = (message: DebugMessage) => {
+    broadcastModuleHmr(message);
+  };
+
   return {
     url,
     localUrl,
@@ -365,10 +433,11 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     rayactAppKey: options.rayactAppKey,
     qrPayload,
     clientCount() {
-      return hmrWss.clients.size + debuggerWss.clients.size + inspectorWss.clients.size;
+      const hmrClients = moduleHmrWss.clients.size;
+      return hmrClients + debuggerWss.clients.size + inspectorWss.clients.size;
     },
     hmrClientCount() {
-      return hmrWss.clients.size;
+      return moduleHmrWss.clients.size;
     },
     debuggerClientCount() {
       return debuggerWss.clients.size;
@@ -377,16 +446,14 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     broadcastDebugger,
     broadcastInspector,
     async reload() {
-      await rebuildBundle();
-      revision++;
-      broadcastHmr({ type: 'reload', payload: { revision } });
+      await rebuildBootstrap();
+      broadcastModuleHmr({ type: 'full-reload' });
     },
     async close() {
       mdns.stop();
-      await watcher.close();
-      hmrWss.close();
       debuggerWss.close();
       inspectorWss.close();
+      if (vite) await vite.close();
       await new Promise<void>(resolve => server.close(() => resolve()));
     }
   };

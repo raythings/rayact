@@ -73,6 +73,28 @@ static std::string desktopDevCall(const char* method, const char* dataJson) {
         }
         return "null";
     }
+    if (m == "openProjectDirect") {
+        std::string url;
+        if (dataJson) {
+            const char* key = "\"url\"";
+            const char* pos = strstr(dataJson, key);
+            if (pos) {
+                pos = strchr(pos + strlen(key), '"');
+                if (pos) {
+                    pos++;
+                    const char* end = strchr(pos, '"');
+                    if (end) url.assign(pos, end - pos);
+                }
+            }
+        }
+        if (url.empty()) return "{\"ok\":false,\"error\":\"Invalid server URL\"}";
+        g_devServerUrl = url;
+        addRecent(url);
+        if (!engineLoadDevServer(url)) {
+            return "{\"ok\":false,\"error\":\"Failed to load dev server\"}";
+        }
+        return std::string("{\"ok\":true,\"url\":\"") + jsonEscape(url) + "\"}";
+    }
     if (m == "getDevServerUrl") return "\"" + jsonEscape(g_devServerUrl) + "\"";
     if (m == "getRecentEntries") return recentEntriesJson();
     if (m == "removeRecentUrl") {

@@ -29,6 +29,7 @@ JSContext* engineContext();
 
 // Load the application JS. Exactly one of these is used per run.
 bool engineLoadDevServer(const std::string& devServerUrl);
+bool engineApplyModuleUpdate(const std::string& path, const std::string& source);
 bool engineLoadFile(const std::string& path);          // sets release asset base dir
 bool engineLoadSource(const std::string& source, const std::string& name);
 bool engineLoadBytecode(const uint8_t* data, size_t len, const char* label = "app.qjsbc");

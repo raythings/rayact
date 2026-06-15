@@ -1,5 +1,6 @@
 package com.rayact.devclient
 
+import android.os.StrictMode
 import android.util.Log
 import com.rayact.engine.RayactEngineSession
 import org.json.JSONObject
@@ -17,7 +18,8 @@ object DevServerLoader {
     data class BundlePayload(
         val baseUrl: String,
         val bundleFormat: String,
-        val bytes: ByteArray
+        val bytes: ByteArray,
+        val hmrMode: String = "module"
     )
 
     @Volatile
@@ -32,6 +34,26 @@ object DevServerLoader {
     var lastSuccessUrl: String? = null
         private set
 
+    /**
+     * Called synchronously from the JS engine (rayactDevFetch) on the render
+     * thread while the module-HMR runtime loads modules. That thread is the
+     * main thread for the surface, so the default policy throws
+     * NetworkOnMainThreadException and androidDevFetch swallows it → empty
+     * module source → black project pane. Blocking module loads are by design
+     * here (the desktop client fetches synchronously too), so relax the network
+     * policy for the duration of the dev fetch only.
+     */
+    @JvmStatic
+    fun devFetchFromNative(url: String): String {
+        val previous = StrictMode.getThreadPolicy()
+        StrictMode.setThreadPolicy(StrictMode.ThreadPolicy.Builder(previous).permitAll().build())
+        return try {
+            httpGetText(url)
+        } finally {
+            StrictMode.setThreadPolicy(previous)
+        }
+    }
+
     fun loadAsync(baseUrl: String, session: RayactEngineSession, onSuccess: (() -> Unit)? = null) {
         val normalized = baseUrl.trimEnd('/')
         loading = true
@@ -39,17 +61,17 @@ object DevServerLoader {
         lastSuccessUrl = null
         executor.execute {
             try {
-                val payload = fetchBundle(normalized)
+                val payload = fetchBootstrap(normalized)
                 val ok = if (payload.bundleFormat == "qjsbc") {
                     session.loadBytecode(payload.bytes)
                 } else {
-                    session.loadSource(payload.bytes.toString(Charsets.UTF_8))
+                    session.loadDevBootstrap(normalized, payload.bytes.toString(Charsets.UTF_8))
                 }
                 if (!ok) {
                     lastError = "Native engine rejected dev bundle"
                     Log.e(TAG, lastError!!)
                 } else {
-                    Log.i(TAG, "Queued dev bundle from ${payload.baseUrl} (${payload.bytes.size} bytes)")
+                    Log.i(TAG, "Queued dev bootstrap from ${payload.baseUrl} (${payload.bytes.size} bytes)")
                     lastSuccessUrl = payload.baseUrl
                     onSuccess?.let { Handler(Looper.getMainLooper()).post(it) }
                 }
@@ -62,18 +84,12 @@ object DevServerLoader {
         }
     }
 
-    /** Ensure a scheme so java.net.URL doesn't throw "no protocol". */
     fun normalizeBase(baseUrl: String): String {
         var s = baseUrl.trim().replace("\\/", "/").trimEnd('/')
         if (!s.startsWith("http://", true) && !s.startsWith("https://", true)) s = "http://$s"
         return s
     }
 
-    /**
-     * Quick reachability + validity probe: returns true when the candidate serves
-     * a parseable Rayact manifest within [timeoutMs]. Used to pick the fastest
-     * reachable host from a multi-interface QR payload.
-     */
     fun probeManifest(baseUrl: String, timeoutMs: Int = 2500): Boolean {
         val url = "${normalizeBase(baseUrl)}/rayact/manifest.json"
         return try {
@@ -95,16 +111,28 @@ object DevServerLoader {
         }
     }
 
-    fun fetchBundle(baseUrl: String): BundlePayload {
-        val normalized = normalizeBase(baseUrl)
-        val manifest = JSONObject(httpGet("$normalized/rayact/manifest.json"))
-        val bundleFormat = manifest.optString("bundleFormat", "js")
-        val bundlePath = if (bundleFormat == "qjsbc") "/rayact/bundle.qjsbc" else "/rayact/bundle"
-        val bytes = httpGetBytes("$normalized$bundlePath")
-        return BundlePayload(normalized, bundleFormat, bytes)
+    fun fetchManifest(baseUrl: String): JSONObject {
+        return JSONObject(httpGetText("${normalizeBase(baseUrl)}/rayact/manifest.json"))
     }
 
-    private fun httpGet(url: String): String {
+    fun fetchBootstrap(baseUrl: String): BundlePayload {
+        val normalized = normalizeBase(baseUrl)
+        val manifest = fetchManifest(normalized)
+        val hmrMode = manifest.optString("hmrMode", "module")
+        val bundleFormat = manifest.optString("bundleFormat", "js")
+        val path = when {
+            bundleFormat == "qjsbc" -> "/rayact/bundle.qjsbc"
+            hmrMode == "module" -> "/rayact/bootstrap.js"
+            else -> "/rayact/bundle"
+        }
+        val bytes = httpGetBytes("$normalized$path")
+        return BundlePayload(normalized, bundleFormat, bytes, hmrMode)
+    }
+
+    /** @deprecated Use [fetchBootstrap] for module HMR dev servers. */
+    fun fetchBundle(baseUrl: String): BundlePayload = fetchBootstrap(baseUrl)
+
+    fun httpGetText(url: String): String {
         val conn = open(url)
         return conn.inputStream.bufferedReader().use { it.readText() }
     }

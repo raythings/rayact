@@ -124,6 +124,7 @@ static JSValue renderFrameFunction = JS_UNDEFINED;
 std::vector<Shape> g_shapes;
 static std::string g_devServerUrl;
 static int g_devRevision = 0;
+static bool g_devModuleHmr = false;
 static std::chrono::steady_clock::time_point g_nextDevPoll = std::chrono::steady_clock::now();
 
 std::mutex g_touchMutex;
@@ -208,6 +209,13 @@ static JSValue JS_getCurrentContext(JSContext* ctx, JSValue this_val,
 }
 
 // Register native functions
+#ifndef RAYACT_NO_NET
+static bool httpGet(const std::string& url, std::string& body, std::string& error);
+#endif
+#if !defined(RAYACT_NO_NET) || defined(__ANDROID__)
+static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst* argv);
+#endif
+
 static void registerNativeFunctions(JSContext* ctx) {
     JSValue global;
 
@@ -597,6 +605,10 @@ static void registerNativeFunctions(JSContext* ctx) {
     }
 #endif
     rayact::installModuleBindings(ctx, global);
+#if !defined(RAYACT_NO_NET) || defined(__ANDROID__)
+    JS_SetPropertyStr(ctx, global, "rayactDevFetch",
+                      JS_NewCFunction(ctx, JS_rayactDevFetch, "rayactDevFetch", 1));
+#endif
     rayact::installDevClientBridge(ctx, global);
     rayact::devtoolsInit(ctx);
     rayact::workletRuntimeInit();
@@ -1138,6 +1150,30 @@ static bool httpGetBytes(const std::string& url, std::vector<uint8_t>& body, std
 }
 #endif // RAYACT_NO_NET
 
+// rayactDevFetch is the sync HTTP shim the module-HMR runtime uses. On Android,
+// networking goes through Java (androidDevFetch) so the binding must exist even
+// though RAYACT_NO_NET strips the curl path; otherwise the dev bootstrap calls
+// an undefined rayactDevFetch and the project pane renders black.
+#if !defined(RAYACT_NO_NET) || defined(__ANDROID__)
+static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    const char* url = JS_ToCString(ctx, argv[0]);
+    if (!url) return JS_UNDEFINED;
+    std::string body;
+#ifdef __ANDROID__
+    body = rayact::androidDevFetch(url);
+#else
+    std::string error;
+    if (!httpGet(url, body, error)) {
+        fprintf(stderr, "rayactDevFetch: %s\n", error.c_str());
+        body.clear();
+    }
+#endif
+    JS_FreeCString(ctx, url);
+    return JS_NewString(ctx, body.c_str());
+}
+#endif // !RAYACT_NO_NET || __ANDROID__
+
 static std::string jsObjectString(JSContext* ctx, JSValue obj, const char* key) {
     JSValue value = JS_GetPropertyStr(ctx, obj, key);
     std::string result;
@@ -1319,31 +1355,67 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
     printf("Rayact dev manifest: %s\n", manifest.c_str());
     g_devRevision = parseJsonIntField(manifest, "revision");
     g_devServerUrl = devServer;
-    g_nextDevPoll = std::chrono::steady_clock::now() + std::chrono::seconds(1);
-    printf("Rayact dev polling enabled: %s (revision %d)\n", g_devServerUrl.c_str(), g_devRevision);
+    g_devModuleHmr = parseJsonStringField(manifest, "hmrMode") == "module";
 
     ensureDevWindow();
 
-    std::string bundleFormat = parseJsonStringField(manifest, "bundleFormat");
-    std::string bundlePath = bundleFormat == "qjsbc" ? "/rayact/bundle.qjsbc" : "/rayact/bundle";
-    std::string hmrUrl = parseJsonStringField(manifest, "hmrUrl");
-    if (hmrUrl.empty()) {
-        std::string wsBase = devServer;
-        if (wsBase.rfind("https://", 0) == 0) wsBase.replace(0, 5, "wss");
-        else if (wsBase.rfind("http://", 0) == 0) wsBase.replace(0, 4, "ws");
-        hmrUrl = wsBase + "/rayact/hmr";
+    std::string bootstrapPath = "/rayact/bootstrap.js";
+    std::string bootstrapUrl = parseJsonStringField(manifest, "bootstrapUrl");
+    if (!bootstrapUrl.empty()) {
+        const auto pos = bootstrapUrl.find("/rayact/");
+        if (pos != std::string::npos) bootstrapPath = bootstrapUrl.substr(pos);
     }
 
+    std::string bundleFormat = parseJsonStringField(manifest, "bundleFormat");
     bool loaded = false;
-    if (bundleFormat == "qjsbc") {
+
+    if (g_devModuleHmr && bundleFormat != "qjsbc") {
+        g_nextDevPoll = std::chrono::steady_clock::time_point::max();
+        printf("Rayact dev module HMR: loading bootstrap from %s\n", bootstrapPath.c_str());
+        const char* devFetchSetup =
+            "globalThis.__rayactDevFetch = function(url) { return rayactDevFetch(url); };";
+        JSValue fetchSetup = JS_Eval(ctx, devFetchSetup, strlen(devFetchSetup),
+                                     "rayact_dev_fetch.js", JS_EVAL_TYPE_GLOBAL);
+        if (JS_IsException(fetchSetup)) {
+            JSValue exception = JS_GetException(ctx);
+            const char* exceptionStr = JS_ToCString(ctx, exception);
+            std::string message = exceptionStr ? exceptionStr : "Unknown JavaScript exception";
+            JS_FreeCString(ctx, exceptionStr);
+            JS_FreeValue(ctx, exception);
+            JS_FreeValue(ctx, fetchSetup);
+            showDevErrorOverlay(ctx, "Failed to install dev fetch hook:\n" + message);
+            return false;
+        }
+        JS_FreeValue(ctx, fetchSetup);
+        std::string bootstrap;
+        if (!httpGet(devServer + bootstrapPath, bootstrap, error)) {
+            showDevErrorOverlay(ctx, "Failed to fetch dev bootstrap:\n" + error);
+            return false;
+        }
+        JSValue result = JS_Eval(ctx, bootstrap.c_str(), bootstrap.size(), "rayact_dev_bootstrap.js", JS_EVAL_TYPE_GLOBAL);
+        if (JS_IsException(result)) {
+            JSValue exception = JS_GetException(ctx);
+            const char* exceptionStr = JS_ToCString(ctx, exception);
+            std::string message = exceptionStr ? exceptionStr : "Unknown JavaScript exception";
+            JS_FreeCString(ctx, exceptionStr);
+            JS_FreeValue(ctx, exception);
+            JS_FreeValue(ctx, result);
+            showDevErrorOverlay(ctx, "Failed to evaluate dev bootstrap:\n" + message);
+            return false;
+        }
+        JS_FreeValue(ctx, result);
+        loaded = true;
+        printf("Successfully loaded Rayact dev bootstrap (%zu bytes)\n", bootstrap.size());
+    } else if (bundleFormat == "qjsbc") {
         std::vector<uint8_t> bytes;
-        if (!httpGetBytes(devServer + bundlePath, bytes, error)) {
+        if (!httpGetBytes(devServer + "/rayact/bundle.qjsbc", bytes, error)) {
             showDevErrorOverlay(ctx, "Failed to fetch dev bytecode:\n" + error);
             return false;
         }
         injectMaterialIcons(ctx);
         loaded = evalBytecodeBuffer(ctx, bytes.data(), bytes.size(), "rayact_dev_bundle.qjsbc");
     } else {
+        std::string bundlePath = "/rayact/bundle";
         std::string bundle;
         if (!httpGet(devServer + bundlePath, bundle, error)) {
             showDevErrorOverlay(ctx, "Failed to fetch dev bundle:\n" + error);
@@ -1363,34 +1435,45 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
         JS_FreeValue(ctx, result);
         loaded = true;
         printf("Successfully loaded Rayact dev bundle (%zu bytes)\n", bundle.size());
+
+        g_nextDevPoll = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+        printf("Rayact dev polling enabled: %s (revision %d)\n", g_devServerUrl.c_str(), g_devRevision);
+
+        std::string hmrUrl = parseJsonStringField(manifest, "hmrUrl");
+        if (hmrUrl.empty()) {
+            std::string wsBase = devServer;
+            if (wsBase.rfind("https://", 0) == 0) wsBase.replace(0, 5, "wss");
+            else if (wsBase.rfind("http://", 0) == 0) wsBase.replace(0, 4, "ws");
+            hmrUrl = wsBase + "/rayact/hmr";
+        }
+        std::string bundlePathLegacy = bundlePath;
+        const bool isQjsbc = false;
+        std::string hmrScript =
+            "(function(){"
+            "if(typeof WebSocket!=='function')return;"
+            "var url=" + jsQuote(hmrUrl) + ";"
+            "var bundleUrl=" + jsQuote(devServer + bundlePathLegacy) + ";"
+            "var isQjsbc=" + (isQjsbc ? "true" : "false") + ";"
+            "function reload(){"
+            "fetch(bundleUrl).then(function(r){return isQjsbc?r.arrayBuffer():r.text();})"
+            ".then(function(p){"
+            "if(isQjsbc&&typeof loadBytecode==='function'){loadBytecode(new Uint8Array(p));}"
+            "else if(typeof eval==='function'){eval(p);}"
+            "});};"
+            "var ws=new WebSocket(url);"
+            "ws.onmessage=function(e){try{var m=JSON.parse(e.data);"
+            "if(m.type==='hmr-update'||m.type==='reload')reload();"
+            "}catch(x){}};"
+            "globalThis.__RAYACT_HMR_WS__=ws;"
+            "})();";
+        JSValue hmrResult = JS_Eval(ctx, hmrScript.c_str(), hmrScript.size(), "rayact_hmr_connector.js", JS_EVAL_TYPE_GLOBAL);
+        JS_FreeValue(ctx, hmrResult);
     }
 
     if (!loaded) {
         showDevErrorOverlay(ctx, "Failed to load dev bundle bytecode");
         return false;
     }
-
-    const bool isQjsbc = bundleFormat == "qjsbc";
-    std::string hmrScript =
-        "(function(){"
-        "if(typeof WebSocket!=='function')return;"
-        "var url=" + jsQuote(hmrUrl) + ";"
-        "var bundleUrl=" + jsQuote(devServer + bundlePath) + ";"
-        "var isQjsbc=" + (isQjsbc ? "true" : "false") + ";"
-        "function reload(){"
-        "fetch(bundleUrl).then(function(r){return isQjsbc?r.arrayBuffer():r.text();})"
-        ".then(function(p){"
-        "if(isQjsbc&&typeof loadBytecode==='function'){loadBytecode(new Uint8Array(p));}"
-        "else if(typeof eval==='function'){eval(p);}"
-        "});};"
-        "var ws=new WebSocket(url);"
-        "ws.onmessage=function(e){try{var m=JSON.parse(e.data);"
-        "if(m.type==='hmr-update'||m.type==='reload')reload();"
-        "}catch(x){}};"
-        "globalThis.__RAYACT_HMR_WS__=ws;"
-        "})();";
-    JSValue hmrResult = JS_Eval(ctx, hmrScript.c_str(), hmrScript.size(), "rayact_hmr_connector.js", JS_EVAL_TYPE_GLOBAL);
-    JS_FreeValue(ctx, hmrResult);
 
     return true;
 #endif // RAYACT_NO_NET
@@ -1401,6 +1484,7 @@ static void pollDevServer(JSContext* ctx) {
     (void)ctx;
     return;
 #else
+    if (g_devModuleHmr) return;
     if (g_devServerUrl.empty()) return;
     auto now = std::chrono::steady_clock::now();
     if (now < g_nextDevPoll) return;
@@ -1478,6 +1562,37 @@ void engineQueueTouch(int action, int id, float x, float y) {
 
 bool engineLoadDevServer(const std::string& devServerUrl) {
     return loadDevServerBundle(g_ctx, devServerUrl);
+}
+
+bool engineApplyModuleUpdate(const std::string& path, const std::string& source) {
+    JSContext* ctx = g_ctx;
+    if (!ctx || source.empty()) return false;
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue fn = JS_GetPropertyStr(ctx, global, "__rayactApplyModuleUpdate");
+    if (!JS_IsFunction(ctx, fn)) {
+        JS_FreeValue(ctx, fn);
+        JS_FreeValue(ctx, global);
+        return false;
+    }
+    JSValue pathArg = JS_NewString(ctx, path.c_str());
+    JSValue sourceArg = JS_NewString(ctx, source.c_str());
+    JSValue argv[2] = { pathArg, sourceArg };
+    JSValue result = JS_Call(ctx, fn, global, 2, argv);
+    JS_FreeValue(ctx, pathArg);
+    JS_FreeValue(ctx, sourceArg);
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, global);
+    if (JS_IsException(result)) {
+        JSValue exception = JS_GetException(ctx);
+        const char* exceptionStr = JS_ToCString(ctx, exception);
+        fprintf(stderr, "Rayact module update failed: %s\n", exceptionStr ? exceptionStr : "unknown");
+        JS_FreeCString(ctx, exceptionStr);
+        JS_FreeValue(ctx, exception);
+        JS_FreeValue(ctx, result);
+        return false;
+    }
+    JS_FreeValue(ctx, result);
+    return true;
 }
 
 bool engineLoadFile(const std::string& path) {

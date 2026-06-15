@@ -5,7 +5,8 @@ import { createRequire } from 'node:module';
 import react from '@vitejs/plugin-react';
 import type { Plugin, UserConfig } from 'vite';
 import type { OutputAsset, OutputChunk, RollupOutput } from 'rollup';
-import { build } from 'vite';
+import { build, createServer, type ViteDevServer } from 'vite';
+import type { Server as HttpServer } from 'node:http';
 
 const require = createRequire(import.meta.url);
 
@@ -264,6 +265,7 @@ function vendorSharePlugin(): Plugin {
 const REFRESH_RUNTIME_SETUP_ID = 'virtual:rayact-refresh-runtime';
 const REACT_NATIVE_VIRTUAL_ID = 'virtual:rayact-react-native';
 export const RAYACT_ENTRY_ID = 'virtual:rayact-entry';
+export const RAYACT_BOOTSTRAP_ID = 'virtual:rayact-bootstrap';
 const ENTRY_ID = RAYACT_ENTRY_ID;
 const DEV_CLIENT_ENTRY_ID = 'virtual:rayact-dev-client-entry';
 
@@ -320,12 +322,37 @@ function rayactRefreshRuntimePlugin(): Plugin {
     load(id) {
       if (id !== `\0${REFRESH_RUNTIME_SETUP_ID}`) return null;
       return [
-        `import RefreshRuntime from 'react-refresh/runtime';`,
+        `import * as __refresh from 'react-refresh/runtime';`,
+        `const RefreshRuntime = __refresh.default || __refresh;`,
         `if (!globalThis.__REACT_REFRESH__) {`,
         `  RefreshRuntime.injectIntoGlobalHook(globalThis);`,
         `  globalThis.__REACT_REFRESH__ = RefreshRuntime;`,
         `}`,
-        `globalThis.$RefreshSig$ = function() { return RefreshRuntime.createSignatureFunctionForTransform(); };`
+        `globalThis.$RefreshSig$ = function() {`,
+        `  var rt = globalThis.__REACT_REFRESH__ || RefreshRuntime;`,
+        `  return rt ? rt.createSignatureFunctionForTransform() : function(type) { return type; };`,
+        `};`
+      ].join('\n');
+    }
+  };
+}
+
+function nodeCryptoShimPlugin(): Plugin {
+  return {
+    name: 'rayact-crypto-shim',
+    enforce: 'pre',
+    resolveId(id) {
+      if (id === 'crypto' || id === 'node:crypto') return '\0rayact-crypto-shim';
+      return null;
+    },
+    load(id) {
+      if (id !== '\0rayact-crypto-shim') return null;
+      return [
+        `import '@rayact/crypto';`,
+        `const crypto = globalThis.crypto;`,
+        `export default crypto;`,
+        `export const getRandomValues = crypto.getRandomValues.bind(crypto);`,
+        `export const randomUUID = crypto.randomUUID?.bind(crypto);`
       ].join('\n');
     }
   };
@@ -378,6 +405,7 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
     },
     resolveId(id, importer) {
       if (id === ENTRY_ID) return `\0${ENTRY_ID}`;
+      if (id === RAYACT_BOOTSTRAP_ID) return `\0${RAYACT_BOOTSTRAP_ID}`;
       if (id === DEV_CLIENT_ENTRY_ID) return `\0${DEV_CLIENT_ENTRY_ID}`;
 
       const cssFile = resolveCssFile(id, importer, root);
@@ -433,6 +461,34 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
           `    React.createElement(DevConsole)`,
           `  )`,
           `);`
+        ].join('\n');
+      }
+
+      if (id === `\0${RAYACT_BOOTSTRAP_ID}`) {
+        return [
+          `import ${JSON.stringify(REFRESH_RUNTIME_SETUP_ID)};`,
+          `import ${JSON.stringify('@rayact/crypto')};`,
+          `import React from 'react';`,
+          `import * as jsxRuntime from 'react/jsx-runtime';`,
+          `import * as jsxDevRuntime from 'react/jsx-dev-runtime';`,
+          `const __vendor = (globalThis.__RAYACT_VENDOR__ = globalThis.__RAYACT_VENDOR__ || {});`,
+          `__vendor.react = React.default || React;`,
+          `__vendor.jsxRuntime = jsxRuntime.default || jsxRuntime;`,
+          `__vendor.jsxDevRuntime = jsxDevRuntime.default || jsxDevRuntime;`,
+          `import { installModuleHmrRuntime } from '@rayact/runtime';`,
+          `(async function(){`,
+          `  const serverUrl = globalThis.__RAYACT_DEV_SERVER__;`,
+          `  if (!serverUrl) throw new Error('__RAYACT_DEV_SERVER__ is required');`,
+          `  if (typeof globalThis.__rayactDevFetch !== 'function' && typeof globalThis.rayactDevFetch === 'function') {`,
+          `    globalThis.__rayactDevFetch = function(url) { return globalThis.rayactDevFetch(url); };`,
+          `  }`,
+          `  const runtime = installModuleHmrRuntime({ serverUrl, global: globalThis });`,
+          `  runtime.markBootstrap(serverUrl + '/rayact/bootstrap.js');`,
+          `  await runtime.startFromManifest();`,
+          `})().catch(function(err){`,
+          `  var msg = err && err.message ? err.message : String(err);`,
+          `  if (globalThis.console) globalThis.console.error('[rayact:bootstrap]', msg);`,
+          `});`
         ].join('\n');
       }
 
@@ -507,6 +563,7 @@ export function createRayactViteConfig(options: BundleOptions, input = ENTRY_ID)
     plugins: [
       ...(isDev ? [vendorSharePlugin()] : []),
       rayactVitePlugin({ ...options, root, mode }, registry),
+      nodeCryptoShimPlugin(),
       reactNativeShimPlugin(),
       ...(isDev ? [rayactRefreshRuntimePlugin()] : []),
       react({
@@ -565,6 +622,63 @@ async function runViteBuild(options: BundleOptions, registry: AssetRegistry, inp
     }
   });
   return extractCode(result);
+}
+
+// Module HMR serves vite SSR-transformed modules to QuickJS. By default SSR
+// resolution picks the Node build of dual-build packages (e.g. nanoid → index.js
+// using `crypto`/`Buffer`), which crash in QuickJS ("Buffer is not defined").
+// The engine is browser-like (crypto.getRandomValues is polyfilled, no Buffer),
+// so resolve the `browser` condition first. This mirrors what the production IIFE
+// build resolves, keeping dev and release behaviour aligned.
+const RAYACT_BROWSER_CONDITIONS = ['browser', 'module', 'import', 'default'];
+
+export function createRayactDevServerConfig(options: BundleOptions, httpServer?: HttpServer): UserConfig {
+  const config = createRayactViteConfig({ ...options, mode: 'development' });
+  return {
+    ...config,
+    appType: 'custom',
+    resolve: {
+      ...config.resolve,
+      conditions: RAYACT_BROWSER_CONDITIONS
+    },
+    ssr: {
+      noExternal: true,
+      resolve: {
+        conditions: RAYACT_BROWSER_CONDITIONS,
+        externalConditions: RAYACT_BROWSER_CONDITIONS
+      }
+    },
+    server: {
+      middlewareMode: httpServer ? { server: httpServer } : true,
+      hmr: false,
+      ws: false,
+      watch: {
+        ignored: ['**/node_modules/**', '**/dist/**', '**/build/**']
+      }
+    },
+    legacy: {
+      skipWebSocketTokenCheck: true
+    },
+    optimizeDeps: {
+      include: ['react', 'react/jsx-runtime', 'react/jsx-dev-runtime']
+    }
+  };
+}
+
+export async function createRayactViteDevServer(
+  options: BundleOptions,
+  httpServer: HttpServer
+): Promise<ViteDevServer> {
+  const viteConfig = createRayactDevServerConfig(options, httpServer);
+  return createServer({
+    ...viteConfig,
+    configFile: false,
+    logLevel: 'warn'
+  });
+}
+
+export async function buildRayactBootstrap(options: BundleOptions): Promise<string> {
+  return runViteBuild({ ...options, mode: 'development' }, new AssetRegistry(path.resolve(options.root)), RAYACT_BOOTSTRAP_ID);
 }
 
 export async function buildRayactBundle(options: BundleOptions): Promise<RayactBuildOutput> {

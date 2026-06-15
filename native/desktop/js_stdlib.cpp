@@ -76,22 +76,38 @@ static JSValue con_log(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
 }
 
 static JSValue con_info(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+#ifdef __ANDROID__
+    TraceLog(LOG_INFO, "JS[info]: %s%s", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
+#else
     printf("\033[36m%s[info]\033[0m %s\n", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
+#endif
     return JS_UNDEFINED;
 }
 
 static JSValue con_warn(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+#ifdef __ANDROID__
+    TraceLog(LOG_WARNING, "JS[warn]: %s%s", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
+#else
     fprintf(stderr, "\033[33m%s[warn]\033[0m %s\n", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
+#endif
     return JS_UNDEFINED;
 }
 
 static JSValue con_error(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+#ifdef __ANDROID__
+    TraceLog(LOG_ERROR, "JS[error]: %s%s", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
+#else
     fprintf(stderr, "\033[31m%s[error]\033[0m %s\n", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
+#endif
     return JS_UNDEFINED;
 }
 
 static JSValue con_debug(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+#ifdef __ANDROID__
+    TraceLog(LOG_DEBUG, "JS[debug]: %s%s", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
+#else
     printf("\033[90m%s[debug]\033[0m %s\n", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
+#endif
     return JS_UNDEFINED;
 }
 

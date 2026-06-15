@@ -25,6 +25,22 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
     fun loadDevClient(source: String): Boolean = nativeLoadScript(nativeHandle, 0, source)
     fun loadDevServer(url: String): Boolean = nativeLoadScript(nativeHandle, 1, url)
     fun loadBytecode(bytes: ByteArray): Boolean = nativeLoadBytecode(nativeHandle, bytes)
+    private fun devTransportScript(serverUrl: String): String = """
+        globalThis.__RAYACT_DEV_SERVER__ = ${org.json.JSONObject.quote(serverUrl)};
+        globalThis.__rayactDevFetch = function(url) { return rayactDevFetch(url); };
+    """.trimIndent()
+
+    /**
+     * Load the dev bootstrap with its transport globals in a SINGLE script.
+     * nativeLoadScript keeps only one pending script slot, so a separate
+     * injectDevTransport() call would be clobbered by the bootstrap load and the
+     * bootstrap would run without __RAYACT_DEV_SERVER__ (→ black screen).
+     */
+    fun loadDevBootstrap(serverUrl: String, source: String): Boolean =
+        loadSource(devTransportScript(serverUrl) + "\n" + source)
+
+    fun applyModuleUpdate(path: String, source: String): Boolean =
+        nativeApplyModuleUpdate(nativeHandle, path, source)
 
     fun createSurface(surface: Surface, density: Float): Int =
         nativeCreateSurface(nativeHandle, surface, density)
@@ -99,6 +115,7 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
         @JvmStatic external fun nativeReleaseGraphics(handle: Long)
         @JvmStatic external fun nativeLoadScript(handle: Long, mode: Int, arg: String): Boolean
         @JvmStatic external fun nativeLoadBytecode(handle: Long, bytes: ByteArray): Boolean
+        @JvmStatic external fun nativeApplyModuleUpdate(handle: Long, path: String, source: String): Boolean
         @JvmStatic external fun nativeToggleDevMenu(handle: Long)
         @JvmStatic external fun nativeCreateSurface(handle: Long, surface: Surface, density: Float): Int
         @JvmStatic external fun nativeResizeSurface(handle: Long, surfaceId: Int, width: Int, height: Int, density: Float)
