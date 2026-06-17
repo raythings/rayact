@@ -74,7 +74,7 @@ JSValue JS_createIcon(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setIconProps(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_registerFont(JSContext*, JSValue, int, JSValueConst*);
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(RAYACT_IOS)
 void AndroidKeyboard_ShowForNode(int nodeId, const std::string &inputType,
                                  bool autocorrect, bool secure,
                                  const std::string &imeAction);
@@ -115,7 +115,7 @@ void rayactResetIconSheet();
 // to tofu after a project session was destroyed under a live launcher).
 void cleanupRaym3Bridge(JSContext* ctx, bool unloadGpuCaches = true);
 
-#ifdef RAYACT_ANDROID
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
 struct Raym3RuntimeStorage;
 Raym3RuntimeStorage* raym3BridgeNewRuntimeStorage();
 void raym3BridgeDeleteRuntimeStorage(Raym3RuntimeStorage* storage);

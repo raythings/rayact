@@ -40,6 +40,23 @@ function resolveAndroidProjectDir(cwd: string, config: RayactConfig): string | n
   }
 }
 
+function resolveIosProjectDir(cwd: string, config: RayactConfig): string | null {
+  if (config.ios?.projectDir) {
+    const dir = path.resolve(cwd, config.ios.projectDir);
+    return existsSync(path.join(dir, 'project.yml')) ? dir : null;
+  }
+  let dir = cwd;
+  for (;;) {
+    for (const name of ['ios', 'apps/ios']) {
+      const candidate = path.join(dir, name);
+      if (existsSync(path.join(candidate, 'project.yml'))) return candidate;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
 interface CssRef {
   /** Absolute path of the CSS file on the build machine. */
   src: string;
@@ -93,6 +110,9 @@ export async function runBuild(flags: CliFlags): Promise<void> {
   if (flags.android && flags.debug && buildMode === 'release') {
     buildMode = 'dev-client';
   }
+  if (flags.ios && flags.debug && buildMode === 'release') {
+    buildMode = 'dev-client';
+  }
 
   const isRelease = buildMode === 'release';
   const minify = resolveTransformFlag(
@@ -106,7 +126,7 @@ export async function runBuild(flags: CliFlags): Promise<void> {
   const output = await writeRayactBuild({
     root: process.cwd(),
     entry: flags.entry,
-    platform: flags.android ? 'android' : flags.platform,
+    platform: flags.android ? 'android' : flags.ios ? 'ios' : flags.platform,
     mode: buildMode,
     outDir,
     minify,
@@ -118,7 +138,7 @@ export async function runBuild(flags: CliFlags): Promise<void> {
   console.log(`Bundle: ${output.bundleFormat === 'qjsbc' ? 'bundle.qjsbc' : 'bundle.js'}`);
   console.log(`Assets: ${output.assets.length}`);
 
-  if (!flags.android && !flags.desktopApp) return;
+  if (!flags.android && !flags.ios && !flags.desktopApp) return;
 
   const { code, cssFiles } = normalizeCssRefs(output.code, process.cwd());
   if (output.bundleFormat === 'qjsbc' && code !== output.code) {
@@ -132,6 +152,8 @@ export async function runBuild(flags: CliFlags): Promise<void> {
 
   if (flags.android) {
     await buildAndroidApk(flags, config, code, cssFiles, output.bytecode, output.bundleFormat, outDir);
+  } else if (flags.ios) {
+    await buildIosApp(flags, config, code, cssFiles, output.bytecode, output.bundleFormat, outDir);
   } else {
     await packageDesktopApp(flags, config, cssFiles, outDir);
   }
@@ -227,6 +249,122 @@ async function buildAndroidApk(
       console.error('adb install failed — is a device connected?');
       process.exit(1);
     }
+  }
+}
+
+async function buildIosApp(
+  flags: CliFlags,
+  config: RayactConfig,
+  code: string,
+  cssFiles: CssRef[],
+  bytecode: Buffer | undefined,
+  bundleFormat: 'js' | 'qjsbc',
+  outDir: string
+): Promise<void> {
+  const cwd = process.cwd();
+  const iosDir = resolveIosProjectDir(cwd, config);
+  if (!iosDir) {
+    console.error('iOS project not found (looked for ios/ or apps/ios with project.yml).');
+    console.error('Set ios.projectDir in rayact.config.json.');
+    process.exit(1);
+  }
+  console.log(`iOS project: ${iosDir}`);
+
+  const androidAssets = path.resolve(iosDir, '../../android/app/src/main/assets');
+  await fs.mkdir(androidAssets, { recursive: true });
+  if (bundleFormat === 'qjsbc' && bytecode) {
+    await fs.writeFile(path.join(androidAssets, 'app.qjsbc'), bytecode);
+  } else {
+    await fs.writeFile(path.join(androidAssets, 'app.js'), code);
+  }
+
+  for (const ref of cssFiles) {
+    if (!existsSync(ref.src)) {
+      console.warn(`warning: bundle references missing CSS file: ${ref.src}`);
+      continue;
+    }
+    await copyInto(ref.src, path.join(androidAssets, 'runtime', ref.rel));
+  }
+  await writeNativeModules(config, path.join(androidAssets, 'runtime', 'native-modules.json'));
+
+  const distAssets = path.join(outDir, 'assets');
+  if (existsSync(distAssets)) {
+    for (const name of await fs.readdir(distAssets)) {
+      const src = path.join(distAssets, name);
+      if (!(await fs.stat(src)).isFile()) continue;
+      await copyInto(src, path.join(androidAssets, 'runtime/assets', name));
+      await copyInto(src, path.join(androidAssets, 'runtime/assets/assets', name));
+    }
+  }
+
+  console.log('Generating Xcode project (xcodegen)...');
+  const xcodegen = spawnSync('xcodegen', ['generate'], { cwd: iosDir, stdio: 'inherit' });
+  if (xcodegen.status !== 0) process.exit(xcodegen.status ?? 1);
+
+  const configuration = flags.debug ? 'Debug' : 'Release';
+  console.log(`Building iOS app (${configuration})...`);
+  const xcodebuild = spawnSync(
+    'xcodebuild',
+    [
+      '-scheme', 'RayactIOS',
+      '-configuration', configuration,
+      '-destination', 'generic/platform=iOS Simulator',
+      'build'
+    ],
+    { cwd: iosDir, stdio: 'inherit' }
+  );
+  if (xcodebuild.status !== 0) process.exit(xcodebuild.status ?? 1);
+
+  const derived = path.join(
+    iosDir,
+    'build',
+    configuration + '-iphonesimulator',
+    'Rayact.app'
+  );
+  const fallback = spawnSync('xcodebuild', ['-showBuildSettings', '-scheme', 'RayactIOS'], {
+    cwd: iosDir,
+    encoding: 'utf8'
+  });
+  let appPath = derived;
+  if (fallback.stdout) {
+    const match = fallback.stdout.match(/TARGET_BUILD_DIR = (.+)/);
+    const nameMatch = fallback.stdout.match(/FULL_PRODUCT_NAME = (.+)/);
+    if (match && nameMatch) {
+      appPath = path.join(match[1].trim(), nameMatch[1].trim());
+    }
+  }
+
+  if (existsSync(appPath)) {
+    await copyInto(appPath, path.join(outDir, 'Rayact.app'));
+    console.log(`iOS app: ${path.join(outDir, 'Rayact.app')}`);
+  }
+
+  if (flags.install) {
+    const simId = spawnSync('xcrun', ['simctl', 'list', 'devices', 'available', '-j'], {
+      encoding: 'utf8'
+    });
+    let deviceId = '';
+    if (simId.stdout) {
+      try {
+        const data = JSON.parse(simId.stdout) as { devices: Record<string, Array<{ udid: string; isAvailable: boolean }>> };
+        for (const runtime of Object.values(data.devices)) {
+          for (const d of runtime) {
+            if (d.isAvailable) {
+              deviceId = d.udid;
+              break;
+            }
+          }
+          if (deviceId) break;
+        }
+      } catch { /* ignore */ }
+    }
+    if (!deviceId || !existsSync(appPath)) {
+      console.error('simctl install skipped — no simulator or app bundle path');
+      return;
+    }
+    spawnSync('xcrun', ['simctl', 'install', deviceId, appPath], { stdio: 'inherit' });
+    const bundleId = config.ios?.bundleId ?? 'com.rayact.ios';
+    spawnSync('xcrun', ['simctl', 'launch', deviceId, bundleId], { stdio: 'inherit' });
   }
 }
 

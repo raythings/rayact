@@ -19,6 +19,9 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 
 // ─── globals ──────────────────────────────────────────────────────────────────
 
@@ -448,10 +451,17 @@ static std::string urlCacheKey(const std::string& url) {
 // Download url → outPath via curl. userAgent optional. Returns true on success.
 static bool curlDownload(const std::string& url, const std::string& outPath,
                          const std::string& userAgent = {}) {
+#if TARGET_OS_IPHONE
+    (void)url;
+    (void)outPath;
+    (void)userAgent;
+    return false;
+#else
     std::string cmd = "curl -s -L -f";
     if (!userAgent.empty()) cmd += " -A \"" + userAgent + "\"";
     cmd += " -o \"" + outPath + "\" \"" + url + "\" 2>/dev/null";
     return system(cmd.c_str()) == 0 && std::filesystem::exists(outPath);
+#endif
 }
 
 // Fetch URL contents as string. Uses a temp file internally.

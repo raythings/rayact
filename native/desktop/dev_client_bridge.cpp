@@ -158,6 +158,8 @@ static JSValue JS_devCall(JSContext* ctx, JSValue, int argc, JSValueConst* argv)
     std::string resultJson;
 #ifdef __ANDROID__
     resultJson = androidDevCall(method, dataJson.empty() ? nullptr : dataJson.c_str());
+#elif defined(RAYACT_IOS)
+    resultJson = iosDevCall(method, dataJson.empty() ? nullptr : dataJson.c_str());
 #else
     resultJson = desktopDevCall(method, dataJson.empty() ? nullptr : dataJson.c_str());
 #endif

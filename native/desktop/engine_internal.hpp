@@ -52,7 +52,7 @@ struct QueuedTouch {
 
 // The engine's JS context (owned by engine_js.cpp; read by main.cpp).
 extern JSContext* g_ctx;
-#ifdef RAYACT_ANDROID
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
 extern JSRuntime* g_rt;
 #endif
 

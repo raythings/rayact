@@ -64,7 +64,7 @@ extern "C" {
 #include <string>
 #include <filesystem>
 
-#ifdef RAYACT_ANDROID
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
 #include "../android/engine_runtime.hpp"
 #endif
 
@@ -92,7 +92,7 @@ static JSValue JS_resolveAssetPath(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_readAssetBytes(JSContext*, JSValue, int, JSValueConst*);
 
 // Global variables
-#ifdef RAYACT_ANDROID
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
 JSRuntime* g_rt = nullptr;
 #else
 static JSRuntime* g_rt = nullptr;
@@ -101,8 +101,8 @@ JSContext* g_ctx = nullptr;
 static bool g_running = false;
 static std::filesystem::path g_releaseAssetBaseDir;
 
-// Default: MSAA 4x. User can override before initRaylib() via setConfigFlags().
-static unsigned int g_configFlags = FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT;
+// Default: MSAA 4x + HighDPI. User can override before initRaylib() via setConfigFlags().
+static unsigned int g_configFlags = FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI;
 static int g_targetFPS = 60;
 
 // Window management
@@ -212,7 +212,7 @@ static JSValue JS_getCurrentContext(JSContext* ctx, JSValue this_val,
 #ifndef RAYACT_NO_NET
 static bool httpGet(const std::string& url, std::string& body, std::string& error);
 #endif
-#if !defined(RAYACT_NO_NET) || defined(__ANDROID__)
+#if !defined(RAYACT_NO_NET) || defined(__ANDROID__) || defined(RAYACT_IOS)
 static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst* argv);
 #endif
 
@@ -611,7 +611,7 @@ static void registerNativeFunctions(JSContext* ctx) {
     }
 #endif
     rayact::installModuleBindings(ctx, global);
-#if !defined(RAYACT_NO_NET) || defined(__ANDROID__)
+#if !defined(RAYACT_NO_NET) || defined(__ANDROID__) || defined(RAYACT_IOS)
     JS_SetPropertyStr(ctx, global, "rayactDevFetch",
                       JS_NewCFunction(ctx, JS_rayactDevFetch, "rayactDevFetch", 1));
 #endif
@@ -642,9 +642,9 @@ static JSValue JS_initRaylib(JSContext* ctx, JSValue this_val,
         return JS_ThrowTypeError(ctx, "Invalid title");
     }
 
-#ifdef RAYACT_ANDROID
-    // Android owns raylib window/context creation from nativeCreateSurface().
-    // Desktop examples still call initRaylib defensively; on Android accepting
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
+    // Mobile hosts own raylib window/context creation from nativeCreateSurface().
+    // Desktop examples still call initRaylib defensively; on mobile accepting
     // the call as a no-op prevents JS evaluation from racing surface bootstrap.
     JS_FreeCString(ctx, title);
     return JS_UNDEFINED;
@@ -888,8 +888,12 @@ static void injectMaterialIcons(JSContext* ctx) {
     }
 
     const char* jscCandidates[] = {
+        "./rayact/packages/rayact-shared/dist/material_icons.jsc",
+        "rayact/packages/rayact-shared/dist/material_icons.jsc",
         "./packages/rayact-shared/dist/material_icons.jsc",
         "packages/rayact-shared/dist/material_icons.jsc",
+        "./rayact/resources/fonts/material_icons.jsc",
+        "rayact/resources/fonts/material_icons.jsc",
         "./resources/fonts/material_icons.jsc",
         "resources/fonts/material_icons.jsc",
         nullptr
@@ -899,6 +903,10 @@ static void injectMaterialIcons(JSContext* ctx) {
     }
 
     const char* candidates[] = {
+        "./rayact/packages/rayact-shared/src/material_icons.js",
+        "rayact/packages/rayact-shared/src/material_icons.js",
+        "./rayact/packages/rayact-shared/dist/material_icons.js",
+        "rayact/packages/rayact-shared/dist/material_icons.js",
         "./packages/rayact-shared/src/material_icons.js",
         "packages/rayact-shared/src/material_icons.js",
         "./packages/rayact-shared/dist/material_icons.js",
@@ -1160,7 +1168,7 @@ static bool httpGetBytes(const std::string& url, std::vector<uint8_t>& body, std
 // networking goes through Java (androidDevFetch) so the binding must exist even
 // though RAYACT_NO_NET strips the curl path; otherwise the dev bootstrap calls
 // an undefined rayactDevFetch and the project pane renders black.
-#if !defined(RAYACT_NO_NET) || defined(__ANDROID__)
+#if !defined(RAYACT_NO_NET) || defined(__ANDROID__) || defined(RAYACT_IOS)
 static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;
     const char* url = JS_ToCString(ctx, argv[0]);
@@ -1168,6 +1176,8 @@ static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst
     std::string body;
 #ifdef __ANDROID__
     body = rayact::androidDevFetch(url);
+#elif defined(RAYACT_IOS)
+    body = rayact::iosDevFetch(url);
 #else
     std::string error;
     if (!httpGet(url, body, error)) {
@@ -1178,7 +1188,7 @@ static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst
     JS_FreeCString(ctx, url);
     return JS_NewString(ctx, body.c_str());
 }
-#endif // !RAYACT_NO_NET || __ANDROID__
+#endif // !RAYACT_NO_NET || __ANDROID__ || RAYACT_IOS
 
 static std::string jsObjectString(JSContext* ctx, JSValue obj, const char* key) {
     JSValue value = JS_GetPropertyStr(ctx, obj, key);
@@ -1714,7 +1724,11 @@ void enginePumpJS() {
     // Execute JS frame update callback if registered
     if (!JS_IsUndefined(frameUpdateFunction)) {
         if (!g_root) g_shapes.clear();
-        JSValue args[] = { JS_NewInt32(ctx, GetRenderWidth()), JS_NewInt32(ctx, GetRenderHeight()) };
+        const float renderScale = getRenderScaleDpi();
+        JSValue args[] = {
+            JS_NewFloat64(ctx, (float)GetRenderWidth() / renderScale),
+            JS_NewFloat64(ctx, (float)GetRenderHeight() / renderScale)
+        };
         JSValue result = JS_Call(ctx, frameUpdateFunction, JS_UNDEFINED, 2, args);
         JS_FreeValue(ctx, args[0]);
         JS_FreeValue(ctx, args[1]);
@@ -1734,7 +1748,9 @@ void enginePumpJS() {
         shadowLayoutEnabled = (env && env[0] && env[0] != '0') ? 1 : 0;
     }
     if (shadowLayoutEnabled && g_root) {
-        rayact::shadowTree().calculateLayout((float)GetRenderWidth(), (float)GetRenderHeight());
+        const float renderScale = getRenderScaleDpi();
+        rayact::shadowTree().calculateLayout((float)GetRenderWidth() / renderScale,
+                                             (float)GetRenderHeight() / renderScale);
         raym3::MutationBatch layoutBatch;
         rayact::shadowTree().emitLayoutMutations(layoutBatch);
         for (const auto &m : layoutBatch.ops)
@@ -1770,7 +1786,7 @@ void engineDestroy() {
     g_rt = nullptr;
 }
 
-#ifdef RAYACT_ANDROID
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
 
 bool engineRuntimeBootstrap(EngineRuntime* runtime) {
     if (!runtime) return false;

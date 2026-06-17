@@ -39,6 +39,10 @@ export interface RayactConfig {
     /** Launcher icon source, relative to project root. */
     icon?: string;
   };
+  ios?: {
+    projectDir?: string;
+    bundleId?: string;
+  };
   /** Native plugin modules the host bundles / the project requires. */
   nativeModules?: RayactNativeModule[];
   transform?: RayactTransformConfig;

@@ -186,6 +186,11 @@ void main() {
 #endif
 float getRenderScaleDpi() {
     float dp = GetWindowScaleDPI().x;
+    int screenW = GetScreenWidth();
+    int renderW = GetRenderWidth();
+    if (screenW > 0 && renderW > 0) {
+        dp = std::max(dp, (float)renderW / (float)screenW);
+    }
     raym3::v2::Density::SetPlatformDensity(dp);
 #if defined(RAYACT_ANDROID)
     // Layout density is owned by setRaym3AndroidDensity (390dp-normalized policy).
@@ -388,13 +393,19 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     resolvePopoverAnchors();
 
     Vector2 mouse = GetMousePosition();
-    // mouse is in screen pixels; HitTest expects logical dp coords.
+    // Android/iOS touch positions are physical pixels; macOS/desktop GLFW mouse
+    // positions are already logical window coords even when the Metal drawable
+    // is supersampled.
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
     Vector2 mouseDp = raym3::v2::Density::PxToDp(mouse);
+#else
+    Vector2 mouseDp = mouse;
+#endif
     float wheelY = GetMouseWheelMove();
     bool pressed  = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
     bool released = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
     bool down     = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
-#if defined(RAYACT_ANDROID)
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
     const bool useQueuedTouch = true;
 #else
     // Desktop: opt into the queued-touch source for scripted input
@@ -407,7 +418,11 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
         // IsMouseButton* reflect raylib's PollInputEvents state which can fire
         // spurious released events when DOWN+UP arrive in the same poll cycle.
         mouse = g_queuedTouch.position;
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
         mouseDp = raym3::v2::Density::PxToDp(mouse);
+#else
+        mouseDp = mouse;
+#endif
         pressed = g_queuedTouch.pressed;
         released = g_queuedTouch.released;
         down = g_queuedTouch.down;
@@ -438,7 +453,7 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
         raym3::v2::ResolveScrollInput(g_root);
         inputDebugOnFrame(mouseDp, pressed, released, preActive);
         rayactDrainDeferredInputCallbacks();
-#if defined(RAYACT_ANDROID)
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
         if (released) {
             std::lock_guard<std::mutex> lock(g_touchMutex);
             g_touchPressFired = true;
@@ -448,7 +463,11 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
 
     rlPushMatrix();
     rlScalef(dp, dp, 1.0f);
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
     SetMouseScale(1.0f / dp, 1.0f / dp); // M3 components call GetMousePosition() in dp space
+#else
+    SetMouseScale(1.0f, 1.0f); // Desktop mouse positions are already logical.
+#endif
     raym3::v2::Render(g_root, bounds, /*layoutAlreadyComputed=*/!forceLayout);
     drawInspectorHighlight();
     SetMouseScale(1.0f, 1.0f);

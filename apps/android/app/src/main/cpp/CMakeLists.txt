@@ -10,12 +10,11 @@ set(CMAKE_C_STANDARD 99)
 get_filename_component(OUTER "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../.." ABSOLUTE)
 set(RAYACT      "${OUTER}/rayact")
 set(RAYLIB_DIR  "${OUTER}/raylib")
-set(RLVK_DIR    "${OUTER}/rlvk")
+set(RAYLIB_BACKENDS_DIR "${OUTER}/raylib-backends")
 set(QUICKJS_DIR "${OUTER}/quickjs")
 set(RAYM3_DIR   "${OUTER}/raym3")
 set(CSSPARSER_DIR "${OUTER}/cssparser/cssparser")
 set(RAYGPU_DIR   "${OUTER}/raygpu")
-set(WGVK_DIR     "${OUTER}/WGVK")
 
 # Feature scope for the first device bring-up. Networking (curl/lws/openssl),
 # workers (wasm3/native), and the TS validator (tree-sitter) are deferred — the
@@ -35,13 +34,19 @@ option(RAYACT_ANDROID_3D_SMOKE "Render the temporary 3D smoke test scene on Andr
 # to execute arm64 test binaries on the build host).
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 
-set(GLES3 GRAPHICS_API_OPENGL_ES3)
+include(${RAYLIB_BACKENDS_DIR}/cmake/RaylibBackend.cmake)
 
 # ---------------------------------------------------------------------------
-# raylib (custom PLATFORM_ANDROID_SURFACE backend — renders into a SurfaceView)
+# raylib plus backend-owned PLATFORM_ANDROID_SURFACE overlay.
 # ---------------------------------------------------------------------------
+raylib_backend_prepare_android_surface_overlay(
+    OUT_VAR RAYLIB_RCORE_SRC
+    RAYLIB_DIR "${RAYLIB_DIR}"
+    RAYLIB_BACKENDS_DIR "${RAYLIB_BACKENDS_DIR}"
+)
+
 set(RAYLIB_SRC
-    ${RAYLIB_DIR}/src/rcore.c
+    ${RAYLIB_RCORE_SRC}
     ${RAYLIB_DIR}/src/rshapes.c
     ${RAYLIB_DIR}/src/rtextures.c
     ${RAYLIB_DIR}/src/rtext.c
@@ -49,12 +54,14 @@ set(RAYLIB_SRC
     ${RAYLIB_DIR}/src/raudio.c
 )
 
-set(RAYLIB_DEFS PLATFORM_ANDROID_SURFACE ${GLES3}
+set(RAYLIB_DEFS PLATFORM_ANDROID_SURFACE
     RL_DEFAULT_BATCH_BUFFER_ELEMENTS=8192)
+if (NOT RAYACT_ANDROID_USE_RLVK)
+    list(APPEND RAYLIB_DEFS GRAPHICS_API_OPENGL_ES3)
+endif()
 set(RAYLIB_LIBS EGL GLESv3)
 
 if (RAYACT_ANDROID_USE_RLVK)
-    list(APPEND RAYLIB_SRC ${RLVK_DIR}/src/glad_vulkan_impl.c)
     list(APPEND RAYLIB_DEFS RAYLIB_USE_RLVK)
     list(APPEND RAYLIB_DEFS RLVK_ENABLE_GLSLANG=1)
     list(APPEND RAYLIB_LIBS vulkan)
@@ -70,6 +77,9 @@ add_library(raylib STATIC ${RAYLIB_SRC})
 target_compile_definitions(raylib PUBLIC ${RAYLIB_DEFS})
 target_include_directories(raylib PUBLIC ${RAYLIB_DIR}/src ${RAYLIB_DIR}/src/external/glfw/include)
 target_compile_options(raylib PRIVATE -Wno-unknown-pragmas)
+if (RAYACT_ANDROID_USE_RLVK)
+    raylib_backend_attach(TARGET raylib BACKEND VULKAN RAYLIB_BACKENDS_DIR ${RAYLIB_BACKENDS_DIR})
+endif()
 
 # ---------------------------------------------------------------------------
 # QuickJS
@@ -180,9 +190,6 @@ if(RAYACT_ANDROID_FULL OR RAYACT_ANDROID_WASM)
     target_link_libraries(rayact m3)
     target_include_directories(rayact PRIVATE ${OUTER}/wasm3/source)
 endif()
-if (RAYACT_ANDROID_USE_RLVK)
-    target_sources(rayact PRIVATE ${WGVK_DIR}/src/spirv_reflect.c ${RLVK_DIR}/src/rlvk_reflect.c)
-endif()
 # Real QuickJS app path: app.js (React 19 + raym3 v2 retained mode) drives
 # engineRenderFrame() via g_root. The C++ smoke tests are still available
 # behind RAYACT_ANDROID_3D_SMOKE and RAYACT_ANDROID_DIAGNOSTIC for one-off
@@ -219,7 +226,8 @@ target_link_libraries(rayact
 if (RAYACT_ANDROID_USE_RLVK)
     target_include_directories(raylib PUBLIC
         ${RAYGPU_DIR}/amalgamation/glslang/glslang/Include
-        ${WGVK_DIR}/src
+        ${RAYLIB_BACKENDS_DIR}/third_party/spirv_reflect
+        ${RAYLIB_BACKENDS_DIR}/backends/rlvk
     )
 endif()
 

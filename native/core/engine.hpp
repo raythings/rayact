@@ -75,7 +75,7 @@ void engineQueueTouch(int action, int id, float x, float y);
 // Tear down JS subsystems, context and runtime.
 void engineDestroy();
 
-#ifdef RAYACT_ANDROID
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
 class EngineRuntime;
 bool engineRuntimeBootstrap(EngineRuntime* runtime);
 void engineRuntimeTeardown(EngineRuntime* runtime);

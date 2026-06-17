@@ -206,7 +206,7 @@ void mmkvRelease(void*, RayactBytes buf) { free((void*)buf.ptr); }
 
 } // namespace
 
-extern "C" int rayact_module_register(const RayactHost* host) {
+extern "C" int rayact_mmkv_register(const RayactHost* host) {
   if (!host || host->abi_version != RAYACT_MODULE_ABI_VERSION) return -1;
   g_host = host;
   RayactModule mod{};
@@ -216,3 +216,9 @@ extern "C" int rayact_module_register(const RayactHost* host) {
   mod.release = mmkvRelease;
   return host->register_module("mmkv", &mod);
 }
+
+#if !defined(RAYACT_IOS)
+extern "C" int rayact_module_register(const RayactHost* host) {
+  return rayact_mmkv_register(host);
+}
+#endif

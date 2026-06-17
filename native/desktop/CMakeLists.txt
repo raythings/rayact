@@ -4,6 +4,9 @@ if(APPLE)
     enable_language(OBJCXX)
 endif()
 
+# Repo layout: this file lives in <repo>/rayact/native/desktop.
+get_filename_component(OUTER "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
+
 # C++ Standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,6 +14,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Build options
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
+option(RAYACT_DESKTOP_USE_METAL "Use Metal backend on macOS" ON)
+option(RAYACT_DESKTOP_USE_VULKAN "Use Vulkan backend on Linux" ON)
 
 # Platform detection
 if(WIN32)
@@ -32,7 +37,7 @@ pkg_check_modules(LWS      REQUIRED libwebsockets)
 pkg_check_modules(OPENSSL  REQUIRED openssl)
 
 # QuickJS include directory (use local quickjs)
-set(QUICKJS_DIR "${CMAKE_SOURCE_DIR}/../quickjs")
+set(QUICKJS_DIR "${OUTER}/quickjs")
 if(EXISTS ${QUICKJS_DIR}/quickjs.h)
     include_directories(${QUICKJS_DIR})
     message(STATUS "Found QuickJS at: ${QUICKJS_DIR}")
@@ -47,7 +52,7 @@ else()
 endif()
 
 # Raylib include directory (use local raylib)
-set(RAYLIB_DIR "${CMAKE_SOURCE_DIR}/../raylib")
+set(RAYLIB_DIR "${OUTER}/raylib")
 if(EXISTS "${RAYLIB_DIR}/src/raylib.h")
     include_directories(${RAYLIB_DIR}/src)
     message(STATUS "Found raylib in src directory")
@@ -56,6 +61,14 @@ elseif(EXISTS "${RAYLIB_DIR}/raylib.h")
     message(STATUS "Found raylib in directory")
 else()
     message(FATAL_ERROR "raylib not found in ${RAYLIB_DIR}")
+endif()
+
+set(RAYLIB_BACKENDS_DIR "${OUTER}/raylib-backends")
+if(EXISTS "${RAYLIB_BACKENDS_DIR}/cmake/RaylibBackend.cmake")
+    include("${RAYLIB_BACKENDS_DIR}/cmake/RaylibBackend.cmake")
+    message(STATUS "Found raylib-backends at: ${RAYLIB_BACKENDS_DIR}")
+else()
+    message(FATAL_ERROR "raylib-backends not found at ${RAYLIB_BACKENDS_DIR}")
 endif()
 
 # Find QuickJS library
@@ -90,23 +103,44 @@ if(QUICKJS_LIBC_LIBRARY)
     message(STATUS "Found QuickJS libc: ${QUICKJS_LIBC_LIBRARY}")
 endif()
 
-# Find Raylib library
-if(PLATFORM_LINUX)
-    find_library(RAYLIB_LIBRARY NAMES raylib PATHS ${RAYLIB_DIR}/build/src)
-elseif(PLATFORM_MACOS)
-    find_library(RAYLIB_LIBRARY NAMES raylib PATHS ${RAYLIB_DIR}/build/raylib ${RAYLIB_DIR}/build)
-elseif(WIN32)
-    find_library(RAYLIB_LIBRARY NAMES raylib PATHS ${RAYLIB_DIR}/build/src/Release)
+set(RAYLIB_RCORE_SRC ${RAYLIB_DIR}/src/rcore.c)
+if(PLATFORM_MACOS AND RAYACT_DESKTOP_USE_METAL)
+    raylib_backend_prepare_rcore_overlay(
+        OUT_VAR RAYLIB_RCORE_SRC
+        RAYLIB_DIR "${RAYLIB_DIR}"
+        RAYLIB_BACKENDS_DIR "${RAYLIB_BACKENDS_DIR}"
+    )
 endif()
 
-if(NOT RAYLIB_LIBRARY)
-    message(FATAL_ERROR "Raylib library not found. Please build raylib first.")
+set(RAYLIB_SRC
+    ${RAYLIB_RCORE_SRC}
+    ${RAYLIB_DIR}/src/rshapes.c
+    ${RAYLIB_DIR}/src/rtextures.c
+    ${RAYLIB_DIR}/src/rtext.c
+    ${RAYLIB_DIR}/src/rmodels.c
+    ${RAYLIB_DIR}/src/raudio.c
+)
+add_library(raylib STATIC ${RAYLIB_SRC})
+target_include_directories(raylib PUBLIC ${RAYLIB_DIR}/src ${RAYLIB_DIR}/src/platforms)
+target_compile_options(raylib PRIVATE -Wno-unknown-pragmas)
+find_library(RAYLIB_GLFW_LIBRARY NAMES glfw3 libglfw3
+    PATHS ${RAYLIB_DIR}/build/raylib/external/glfw/src
+          ${RAYLIB_DIR}/build/raylib/external/glfw/src/Debug
+          ${RAYLIB_DIR}/examples/others/external/lib
+          ${RAYM3_DIR}/build-v2-yoga2/_deps/raylib-build/raylib/external/glfw/src
+          ${RAYM3_DIR}/build-v2-yoga2/_deps/raylib-src/examples/others/external/lib)
+if(NOT RAYLIB_GLFW_LIBRARY)
+    message(FATAL_ERROR "raylib GLFW library not found. Build raylib or provide libglfw3.a")
 endif()
 
-message(STATUS "Found Raylib library: ${RAYLIB_LIBRARY}")
+if(PLATFORM_MACOS AND RAYACT_DESKTOP_USE_METAL)
+    raylib_backend_attach(TARGET raylib BACKEND METAL RAYLIB_BACKENDS_DIR ${RAYLIB_BACKENDS_DIR})
+elseif(PLATFORM_LINUX AND RAYACT_DESKTOP_USE_VULKAN)
+    raylib_backend_attach(TARGET raylib BACKEND VULKAN RAYLIB_BACKENDS_DIR ${RAYLIB_BACKENDS_DIR})
+endif()
 
 # wasm3 — embed only the core m3 interpreter (no WASI, no uvwasi)
-set(WASM3_DIR "${CMAKE_SOURCE_DIR}/../wasm3")
+set(WASM3_DIR "${OUTER}/wasm3")
 if(NOT EXISTS "${WASM3_DIR}/source/wasm3.h")
     message(FATAL_ERROR "wasm3 not found at ${WASM3_DIR}")
 endif()
@@ -135,9 +169,9 @@ include_directories("${WASM3_DIR}/source")
 message(STATUS "Found wasm3 at: ${WASM3_DIR}")
 
 # cssparser — CSS file import support
-set(CSSPARSER_DIR "${CMAKE_SOURCE_DIR}/../cssparser/cssparser")
+set(CSSPARSER_DIR "${OUTER}/cssparser/cssparser")
 if(EXISTS "${CSSPARSER_DIR}/CSSParser.h")
-    include_directories(${CMAKE_SOURCE_DIR}/../cssparser)
+    include_directories(${OUTER}/cssparser)
     message(STATUS "Found cssparser at: ${CSSPARSER_DIR}")
 else()
     message(FATAL_ERROR "cssparser not found at ${CSSPARSER_DIR}")
@@ -150,7 +184,7 @@ set(CSSPARSER_SOURCES
 )
 
 # raym3 (Yoga-enabled build for proper flexGrow/layout support)
-set(RAYM3_DIR "${CMAKE_SOURCE_DIR}/../raym3")
+set(RAYM3_DIR "${OUTER}/raym3")
 if(EXISTS "${RAYM3_DIR}/include/raym3/v2.h")
     include_directories(${RAYM3_DIR}/include)
     message(STATUS "Found raym3 at: ${RAYM3_DIR}")
@@ -197,7 +231,7 @@ else()
 endif()
 
 # tree-sitter-typescript grammar (compiled from source)
-set(TS_TYPESCRIPT_DIR "${CMAKE_SOURCE_DIR}/../tree-sitter-typescript/typescript/src")
+set(TS_TYPESCRIPT_DIR "${OUTER}/tree-sitter-typescript/typescript/src")
 set(TS_TYPESCRIPT_SOURCES
     ${TS_TYPESCRIPT_DIR}/parser.c
     ${TS_TYPESCRIPT_DIR}/scanner.c
@@ -254,8 +288,8 @@ if(PLATFORM_MACOS)
 endif()
 
 file(GLOB_RECURSE RAYACT_APP_NATIVE_WORKERS
-    "${CMAKE_SOURCE_DIR}/native/workers/*/*.cpp"
-    "${CMAKE_SOURCE_DIR}/apps/*/native/workers/*/*.cpp"
+    "${OUTER}/rayact/native/workers/*/*.cpp"
+    "${OUTER}/rayact/apps/*/native/workers/*/*.cpp"
 )
 if(RAYACT_APP_NATIVE_WORKERS)
     list(APPEND SOURCES ${RAYACT_APP_NATIVE_WORKERS})
@@ -283,7 +317,8 @@ target_link_libraries(rayact_desktop
     Threads::Threads
     ${QUICKJS_LIBC_LIBRARY}
     ${QUICKJS_LIBRARY}
-    ${RAYLIB_LIBRARY}
+    raylib
+    ${RAYLIB_GLFW_LIBRARY}
     raym3_prebuilt
     yogacore_prebuilt
     ${TREESITTER_LIBRARY}
@@ -321,6 +356,26 @@ if(PLATFORM_MACOS)
         ${COREFOUNDATION_FRAMEWORK}
         ${OPENGL_FRAMEWORK}
     )
+    # rlmt (Metal backend) needs these; harmless for the OpenGL build.
+    if(RAYACT_USE_RLMT)
+        target_link_libraries(rayact_desktop
+            "-framework Metal" "-framework QuartzCore" "-framework CoreVideo")
+        # librlmt.a (built with transpile) references glslang + SPIRV-Cross.
+        set(BREW /opt/homebrew)
+        if(EXISTS "${BREW}/lib/libspirv-cross-c.a")
+            target_link_libraries(rayact_desktop
+                ${BREW}/lib/libglslang.dylib
+                ${BREW}/lib/libglslang-default-resource-limits.dylib
+                ${BREW}/lib/libspirv-cross-c.a
+                ${BREW}/lib/libspirv-cross-msl.a
+                ${BREW}/lib/libspirv-cross-glsl.a
+                ${BREW}/lib/libspirv-cross-hlsl.a
+                ${BREW}/lib/libspirv-cross-cpp.a
+                ${BREW}/lib/libspirv-cross-reflect.a
+                ${BREW}/lib/libspirv-cross-util.a
+                ${BREW}/lib/libspirv-cross-core.a)
+        endif()
+    endif()
 endif()
 
 # Compile options

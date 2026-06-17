@@ -14,6 +14,7 @@ export interface CliFlags {
   minify: boolean | null;
   bytecode: boolean | null;
   android: boolean;
+  ios: boolean;
   desktopApp: boolean;
   install: boolean;
   debug: boolean;
@@ -38,6 +39,7 @@ export function parseCli(argv: string[]): CliFlags {
     minify: null,
     bytecode: null,
     android: false,
+    ios: false,
     desktopApp: false,
     install: false,
     debug: true,
@@ -96,19 +98,24 @@ export function parseCli(argv: string[]): CliFlags {
     else if (arg === '--bytecode') flags.bytecode = true;
     else if (arg === '--no-bytecode') flags.bytecode = false;
     else if (arg === '--android') flags.android = true;
+    else if (arg === '--ios') flags.ios = true;
     else if (arg === '--desktop') flags.desktopApp = true;
     else if (arg === '--dev') flags.dev = true;
     else if (arg === '--debug') flags.debug = true;
     else if (arg === '--release') { flags.debug = false; flags.mode = 'release'; }
-    else if (arg === '--install') { flags.install = true; flags.android = true; }
+    else if (arg === '--install') {
+      flags.install = true;
+      if (!flags.ios) flags.android = true;
+    }
     else if (!arg.startsWith('-')) flags.positional.push(arg);
     else throw new Error(`Unknown flag: ${arg}`);
   }
 
   if (flags.command === 'run' && flags.subcommand) {
     if (flags.subcommand === 'android') flags.platform = 'android';
+    else if (flags.subcommand === 'ios') flags.platform = 'ios';
     else if (flags.subcommand === 'desktop') flags.platform = 'desktop';
-    else throw new Error(`Unknown run target: ${flags.subcommand}. Use run:desktop or run:android`);
+    else throw new Error(`Unknown run target: ${flags.subcommand}. Use run:desktop, run:android, or run:ios`);
   }
 
   return flags;

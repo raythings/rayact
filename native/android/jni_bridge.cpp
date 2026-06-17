@@ -1,8 +1,8 @@
 // Rayact Android JNI bridge.
 //
 // Connects the process-level Rayact engine (native/core/engine.hpp) to N
-// Android SurfaceViews via the custom raylib PLATFORM_ANDROID_SURFACE backend
-// (raylib/src/platforms/rcore_android_surface.{c,h}). The Kotlin host owns
+// Android SurfaceViews via the raylib-backends PLATFORM_ANDROID_SURFACE backend
+// (backends/rlvk/platforms/rcore_android_surface.{c,h}). The Kotlin host owns
 // threading: each RayactSurfaceView runs a render thread, drives a
 // Choreographer frame callback, and calls nativeRenderFrame() once per vsync.
 // The engine itself is NOT tied to any Activity — it is created once per
@@ -57,7 +57,7 @@
 #include <raym3/v2/TextInput.h>
 
 extern "C" {
-#include "rcore_android_surface.h"   // RcoreAndroidSurface_* host hooks (from raylib)
+#include "rcore_android_surface.h"   // RcoreAndroidSurface_* host hooks (from raylib-backends)
 }
 
 // raylib functions we call directly to bring up / drive a surface.

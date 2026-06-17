@@ -1,0 +1,1504 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		02255831225A0E37156DE97C /* Renderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C34A484593D51A0FD3FE50B /* Renderer.cpp */; };
+		0398FB8BB5F0A35AB3A0BBDE /* plugin_loader.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B41AFF549810185CB5F306B0 /* plugin_loader.cpp */; };
+		03A2EF37828D106246A1B256 /* css_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6E51B3E4F4E82FE60F28FD4E /* css_bridge.cpp */; };
+		04AB7A1A8A510840F079FB0E /* Stylesheet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E1CF60B5E9FEAA7F77B23D43 /* Stylesheet.cpp */; };
+		0533AEB8C6AAF1DF2F21503E /* AssertFatal.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0496DF4A4603751341FC16FD /* AssertFatal.cpp */; };
+		0628A5A434A2F6A2CC61E2EB /* Transitions.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 31F943538A558EB7C99C35BD /* Transitions.cpp */; };
+		0680F7AB30870D565359F4F9 /* Divider.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7E215ED7819E79879A768848 /* Divider.cpp */; };
+		0844E720DAD4AEC45A348EF4 /* CalculateLayout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7BB87A76EC7C75004E1CAD68 /* CalculateLayout.cpp */; };
+		0AA922A924C0C14035AED05B /* RayactRenderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67BDFB073956694F1E0D55E1 /* RayactRenderScheduler.swift */; };
+		0AB7F22628B85249C014E248 /* TextMeasureCache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 394F9D7799DD790573E5CC67 /* TextMeasureCache.cpp */; };
+		0CCE1126D396A593E53F71C4 /* RayactEngineHostCallbacks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F8F85A38D8A5C2AC10C2543 /* RayactEngineHostCallbacks.swift */; };
+		13CCED586250C021D60F20F3 /* Snackbar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 22018002A09CFD74E653EA9C /* Snackbar.cpp */; };
+		1401A1530FBA01EA02C60D92 /* CSSDeNest.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 81E31863B107845C0A8FE311 /* CSSDeNest.cpp */; };
+		1577608A9789B12F0FA486D2 /* FloatingActionButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2349AA101E797DF097B7183D /* FloatingActionButton.cpp */; };
+		15BCDF543FED685FFE548917 /* RayactMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C768E6E1A5A2A97A150ED997 /* RayactMetalView.swift */; };
+		19C0068226BAF95EEED4C21F /* m3_function.c in Sources */ = {isa = PBXBuildFile; fileRef = F3A43D53B829B514AC4FCBD1 /* m3_function.c */; };
+		1A4BFE18FFBA9D3069B3EB6E /* Navigation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3650E902931A9E55A504E0FA /* Navigation.cpp */; };
+		1A99D0765DBF15CACDD636E5 /* data_dir.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9089E6D8BE1FFB1B63D3F8FE /* data_dir.cpp */; };
+		1BCA7FAED4BC3B515D74A6DD /* quickjs_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 25205A3983407A326A8FA64A /* quickjs_bridge.cpp */; };
+		1DCEA2C01E99AC6608B02B29 /* unicode_download.sh in Resources */ = {isa = PBXBuildFile; fileRef = D93EDE6AE087FBDE206BC5D2 /* unicode_download.sh */; };
+		1E28D84F1AD986DF8F475877 /* ios_engine_instance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EE0F30DA7DE7D611C4DB1AD6 /* ios_engine_instance.cpp */; };
+		23C3808D2732443AE859140C /* m3_compile.c in Sources */ = {isa = PBXBuildFile; fileRef = 1A975362667BD597D2506176 /* m3_compile.c */; };
+		2570C3966D3A3A2C5F5769B3 /* CSSProperties.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E7E768F73E5954CCE6181D6 /* CSSProperties.cpp */; };
+		29718BB6BB5CF7F4EB74F6A2 /* Dialog.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 364E7ADD53511EAAD220CE0C /* Dialog.cpp */; };
+		2C6DBCAED66F18DE40BF9C97 /* ButtonGroup.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CB7693B1C166BE54A1A0A885 /* ButtonGroup.cpp */; };
+		2DA12B685C581ED14B7ED2D3 /* utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D64CE86C42AA969248D4F78D /* utils.cpp */; };
+		2F04B521DF14E6F7D609B3C0 /* EmojiRasterizerApple.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4FAAD9A25EC18CD490DB9A8F /* EmojiRasterizerApple.mm */; };
+		32D560D5DE4574CE9C962FA0 /* worker_wasm.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C58A0CFF34752083F59A291E /* worker_wasm.cpp */; };
+		33C5777855FC285C8558821F /* YGNodeLayout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FF147B193D6F2772911F3C38 /* YGNodeLayout.cpp */; };
+		386BE0BEB14BBDAAD0F44BBA /* RangeSlider.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4ADA129237C4AD20879A6BB1 /* RangeSlider.cpp */; };
+		3A62D21DEF7029A946CC1E8E /* RayactHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = D32180F57BB9218D21FCB74A /* RayactHost.swift */; };
+		3D2E97B654F79878611BECDA /* YGPixelGrid.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C8F3DDC9E7B377238A96AB9D /* YGPixelGrid.cpp */; };
+		3E95F06000CF7539F34FDD98 /* tests.conf in Resources */ = {isa = PBXBuildFile; fileRef = AD29354857DD2F2C1DCA7296 /* tests.conf */; };
+		3EB7FE22A69EA4B68D23C904 /* SvgRenderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7917706AECFD76A3C61A1BC2 /* SvgRenderer.cpp */; };
+		41EF64C12FB89FCAF4105024 /* DevServerLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 131E130C48A79923A9CC645E /* DevServerLoader.swift */; };
+		426928DE67400FF16038961C /* TextSelectionOverlay.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6492F076A3C93508C738F9B5 /* TextSelectionOverlay.cpp */; };
+		4375DACB1DE367D79A6D553F /* ColorScheme.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EAAAB3A0A7F5BAC4E0953F4F /* ColorScheme.cpp */; };
+		43F5CAB09AA6F418A7414C59 /* secure_store_mac.mm in Sources */ = {isa = PBXBuildFile; fileRef = F8BB7EB6F101597A14C788BC /* secure_store_mac.mm */; };
+		442715F30051F8458E70C4D0 /* dev_client_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B3FBF2187FCB8F5B48BA59B3 /* dev_client_bridge.cpp */; };
+		44419C81F245695CDF5154BD /* SystemAppearance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 90C676A667D5EF5515A6016E /* SystemAppearance.cpp */; };
+		462CFD47C996CD463152D5A8 /* Chip.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 15B78893FEC9E2EB16EAEA93 /* Chip.cpp */; };
+		483A104948CDE8DE8AD87E59 /* Modal.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EE8DF0A2D484B19EFDBDC81A /* Modal.cpp */; };
+		491FCFE837071667BA57689A /* commit_queue.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C1414C05570DD9C44E3EAA1A /* commit_queue.cpp */; };
+		498347526014CBE05C94F61C /* RadioButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AB3FD221D5E0461011D76DC5 /* RadioButton.cpp */; };
+		4C3931369CB053819607D39B /* YGEnums.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3285FF667288E76ED26EB9CF /* YGEnums.cpp */; };
+		4C7A7E876C47316F1D3C1430 /* rlmt.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5174C51F9A1A937C22FFAC48 /* rlmt.mm */; };
+		4E36514D213619DE8BEAF32C /* TabBar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 21FF49F13CA289D1BB264848 /* TabBar.cpp */; };
+		4E86BB4C3AE21F3A95523095 /* window_manager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A9DFE135C70DA0D8EDD07FAD /* window_manager.cpp */; };
+		506CEC36326498B6DFDF3CA2 /* workers.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D99BD61C508B4DF48014172B /* workers.cpp */; };
+		50A815DCFD48C472F31543F2 /* YGConfig.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CA04DB257606DA6B39C22160 /* YGConfig.cpp */; };
+		51451761E5DC5C9C00F4FF77 /* Container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9D7D73423A19565149CE17F2 /* Container.cpp */; };
+		51BCE200DDB7822DD7183F1D /* FlexLine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32646D3D3C2A74F0CC05ACB2 /* FlexLine.cpp */; };
+		54F564DF6771C2C6A5179401 /* InputLayer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 31656B737E95A2F23DEBE135 /* InputLayer.cpp */; };
+		56526A79EC94831822DDC853 /* PixelGrid.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FF9239B7D3A72E7AEED1ECF5 /* PixelGrid.cpp */; };
+		565A81D984B089F55EE4E6A9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 359CA33638B664F07A1AA061 /* AppDelegate.swift */; };
+		5733A093EEB0ADEC6B7168F7 /* system_appearance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 49E704D3FE6E22A46FA74C75 /* system_appearance.cpp */; };
+		5782BF7C040F7B1090CC310E /* m3_bind.c in Sources */ = {isa = PBXBuildFile; fileRef = C58AEE8443393184359FB2F8 /* m3_bind.c */; };
+		587149023A8B3C82FE6993A4 /* module_bus.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 831D0F39EBE86FFE17FFF5B0 /* module_bus.cpp */; };
+		59B9264006E4AF897A8E9C1E /* RayactSurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C863A2828BD0228178D84024 /* RayactSurfaceView.swift */; };
+		59CD87EDA549956C34D448B5 /* YGNodeStyle.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2E2665334F34A0BE8CDCD2BC /* YGNodeStyle.cpp */; };
+		59FE09DA198D86B92F4DA164 /* ProgressIndicator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 959C077460A1797D73B425EC /* ProgressIndicator.cpp */; };
+		5B351EE64377A8ED540964D0 /* IconButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3D39846B38E4EB78300E70AB /* IconButton.cpp */; };
+		5C14FA105A60DA91226627A4 /* Log.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 86D7ADA32D292808F71E2343 /* Log.cpp */; };
+		5C7B9AC5E0D2D59F255A5A23 /* Renderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1F6AAFA3FCBAA3AF64FF07A9 /* Renderer.cpp */; };
+		5CE3B84B1EB98CC9FB5ABE2C /* libunicode.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0870FE08C0BDD271C3343 /* libunicode.c */; };
+		5E166E5862E5EEFEBF39A337 /* config_loader.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F7053D1A9402E92BD2189BFC /* config_loader.cpp */; };
+		5E669D1C510857B5D40CC7A5 /* m3_exec.c in Sources */ = {isa = PBXBuildFile; fileRef = 52155F1D199F9A0244BFE97D /* m3_exec.c */; };
+		60B35A3066CF0607A42FEAF5 /* IconRenderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A542F6F40A2E3A2B38CECD8D /* IconRenderer.cpp */; };
+		6B12C5BFCEAA0892D0075487 /* engine_render.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7ECC0C8C334F47DFAA15AD64 /* engine_render.cpp */; };
+		6B869D41DDEB91E02E2B03EB /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EB865D7A2EB827CB554084F /* SceneDelegate.swift */; };
+		6C163CCE8358518F7005D90D /* engine_js.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B6C45258FBFE071D0EC11F50 /* engine_js.cpp */; };
+		6D503DB88D62F54F3F24B0AF /* rcore_ios_metal_overlay.c in Sources */ = {isa = PBXBuildFile; fileRef = BDE397E69B0DF3A4FC9352E7 /* rcore_ios_metal_overlay.c */; };
+		6DA29412479C45AE815B46B1 /* Tooltip.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B532A16A4117E91655AB71CE /* Tooltip.cpp */; };
+		6EF4E8EB480D270827EA75EC /* IOSBundledAssets.swift in Sources */ = {isa = PBXBuildFile; fileRef = D871AAC601732161AF2747A3 /* IOSBundledAssets.swift */; };
+		7029EBECF7F9F588A3C51073 /* LayoutNode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B76037309E6EA19C79832353 /* LayoutNode.cpp */; };
+		719DC52B8B5913ECE2471DEE /* Mutations.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8567FB0243169DBFCDEEE936 /* Mutations.cpp */; };
+		72D223B8411CBD028D9474EF /* RenderContext.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5CB06F040A4CC6DF6B4A9B82 /* RenderContext.cpp */; };
+		760CDAF3F5BF0866AA55D0A9 /* m3_core.c in Sources */ = {isa = PBXBuildFile; fileRef = 75A2A660FA80E67CEA4DCD9E /* m3_core.c */; };
+		77421B4ED24C40F240DD9419 /* test262.conf in Resources */ = {isa = PBXBuildFile; fileRef = 595E57CC00CEEEC3D3D2C3B3 /* test262.conf */; };
+		78356034A860CDD81EAD7FF2 /* Switch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A6823BC8335C79C6CD1BC7EE /* Switch.cpp */; };
+		7A4B23999FB8B6F78A1AA124 /* DevMenuOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADA048B96ADC9AFDA99C4C08 /* DevMenuOverlay.swift */; };
+		7B647ADE10FFBC547FC6B847 /* worklet_runtime.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 70D8D848C09D583397C08FB7 /* worklet_runtime.cpp */; };
+		7C696CA0756E5D2289D53FB2 /* ios_plugins_register.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C582FBEF2363981B5ABDA8BF /* ios_plugins_register.cpp */; };
+		7C9AD967B12DEF49FF0AA129 /* RayactEngineSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00B60127D0AF9FF82D317CC9 /* RayactEngineSession.swift */; };
+		80A013227ADE6AA970845C76 /* SearchBar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 48F44CFC99F7429EB11B4BF5 /* SearchBar.cpp */; };
+		8168632487675DFF099F6FB9 /* Baseline.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 020F88A4AD4E13A283EA9DD3 /* Baseline.cpp */; };
+		8256805485BA1EBFF65F52A4 /* devtools_ios.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 05F70DD7DDDC9C7206B25D03 /* devtools_ios.cpp */; };
+		82F2EE47D37AE050CDEC3638 /* Cache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A0BD219E6A1366278E61EBCB /* Cache.cpp */; };
+		877AD2A3BFAE7486B46730E1 /* Button.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6BC4638C75044DF07841D17B /* Button.cpp */; };
+		898AB0E4C7400BD90D65CB0B /* rtext.c in Sources */ = {isa = PBXBuildFile; fileRef = 033D06CBD69C1A750204C7F1 /* rtext.c */; };
+		8AB41411FECA2FC3AB9711FF /* YGNode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2EDBDE36DAE581834D13867D /* YGNode.cpp */; };
+		8D2BC51FD45F2099DE163954 /* rshapes.c in Sources */ = {isa = PBXBuildFile; fileRef = D4F92D27F9383E1B90D2AB1F /* rshapes.c */; };
+		8DDB8789F9AC2391D5233DE5 /* m3_parse.c in Sources */ = {isa = PBXBuildFile; fileRef = 4DD415575E09D0EE82B83F4C /* m3_parse.c */; };
+		90D2CD8A4B3A39C8206AC591 /* color_parse.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D338089586A9E4D25A64C8FA /* color_parse.cpp */; };
+		91248E8395507EA272E2CF82 /* accessibility_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A176FB6E02D45A0F886BAECD /* accessibility_bridge.cpp */; };
+		9188F6F40DE13083F9C4E337 /* event.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F131ED1BCD99188B3EA6615C /* event.cpp */; };
+		9192CD0DB5ECBAA84C7F1CC0 /* View.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6E9E2BDB6DE2D9AE8AE0CB7A /* View.cpp */; };
+		91F4FE368ED312D28C5BE32F /* m3_env.c in Sources */ = {isa = PBXBuildFile; fileRef = B0C5482E94942DF05E7860D2 /* m3_env.c */; };
+		931BDCBE94EA3ED8F1AA8F4F /* AbsoluteLayout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0505A61CF3B74FC77872B757 /* AbsoluteLayout.cpp */; };
+		944FD0C549D5A987A55307A9 /* raym3_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4509BE0DB4D7D7B1ED6BEAF8 /* raym3_bridge.cpp */; };
+		96962E57BF045D889E3AAEDA /* platform_ios.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 161ECA68BB5DDAA75415F0FD /* platform_ios.cpp */; };
+		98EE116EDE894DBB7F9EB2BB /* Checkbox.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2D844D815300F23880FBE1FA /* Checkbox.cpp */; };
+		9BD0E98122F875EC2B1E70D2 /* FontManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A73914BE9936EC5E072E99C9 /* FontManager.cpp */; };
+		9DCB48FEF9126013AE4A4EC8 /* quickjs-libc.c in Sources */ = {isa = PBXBuildFile; fileRef = B146E609AC0016988E08B024 /* quickjs-libc.c */; };
+		9DF44BC282A74D2379DA263C /* libregexp.c in Sources */ = {isa = PBXBuildFile; fileRef = 3B66654088E57B2DA773C955 /* libregexp.c */; };
+		9E6D3980058E37AAC430F584 /* Node.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 77D94C1DADD5AB4D125DE57D /* Node.cpp */; };
+		9F186EB555AD7647CD02B657 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 390CE3FE919320CBB64E90B5 /* Assets.xcassets */; };
+		A136622FA5AD4DA957BBF15B /* MaterialDefaults.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C4149BFBCA91BDC435ADB975 /* MaterialDefaults.cpp */; };
+		A3DAD6180F0CFC39540A8839 /* DevClientBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A2DAB3DA708FD3FD8F533FC /* DevClientBridge.swift */; };
+		A4A54E28B804963EA472EFB7 /* Theme.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FF5EFD75635045D7F31B8AF4 /* Theme.cpp */; };
+		A50E4A706D46B27E9C009C8D /* DevShakeDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2504A8EEDDEE6DE370CF8E42 /* DevShakeDetector.swift */; };
+		A633B49D47788CB85D2FAB10 /* EmojiFont.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1CF8EAFC4FD8B1B033557097 /* EmojiFont.cpp */; };
+		A8FECD0B4BA5E98A70298A95 /* AppBar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E02CD5F98842E4310FC445C /* AppBar.cpp */; };
+		AA4EB0BBE4E733EF16E2A671 /* rtextures.c in Sources */ = {isa = PBXBuildFile; fileRef = 2946B84A4A7FF9FF1C43DFC2 /* rtextures.c */; };
+		ADFBA51BFE00F4CE13FFE980 /* SystemAppearance.mm in Sources */ = {isa = PBXBuildFile; fileRef = 78460481074191BFF35CD1D8 /* SystemAppearance.mm */; };
+		AEB7DD0BF6E2EB77866AD698 /* SvgModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F580CD4E2F9FFAA4B1341D35 /* SvgModel.cpp */; };
+		B063B63DAF0AE710F05A3B08 /* engine_thread.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7D6CD8BB50B297A17E45231F /* engine_thread.cpp */; };
+		B20E9499A79EB3FFF1377EDF /* engine_runtime.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 74DBCA3944A8B9E724BFB3DC /* engine_runtime.cpp */; };
+		B3CDA4E49203E1A34EE4392E /* RayactNativeBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3C7D1E2BC8A5A32056664A /* RayactNativeBridge.swift */; };
+		B41A1BAB1F083D8548230FAB /* raym3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F9A1AF35922E1BA96BE97CBE /* raym3.cpp */; };
+		B42F038E071BA6FEA29CA0D2 /* ProjectHmrClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60C506A65430CF60588D22FB /* ProjectHmrClient.swift */; };
+		B515274692716764B1514243 /* Density.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 68469D2FE07DBA277E1658B0 /* Density.cpp */; };
+		B5CED7E033874AC24BF72E85 /* Components.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E2CEE3EBA53166EBF92326B7 /* Components.cpp */; };
+		B7C4A8713642E5B49364B07B /* secure_store_plugin.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4AE641ED164D08DAC13A924E /* secure_store_plugin.cpp */; };
+		B81F127C71B41115425C7181 /* TextField.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F5B08C908128E9379859CC94 /* TextField.cpp */; };
+		BA0B8531C69D7AF1CA02DDEE /* CSSParser.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E69B05E520CE0BDC11E5E814 /* CSSParser.cpp */; };
+		BBCB45FC01672B409B0D6C3E /* mmkv_plugin.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5978B0F37C9B424062E35D9D /* mmkv_plugin.cpp */; };
+		BC2B53799DE98B6E7ED6CD29 /* TextEngine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8D9B685A8DE5801F02A3EDAC /* TextEngine.cpp */; };
+		BC8B81AB58B3CE0814462B83 /* RayactScreenViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96196FB533595CED1263FDFB /* RayactScreenViewController.swift */; };
+		BD0673CC6FE8CCCF5663CBFE /* Badge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B842A810A8740B2243A790FD /* Badge.cpp */; };
+		BE79C0406D8CAE69BD5D69A7 /* Ripple.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BF2DA98AEDA8C4CD32294A86 /* Ripple.cpp */; };
+		BED80B977E8614175592B343 /* Slider.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E92FF35319D5631AC5E15853 /* Slider.cpp */; };
+		C0CDFD46ADDEBDA206D8E5B9 /* LayoutResults.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FADFB3523E24CBEFA34FAF8E /* LayoutResults.cpp */; };
+		C1AF0795FCB63DA225E38E44 /* View3D.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 26A2363B4CBAC90587376E4F /* View3D.cpp */; };
+		C3D5B3C3FC9C288BA658D5E4 /* Layout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 34CDCD40C0C701946B2232F9 /* Layout.cpp */; };
+		C4A2D7F4A7E80B7E64537C61 /* worker_native.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CB3C855D36B51CE29E8AAA3A /* worker_native.cpp */; };
+		C58F0EB10DC46B17780E5A8E /* dtoa.c in Sources */ = {isa = PBXBuildFile; fileRef = 22210114E93A4132C4F7029E /* dtoa.c */; };
+		C67505ABC019F440B6C24A33 /* NavigationHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0212F7D9A4AD975A70B16DF /* NavigationHost.swift */; };
+		C7E1D152A74C93BDB29AB8AD /* Input.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2EDA5ACC9660444D2043B5D7 /* Input.cpp */; };
+		CB11E83D4066E9A2F9A2201E /* gesture_recognizer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 125987C1814763C5DD732C3C /* gesture_recognizer.cpp */; };
+		CC8A0AF0CD9C8EF514002A60 /* TextInput.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C8D38712A957FD5697015BC3 /* TextInput.cpp */; };
+		CE9756CE17C0832FE9A416D7 /* m3_info.c in Sources */ = {isa = PBXBuildFile; fileRef = ECF39F19F0783E95837FDC50 /* m3_info.c */; };
+		CF07B500A35042E1F6D722C8 /* test262-fast.conf in Resources */ = {isa = PBXBuildFile; fileRef = 779530731ADFBA7776BCD386 /* test262-fast.conf */; };
+		D0588FD07A9B4997E5DF02E9 /* Text.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EF9A50956BDA73CBC0F0D322 /* Text.cpp */; };
+		D072984889A46AB829AEAFAC /* Menu.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F7CC4B0DDADC8CDFC8DD8FF3 /* Menu.cpp */; };
+		D4ED30A57039A079C5AD5BAC /* m3_code.c in Sources */ = {isa = PBXBuildFile; fileRef = 2B8B9763872437656442769F /* m3_code.c */; };
+		D6EBA1156B07921DB450D1DC /* CSSUtils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4B39956F06DD9AC33A73C936 /* CSSUtils.cpp */; };
+		D94F2AF9C28C53A16A01675B /* m3_module.c in Sources */ = {isa = PBXBuildFile; fileRef = BC38A370866BEEDE4CC8DE7C /* m3_module.c */; };
+		D99132B5214B01EF3563A232 /* theme_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11D8580FA38B56405E57F90C /* theme_bridge.cpp */; };
+		E222EE2C1B7638D43B7721B2 /* ios_bridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = FD79277A49A59E148C2863ED /* ios_bridge.mm */; };
+		E3089CBD9ABA5AFDF8B28701 /* quickjs.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C691D9041EAB7C4D2EC024E /* quickjs.c */; };
+		E3993B3961DFED6BD1A9E306 /* worker_js.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1354574C79B5EE1A0B8671AB /* worker_js.cpp */; };
+		E4CE0D54A5BD8F6B1602DEDA /* SegmentedButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 07412C116ED17EEBC93CAE53 /* SegmentedButton.cpp */; };
+		E5C83823BA81676F862A191E /* Style.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E5AB9052D5A582E28D603A6 /* Style.cpp */; };
+		E68899CEA1318D634E3B2629 /* Controls.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F1D8A2C57EC5F03592EC0DE /* Controls.cpp */; };
+		EBF2E217E13712272D0D3DDC /* async_storage.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 01B5A1D12126E302B2F63632 /* async_storage.cpp */; };
+		ED89BD40E34572A212442113 /* LayoutCard.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6A61438CFC4542C203113E18 /* LayoutCard.cpp */; };
+		ED9D226B6297B05B0228E2F9 /* Icon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3B3DC4ACB5FED967F2EBDA22 /* Icon.cpp */; };
+		EE121A68EDFC1E76D103F2AB /* rmodels.c in Sources */ = {isa = PBXBuildFile; fileRef = 62D5F1BAB64A9A455402D29E /* rmodels.c */; };
+		EE6BC16D52D0E8B188164B91 /* Config.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C9B01CFCF12E1D04B242A54F /* Config.cpp */; };
+		EFD8025F98E2DB04520DA0FF /* List.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6058EEEEED5EBA2479FC7DD7 /* List.cpp */; };
+		F242926AA62B3EA4D5061473 /* m3_extensions.c in Sources */ = {isa = PBXBuildFile; fileRef = 3719A70FF9FB36517B19379F /* m3_extensions.c */; };
+		F2FED92558BF715FE5DBB2AB /* RayactHostCallbacksBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 554DA2B057F68DE0276086F2 /* RayactHostCallbacksBridge.swift */; };
+		F379F0CC178E0EE511674758 /* js_stdlib.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 20F92CF43B7F1D037FF2CC55 /* js_stdlib.cpp */; };
+		F637DEE432114820CBAF51E2 /* Card.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 729BCF3CAF33A83E39CAA174 /* Card.cpp */; };
+		F734AA2AE1B0356832AFDC72 /* YGValue.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5636239CF32FB134C77058DE /* YGValue.cpp */; };
+		FC89F20BE1679C7A74401EDD /* shadow_tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C2FF8D3204D04C57EF6C3CE5 /* shadow_tree.cpp */; };
+		FDCEE6E0CE55DC8500E10F22 /* kv_store.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5652D373531BC05A07AF0E14 /* kv_store.cpp */; };
+		FF214DB072614CB1C62AA854 /* RenderQueue.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 87F684E9CC8E8356DBE55C8F /* RenderQueue.cpp */; };
+		FF6F20B985EBC656F348D298 /* DevLauncherController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BE5620B1A2988311F03FE0B /* DevLauncherController.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		00A2335F0E30B1D223EF4DDB /* BoundAxis.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BoundAxis.h; sourceTree = "<group>"; };
+		00B60127D0AF9FF82D317CC9 /* RayactEngineSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactEngineSession.swift; sourceTree = "<group>"; };
+		01B5A1D12126E302B2F63632 /* async_storage.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = async_storage.cpp; sourceTree = "<group>"; };
+		01D16D3C8E05EF83DFA5EA8E /* ios_host_callbacks.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ios_host_callbacks.hpp; sourceTree = "<group>"; };
+		020F88A4AD4E13A283EA9DD3 /* Baseline.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Baseline.cpp; sourceTree = "<group>"; };
+		033D06CBD69C1A750204C7F1 /* rtext.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rtext.c; sourceTree = "<group>"; };
+		0496DF4A4603751341FC16FD /* AssertFatal.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = AssertFatal.cpp; sourceTree = "<group>"; };
+		0505A61CF3B74FC77872B757 /* AbsoluteLayout.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = AbsoluteLayout.cpp; sourceTree = "<group>"; };
+		05F70DD7DDDC9C7206B25D03 /* devtools_ios.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = devtools_ios.cpp; sourceTree = "<group>"; };
+		07412C116ED17EEBC93CAE53 /* SegmentedButton.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SegmentedButton.cpp; sourceTree = "<group>"; };
+		0B2B14115148E4551DD6759E /* worker_wasm.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = worker_wasm.hpp; sourceTree = "<group>"; };
+		0B8B502FEB56CFC73F60E738 /* net.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = net.hpp; sourceTree = "<group>"; };
+		0D41062625106E61244E9CD1 /* FlexDirection.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FlexDirection.h; sourceTree = "<group>"; };
+		0E02CD5F98842E4310FC445C /* AppBar.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = AppBar.cpp; sourceTree = "<group>"; };
+		0F53FFF5EE27DE499CA649C9 /* StyleValueHandle.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StyleValueHandle.h; sourceTree = "<group>"; };
+		0FE450148A4A1CABC9C019D9 /* wasi_core.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = wasi_core.h; sourceTree = "<group>"; };
+		110F51E2584337C74CF4177A /* Logger.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Logger.h; sourceTree = "<group>"; };
+		11D8580FA38B56405E57F90C /* theme_bridge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = theme_bridge.cpp; sourceTree = "<group>"; };
+		125987C1814763C5DD732C3C /* gesture_recognizer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = gesture_recognizer.cpp; sourceTree = "<group>"; };
+		131E130C48A79923A9CC645E /* DevServerLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevServerLoader.swift; sourceTree = "<group>"; };
+		1354574C79B5EE1A0B8671AB /* worker_js.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = worker_js.cpp; sourceTree = "<group>"; };
+		13B32CCF88CFB21B68DA7B56 /* RayactIOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = RayactIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		15B78893FEC9E2EB16EAEA93 /* Chip.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Chip.cpp; sourceTree = "<group>"; };
+		161ECA68BB5DDAA75415F0FD /* platform_ios.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = platform_ios.cpp; sourceTree = "<group>"; };
+		164A07104D9D08FB2DDAB72E /* BoxSizing.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BoxSizing.h; sourceTree = "<group>"; };
+		1A975362667BD597D2506176 /* m3_compile.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_compile.c; sourceTree = "<group>"; };
+		1C5A43075C3E76AAD1988559 /* devtools.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = devtools.hpp; sourceTree = "<group>"; };
+		1CF8EAFC4FD8B1B033557097 /* EmojiFont.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = EmojiFont.cpp; sourceTree = "<group>"; };
+		1DD39B997B55C029F70BCA59 /* AbsoluteLayout.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AbsoluteLayout.h; sourceTree = "<group>"; };
+		1EC0870FE08C0BDD271C3343 /* libunicode.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = libunicode.c; sourceTree = "<group>"; };
+		1F6AAFA3FCBAA3AF64FF07A9 /* Renderer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Renderer.cpp; sourceTree = "<group>"; };
+		1FB584EBDF81DFDF7087E8D5 /* FloatOptional.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FloatOptional.h; sourceTree = "<group>"; };
+		20F92CF43B7F1D037FF2CC55 /* js_stdlib.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = js_stdlib.cpp; sourceTree = "<group>"; };
+		21FF49F13CA289D1BB264848 /* TabBar.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TabBar.cpp; sourceTree = "<group>"; };
+		22018002A09CFD74E653EA9C /* Snackbar.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Snackbar.cpp; sourceTree = "<group>"; };
+		22210114E93A4132C4F7029E /* dtoa.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = dtoa.c; sourceTree = "<group>"; };
+		22B96FC50B0BD6D4BFE09371 /* Edge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Edge.h; sourceTree = "<group>"; };
+		2349AA101E797DF097B7183D /* FloatingActionButton.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = FloatingActionButton.cpp; sourceTree = "<group>"; };
+		2504A8EEDDEE6DE370CF8E42 /* DevShakeDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevShakeDetector.swift; sourceTree = "<group>"; };
+		25205A3983407A326A8FA64A /* quickjs_bridge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = quickjs_bridge.cpp; sourceTree = "<group>"; };
+		25B7FE4A12BC024FA7A69E8D /* tree-sitter-typescript.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "tree-sitter-typescript.h"; sourceTree = "<group>"; };
+		26A2363B4CBAC90587376E4F /* View3D.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = View3D.cpp; sourceTree = "<group>"; };
+		28017968BFB09359F4901F61 /* CachedMeasurement.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CachedMeasurement.h; sourceTree = "<group>"; };
+		2946B84A4A7FF9FF1C43DFC2 /* rtextures.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rtextures.c; sourceTree = "<group>"; };
+		2A205E331E0AEB99ED3C10A5 /* accessibility_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = accessibility_bridge.hpp; sourceTree = "<group>"; };
+		2B8B9763872437656442769F /* m3_code.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_code.c; sourceTree = "<group>"; };
+		2BA2F19EC73A317D5BB8F968 /* Cache.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Cache.h; sourceTree = "<group>"; };
+		2D20D9535FB7EA431026374F /* Dimension.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Dimension.h; sourceTree = "<group>"; };
+		2D844D815300F23880FBE1FA /* Checkbox.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Checkbox.cpp; sourceTree = "<group>"; };
+		2E2665334F34A0BE8CDCD2BC /* YGNodeStyle.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = YGNodeStyle.cpp; sourceTree = "<group>"; };
+		2EDA5ACC9660444D2043B5D7 /* Input.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Input.cpp; sourceTree = "<group>"; };
+		2EDBDE36DAE581834D13867D /* YGNode.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = YGNode.cpp; sourceTree = "<group>"; };
+		30D8ED92E5026B9EA1E91ABF /* dev_client_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = dev_client_bridge.hpp; sourceTree = "<group>"; };
+		31656B737E95A2F23DEBE135 /* InputLayer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = InputLayer.cpp; sourceTree = "<group>"; };
+		31F943538A558EB7C99C35BD /* Transitions.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Transitions.cpp; sourceTree = "<group>"; };
+		32646D3D3C2A74F0CC05ACB2 /* FlexLine.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = FlexLine.cpp; sourceTree = "<group>"; };
+		3285FF667288E76ED26EB9CF /* YGEnums.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = YGEnums.cpp; sourceTree = "<group>"; };
+		34CDCD40C0C701946B2232F9 /* Layout.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Layout.cpp; sourceTree = "<group>"; };
+		359CA33638B664F07A1AA061 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		364E7ADD53511EAAD220CE0C /* Dialog.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Dialog.cpp; sourceTree = "<group>"; };
+		3650E902931A9E55A504E0FA /* Navigation.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Navigation.cpp; sourceTree = "<group>"; };
+		3719A70FF9FB36517B19379F /* m3_extensions.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_extensions.c; sourceTree = "<group>"; };
+		390CE3FE919320CBB64E90B5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		394F9D7799DD790573E5CC67 /* TextMeasureCache.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TextMeasureCache.cpp; sourceTree = "<group>"; };
+		3B3DC4ACB5FED967F2EBDA22 /* Icon.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Icon.cpp; sourceTree = "<group>"; };
+		3B66654088E57B2DA773C955 /* libregexp.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = libregexp.c; sourceTree = "<group>"; };
+		3C34A484593D51A0FD3FE50B /* Renderer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Renderer.cpp; sourceTree = "<group>"; };
+		3D39846B38E4EB78300E70AB /* IconButton.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = IconButton.cpp; sourceTree = "<group>"; };
+		3E118070D437B07CF353421F /* MeasureMode.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MeasureMode.h; sourceTree = "<group>"; };
+		421CD5F95902B10A9A976E0B /* cdp_handler.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = cdp_handler.hpp; sourceTree = "<group>"; };
+		443F1AEA92C351E3E310C8E2 /* plugin_loader.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = plugin_loader.hpp; sourceTree = "<group>"; };
+		44EEB077FD4A4F6061EE0638 /* StyleLength.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StyleLength.h; sourceTree = "<group>"; };
+		4509BE0DB4D7D7B1ED6BEAF8 /* raym3_bridge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = raym3_bridge.cpp; sourceTree = "<group>"; };
+		48F44CFC99F7429EB11B4BF5 /* SearchBar.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SearchBar.cpp; sourceTree = "<group>"; };
+		49E704D3FE6E22A46FA74C75 /* system_appearance.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = system_appearance.cpp; sourceTree = "<group>"; };
+		4ADA129237C4AD20879A6BB1 /* RangeSlider.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = RangeSlider.cpp; sourceTree = "<group>"; };
+		4AE641ED164D08DAC13A924E /* secure_store_plugin.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = secure_store_plugin.cpp; sourceTree = "<group>"; };
+		4B39956F06DD9AC33A73C936 /* CSSUtils.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CSSUtils.cpp; sourceTree = "<group>"; };
+		4B6C514910B80601FDD7FD37 /* theme_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = theme_bridge.hpp; sourceTree = "<group>"; };
+		4BE5620B1A2988311F03FE0B /* DevLauncherController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevLauncherController.swift; sourceTree = "<group>"; };
+		4C691D9041EAB7C4D2EC024E /* quickjs.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = quickjs.c; sourceTree = "<group>"; };
+		4DD415575E09D0EE82B83F4C /* m3_parse.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_parse.c; sourceTree = "<group>"; };
+		4EB865D7A2EB827CB554084F /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		4F1D8A2C57EC5F03592EC0DE /* Controls.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Controls.cpp; sourceTree = "<group>"; };
+		4F8F85A38D8A5C2AC10C2543 /* RayactEngineHostCallbacks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactEngineHostCallbacks.swift; sourceTree = "<group>"; };
+		4FAAD9A25EC18CD490DB9A8F /* EmojiRasterizerApple.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = EmojiRasterizerApple.mm; sourceTree = "<group>"; };
+		5174C51F9A1A937C22FFAC48 /* rlmt.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = rlmt.mm; sourceTree = "<group>"; };
+		52155F1D199F9A0244BFE97D /* m3_exec.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_exec.c; sourceTree = "<group>"; };
+		554DA2B057F68DE0276086F2 /* RayactHostCallbacksBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactHostCallbacksBridge.swift; sourceTree = "<group>"; };
+		5636239CF32FB134C77058DE /* YGValue.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = YGValue.cpp; sourceTree = "<group>"; };
+		5652D373531BC05A07AF0E14 /* kv_store.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = kv_store.cpp; sourceTree = "<group>"; };
+		595E57CC00CEEEC3D3D2C3B3 /* test262.conf */ = {isa = PBXFileReference; path = test262.conf; sourceTree = "<group>"; };
+		5978B0F37C9B424062E35D9D /* mmkv_plugin.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = mmkv_plugin.cpp; sourceTree = "<group>"; };
+		5A2DAB3DA708FD3FD8F533FC /* DevClientBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevClientBridge.swift; sourceTree = "<group>"; };
+		5CB06F040A4CC6DF6B4A9B82 /* RenderContext.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = RenderContext.cpp; sourceTree = "<group>"; };
+		5F1EED944D9ADAA093227DE4 /* fib32_tail.wasm.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = fib32_tail.wasm.h; sourceTree = "<group>"; };
+		5F9E6DF5CF775408AFF833C4 /* Align.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Align.h; sourceTree = "<group>"; };
+		6058EEEEED5EBA2479FC7DD7 /* List.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = List.cpp; sourceTree = "<group>"; };
+		608D8FD85290A241F5A21DED /* Align.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Align.h; sourceTree = "<group>"; };
+		60C506A65430CF60588D22FB /* ProjectHmrClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectHmrClient.swift; sourceTree = "<group>"; };
+		62D5F1BAB64A9A455402D29E /* rmodels.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rmodels.c; sourceTree = "<group>"; };
+		6492F076A3C93508C738F9B5 /* TextSelectionOverlay.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TextSelectionOverlay.cpp; sourceTree = "<group>"; };
+		66C69168EE966ECD7A706D46 /* fib32.wasm.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = fib32.wasm.h; sourceTree = "<group>"; };
+		67BDFB073956694F1E0D55E1 /* RayactRenderScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactRenderScheduler.swift; sourceTree = "<group>"; };
+		68469D2FE07DBA277E1658B0 /* Density.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Density.cpp; sourceTree = "<group>"; };
+		6A61438CFC4542C203113E18 /* LayoutCard.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = LayoutCard.cpp; sourceTree = "<group>"; };
+		6BC4638C75044DF07841D17B /* Button.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Button.cpp; sourceTree = "<group>"; };
+		6C6010B0A4149AF8F68CD4FA /* system_appearance.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = system_appearance.hpp; sourceTree = "<group>"; };
+		6C746BE382D7EB1D4DC2555C /* PixelGrid.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PixelGrid.h; sourceTree = "<group>"; };
+		6D0420A8A055553874A0C9D7 /* shadow_tree.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = shadow_tree.hpp; sourceTree = "<group>"; };
+		6E51B3E4F4E82FE60F28FD4E /* css_bridge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = css_bridge.cpp; sourceTree = "<group>"; };
+		6E9E2BDB6DE2D9AE8AE0CB7A /* View.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = View.cpp; sourceTree = "<group>"; };
+		70D8D848C09D583397C08FB7 /* worklet_runtime.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = worklet_runtime.cpp; sourceTree = "<group>"; };
+		729BCF3CAF33A83E39CAA174 /* Card.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Card.cpp; sourceTree = "<group>"; };
+		74307B4B628BDC488294D874 /* worker_native.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = worker_native.hpp; sourceTree = "<group>"; };
+		74DBCA3944A8B9E724BFB3DC /* engine_runtime.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = engine_runtime.cpp; sourceTree = "<group>"; };
+		75A2A660FA80E67CEA4DCD9E /* m3_core.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_core.c; sourceTree = "<group>"; };
+		76A82E5FEF5C36D7504CDBA9 /* worklet_runtime.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = worklet_runtime.hpp; sourceTree = "<group>"; };
+		779530731ADFBA7776BCD386 /* test262-fast.conf */ = {isa = PBXFileReference; path = "test262-fast.conf"; sourceTree = "<group>"; };
+		77D94C1DADD5AB4D125DE57D /* Node.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Node.cpp; sourceTree = "<group>"; };
+		78460481074191BFF35CD1D8 /* SystemAppearance.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SystemAppearance.mm; sourceTree = "<group>"; };
+		7917706AECFD76A3C61A1BC2 /* SvgRenderer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SvgRenderer.cpp; sourceTree = "<group>"; };
+		7BB87A76EC7C75004E1CAD68 /* CalculateLayout.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CalculateLayout.cpp; sourceTree = "<group>"; };
+		7CEAC7C9987393E458BB8849 /* FlexDirection.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FlexDirection.h; sourceTree = "<group>"; };
+		7D45EA7024F72C7048373476 /* NodeType.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NodeType.h; sourceTree = "<group>"; };
+		7D6CD8BB50B297A17E45231F /* engine_thread.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = engine_thread.cpp; sourceTree = "<group>"; };
+		7E215ED7819E79879A768848 /* Divider.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Divider.cpp; sourceTree = "<group>"; };
+		7E4AFA70E175927A372050E1 /* platform.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = platform.hpp; sourceTree = "<group>"; };
+		7ECC0C8C334F47DFAA15AD64 /* engine_render.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = engine_render.cpp; sourceTree = "<group>"; };
+		7EF55FEDBEA80C6B265D79FA /* Errata.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Errata.h; sourceTree = "<group>"; };
+		7FD1DD1B2EFB3C83A0CC0A37 /* SmallValueBuffer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SmallValueBuffer.h; sourceTree = "<group>"; };
+		81E31863B107845C0A8FE311 /* CSSDeNest.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CSSDeNest.cpp; sourceTree = "<group>"; };
+		831D0F39EBE86FFE17FFF5B0 /* module_bus.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = module_bus.cpp; sourceTree = "<group>"; };
+		8567FB0243169DBFCDEEE936 /* Mutations.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Mutations.cpp; sourceTree = "<group>"; };
+		856F631BEDDD2B68FFAB8DDA /* StyleValuePool.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StyleValuePool.h; sourceTree = "<group>"; };
+		86D7ADA32D292808F71E2343 /* Log.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Log.cpp; sourceTree = "<group>"; };
+		87F684E9CC8E8356DBE55C8F /* RenderQueue.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = RenderQueue.cpp; sourceTree = "<group>"; };
+		8AC6BC4338CE2609BECE0618 /* wasm3_ext.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = wasm3_ext.h; sourceTree = "<group>"; };
+		8AFA790F67414E79FF1A77BD /* Comparison.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Comparison.h; sourceTree = "<group>"; };
+		8B1BAB9B80702B7567C7F856 /* Direction.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Direction.h; sourceTree = "<group>"; };
+		8BCB96BE8F96C39103FFB22C /* Wrap.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Wrap.h; sourceTree = "<group>"; };
+		8D6C0183A7189F58E5EC79DC /* EmbeddedFonts.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EmbeddedFonts.h; sourceTree = "<group>"; };
+		8D9B685A8DE5801F02A3EDAC /* TextEngine.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TextEngine.cpp; sourceTree = "<group>"; };
+		8E5AB9052D5A582E28D603A6 /* Style.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Style.cpp; sourceTree = "<group>"; };
+		9089E6D8BE1FFB1B63D3F8FE /* data_dir.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = data_dir.cpp; sourceTree = "<group>"; };
+		90C676A667D5EF5515A6016E /* SystemAppearance.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SystemAppearance.cpp; sourceTree = "<group>"; };
+		927BF999C9A4C208D4214B23 /* css_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = css_bridge.hpp; sourceTree = "<group>"; };
+		9320094D57E6B0C1D750BF4F /* FlexLine.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FlexLine.h; sourceTree = "<group>"; };
+		93579AB401D469E9F819C2C4 /* worker_js.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = worker_js.hpp; sourceTree = "<group>"; };
+		945608FA4A82183CFC3A9FC3 /* main_impl.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = main_impl.hpp; sourceTree = "<group>"; };
+		949583301663294BB1A006AD /* CalculateLayout.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CalculateLayout.h; sourceTree = "<group>"; };
+		959C077460A1797D73B425EC /* ProgressIndicator.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ProgressIndicator.cpp; sourceTree = "<group>"; };
+		95C388D3F8DF8DDF20C7E7FC /* ExperimentalFeature.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ExperimentalFeature.h; sourceTree = "<group>"; };
+		96196FB533595CED1263FDFB /* RayactScreenViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactScreenViewController.swift; sourceTree = "<group>"; };
+		97C8A8979228E34B22AB163C /* fib64.wasm.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = fib64.wasm.h; sourceTree = "<group>"; };
+		9D7D73423A19565149CE17F2 /* Container.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Container.cpp; sourceTree = "<group>"; };
+		9DA590B9759315AC5FCA1EAF /* event.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = event.h; sourceTree = "<group>"; };
+		9E5BA56B5A8C5EC5C4AF1ED6 /* Gutter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Gutter.h; sourceTree = "<group>"; };
+		9E7E768F73E5954CCE6181D6 /* CSSProperties.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CSSProperties.cpp; sourceTree = "<group>"; };
+		A08B6FF61321713ABBBB0DFC /* Style.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Style.h; sourceTree = "<group>"; };
+		A0BD219E6A1366278E61EBCB /* Cache.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Cache.cpp; sourceTree = "<group>"; };
+		A176FB6E02D45A0F886BAECD /* accessibility_bridge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = accessibility_bridge.cpp; sourceTree = "<group>"; };
+		A25B64C44483E16104293AD1 /* AssertFatal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AssertFatal.h; sourceTree = "<group>"; };
+		A4E0D57F836EE51563FCBE41 /* quickjs_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = quickjs_bridge.hpp; sourceTree = "<group>"; };
+		A542F6F40A2E3A2B38CECD8D /* IconRenderer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = IconRenderer.cpp; sourceTree = "<group>"; };
+		A6823BC8335C79C6CD1BC7EE /* Switch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Switch.cpp; sourceTree = "<group>"; };
+		A73914BE9936EC5E072E99C9 /* FontManager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = FontManager.cpp; sourceTree = "<group>"; };
+		A8553035399C5D547BE08A8E /* LayoutableChildren.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LayoutableChildren.h; sourceTree = "<group>"; };
+		A9DFE135C70DA0D8EDD07FAD /* window_manager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = window_manager.cpp; sourceTree = "<group>"; };
+		AB3FD221D5E0461011D76DC5 /* RadioButton.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = RadioButton.cpp; sourceTree = "<group>"; };
+		AD29354857DD2F2C1DCA7296 /* tests.conf */ = {isa = PBXFileReference; path = tests.conf; sourceTree = "<group>"; };
+		ADA048B96ADC9AFDA99C4C08 /* DevMenuOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevMenuOverlay.swift; sourceTree = "<group>"; };
+		B0963FCAEEDCA30D0A2BD71B /* Baseline.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Baseline.h; sourceTree = "<group>"; };
+		B0C5482E94942DF05E7860D2 /* m3_env.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_env.c; sourceTree = "<group>"; };
+		B146E609AC0016988E08B024 /* quickjs-libc.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "quickjs-libc.c"; sourceTree = "<group>"; };
+		B2BE3D74E24095983E79169E /* Overflow.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Overflow.h; sourceTree = "<group>"; };
+		B3FBF2187FCB8F5B48BA59B3 /* dev_client_bridge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = dev_client_bridge.cpp; sourceTree = "<group>"; };
+		B41AFF549810185CB5F306B0 /* plugin_loader.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = plugin_loader.cpp; sourceTree = "<group>"; };
+		B46801B10FC79EC5429867B1 /* YogaEnums.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = YogaEnums.h; sourceTree = "<group>"; };
+		B5228F4C5749D203FF72E958 /* async_storage.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = async_storage.hpp; sourceTree = "<group>"; };
+		B532A16A4117E91655AB71CE /* Tooltip.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Tooltip.cpp; sourceTree = "<group>"; };
+		B55C2CF2B0916AB2342C5289 /* platform_wayland.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = platform_wayland.hpp; sourceTree = "<group>"; };
+		B666AE3A16304FB286BED47B /* TypeStripper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TypeStripper.h; sourceTree = "<group>"; };
+		B6C45258FBFE071D0EC11F50 /* engine_js.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = engine_js.cpp; sourceTree = "<group>"; };
+		B76037309E6EA19C79832353 /* LayoutNode.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = LayoutNode.cpp; sourceTree = "<group>"; };
+		B842A810A8740B2243A790FD /* Badge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Badge.cpp; sourceTree = "<group>"; };
+		BA3C7D1E2BC8A5A32056664A /* RayactNativeBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactNativeBridge.swift; sourceTree = "<group>"; };
+		BB81FAD003C69100211EB043 /* Log.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Log.h; sourceTree = "<group>"; };
+		BC38A370866BEEDE4CC8DE7C /* m3_module.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_module.c; sourceTree = "<group>"; };
+		BDE397E69B0DF3A4FC9352E7 /* rcore_ios_metal_overlay.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rcore_ios_metal_overlay.c; sourceTree = "<group>"; };
+		BF2DA98AEDA8C4CD32294A86 /* Ripple.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Ripple.cpp; sourceTree = "<group>"; };
+		C1414C05570DD9C44E3EAA1A /* commit_queue.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = commit_queue.cpp; sourceTree = "<group>"; };
+		C2E39C21C3C70AED1071F5C8 /* module_bus.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = module_bus.hpp; sourceTree = "<group>"; };
+		C2FF8D3204D04C57EF6C3CE5 /* shadow_tree.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = shadow_tree.cpp; sourceTree = "<group>"; };
+		C4149BFBCA91BDC435ADB975 /* MaterialDefaults.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = MaterialDefaults.cpp; sourceTree = "<group>"; };
+		C582FBEF2363981B5ABDA8BF /* ios_plugins_register.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ios_plugins_register.cpp; sourceTree = "<group>"; };
+		C58A0CFF34752083F59A291E /* worker_wasm.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = worker_wasm.cpp; sourceTree = "<group>"; };
+		C58AEE8443393184359FB2F8 /* m3_bind.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_bind.c; sourceTree = "<group>"; };
+		C768E6E1A5A2A97A150ED997 /* RayactMetalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactMetalView.swift; sourceTree = "<group>"; };
+		C863A2828BD0228178D84024 /* RayactSurfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactSurfaceView.swift; sourceTree = "<group>"; };
+		C8D38712A957FD5697015BC3 /* TextInput.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TextInput.cpp; sourceTree = "<group>"; };
+		C8F3DDC9E7B377238A96AB9D /* YGPixelGrid.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = YGPixelGrid.cpp; sourceTree = "<group>"; };
+		C9B01CFCF12E1D04B242A54F /* Config.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Config.cpp; sourceTree = "<group>"; };
+		CA04DB257606DA6B39C22160 /* YGConfig.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = YGConfig.cpp; sourceTree = "<group>"; };
+		CB3C855D36B51CE29E8AAA3A /* worker_native.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = worker_native.cpp; sourceTree = "<group>"; };
+		CB7693B1C166BE54A1A0A885 /* ButtonGroup.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ButtonGroup.cpp; sourceTree = "<group>"; };
+		D0212F7D9A4AD975A70B16DF /* NavigationHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationHost.swift; sourceTree = "<group>"; };
+		D26E58A6A1E2238831370C4F /* worker_queue.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = worker_queue.hpp; sourceTree = "<group>"; };
+		D31058E068CBD4B2ADF53B38 /* data_dir.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = data_dir.hpp; sourceTree = "<group>"; };
+		D32180F57BB9218D21FCB74A /* RayactHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactHost.swift; sourceTree = "<group>"; };
+		D338089586A9E4D25A64C8FA /* color_parse.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = color_parse.cpp; sourceTree = "<group>"; };
+		D465C5675F029FD7EE39C14D /* raym3_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = raym3_bridge.hpp; sourceTree = "<group>"; };
+		D4F92D27F9383E1B90D2AB1F /* rshapes.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rshapes.c; sourceTree = "<group>"; };
+		D524A9973A0039BDEE2A56E5 /* rayact_module_abi.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = rayact_module_abi.h; sourceTree = "<group>"; };
+		D5A74238BEBC7D1FC92D7EE6 /* Display.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Display.h; sourceTree = "<group>"; };
+		D64CE86C42AA969248D4F78D /* utils.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = utils.cpp; sourceTree = "<group>"; };
+		D871AAC601732161AF2747A3 /* IOSBundledAssets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSBundledAssets.swift; sourceTree = "<group>"; };
+		D8CC98D23BA0119E72BCA0E8 /* gesture_recognizer.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = gesture_recognizer.hpp; sourceTree = "<group>"; };
+		D93EDE6AE087FBDE206BC5D2 /* unicode_download.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = unicode_download.sh; sourceTree = "<group>"; };
+		D9715FB1508BFD1DD03DA05B /* commit_queue.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = commit_queue.hpp; sourceTree = "<group>"; };
+		D99BD61C508B4DF48014172B /* workers.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = workers.cpp; sourceTree = "<group>"; };
+		D9F521150FB64299EE772D55 /* Justify.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Justify.h; sourceTree = "<group>"; };
+		DB4EC69CF1BEDBC5BBA23AB1 /* ios_engine_instance.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ios_engine_instance.hpp; sourceTree = "<group>"; };
+		DC477CB25CF38826C37F9F19 /* kv_store.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = kv_store.hpp; sourceTree = "<group>"; };
+		DC9C0D199B8A3531AC221AAF /* PositionType.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PositionType.h; sourceTree = "<group>"; };
+		DD5EDD3AA86B79D83D1E5C40 /* LayoutResults.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LayoutResults.h; sourceTree = "<group>"; };
+		DE2C2A7270C52D44158CB893 /* Config.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Config.h; sourceTree = "<group>"; };
+		DE30E4DBAAFA94BD93005C60 /* SizingMode.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SizingMode.h; sourceTree = "<group>"; };
+		E089DF39EEC44C7DE012034E /* workers.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = workers.hpp; sourceTree = "<group>"; };
+		E1CF60B5E9FEAA7F77B23D43 /* Stylesheet.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Stylesheet.cpp; sourceTree = "<group>"; };
+		E2CEE3EBA53166EBF92326B7 /* Components.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Components.cpp; sourceTree = "<group>"; };
+		E3CADB400DF6E522183B57F7 /* Unit.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Unit.h; sourceTree = "<group>"; };
+		E3D4F2DA94E34001A4747E0F /* PhysicalEdge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PhysicalEdge.h; sourceTree = "<group>"; };
+		E4E8757AA4DC53306442B3AF /* js_stdlib.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = js_stdlib.hpp; sourceTree = "<group>"; };
+		E69B05E520CE0BDC11E5E814 /* CSSParser.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CSSParser.cpp; sourceTree = "<group>"; };
+		E85A0F3615E47552C90C4479 /* coremark_minimal.wasm.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = coremark_minimal.wasm.h; sourceTree = "<group>"; };
+		E909432E0ED910AAC42E28E3 /* color_parse.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = color_parse.hpp; sourceTree = "<group>"; };
+		E92FF35319D5631AC5E15853 /* Slider.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Slider.cpp; sourceTree = "<group>"; };
+		EAAAB3A0A7F5BAC4E0953F4F /* ColorScheme.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ColorScheme.cpp; sourceTree = "<group>"; };
+		EB2CA3CB3D6288CF7BEA0C0F /* ios_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ios_bridge.hpp; sourceTree = "<group>"; };
+		ECF39F19F0783E95837FDC50 /* m3_info.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_info.c; sourceTree = "<group>"; };
+		EE0F30DA7DE7D611C4DB1AD6 /* ios_engine_instance.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ios_engine_instance.cpp; sourceTree = "<group>"; };
+		EE8DF0A2D484B19EFDBDC81A /* Modal.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Modal.cpp; sourceTree = "<group>"; };
+		EF9A50956BDA73CBC0F0D322 /* Text.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Text.cpp; sourceTree = "<group>"; };
+		F04254C97788AFD49910D753 /* Node.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Node.h; sourceTree = "<group>"; };
+		F131ED1BCD99188B3EA6615C /* event.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = event.cpp; sourceTree = "<group>"; };
+		F3A43D53B829B514AC4FCBD1 /* m3_function.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_function.c; sourceTree = "<group>"; };
+		F3C7DF52180D42A9C56AAC02 /* LogLevel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LogLevel.h; sourceTree = "<group>"; };
+		F57AC742BC931EEF67278A52 /* TrailingPosition.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TrailingPosition.h; sourceTree = "<group>"; };
+		F580CD4E2F9FFAA4B1341D35 /* SvgModel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SvgModel.cpp; sourceTree = "<group>"; };
+		F5B08C908128E9379859CC94 /* TextField.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TextField.cpp; sourceTree = "<group>"; };
+		F7053D1A9402E92BD2189BFC /* config_loader.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = config_loader.cpp; sourceTree = "<group>"; };
+		F7CC4B0DDADC8CDFC8DD8FF3 /* Menu.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Menu.cpp; sourceTree = "<group>"; };
+		F8BB7EB6F101597A14C788BC /* secure_store_mac.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = secure_store_mac.mm; sourceTree = "<group>"; };
+		F9A1AF35922E1BA96BE97CBE /* raym3.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = raym3.cpp; sourceTree = "<group>"; };
+		F9EFAE084161525DD53813A5 /* engine_internal.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = engine_internal.hpp; sourceTree = "<group>"; };
+		FAD8E5D670D63F0281673085 /* ScriptValidator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ScriptValidator.h; sourceTree = "<group>"; };
+		FADFB3523E24CBEFA34FAF8E /* LayoutResults.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = LayoutResults.cpp; sourceTree = "<group>"; };
+		FD79277A49A59E148C2863ED /* ios_bridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ios_bridge.mm; sourceTree = "<group>"; };
+		FF147B193D6F2772911F3C38 /* YGNodeLayout.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = YGNodeLayout.cpp; sourceTree = "<group>"; };
+		FF5EFD75635045D7F31B8AF4 /* Theme.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Theme.cpp; sourceTree = "<group>"; };
+		FF9239B7D3A72E7AEED1ECF5 /* PixelGrid.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = PixelGrid.cpp; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0002D496B3EF33707E62A2C5 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				13B32CCF88CFB21B68DA7B56 /* RayactIOS.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		0BFE1E225E217BB8FBE92C11 /* ios */ = {
+			isa = PBXGroup;
+			children = (
+				05F70DD7DDDC9C7206B25D03 /* devtools_ios.cpp */,
+				EB2CA3CB3D6288CF7BEA0C0F /* ios_bridge.hpp */,
+				FD79277A49A59E148C2863ED /* ios_bridge.mm */,
+				EE0F30DA7DE7D611C4DB1AD6 /* ios_engine_instance.cpp */,
+				DB4EC69CF1BEDBC5BBA23AB1 /* ios_engine_instance.hpp */,
+				01D16D3C8E05EF83DFA5EA8E /* ios_host_callbacks.hpp */,
+				C582FBEF2363981B5ABDA8BF /* ios_plugins_register.cpp */,
+				161ECA68BB5DDAA75415F0FD /* platform_ios.cpp */,
+			);
+			name = ios;
+			path = ../../native/ios;
+			sourceTree = "<group>";
+		};
+		0E40E57E68CA15CA4D50C80F /* utils */ = {
+			isa = PBXGroup;
+			children = (
+				FAD8E5D670D63F0281673085 /* ScriptValidator.h */,
+				B666AE3A16304FB286BED47B /* TypeStripper.h */,
+			);
+			path = utils;
+			sourceTree = "<group>";
+		};
+		186EB7EEC45665F17E0A9DE2 /* mmkv */ = {
+			isa = PBXGroup;
+			children = (
+				5978B0F37C9B424062E35D9D /* mmkv_plugin.cpp */,
+			);
+			name = mmkv;
+			path = ../../native/plugins/mmkv;
+			sourceTree = "<group>";
+		};
+		1B3FD5CA6C5DA7B70115F107 /* extra */ = {
+			isa = PBXGroup;
+			children = (
+				E85A0F3615E47552C90C4479 /* coremark_minimal.wasm.h */,
+				5F1EED944D9ADAA093227DE4 /* fib32_tail.wasm.h */,
+				66C69168EE966ECD7A706D46 /* fib32.wasm.h */,
+				97C8A8979228E34B22AB163C /* fib64.wasm.h */,
+				0FE450148A4A1CABC9C019D9 /* wasi_core.h */,
+			);
+			path = extra;
+			sourceTree = "<group>";
+		};
+		1E2351CA2D01F0C72C45695E /* styles */ = {
+			isa = PBXGroup;
+			children = (
+				EAAAB3A0A7F5BAC4E0953F4F /* ColorScheme.cpp */,
+				E1CF60B5E9FEAA7F77B23D43 /* Stylesheet.cpp */,
+				FF5EFD75635045D7F31B8AF4 /* Theme.cpp */,
+			);
+			path = styles;
+			sourceTree = "<group>";
+		};
+		1F66EEAF6E527EE2EA89C394 /* node */ = {
+			isa = PBXGroup;
+			children = (
+				28017968BFB09359F4901F61 /* CachedMeasurement.h */,
+				A8553035399C5D547BE08A8E /* LayoutableChildren.h */,
+				FADFB3523E24CBEFA34FAF8E /* LayoutResults.cpp */,
+				DD5EDD3AA86B79D83D1E5C40 /* LayoutResults.h */,
+				77D94C1DADD5AB4D125DE57D /* Node.cpp */,
+				F04254C97788AFD49910D753 /* Node.h */,
+			);
+			path = node;
+			sourceTree = "<group>";
+		};
+		21F9B6E3C413E7F26E2D2A61 /* src */ = {
+			isa = PBXGroup;
+			children = (
+				62D5F1BAB64A9A455402D29E /* rmodels.c */,
+				D4F92D27F9383E1B90D2AB1F /* rshapes.c */,
+				033D06CBD69C1A750204C7F1 /* rtext.c */,
+				2946B84A4A7FF9FF1C43DFC2 /* rtextures.c */,
+			);
+			name = src;
+			path = ../../../raylib/src;
+			sourceTree = "<group>";
+		};
+		27222A481FD06CA7C6B182A5 /* platforms */ = {
+			isa = PBXGroup;
+			children = (
+				BDE397E69B0DF3A4FC9352E7 /* rcore_ios_metal_overlay.c */,
+			);
+			name = platforms;
+			path = "../../../raylib-backends/backends/rlmt/platforms";
+			sourceTree = "<group>";
+		};
+		2EAA334E8DF6C07DD27BAB5B /* rendering */ = {
+			isa = PBXGroup;
+			children = (
+				3C34A484593D51A0FD3FE50B /* Renderer.cpp */,
+				F580CD4E2F9FFAA4B1341D35 /* SvgModel.cpp */,
+				7917706AECFD76A3C61A1BC2 /* SvgRenderer.cpp */,
+			);
+			path = rendering;
+			sourceTree = "<group>";
+		};
+		31FFCE3C188FB5C45B673B43 /* secure-store */ = {
+			isa = PBXGroup;
+			children = (
+				F8BB7EB6F101597A14C788BC /* secure_store_mac.mm */,
+				4AE641ED164D08DAC13A924E /* secure_store_plugin.cpp */,
+			);
+			name = "secure-store";
+			path = "../../native/plugins/secure-store";
+			sourceTree = "<group>";
+		};
+		67F8619766ABAE407D6B39C7 /* algorithm */ = {
+			isa = PBXGroup;
+			children = (
+				0505A61CF3B74FC77872B757 /* AbsoluteLayout.cpp */,
+				1DD39B997B55C029F70BCA59 /* AbsoluteLayout.h */,
+				608D8FD85290A241F5A21DED /* Align.h */,
+				020F88A4AD4E13A283EA9DD3 /* Baseline.cpp */,
+				B0963FCAEEDCA30D0A2BD71B /* Baseline.h */,
+				00A2335F0E30B1D223EF4DDB /* BoundAxis.h */,
+				A0BD219E6A1366278E61EBCB /* Cache.cpp */,
+				2BA2F19EC73A317D5BB8F968 /* Cache.h */,
+				7BB87A76EC7C75004E1CAD68 /* CalculateLayout.cpp */,
+				949583301663294BB1A006AD /* CalculateLayout.h */,
+				0D41062625106E61244E9CD1 /* FlexDirection.h */,
+				32646D3D3C2A74F0CC05ACB2 /* FlexLine.cpp */,
+				9320094D57E6B0C1D750BF4F /* FlexLine.h */,
+				FF9239B7D3A72E7AEED1ECF5 /* PixelGrid.cpp */,
+				6C746BE382D7EB1D4DC2555C /* PixelGrid.h */,
+				DE30E4DBAAFA94BD93005C60 /* SizingMode.h */,
+				F57AC742BC931EEF67278A52 /* TrailingPosition.h */,
+			);
+			path = algorithm;
+			sourceTree = "<group>";
+		};
+		7559C894759D94A42ADFCE75 /* cssparser */ = {
+			isa = PBXGroup;
+			children = (
+				81E31863B107845C0A8FE311 /* CSSDeNest.cpp */,
+				E69B05E520CE0BDC11E5E814 /* CSSParser.cpp */,
+				9E7E768F73E5954CCE6181D6 /* CSSProperties.cpp */,
+				4B39956F06DD9AC33A73C936 /* CSSUtils.cpp */,
+			);
+			name = cssparser;
+			path = ../../../cssparser/cssparser;
+			sourceTree = "<group>";
+		};
+		7576FF4C5C4A796550B71BC5 /* rlmt */ = {
+			isa = PBXGroup;
+			children = (
+				5174C51F9A1A937C22FFAC48 /* rlmt.mm */,
+			);
+			name = rlmt;
+			path = "../../../raylib-backends/backends/rlmt";
+			sourceTree = "<group>";
+		};
+		7DEB412F2E661EF949B2CE29 /* core */ = {
+			isa = PBXGroup;
+			children = (
+				110F51E2584337C74CF4177A /* Logger.h */,
+			);
+			path = core;
+			sourceTree = "<group>";
+		};
+		87CD1BA336223407B2B2281F /* android */ = {
+			isa = PBXGroup;
+			children = (
+				74DBCA3944A8B9E724BFB3DC /* engine_runtime.cpp */,
+			);
+			name = android;
+			path = ../../native/android;
+			sourceTree = "<group>";
+		};
+		944558C38683C24471E223FC /* debug */ = {
+			isa = PBXGroup;
+			children = (
+				0496DF4A4603751341FC16FD /* AssertFatal.cpp */,
+				A25B64C44483E16104293AD1 /* AssertFatal.h */,
+				86D7ADA32D292808F71E2343 /* Log.cpp */,
+				BB81FAD003C69100211EB043 /* Log.h */,
+			);
+			path = debug;
+			sourceTree = "<group>";
+		};
+		9995CFFC55728107EE89E355 /* numeric */ = {
+			isa = PBXGroup;
+			children = (
+				8AFA790F67414E79FF1A77BD /* Comparison.h */,
+				1FB584EBDF81DFDF7087E8D5 /* FloatOptional.h */,
+			);
+			path = numeric;
+			sourceTree = "<group>";
+		};
+		9CB6A374AE66C43E81EA24DB /* v2 */ = {
+			isa = PBXGroup;
+			children = (
+				E2CEE3EBA53166EBF92326B7 /* Components.cpp */,
+				4F1D8A2C57EC5F03592EC0DE /* Controls.cpp */,
+				68469D2FE07DBA277E1658B0 /* Density.cpp */,
+				1CF8EAFC4FD8B1B033557097 /* EmojiFont.cpp */,
+				4FAAD9A25EC18CD490DB9A8F /* EmojiRasterizerApple.mm */,
+				A542F6F40A2E3A2B38CECD8D /* IconRenderer.cpp */,
+				2EDA5ACC9660444D2043B5D7 /* Input.cpp */,
+				C4149BFBCA91BDC435ADB975 /* MaterialDefaults.cpp */,
+				8567FB0243169DBFCDEEE936 /* Mutations.cpp */,
+				5CB06F040A4CC6DF6B4A9B82 /* RenderContext.cpp */,
+				1F6AAFA3FCBAA3AF64FF07A9 /* Renderer.cpp */,
+				BF2DA98AEDA8C4CD32294A86 /* Ripple.cpp */,
+				8E5AB9052D5A582E28D603A6 /* Style.cpp */,
+				8D9B685A8DE5801F02A3EDAC /* TextEngine.cpp */,
+				C8D38712A957FD5697015BC3 /* TextInput.cpp */,
+				394F9D7799DD790573E5CC67 /* TextMeasureCache.cpp */,
+				6492F076A3C93508C738F9B5 /* TextSelectionOverlay.cpp */,
+				31F943538A558EB7C99C35BD /* Transitions.cpp */,
+				6E9E2BDB6DE2D9AE8AE0CB7A /* View.cpp */,
+			);
+			path = v2;
+			sourceTree = "<group>";
+		};
+		A2AF8820EF07542A6379D4C2 /* style */ = {
+			isa = PBXGroup;
+			children = (
+				7FD1DD1B2EFB3C83A0CC0A37 /* SmallValueBuffer.h */,
+				A08B6FF61321713ABBBB0DFC /* Style.h */,
+				44EEB077FD4A4F6061EE0638 /* StyleLength.h */,
+				0F53FFF5EE27DE499CA649C9 /* StyleValueHandle.h */,
+				856F631BEDDD2B68FFAB8DDA /* StyleValuePool.h */,
+			);
+			path = style;
+			sourceTree = "<group>";
+		};
+		A32AD65D1EEE8D20BB6B7593 /* layout */ = {
+			isa = PBXGroup;
+			children = (
+				9D7D73423A19565149CE17F2 /* Container.cpp */,
+				34CDCD40C0C701946B2232F9 /* Layout.cpp */,
+				6A61438CFC4542C203113E18 /* LayoutCard.cpp */,
+				B76037309E6EA19C79832353 /* LayoutNode.cpp */,
+			);
+			path = layout;
+			sourceTree = "<group>";
+		};
+		A4021D54D800B1610BAC30E9 /* desktop */ = {
+			isa = PBXGroup;
+			children = (
+				A176FB6E02D45A0F886BAECD /* accessibility_bridge.cpp */,
+				2A205E331E0AEB99ED3C10A5 /* accessibility_bridge.hpp */,
+				01B5A1D12126E302B2F63632 /* async_storage.cpp */,
+				B5228F4C5749D203FF72E958 /* async_storage.hpp */,
+				421CD5F95902B10A9A976E0B /* cdp_handler.hpp */,
+				D338089586A9E4D25A64C8FA /* color_parse.cpp */,
+				E909432E0ED910AAC42E28E3 /* color_parse.hpp */,
+				C1414C05570DD9C44E3EAA1A /* commit_queue.cpp */,
+				D9715FB1508BFD1DD03DA05B /* commit_queue.hpp */,
+				6E51B3E4F4E82FE60F28FD4E /* css_bridge.cpp */,
+				927BF999C9A4C208D4214B23 /* css_bridge.hpp */,
+				9089E6D8BE1FFB1B63D3F8FE /* data_dir.cpp */,
+				D31058E068CBD4B2ADF53B38 /* data_dir.hpp */,
+				B3FBF2187FCB8F5B48BA59B3 /* dev_client_bridge.cpp */,
+				30D8ED92E5026B9EA1E91ABF /* dev_client_bridge.hpp */,
+				1C5A43075C3E76AAD1988559 /* devtools.hpp */,
+				F9EFAE084161525DD53813A5 /* engine_internal.hpp */,
+				B6C45258FBFE071D0EC11F50 /* engine_js.cpp */,
+				7ECC0C8C334F47DFAA15AD64 /* engine_render.cpp */,
+				7D6CD8BB50B297A17E45231F /* engine_thread.cpp */,
+				125987C1814763C5DD732C3C /* gesture_recognizer.cpp */,
+				D8CC98D23BA0119E72BCA0E8 /* gesture_recognizer.hpp */,
+				20F92CF43B7F1D037FF2CC55 /* js_stdlib.cpp */,
+				E4E8757AA4DC53306442B3AF /* js_stdlib.hpp */,
+				5652D373531BC05A07AF0E14 /* kv_store.cpp */,
+				DC477CB25CF38826C37F9F19 /* kv_store.hpp */,
+				945608FA4A82183CFC3A9FC3 /* main_impl.hpp */,
+				831D0F39EBE86FFE17FFF5B0 /* module_bus.cpp */,
+				C2E39C21C3C70AED1071F5C8 /* module_bus.hpp */,
+				0B8B502FEB56CFC73F60E738 /* net.hpp */,
+				B55C2CF2B0916AB2342C5289 /* platform_wayland.hpp */,
+				7E4AFA70E175927A372050E1 /* platform.hpp */,
+				B41AFF549810185CB5F306B0 /* plugin_loader.cpp */,
+				443F1AEA92C351E3E310C8E2 /* plugin_loader.hpp */,
+				25205A3983407A326A8FA64A /* quickjs_bridge.cpp */,
+				A4E0D57F836EE51563FCBE41 /* quickjs_bridge.hpp */,
+				4509BE0DB4D7D7B1ED6BEAF8 /* raym3_bridge.cpp */,
+				D465C5675F029FD7EE39C14D /* raym3_bridge.hpp */,
+				C2FF8D3204D04C57EF6C3CE5 /* shadow_tree.cpp */,
+				6D0420A8A055553874A0C9D7 /* shadow_tree.hpp */,
+				49E704D3FE6E22A46FA74C75 /* system_appearance.cpp */,
+				6C6010B0A4149AF8F68CD4FA /* system_appearance.hpp */,
+				11D8580FA38B56405E57F90C /* theme_bridge.cpp */,
+				4B6C514910B80601FDD7FD37 /* theme_bridge.hpp */,
+				25B7FE4A12BC024FA7A69E8D /* tree-sitter-typescript.h */,
+				D64CE86C42AA969248D4F78D /* utils.cpp */,
+				A9DFE135C70DA0D8EDD07FAD /* window_manager.cpp */,
+				1354574C79B5EE1A0B8671AB /* worker_js.cpp */,
+				93579AB401D469E9F819C2C4 /* worker_js.hpp */,
+				CB3C855D36B51CE29E8AAA3A /* worker_native.cpp */,
+				74307B4B628BDC488294D874 /* worker_native.hpp */,
+				D26E58A6A1E2238831370C4F /* worker_queue.hpp */,
+				C58A0CFF34752083F59A291E /* worker_wasm.cpp */,
+				0B2B14115148E4551DD6759E /* worker_wasm.hpp */,
+				D99BD61C508B4DF48014172B /* workers.cpp */,
+				E089DF39EEC44C7DE012034E /* workers.hpp */,
+				70D8D848C09D583397C08FB7 /* worklet_runtime.cpp */,
+				76A82E5FEF5C36D7504CDBA9 /* worklet_runtime.hpp */,
+				7DEB412F2E661EF949B2CE29 /* core */,
+				0E40E57E68CA15CA4D50C80F /* utils */,
+			);
+			name = desktop;
+			path = ../../native/desktop;
+			sourceTree = "<group>";
+		};
+		B95DCD781E7E8815F935AA48 /* enums */ = {
+			isa = PBXGroup;
+			children = (
+				5F9E6DF5CF775408AFF833C4 /* Align.h */,
+				164A07104D9D08FB2DDAB72E /* BoxSizing.h */,
+				2D20D9535FB7EA431026374F /* Dimension.h */,
+				8B1BAB9B80702B7567C7F856 /* Direction.h */,
+				D5A74238BEBC7D1FC92D7EE6 /* Display.h */,
+				22B96FC50B0BD6D4BFE09371 /* Edge.h */,
+				7EF55FEDBEA80C6B265D79FA /* Errata.h */,
+				95C388D3F8DF8DDF20C7E7FC /* ExperimentalFeature.h */,
+				7CEAC7C9987393E458BB8849 /* FlexDirection.h */,
+				9E5BA56B5A8C5EC5C4AF1ED6 /* Gutter.h */,
+				D9F521150FB64299EE772D55 /* Justify.h */,
+				F3C7DF52180D42A9C56AAC02 /* LogLevel.h */,
+				3E118070D437B07CF353421F /* MeasureMode.h */,
+				7D45EA7024F72C7048373476 /* NodeType.h */,
+				B2BE3D74E24095983E79169E /* Overflow.h */,
+				E3D4F2DA94E34001A4747E0F /* PhysicalEdge.h */,
+				DC9C0D199B8A3531AC221AAF /* PositionType.h */,
+				E3CADB400DF6E522183B57F7 /* Unit.h */,
+				8BCB96BE8F96C39103FFB22C /* Wrap.h */,
+				B46801B10FC79EC5429867B1 /* YogaEnums.h */,
+			);
+			path = enums;
+			sourceTree = "<group>";
+		};
+		BC17AA5D4680D03946BDD844 /* extensions */ = {
+			isa = PBXGroup;
+			children = (
+				3719A70FF9FB36517B19379F /* m3_extensions.c */,
+				8AC6BC4338CE2609BECE0618 /* wasm3_ext.h */,
+			);
+			path = extensions;
+			sourceTree = "<group>";
+		};
+		BCB484B43FEE5E48323D417D /* ios */ = {
+			isa = PBXGroup;
+			children = (
+				359CA33638B664F07A1AA061 /* AppDelegate.swift */,
+				390CE3FE919320CBB64E90B5 /* Assets.xcassets */,
+				5A2DAB3DA708FD3FD8F533FC /* DevClientBridge.swift */,
+				4BE5620B1A2988311F03FE0B /* DevLauncherController.swift */,
+				ADA048B96ADC9AFDA99C4C08 /* DevMenuOverlay.swift */,
+				131E130C48A79923A9CC645E /* DevServerLoader.swift */,
+				2504A8EEDDEE6DE370CF8E42 /* DevShakeDetector.swift */,
+				D871AAC601732161AF2747A3 /* IOSBundledAssets.swift */,
+				D0212F7D9A4AD975A70B16DF /* NavigationHost.swift */,
+				60C506A65430CF60588D22FB /* ProjectHmrClient.swift */,
+				4F8F85A38D8A5C2AC10C2543 /* RayactEngineHostCallbacks.swift */,
+				00B60127D0AF9FF82D317CC9 /* RayactEngineSession.swift */,
+				D32180F57BB9218D21FCB74A /* RayactHost.swift */,
+				554DA2B057F68DE0276086F2 /* RayactHostCallbacksBridge.swift */,
+				C768E6E1A5A2A97A150ED997 /* RayactMetalView.swift */,
+				BA3C7D1E2BC8A5A32056664A /* RayactNativeBridge.swift */,
+				67BDFB073956694F1E0D55E1 /* RayactRenderScheduler.swift */,
+				96196FB533595CED1263FDFB /* RayactScreenViewController.swift */,
+				C863A2828BD0228178D84024 /* RayactSurfaceView.swift */,
+				4EB865D7A2EB827CB554084F /* SceneDelegate.swift */,
+			);
+			name = ios;
+			path = .;
+			sourceTree = "<group>";
+		};
+		BDBC7B30D49E2AB9A7B224F8 /* components */ = {
+			isa = PBXGroup;
+			children = (
+				0E02CD5F98842E4310FC445C /* AppBar.cpp */,
+				B842A810A8740B2243A790FD /* Badge.cpp */,
+				6BC4638C75044DF07841D17B /* Button.cpp */,
+				CB7693B1C166BE54A1A0A885 /* ButtonGroup.cpp */,
+				729BCF3CAF33A83E39CAA174 /* Card.cpp */,
+				2D844D815300F23880FBE1FA /* Checkbox.cpp */,
+				15B78893FEC9E2EB16EAEA93 /* Chip.cpp */,
+				364E7ADD53511EAAD220CE0C /* Dialog.cpp */,
+				7E215ED7819E79879A768848 /* Divider.cpp */,
+				2349AA101E797DF097B7183D /* FloatingActionButton.cpp */,
+				3B3DC4ACB5FED967F2EBDA22 /* Icon.cpp */,
+				3D39846B38E4EB78300E70AB /* IconButton.cpp */,
+				6058EEEEED5EBA2479FC7DD7 /* List.cpp */,
+				F7CC4B0DDADC8CDFC8DD8FF3 /* Menu.cpp */,
+				EE8DF0A2D484B19EFDBDC81A /* Modal.cpp */,
+				3650E902931A9E55A504E0FA /* Navigation.cpp */,
+				959C077460A1797D73B425EC /* ProgressIndicator.cpp */,
+				AB3FD221D5E0461011D76DC5 /* RadioButton.cpp */,
+				4ADA129237C4AD20879A6BB1 /* RangeSlider.cpp */,
+				48F44CFC99F7429EB11B4BF5 /* SearchBar.cpp */,
+				07412C116ED17EEBC93CAE53 /* SegmentedButton.cpp */,
+				E92FF35319D5631AC5E15853 /* Slider.cpp */,
+				22018002A09CFD74E653EA9C /* Snackbar.cpp */,
+				A6823BC8335C79C6CD1BC7EE /* Switch.cpp */,
+				21FF49F13CA289D1BB264848 /* TabBar.cpp */,
+				EF9A50956BDA73CBC0F0D322 /* Text.cpp */,
+				F5B08C908128E9379859CC94 /* TextField.cpp */,
+				B532A16A4117E91655AB71CE /* Tooltip.cpp */,
+				26A2363B4CBAC90587376E4F /* View3D.cpp */,
+			);
+			path = components;
+			sourceTree = "<group>";
+		};
+		C6FF80BCB2723A862B3A5153 /* core */ = {
+			isa = PBXGroup;
+			children = (
+				F7053D1A9402E92BD2189BFC /* config_loader.cpp */,
+				D524A9973A0039BDEE2A56E5 /* rayact_module_abi.h */,
+			);
+			name = core;
+			path = ../../native/core;
+			sourceTree = "<group>";
+		};
+		D1FA6A0474596C9B966084DF /* fonts */ = {
+			isa = PBXGroup;
+			children = (
+				8D6C0183A7189F58E5EC79DC /* EmbeddedFonts.h */,
+				A73914BE9936EC5E072E99C9 /* FontManager.cpp */,
+			);
+			path = fonts;
+			sourceTree = "<group>";
+		};
+		D5890124F8F5B365BC2A3DFD /* yoga */ = {
+			isa = PBXGroup;
+			children = (
+				CA04DB257606DA6B39C22160 /* YGConfig.cpp */,
+				3285FF667288E76ED26EB9CF /* YGEnums.cpp */,
+				2EDBDE36DAE581834D13867D /* YGNode.cpp */,
+				FF147B193D6F2772911F3C38 /* YGNodeLayout.cpp */,
+				2E2665334F34A0BE8CDCD2BC /* YGNodeStyle.cpp */,
+				C8F3DDC9E7B377238A96AB9D /* YGPixelGrid.cpp */,
+				5636239CF32FB134C77058DE /* YGValue.cpp */,
+				67F8619766ABAE407D6B39C7 /* algorithm */,
+				EF8FC71857F229B1A7DDC089 /* config */,
+				944558C38683C24471E223FC /* debug */,
+				B95DCD781E7E8815F935AA48 /* enums */,
+				F93242E99A660A19F7F66438 /* event */,
+				1F66EEAF6E527EE2EA89C394 /* node */,
+				9995CFFC55728107EE89E355 /* numeric */,
+				A2AF8820EF07542A6379D4C2 /* style */,
+			);
+			name = yoga;
+			path = "../../../raym3/build-v2-yoga2/_deps/yoga-src/yoga";
+			sourceTree = "<group>";
+		};
+		DC5ADB45C711D52BCF5C2139 /* src */ = {
+			isa = PBXGroup;
+			children = (
+				F9A1AF35922E1BA96BE97CBE /* raym3.cpp */,
+				BDBC7B30D49E2AB9A7B224F8 /* components */,
+				D1FA6A0474596C9B966084DF /* fonts */,
+				F4DDDDA81E51E9DC2FD9467B /* input */,
+				A32AD65D1EEE8D20BB6B7593 /* layout */,
+				FBE34C0E60F46EB5CB306C0B /* platform */,
+				2EAA334E8DF6C07DD27BAB5B /* rendering */,
+				1E2351CA2D01F0C72C45695E /* styles */,
+				9CB6A374AE66C43E81EA24DB /* v2 */,
+			);
+			name = src;
+			path = ../../../raym3/src;
+			sourceTree = "<group>";
+		};
+		E4259D8BF16E3E412BBC27A5 /* quickjs */ = {
+			isa = PBXGroup;
+			children = (
+				22210114E93A4132C4F7029E /* dtoa.c */,
+				3B66654088E57B2DA773C955 /* libregexp.c */,
+				1EC0870FE08C0BDD271C3343 /* libunicode.c */,
+				B146E609AC0016988E08B024 /* quickjs-libc.c */,
+				4C691D9041EAB7C4D2EC024E /* quickjs.c */,
+				779530731ADFBA7776BCD386 /* test262-fast.conf */,
+				595E57CC00CEEEC3D3D2C3B3 /* test262.conf */,
+				AD29354857DD2F2C1DCA7296 /* tests.conf */,
+				D93EDE6AE087FBDE206BC5D2 /* unicode_download.sh */,
+			);
+			name = quickjs;
+			path = ../../../quickjs;
+			sourceTree = "<group>";
+		};
+		ECF9D9052F04CEB2CC511A95 = {
+			isa = PBXGroup;
+			children = (
+				87CD1BA336223407B2B2281F /* android */,
+				C6FF80BCB2723A862B3A5153 /* core */,
+				7559C894759D94A42ADFCE75 /* cssparser */,
+				A4021D54D800B1610BAC30E9 /* desktop */,
+				BCB484B43FEE5E48323D417D /* ios */,
+				0BFE1E225E217BB8FBE92C11 /* ios */,
+				186EB7EEC45665F17E0A9DE2 /* mmkv */,
+				27222A481FD06CA7C6B182A5 /* platforms */,
+				E4259D8BF16E3E412BBC27A5 /* quickjs */,
+				7576FF4C5C4A796550B71BC5 /* rlmt */,
+				31FFCE3C188FB5C45B673B43 /* secure-store */,
+				F012CC6B17802DD3B2359B41 /* source */,
+				21F9B6E3C413E7F26E2D2A61 /* src */,
+				DC5ADB45C711D52BCF5C2139 /* src */,
+				D5890124F8F5B365BC2A3DFD /* yoga */,
+				0002D496B3EF33707E62A2C5 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		EF8FC71857F229B1A7DDC089 /* config */ = {
+			isa = PBXGroup;
+			children = (
+				C9B01CFCF12E1D04B242A54F /* Config.cpp */,
+				DE2C2A7270C52D44158CB893 /* Config.h */,
+			);
+			path = config;
+			sourceTree = "<group>";
+		};
+		F012CC6B17802DD3B2359B41 /* source */ = {
+			isa = PBXGroup;
+			children = (
+				C58AEE8443393184359FB2F8 /* m3_bind.c */,
+				2B8B9763872437656442769F /* m3_code.c */,
+				1A975362667BD597D2506176 /* m3_compile.c */,
+				75A2A660FA80E67CEA4DCD9E /* m3_core.c */,
+				B0C5482E94942DF05E7860D2 /* m3_env.c */,
+				52155F1D199F9A0244BFE97D /* m3_exec.c */,
+				F3A43D53B829B514AC4FCBD1 /* m3_function.c */,
+				ECF39F19F0783E95837FDC50 /* m3_info.c */,
+				BC38A370866BEEDE4CC8DE7C /* m3_module.c */,
+				4DD415575E09D0EE82B83F4C /* m3_parse.c */,
+				BC17AA5D4680D03946BDD844 /* extensions */,
+				1B3FD5CA6C5DA7B70115F107 /* extra */,
+			);
+			name = source;
+			path = ../../../wasm3/source;
+			sourceTree = "<group>";
+		};
+		F4DDDDA81E51E9DC2FD9467B /* input */ = {
+			isa = PBXGroup;
+			children = (
+				31656B737E95A2F23DEBE135 /* InputLayer.cpp */,
+				87F684E9CC8E8356DBE55C8F /* RenderQueue.cpp */,
+			);
+			path = input;
+			sourceTree = "<group>";
+		};
+		F93242E99A660A19F7F66438 /* event */ = {
+			isa = PBXGroup;
+			children = (
+				F131ED1BCD99188B3EA6615C /* event.cpp */,
+				9DA590B9759315AC5FCA1EAF /* event.h */,
+			);
+			path = event;
+			sourceTree = "<group>";
+		};
+		FBE34C0E60F46EB5CB306C0B /* platform */ = {
+			isa = PBXGroup;
+			children = (
+				90C676A667D5EF5515A6016E /* SystemAppearance.cpp */,
+				78460481074191BFF35CD1D8 /* SystemAppearance.mm */,
+			);
+			path = platform;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2F43DFF7BD00A1A4C8F2389C /* RayactIOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E37C75A626A0CCF22ACADDF2 /* Build configuration list for PBXNativeTarget "RayactIOS" */;
+			buildPhases = (
+				9113182C25A990D6ECED6DF2 /* Generate iOS Metal overlay */,
+				D1D6B20CE66293083A050239 /* Sources */,
+				D8A6A84136FB927E6A179ECB /* Resources */,
+				1191FE2AE6F1B40C37F86D32 /* Copy bundled runtime assets */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RayactIOS;
+			packageProductDependencies = (
+			);
+			productName = RayactIOS;
+			productReference = 13B32CCF88CFB21B68DA7B56 /* RayactIOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B34E13320245C4AF7FFF9995 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					2F43DFF7BD00A1A4C8F2389C = {
+						DevelopmentTeam = "";
+					};
+				};
+			};
+			buildConfigurationList = 42FB87DA8124AD29A9B455BD /* Build configuration list for PBXProject "RayactIOS" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = ECF9D9052F04CEB2CC511A95;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				2F43DFF7BD00A1A4C8F2389C /* RayactIOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D8A6A84136FB927E6A179ECB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9F186EB555AD7647CD02B657 /* Assets.xcassets in Resources */,
+				CF07B500A35042E1F6D722C8 /* test262-fast.conf in Resources */,
+				77421B4ED24C40F240DD9419 /* test262.conf in Resources */,
+				3E95F06000CF7539F34FDD98 /* tests.conf in Resources */,
+				1DCEA2C01E99AC6608B02B29 /* unicode_download.sh in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		1191FE2AE6F1B40C37F86D32 /* Copy bundled runtime assets */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy bundled runtime assets";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\nSOURCE=\"${SRCROOT}/../../apps/android/app/src/main/assets/runtime\"\nDEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/runtime\"\nrm -rf \"${DEST}\"\nmkdir -p \"${DEST}\"\nditto \"${SOURCE}\" \"${DEST}\"\nAPPJS=\"${SRCROOT}/../../apps/android/app/src/main/assets/app.js\"\nif [ -f \"${APPJS}\" ]; then\n  cp \"${APPJS}\" \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/app.js\"\nfi\n";
+		};
+		9113182C25A990D6ECED6DF2 /* Generate iOS Metal overlay */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Generate iOS Metal overlay";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\nROOT=\"${SRCROOT}/../../..\"\n\"${ROOT}/raylib-backends/scripts/generate_ios_metal_overlay.sh\" \"${ROOT}/raylib\" \"${ROOT}/raylib-backends/backends/rlmt/platforms/rcore_ios_metal_overlay.c\" \"${ROOT}/raylib-backends\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D1D6B20CE66293083A050239 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				931BDCBE94EA3ED8F1AA8F4F /* AbsoluteLayout.cpp in Sources */,
+				A8FECD0B4BA5E98A70298A95 /* AppBar.cpp in Sources */,
+				565A81D984B089F55EE4E6A9 /* AppDelegate.swift in Sources */,
+				0533AEB8C6AAF1DF2F21503E /* AssertFatal.cpp in Sources */,
+				BD0673CC6FE8CCCF5663CBFE /* Badge.cpp in Sources */,
+				8168632487675DFF099F6FB9 /* Baseline.cpp in Sources */,
+				877AD2A3BFAE7486B46730E1 /* Button.cpp in Sources */,
+				2C6DBCAED66F18DE40BF9C97 /* ButtonGroup.cpp in Sources */,
+				1401A1530FBA01EA02C60D92 /* CSSDeNest.cpp in Sources */,
+				BA0B8531C69D7AF1CA02DDEE /* CSSParser.cpp in Sources */,
+				2570C3966D3A3A2C5F5769B3 /* CSSProperties.cpp in Sources */,
+				D6EBA1156B07921DB450D1DC /* CSSUtils.cpp in Sources */,
+				82F2EE47D37AE050CDEC3638 /* Cache.cpp in Sources */,
+				0844E720DAD4AEC45A348EF4 /* CalculateLayout.cpp in Sources */,
+				F637DEE432114820CBAF51E2 /* Card.cpp in Sources */,
+				98EE116EDE894DBB7F9EB2BB /* Checkbox.cpp in Sources */,
+				462CFD47C996CD463152D5A8 /* Chip.cpp in Sources */,
+				4375DACB1DE367D79A6D553F /* ColorScheme.cpp in Sources */,
+				B5CED7E033874AC24BF72E85 /* Components.cpp in Sources */,
+				EE6BC16D52D0E8B188164B91 /* Config.cpp in Sources */,
+				51451761E5DC5C9C00F4FF77 /* Container.cpp in Sources */,
+				E68899CEA1318D634E3B2629 /* Controls.cpp in Sources */,
+				B515274692716764B1514243 /* Density.cpp in Sources */,
+				A3DAD6180F0CFC39540A8839 /* DevClientBridge.swift in Sources */,
+				FF6F20B985EBC656F348D298 /* DevLauncherController.swift in Sources */,
+				7A4B23999FB8B6F78A1AA124 /* DevMenuOverlay.swift in Sources */,
+				41EF64C12FB89FCAF4105024 /* DevServerLoader.swift in Sources */,
+				A50E4A706D46B27E9C009C8D /* DevShakeDetector.swift in Sources */,
+				29718BB6BB5CF7F4EB74F6A2 /* Dialog.cpp in Sources */,
+				0680F7AB30870D565359F4F9 /* Divider.cpp in Sources */,
+				A633B49D47788CB85D2FAB10 /* EmojiFont.cpp in Sources */,
+				2F04B521DF14E6F7D609B3C0 /* EmojiRasterizerApple.mm in Sources */,
+				51BCE200DDB7822DD7183F1D /* FlexLine.cpp in Sources */,
+				1577608A9789B12F0FA486D2 /* FloatingActionButton.cpp in Sources */,
+				9BD0E98122F875EC2B1E70D2 /* FontManager.cpp in Sources */,
+				6EF4E8EB480D270827EA75EC /* IOSBundledAssets.swift in Sources */,
+				ED9D226B6297B05B0228E2F9 /* Icon.cpp in Sources */,
+				5B351EE64377A8ED540964D0 /* IconButton.cpp in Sources */,
+				60B35A3066CF0607A42FEAF5 /* IconRenderer.cpp in Sources */,
+				C7E1D152A74C93BDB29AB8AD /* Input.cpp in Sources */,
+				54F564DF6771C2C6A5179401 /* InputLayer.cpp in Sources */,
+				C3D5B3C3FC9C288BA658D5E4 /* Layout.cpp in Sources */,
+				ED89BD40E34572A212442113 /* LayoutCard.cpp in Sources */,
+				7029EBECF7F9F588A3C51073 /* LayoutNode.cpp in Sources */,
+				C0CDFD46ADDEBDA206D8E5B9 /* LayoutResults.cpp in Sources */,
+				EFD8025F98E2DB04520DA0FF /* List.cpp in Sources */,
+				5C14FA105A60DA91226627A4 /* Log.cpp in Sources */,
+				A136622FA5AD4DA957BBF15B /* MaterialDefaults.cpp in Sources */,
+				D072984889A46AB829AEAFAC /* Menu.cpp in Sources */,
+				483A104948CDE8DE8AD87E59 /* Modal.cpp in Sources */,
+				719DC52B8B5913ECE2471DEE /* Mutations.cpp in Sources */,
+				1A4BFE18FFBA9D3069B3EB6E /* Navigation.cpp in Sources */,
+				C67505ABC019F440B6C24A33 /* NavigationHost.swift in Sources */,
+				9E6D3980058E37AAC430F584 /* Node.cpp in Sources */,
+				56526A79EC94831822DDC853 /* PixelGrid.cpp in Sources */,
+				59FE09DA198D86B92F4DA164 /* ProgressIndicator.cpp in Sources */,
+				B42F038E071BA6FEA29CA0D2 /* ProjectHmrClient.swift in Sources */,
+				498347526014CBE05C94F61C /* RadioButton.cpp in Sources */,
+				386BE0BEB14BBDAAD0F44BBA /* RangeSlider.cpp in Sources */,
+				0CCE1126D396A593E53F71C4 /* RayactEngineHostCallbacks.swift in Sources */,
+				7C9AD967B12DEF49FF0AA129 /* RayactEngineSession.swift in Sources */,
+				3A62D21DEF7029A946CC1E8E /* RayactHost.swift in Sources */,
+				F2FED92558BF715FE5DBB2AB /* RayactHostCallbacksBridge.swift in Sources */,
+				15BCDF543FED685FFE548917 /* RayactMetalView.swift in Sources */,
+				B3CDA4E49203E1A34EE4392E /* RayactNativeBridge.swift in Sources */,
+				0AA922A924C0C14035AED05B /* RayactRenderScheduler.swift in Sources */,
+				BC8B81AB58B3CE0814462B83 /* RayactScreenViewController.swift in Sources */,
+				59B9264006E4AF897A8E9C1E /* RayactSurfaceView.swift in Sources */,
+				72D223B8411CBD028D9474EF /* RenderContext.cpp in Sources */,
+				FF214DB072614CB1C62AA854 /* RenderQueue.cpp in Sources */,
+				5C7B9AC5E0D2D59F255A5A23 /* Renderer.cpp in Sources */,
+				02255831225A0E37156DE97C /* Renderer.cpp in Sources */,
+				BE79C0406D8CAE69BD5D69A7 /* Ripple.cpp in Sources */,
+				6B869D41DDEB91E02E2B03EB /* SceneDelegate.swift in Sources */,
+				80A013227ADE6AA970845C76 /* SearchBar.cpp in Sources */,
+				E4CE0D54A5BD8F6B1602DEDA /* SegmentedButton.cpp in Sources */,
+				BED80B977E8614175592B343 /* Slider.cpp in Sources */,
+				13CCED586250C021D60F20F3 /* Snackbar.cpp in Sources */,
+				E5C83823BA81676F862A191E /* Style.cpp in Sources */,
+				04AB7A1A8A510840F079FB0E /* Stylesheet.cpp in Sources */,
+				AEB7DD0BF6E2EB77866AD698 /* SvgModel.cpp in Sources */,
+				3EB7FE22A69EA4B68D23C904 /* SvgRenderer.cpp in Sources */,
+				78356034A860CDD81EAD7FF2 /* Switch.cpp in Sources */,
+				44419C81F245695CDF5154BD /* SystemAppearance.cpp in Sources */,
+				ADFBA51BFE00F4CE13FFE980 /* SystemAppearance.mm in Sources */,
+				4E36514D213619DE8BEAF32C /* TabBar.cpp in Sources */,
+				D0588FD07A9B4997E5DF02E9 /* Text.cpp in Sources */,
+				BC2B53799DE98B6E7ED6CD29 /* TextEngine.cpp in Sources */,
+				B81F127C71B41115425C7181 /* TextField.cpp in Sources */,
+				CC8A0AF0CD9C8EF514002A60 /* TextInput.cpp in Sources */,
+				0AB7F22628B85249C014E248 /* TextMeasureCache.cpp in Sources */,
+				426928DE67400FF16038961C /* TextSelectionOverlay.cpp in Sources */,
+				A4A54E28B804963EA472EFB7 /* Theme.cpp in Sources */,
+				6DA29412479C45AE815B46B1 /* Tooltip.cpp in Sources */,
+				0628A5A434A2F6A2CC61E2EB /* Transitions.cpp in Sources */,
+				9192CD0DB5ECBAA84C7F1CC0 /* View.cpp in Sources */,
+				C1AF0795FCB63DA225E38E44 /* View3D.cpp in Sources */,
+				50A815DCFD48C472F31543F2 /* YGConfig.cpp in Sources */,
+				4C3931369CB053819607D39B /* YGEnums.cpp in Sources */,
+				8AB41411FECA2FC3AB9711FF /* YGNode.cpp in Sources */,
+				33C5777855FC285C8558821F /* YGNodeLayout.cpp in Sources */,
+				59CD87EDA549956C34D448B5 /* YGNodeStyle.cpp in Sources */,
+				3D2E97B654F79878611BECDA /* YGPixelGrid.cpp in Sources */,
+				F734AA2AE1B0356832AFDC72 /* YGValue.cpp in Sources */,
+				91248E8395507EA272E2CF82 /* accessibility_bridge.cpp in Sources */,
+				EBF2E217E13712272D0D3DDC /* async_storage.cpp in Sources */,
+				90D2CD8A4B3A39C8206AC591 /* color_parse.cpp in Sources */,
+				491FCFE837071667BA57689A /* commit_queue.cpp in Sources */,
+				5E166E5862E5EEFEBF39A337 /* config_loader.cpp in Sources */,
+				03A2EF37828D106246A1B256 /* css_bridge.cpp in Sources */,
+				1A99D0765DBF15CACDD636E5 /* data_dir.cpp in Sources */,
+				442715F30051F8458E70C4D0 /* dev_client_bridge.cpp in Sources */,
+				8256805485BA1EBFF65F52A4 /* devtools_ios.cpp in Sources */,
+				C58F0EB10DC46B17780E5A8E /* dtoa.c in Sources */,
+				6C163CCE8358518F7005D90D /* engine_js.cpp in Sources */,
+				6B12C5BFCEAA0892D0075487 /* engine_render.cpp in Sources */,
+				B20E9499A79EB3FFF1377EDF /* engine_runtime.cpp in Sources */,
+				B063B63DAF0AE710F05A3B08 /* engine_thread.cpp in Sources */,
+				9188F6F40DE13083F9C4E337 /* event.cpp in Sources */,
+				CB11E83D4066E9A2F9A2201E /* gesture_recognizer.cpp in Sources */,
+				E222EE2C1B7638D43B7721B2 /* ios_bridge.mm in Sources */,
+				1E28D84F1AD986DF8F475877 /* ios_engine_instance.cpp in Sources */,
+				7C696CA0756E5D2289D53FB2 /* ios_plugins_register.cpp in Sources */,
+				F379F0CC178E0EE511674758 /* js_stdlib.cpp in Sources */,
+				FDCEE6E0CE55DC8500E10F22 /* kv_store.cpp in Sources */,
+				9DF44BC282A74D2379DA263C /* libregexp.c in Sources */,
+				5CE3B84B1EB98CC9FB5ABE2C /* libunicode.c in Sources */,
+				5782BF7C040F7B1090CC310E /* m3_bind.c in Sources */,
+				D4ED30A57039A079C5AD5BAC /* m3_code.c in Sources */,
+				23C3808D2732443AE859140C /* m3_compile.c in Sources */,
+				760CDAF3F5BF0866AA55D0A9 /* m3_core.c in Sources */,
+				91F4FE368ED312D28C5BE32F /* m3_env.c in Sources */,
+				5E669D1C510857B5D40CC7A5 /* m3_exec.c in Sources */,
+				F242926AA62B3EA4D5061473 /* m3_extensions.c in Sources */,
+				19C0068226BAF95EEED4C21F /* m3_function.c in Sources */,
+				CE9756CE17C0832FE9A416D7 /* m3_info.c in Sources */,
+				D94F2AF9C28C53A16A01675B /* m3_module.c in Sources */,
+				8DDB8789F9AC2391D5233DE5 /* m3_parse.c in Sources */,
+				BBCB45FC01672B409B0D6C3E /* mmkv_plugin.cpp in Sources */,
+				587149023A8B3C82FE6993A4 /* module_bus.cpp in Sources */,
+				96962E57BF045D889E3AAEDA /* platform_ios.cpp in Sources */,
+				0398FB8BB5F0A35AB3A0BBDE /* plugin_loader.cpp in Sources */,
+				9DCB48FEF9126013AE4A4EC8 /* quickjs-libc.c in Sources */,
+				E3089CBD9ABA5AFDF8B28701 /* quickjs.c in Sources */,
+				1BCA7FAED4BC3B515D74A6DD /* quickjs_bridge.cpp in Sources */,
+				B41A1BAB1F083D8548230FAB /* raym3.cpp in Sources */,
+				944FD0C549D5A987A55307A9 /* raym3_bridge.cpp in Sources */,
+				6D503DB88D62F54F3F24B0AF /* rcore_ios_metal_overlay.c in Sources */,
+				4C7A7E876C47316F1D3C1430 /* rlmt.mm in Sources */,
+				EE121A68EDFC1E76D103F2AB /* rmodels.c in Sources */,
+				8D2BC51FD45F2099DE163954 /* rshapes.c in Sources */,
+				898AB0E4C7400BD90D65CB0B /* rtext.c in Sources */,
+				AA4EB0BBE4E733EF16E2A671 /* rtextures.c in Sources */,
+				43F5CAB09AA6F418A7414C59 /* secure_store_mac.mm in Sources */,
+				B7C4A8713642E5B49364B07B /* secure_store_plugin.cpp in Sources */,
+				FC89F20BE1679C7A74401EDD /* shadow_tree.cpp in Sources */,
+				5733A093EEB0ADEC6B7168F7 /* system_appearance.cpp in Sources */,
+				D99132B5214B01EF3563A232 /* theme_bridge.cpp in Sources */,
+				2DA12B685C581ED14B7ED2D3 /* utils.cpp in Sources */,
+				4E86BB4C3AE21F3A95523095 /* window_manager.cpp in Sources */,
+				E3993B3961DFED6BD1A9E306 /* worker_js.cpp in Sources */,
+				C4A2D7F4A7E80B7E64537C61 /* worker_native.cpp in Sources */,
+				32D560D5DE4574CE9C962FA0 /* worker_wasm.cpp in Sources */,
+				506CEC36326498B6DFDF3CA2 /* workers.cpp in Sources */,
+				7B647ADE10FFBC547FC6B847 /* worklet_runtime.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		2B9CC2FB49172B5048B29757 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_CXX_LIBRARY = "libc++";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = "";
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) RAYACT_NO_NET=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1";
+				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = "$(inherited) ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../../raylib-backends/backends/rlmt ../../../raylib-backends/backends/rlmt/platforms ../../../raylib/src ../../../raym3/include ../../../raym3/build-v2/include ../../../raym3/build-v2-yoga2/_deps/yoga-src ../../../quickjs ../../../lynx/third_party/quickjs/include ../../../wasm3/source ../../../cssparser";
+				INFOPLIST_FILE = Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_CFLAGS = "$(inherited) -D_GNU_SOURCE";
+				OTHER_LDFLAGS = "$(inherited) -framework Metal -framework QuartzCore -framework UIKit -framework CoreFoundation -framework Security";
+				PRODUCT_BUNDLE_IDENTIFIER = com.rayact.ios;
+				PRODUCT_NAME = Rayact;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				USER_HEADER_SEARCH_PATHS = "$(inherited) ../../../raylib-backends/backends/rlmt ../../../raylib-backends/backends/rlmt/platforms ../../../raylib/src ../../../raym3/include ../../../raym3/build-v2/include ../../../raym3/build-v2-yoga2/_deps/yoga-src ../../../quickjs ../../../lynx/third_party/quickjs/include ../../../wasm3/source ../../../cssparser";
+				USE_HEADERMAP = NO;
+			};
+			name = Release;
+		};
+		493A68106764DB1EE557836F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		7BDCAE077E2C06339BC5A026 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		9158D1AD4249836FBB9A6048 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_CXX_LIBRARY = "libc++";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = "";
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) RAYACT_NO_NET=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1";
+				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = "$(inherited) ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../../raylib-backends/backends/rlmt ../../../raylib-backends/backends/rlmt/platforms ../../../raylib/src ../../../raym3/include ../../../raym3/build-v2/include ../../../raym3/build-v2-yoga2/_deps/yoga-src ../../../quickjs ../../../lynx/third_party/quickjs/include ../../../wasm3/source ../../../cssparser";
+				INFOPLIST_FILE = Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_CFLAGS = "$(inherited) -D_GNU_SOURCE";
+				OTHER_LDFLAGS = "$(inherited) -framework Metal -framework QuartzCore -framework UIKit -framework CoreFoundation -framework Security";
+				PRODUCT_BUNDLE_IDENTIFIER = com.rayact.ios;
+				PRODUCT_NAME = Rayact;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				USER_HEADER_SEARCH_PATHS = "$(inherited) ../../../raylib-backends/backends/rlmt ../../../raylib-backends/backends/rlmt/platforms ../../../raylib/src ../../../raym3/include ../../../raym3/build-v2/include ../../../raym3/build-v2-yoga2/_deps/yoga-src ../../../quickjs ../../../lynx/third_party/quickjs/include ../../../wasm3/source ../../../cssparser";
+				USE_HEADERMAP = NO;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		42FB87DA8124AD29A9B455BD /* Build configuration list for PBXProject "RayactIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7BDCAE077E2C06339BC5A026 /* Debug */,
+				493A68106764DB1EE557836F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E37C75A626A0CCF22ACADDF2 /* Build configuration list for PBXNativeTarget "RayactIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9158D1AD4249836FBB9A6048 /* Debug */,
+				2B9CC2FB49172B5048B29757 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = B34E13320245C4AF7FFF9995 /* Project object */;
+}

@@ -15,6 +15,10 @@
     "packageName": "com.rayact.devapp",
     "icon": "src/assets/icon.png"
   },
+  "ios": {
+    "projectDir": "../ios",
+    "bundleId": "com.rayact.ios"
+  },
   "nativeModules": [
     { "name": "kv", "lib": "", "jsPackage": "@rayact/runtime" },
     { "name": "mmkv", "lib": "rayact_mmkv", "jsPackage": "@rayact/mmkv" },

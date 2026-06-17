@@ -42,6 +42,14 @@ android {
     buildTypes {
         debug {
             buildConfigField "boolean", "RAYACT_DEV_CLIENT", "true"
+            externalNativeBuild {
+                cmake {
+                    // AGP maps debug → CMAKE_BUILD_TYPE=Debug (-O0). Override to
+                    // RelWithDebInfo (-O2 -g) so the render loop performs like
+                    // release while retaining debug symbols.
+                    arguments "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+                }
+            }
         }
         release {
             minifyEnabled false

@@ -435,15 +435,16 @@ static std::set<IconKey>         g_iconRequests;  // (cp, size) pairs registered
 static Texture2D                 g_iconSheet = {0};
 static std::map<IconKey, Rectangle> g_iconSheetRects; // UV pixel rects in g_iconSheet
 
-// Search order: MaterialSymbolsRounded FIRST — material_icons.js (the Icons
-// name→codepoint map) is generated from its codepoints, so the loaded font must
-// match or glyphs resolve to .notdef. LoadFontEx loads only the specific
-// requested codepoints, so the variable font indexes fine here (the historical
-// "cannot index PUA" caveat only applied to bulk-loading the whole range).
+// Search order must match material_icons.js. That map currently uses classic
+// Material Icons codepoints; loading Material Symbols first produces .notdef
+// glyphs for many names.
 static const char* kFilledIconFontCandidates[] = {
+    "./rayact/resources/fonts/MaterialIcons-Regular.ttf",
+    "./rayact/resources/fonts/MaterialSymbolsRounded-Filled.ttf",
+    "./rayact/resources/fonts/MaterialSymbolsRounded.ttf",
+    "./resources/fonts/MaterialIcons-Regular.ttf",
     "./resources/fonts/MaterialSymbolsRounded-Filled.ttf",
     "./resources/fonts/MaterialSymbolsRounded.ttf",
-    "./resources/fonts/MaterialIcons-Regular.ttf",
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
     "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -452,9 +453,12 @@ static const char* kFilledIconFontCandidates[] = {
 };
 
 static const char* kOutlinedIconFontCandidates[] = {
+    "./rayact/resources/fonts/MaterialIcons-Regular.ttf",
+    "./rayact/resources/fonts/MaterialSymbolsRounded.ttf",
+    "./rayact/resources/fonts/MaterialSymbolsRounded-Filled.ttf",
+    "./resources/fonts/MaterialIcons-Regular.ttf",
     "./resources/fonts/MaterialSymbolsRounded.ttf",
     "./resources/fonts/MaterialSymbolsRounded-Filled.ttf",
-    "./resources/fonts/MaterialIcons-Regular.ttf",
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
     "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -674,11 +678,11 @@ static const char* findIconFontPath(bool filled) {
     const char* assets = rayact::appAssetsPath();
     if (assets && *assets) {
         const char* rels[] = {
+            "resources/fonts/MaterialIcons-Regular.ttf",
             filled ? "resources/fonts/MaterialSymbolsRounded-Filled.ttf"
                    : "resources/fonts/MaterialSymbolsRounded.ttf",
             filled ? "resources/fonts/MaterialSymbolsRounded.ttf"
                    : "resources/fonts/MaterialSymbolsRounded-Filled.ttf",
-            "resources/fonts/MaterialIcons-Regular.ttf",
             nullptr
         };
         for (int i = 0; rels[i]; i++) {
@@ -827,7 +831,7 @@ void buildIconSpriteSheet() {
             dw *= fit; dh *= fit;
             Rectangle src = {(float)left, (float)top, inkW, inkH};
             Rectangle dst = {e.x + (cell - dw) * 0.5f, PAD + (cell - dh) * 0.5f, dw, dh};
-            ImageDraw(&atlas, g, src, dst, WHITE);
+            ImageDrawImagePro(&atlas, g, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
         }
         g_iconSheetRects[e.key] = {e.x, (float)PAD, cell, cell};
     }
@@ -2121,7 +2125,7 @@ void rayactBlurFocusedTextInput() {
     raym3::v2::Blur();
 }
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(RAYACT_IOS)
 // Push native editing-state changes back into the IME InputConnection.
 static void registerImeStateCallbackOnce() {
     static bool registered = false;
@@ -2163,7 +2167,7 @@ static void fireTextInputTextEvent(std::map<int, JSValue>& callbacks, int nodeId
 }
 
 JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(RAYACT_IOS)
     registerImeStateCallbackOnce();
 #endif
     std::string value;
@@ -2243,7 +2247,7 @@ JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSVal
                                autocorrect = props.autocorrect,
                                secure = props.secure || props.passwordMode,
                                imeAction = props.imeAction]() {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(RAYACT_IOS)
         AndroidKeyboard_ShowForNode(id, inputType, autocorrect, secure, imeAction);
 #endif
         auto it = g_focusCallbacks.find(id);
@@ -2253,7 +2257,7 @@ JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSVal
         JS_FreeValue(g_bridge_ctx, result);
     };
     node->textInput.onBlur = [id = g_nextNodeId]() {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(RAYACT_IOS)
         // Focus already moved when switching fields — keep keyboard open.
         raym3::v2::NodeId focused = raym3::v2::GetFocusedId();
         if (focused != 0) {
@@ -2489,7 +2493,10 @@ JSValue JS_createExternalView(JSContext* ctx, JSValue, int argc, JSValueConst* a
     // routing with stashed MotionEvents lands with the Android producer).
     node->onPress = [id, layoutRect]() {
         if (!g_externalViewInputCb) return;
-        Vector2 m = raym3::v2::Density::PxToDp(GetMousePosition());
+        Vector2 m = GetMousePosition();
+#if defined(RAYACT_ANDROID) || defined(__ANDROID__)
+        m = raym3::v2::Density::PxToDp(m);
+#endif
         g_externalViewInputCb(id, 1 /*up=tap*/, m.x - layoutRect->x, m.y - layoutRect->y);
     };
 
@@ -4131,8 +4138,7 @@ JSValue JS_setCurrentScreen(JSContext* ctx, JSValue, int argc, JSValueConst* arg
 // functions are no-ops (return 0). The JNI implementations live in
 // jni_bridge.cpp (Android-only). On desktop we provide weak stubs here.
 
-#if defined(RAYACT_ANDROID)
-// Android builds: link against jni_bridge.cpp, which provides these symbols.
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
 extern "C" {
 extern int  rayactJniRequestNewSurface();
 extern void rayactJniReleaseSurface(int surfaceId);
@@ -4529,7 +4535,7 @@ extern "C" void rayactMacImeCaretRect(float* x, float* y, float* w, float* h) {
     *h = input.height;
 }
 
-#ifdef RAYACT_ANDROID
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
 struct Raym3RuntimeStorage {
     std::map<int, ScreenState> screens;
     int currentScreenId = 0;
@@ -5921,7 +5927,7 @@ void createParamNodeFromBuffer(
             }
         });
     } else if (typeId == RTYPE_TEXT_INPUT) {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(RAYACT_IOS)
         registerImeStateCallbackOnce();
 #endif
         raym3::v2::TextInputProps props;
@@ -5944,7 +5950,7 @@ void createParamNodeFromBuffer(
             JS_FreeValue(g_bridge_ctx, arg);
         };
         node->textInput.onFocus = [id]() {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(RAYACT_IOS)
             AndroidKeyboard_ShowForNode(id, "", false, false, "");
 #endif
             auto it = g_focusCallbacks.find(id);
@@ -5954,7 +5960,7 @@ void createParamNodeFromBuffer(
             JS_FreeValue(g_bridge_ctx, result);
         };
         node->textInput.onBlur = [id]() {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(RAYACT_IOS)
             AndroidKeyboard_Hide();
 #endif
             auto it = g_blurCallbacks.find(id);
