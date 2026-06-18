@@ -15,9 +15,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <chrono>
 #include <functional>
 #include <iostream>
 #include <string>
+#include <thread>
 #ifndef _WIN32
 #include <climits>
 #include <cstdlib>
@@ -81,8 +83,17 @@ void mainLoop(JSContext* ctx) {
     SetWindowLiveResizeHook(liveResizeRender);
 
     if (!IsWindowReady()) {
-        fprintf(stderr, "Window not ready — cannot start render loop\n");
-        return;
+        // Module-HMR dev bootstrap imports the project entry asynchronously; the
+        // project's initRaylib() may run only after the JS job queue is pumped.
+        for (int i = 0; i < 10000 && !IsWindowReady(); ++i) {
+            if (!rayact::engineThreadedModeEnabled())
+                rayact::enginePumpJS();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        if (!IsWindowReady()) {
+            fprintf(stderr, "Window not ready — cannot start render loop\n");
+            return;
+        }
     }
 
     // raym3::Initialize() + initSystemAppearance() were already done by

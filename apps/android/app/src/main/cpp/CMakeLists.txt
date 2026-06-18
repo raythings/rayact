@@ -24,7 +24,7 @@ option(RAYACT_ANDROID_FULL "Build net + workers + TS subsystems" OFF)
 # workers (and the module bus's sys_invoke) run on Android while keeping curl/lws
 # and tree-sitter out of the build. Implied by RAYACT_ANDROID_FULL.
 option(RAYACT_ANDROID_WASM "Build the worker subsystem (wasm3 + workers) on Android" OFF)
-option(RAYACT_ANDROID_USE_RLVK "Build Android with the Vulkan-backed rlvk rlgl implementation" ON)
+option(RAYACT_ANDROID_USE_RAYLIB_BACKEND "Build Android with the raylib-backends Vulkan renderer" ON)
 # 3D smoke-test scene is opt-in. Pass -DRAYACT_ANDROID_3D_SMOKE=ON at configure
 # time to re-enable the in-process probe (FBO + grid + cube + lines). Default
 # is OFF so the engine renders the real QuickJS app.js path.
@@ -56,14 +56,12 @@ set(RAYLIB_SRC
 
 set(RAYLIB_DEFS PLATFORM_ANDROID_SURFACE
     RL_DEFAULT_BATCH_BUFFER_ELEMENTS=8192)
-if (NOT RAYACT_ANDROID_USE_RLVK)
+if (NOT RAYACT_ANDROID_USE_RAYLIB_BACKEND)
     list(APPEND RAYLIB_DEFS GRAPHICS_API_OPENGL_ES3)
 endif()
 set(RAYLIB_LIBS EGL GLESv3)
 
-if (RAYACT_ANDROID_USE_RLVK)
-    list(APPEND RAYLIB_DEFS RAYLIB_USE_RLVK)
-    list(APPEND RAYLIB_DEFS RLVK_ENABLE_GLSLANG=1)
+if (RAYACT_ANDROID_USE_RAYLIB_BACKEND)
     list(APPEND RAYLIB_LIBS vulkan)
     set(GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
     set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
@@ -77,7 +75,7 @@ add_library(raylib STATIC ${RAYLIB_SRC})
 target_compile_definitions(raylib PUBLIC ${RAYLIB_DEFS})
 target_include_directories(raylib PUBLIC ${RAYLIB_DIR}/src ${RAYLIB_DIR}/src/external/glfw/include)
 target_compile_options(raylib PRIVATE -Wno-unknown-pragmas)
-if (RAYACT_ANDROID_USE_RLVK)
+if (RAYACT_ANDROID_USE_RAYLIB_BACKEND)
     raylib_backend_attach(TARGET raylib BACKEND VULKAN RAYLIB_BACKENDS_DIR ${RAYLIB_BACKENDS_DIR})
 endif()
 
@@ -109,7 +107,7 @@ set(RAYM3_EMBED_RESOURCES ON CACHE BOOL "" FORCE)
 set(RAYM3_EMBED_ALL_ICONS  ON CACHE BOOL "" FORCE)
 add_subdirectory(${RAYM3_DIR} ${CMAKE_BINARY_DIR}/raym3 EXCLUDE_FROM_ALL)
 
-if (RAYACT_ANDROID_USE_RLVK)
+if (RAYACT_ANDROID_USE_RAYLIB_BACKEND)
     target_compile_definitions(raym3 PUBLIC RAYLIB_USE_RLVK)
     target_link_libraries(raylib PUBLIC glslang glslang-default-resource-limits)
 endif()
@@ -223,11 +221,10 @@ target_link_libraries(rayact
     ${RAYLIB_LIBS} android log m dl
 )
 
-if (RAYACT_ANDROID_USE_RLVK)
+if (RAYACT_ANDROID_USE_RAYLIB_BACKEND)
     target_include_directories(raylib PUBLIC
         ${RAYGPU_DIR}/amalgamation/glslang/glslang/Include
         ${RAYLIB_BACKENDS_DIR}/third_party/spirv_reflect
-        ${RAYLIB_BACKENDS_DIR}/backends/rlvk
     )
 endif()
 

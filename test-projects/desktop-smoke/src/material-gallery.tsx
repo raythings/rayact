@@ -47,10 +47,11 @@ import {
   TimePicker,
   Tooltip,
   View,
-  render,
 } from '@rayact/react';
+import { useGalleryMode } from './galleryMode';
 
-function MaterialGallery() {
+export function MaterialGallery() {
+  const { setGallery } = useGalleryMode();
   const [enabled, setEnabled] = useState(true);
   const [slider, setSlider] = useState(0.45);
   const [rangeStart, setRangeStart] = useState(0.22);
@@ -85,6 +86,13 @@ function MaterialGallery() {
       <Text style={{ fontSize: 22, lineHeight: 28, fontWeight: 'bold' }}>
         raym3 Material Gallery
       </Text>
+
+      <Card style={{ gap: 12, flexShrink: 0 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+          <Text style={{ fontSize: 16, flex: 1 }}>Habit Tracker</Text>
+          <Switch checked={false} onPress={() => setGallery(false)} />
+        </View>
+      </Card>
 
       <Card style={{ gap: 12, flexShrink: 0 }}>
         <Text>Controls</Text>
@@ -283,10 +291,3 @@ function MaterialGallery() {
     </AvoidKeyboard>
   );
 }
-
-const host = globalThis as any;
-if (typeof host.initRaylib === 'function') {
-  host.initRaylib(1000, 720, 'Material Gallery');
-}
-
-render(<MaterialGallery />);

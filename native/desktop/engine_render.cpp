@@ -483,6 +483,12 @@ void engineRenderFrame(int width, int height) {
 
     workletRuntimeTick(GetFrameTime());
 
+    // On macOS, the drawable can transiently disappear during app/window
+    // activation changes. Guard the entire GL frame so we never call into
+    // ClearBackground/BeginDrawing with a dead context.
+    if (!IsWindowReady() || GetRenderWidth() <= 0 || GetRenderHeight() <= 0)
+        return;
+
     const bool canIdleSkip = engineThreadedModeEnabled() && !engineNeedsAnotherFrame();
     if (canIdleSkip && g_root && raym3::v2::ShouldSkipRender(g_root)) {
         if (engineThreadedModeEnabled())

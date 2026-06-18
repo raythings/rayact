@@ -1,6 +1,7 @@
 package com.rayact.app
 
 import android.content.Context
+import android.graphics.Paint
 import android.text.InputType
 import android.text.Selection
 import android.text.SpannableStringBuilder
@@ -110,6 +111,10 @@ class RayactSurfaceView @JvmOverloads constructor(
 
     /** Called from Kotlin main thread by hideSoftKeyboardFromHost. */
     fun clearIme() {
+        activeInputConnection?.let { ic ->
+            ic.finishComposingText()
+            ic.resetSnapshot()
+        }
         imeNodeId = -1
         imeText.clear()
         activeInputConnection = null
@@ -134,6 +139,16 @@ class RayactSurfaceView @JvmOverloads constructor(
             ed.replace(0, ed.length, text)
             imeText.replace(0, imeText.length, text)
         }
+        val compStart = if (composingStart >= 0 && composingEnd >= composingStart) {
+            composingStart.coerceIn(0, ed.length)
+        } else {
+            -1
+        }
+        val compEnd = if (composingStart >= 0 && composingEnd >= composingStart) {
+            composingEnd.coerceIn(0, ed.length)
+        } else {
+            -1
+        }
         val start = if (selectionStart < 0 || selectionEnd < 0) {
             ed.length
         } else {
@@ -145,20 +160,29 @@ class RayactSurfaceView @JvmOverloads constructor(
             maxOf(selectionStart, selectionEnd).coerceIn(0, ed.length)
         }
         Selection.setSelection(ed, start, end)
-        if (composingStart >= 0 && composingEnd >= composingStart) {
-            ic.setComposingRegion(
-                composingStart.coerceIn(0, ed.length),
-                composingEnd.coerceIn(0, ed.length)
-            )
+        if (compStart >= 0 && compEnd >= compStart) {
+            ic.setComposingRegion(compStart, compEnd)
         } else {
             ic.finishComposingText()
         }
         ic.applyingFromNative = false
         ic.resetSnapshot()
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.updateSelection(this, start, end, composingStart, composingEnd)
-        val cursorBuilder = CursorAnchorInfo.Builder().setSelectionRange(start, end)
-        imm.updateCursorAnchorInfo(this, cursorBuilder.build())
+        imm.updateSelection(this, start, end, compStart, compEnd)
+        val cursor = Selection.getSelectionEnd(ed).coerceIn(0, ed.length)
+        val paint = Paint().apply {
+            textSize = 16f * resources.displayMetrics.scaledDensity
+            isAntiAlias = true
+        }
+        val cursorX = paint.measureText(ed.substring(0, cursor))
+        val cursorHeight = paint.fontSpacing
+        imm.updateCursorAnchorInfo(
+            this,
+            CursorAnchorInfo.Builder()
+                .setSelectionRange(start, end)
+                .setInsertionMarkerLocation(cursorX, 0f, cursorX, cursorHeight, CursorAnchorInfo.FLAG_HAS_VISIBLE_REGION)
+                .build()
+        )
     }
 
     override fun onCheckIsTextEditor() =
@@ -294,6 +318,12 @@ class RayactSurfaceView @JvmOverloads constructor(
             return true
         }
 
+        override fun setSelection(start: Int, end: Int): Boolean {
+            val ok = super.setSelection(start, end)
+            syncToNative()
+            return ok
+        }
+
         override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
             val ok = super.deleteSurroundingText(beforeLength, afterLength)
             syncToNative()
@@ -400,6 +430,14 @@ class RayactSurfaceView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         ViewCompat.requestApplyInsets(this)
+    }
+
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        if (!hasWindowFocus && imeNodeId >= 0) {
+            session.nativeBlurTextInput()
+            clearIme()
+        }
     }
 
     private fun reportSafeAreaInsets(topPx: Int, rightPx: Int, bottomPx: Int, leftPx: Int) {

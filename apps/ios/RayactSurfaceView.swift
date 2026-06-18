@@ -59,6 +59,8 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
                 metalLayer.device = MTLCreateSystemDefaultDevice()
             }
             updateSafeAreaInsets()
+        } else {
+            clearIme()
         }
     }
 
@@ -143,6 +145,14 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
         }
         if let range = textRange(in: hiddenTextField, start: selectionStart, end: selectionEnd) {
             hiddenTextField.selectedTextRange = range
+        }
+        if let composingRange = textRange(in: hiddenTextField, start: composingStart, end: composingEnd) {
+            hiddenTextField.setMarkedText(
+                hiddenTextField.text(in: composingRange) ?? "",
+                selectedRange: NSRange(location: 0, length: 0)
+            )
+        } else if hiddenTextField.markedTextRange != nil {
+            hiddenTextField.unmarkText()
         }
         applyingFromNative = false
     }
@@ -259,13 +269,22 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
         let text = hiddenTextField.text ?? ""
         let start = hiddenTextField.offset(from: hiddenTextField.beginningOfDocument, to: hiddenTextField.selectedTextRange?.start ?? hiddenTextField.endOfDocument)
         let end = hiddenTextField.offset(from: hiddenTextField.beginningOfDocument, to: hiddenTextField.selectedTextRange?.end ?? hiddenTextField.endOfDocument)
+        let composingStart: Int
+        let composingEnd: Int
+        if let marked = hiddenTextField.markedTextRange {
+            composingStart = hiddenTextField.offset(from: hiddenTextField.beginningOfDocument, to: marked.start)
+            composingEnd = hiddenTextField.offset(from: hiddenTextField.beginningOfDocument, to: marked.end)
+        } else {
+            composingStart = -1
+            composingEnd = -1
+        }
         session.nativeSetTextInputContent(
             nodeId: imeNodeId,
             text: text,
             selectionStart: start,
             selectionEnd: end,
-            composingStart: -1,
-            composingEnd: -1
+            composingStart: composingStart,
+            composingEnd: composingEnd
         )
         session.host.renderScheduler.requestFrame()
     }

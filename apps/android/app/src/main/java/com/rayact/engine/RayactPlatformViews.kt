@@ -36,7 +36,7 @@ import java.util.concurrent.ConcurrentHashMap
  * textures). A "textfield" node hosts a real [EditText] inside a
  * [Presentation] on a [VirtualDisplay] whose output surface is an
  * [ImageReader]; frames flow zero-copy as HardwareBuffers into the engine
- * (rlvk AHardwareBuffer import) and are drawn by the node's customRender.
+ * (backend AHardwareBuffer import) and are drawn by the node's customRender.
  *
  * Touch: gestures that start inside a hosted field's surface rect are routed
  * wholesale into the Presentation (real DOWN/MOVE/UP stream, original

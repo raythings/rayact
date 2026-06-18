@@ -16,6 +16,8 @@ import {
   NavigationContainer, createStackNavigator,
   useNavigation, useIsFocused,
 } from '@rayact/navigation';
+import { MaterialGallery } from './material-gallery';
+import { GalleryModeContext, useGalleryMode } from './galleryMode';
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
@@ -314,6 +316,8 @@ function StatsScreen() {
 
 function SettingsScreen() {
   const t = useTheme();
+  const insets = useSafeAreaInsets();
+  const { setGallery } = useGalleryMode();
   const [notifs, setNotifs]   = useState(store.notificationsEnabled);
   const [goal, setGoal]       = useState(store.goalCount);
 
@@ -321,11 +325,17 @@ function SettingsScreen() {
     <Screen>
       <ScreenAppBar title="Settings" />
       <InsetContent>
-      <ScrollView style={{ flexGrow: 1, flexShrink: 1, minHeight: 0 }}>
-        <View style={{ flexShrink: 0 }}>
+        <ScrollView style={{ flexGrow: 1, flexShrink: 1, minHeight: 0 }}>
+        <View style={{ flexShrink: 0, paddingBottom: 96 + insets.bottom }}>
 
         <Text text="APPEARANCE" style={settingsSectionTitleStyle(t)} />
         <Card style={settingsCardStyle}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, gap: 16 }}>
+            <Icon name="palette" size={24} color={t.onSurfaceVariant} />
+            <Text text="Material Gallery" style={{ color: t.onSurface, fontSize: 16, flex: 1 }} />
+            <Switch checked={false} onPress={() => setGallery(true)} />
+          </View>
+          <Divider />
           <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, gap: 16 }}>
             <Icon name="dark_mode" size={24} color={t.onSurfaceVariant} />
             <Text text="Dark Mode" style={{ color: t.onSurface, fontSize: 16, flex: 1 }} />
@@ -373,9 +383,8 @@ function SettingsScreen() {
           </View>
         </Card>
 
-        <View style={{ height: 16 }} />
         </View>
-      </ScrollView>
+        </ScrollView>
       </InsetContent>
     </Screen>
   );
@@ -469,7 +478,7 @@ function AddHabitScreen() {
 
 const Stack = createStackNavigator();
 
-function App() {
+function HabitTrackerApp() {
   const t = useTheme();
   const colorSchemePreference = useColorSchemePreference();
   const navigationRef = React.useRef<{
@@ -524,6 +533,20 @@ function App() {
   );
 }
 
+function Root() {
+  const [gallery, setGallery] = useState(false);
+  const galleryMode = React.useMemo(
+    () => ({ gallery, setGallery }),
+    [gallery],
+  );
+
+  return (
+    <GalleryModeContext.Provider value={galleryMode}>
+      {gallery ? <MaterialGallery /> : <HabitTrackerApp />}
+    </GalleryModeContext.Provider>
+  );
+}
+
 const host = globalThis as any;
 if (typeof host.initRaylib === 'function') host.initRaylib(390, 844, 'Habit Tracker');
-render(<App />);
+render(<Root />);

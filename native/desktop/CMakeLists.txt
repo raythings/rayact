@@ -191,32 +191,18 @@ if(EXISTS "${RAYM3_DIR}/include/raym3/v2.h")
 else()
     message(FATAL_ERROR "raym3 not found at ${RAYM3_DIR}")
 endif()
-set(RAYM3_BUILD_DIR "${RAYM3_DIR}/build-v2-yoga2")
-set(RAYM3_LIB "${RAYM3_BUILD_DIR}/libraym3.a")
-set(YOGACORE_LIB "${RAYM3_BUILD_DIR}/_deps/yoga-build/libyogacore.a")
-if(NOT EXISTS "${RAYM3_LIB}")
-    message(FATAL_ERROR "raym3 (yoga build) not found at ${RAYM3_LIB}")
+set(YOGA_DIR "${RAYM3_DIR}/build-v2-yoga2/_deps/yoga-src" CACHE PATH "" FORCE)
+set(RAYM3_FETCH_DEPS OFF CACHE BOOL "" FORCE)
+set(RAYM3_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(RAYM3_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(RAYM3_USE_YOGA ON CACHE BOOL "" FORCE)
+set(RAYM3_USE_INPUT_LAYERS 0 CACHE BOOL "" FORCE)
+add_subdirectory("${RAYM3_DIR}" "${CMAKE_BINARY_DIR}/raym3" EXCLUDE_FROM_ALL)
+if(PLATFORM_MACOS AND RAYACT_DESKTOP_USE_METAL)
+    target_include_directories(raym3 BEFORE PRIVATE "${RAYLIB_BACKENDS_DIR}/backends/rlmt")
+elseif(PLATFORM_LINUX AND RAYACT_DESKTOP_USE_VULKAN)
+    target_include_directories(raym3 BEFORE PRIVATE "${RAYLIB_BACKENDS_DIR}/backends/rlvk")
 endif()
-if(NOT EXISTS "${YOGACORE_LIB}")
-    message(FATAL_ERROR "libyogacore not found at ${YOGACORE_LIB}")
-endif()
-message(STATUS "Found raym3: ${RAYM3_LIB}")
-message(STATUS "Found yogacore: ${YOGACORE_LIB}")
-
-# Rebuild raym3 before linking desktop so Renderer/input changes are picked up.
-add_custom_target(raym3_prebuild
-    COMMAND ${CMAKE_COMMAND} --build ${RAYM3_BUILD_DIR}
-    BYPRODUCTS ${RAYM3_LIB} ${YOGACORE_LIB}
-    COMMENT "Building raym3 (build-v2-yoga2)..."
-)
-
-add_library(raym3_prebuilt STATIC IMPORTED GLOBAL)
-set_target_properties(raym3_prebuilt PROPERTIES IMPORTED_LOCATION "${RAYM3_LIB}")
-add_dependencies(raym3_prebuilt raym3_prebuild)
-
-add_library(yogacore_prebuilt STATIC IMPORTED GLOBAL)
-set_target_properties(yogacore_prebuilt PROPERTIES IMPORTED_LOCATION "${YOGACORE_LIB}")
-add_dependencies(yogacore_prebuilt raym3_prebuild)
 
 # tree-sitter
 find_library(TREESITTER_LIBRARY NAMES tree-sitter
@@ -301,7 +287,7 @@ add_executable(rayact_desktop ${SOURCES})
 target_include_directories(rayact_desktop PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../core
-    ${RAYM3_BUILD_DIR}/_deps/yoga-src
+    ${YOGA_DIR}
     ${CURL_INCLUDE_DIRS}
     ${LWS_INCLUDE_DIRS}
     ${OPENSSL_INCLUDE_DIRS}
@@ -319,8 +305,7 @@ target_link_libraries(rayact_desktop
     ${QUICKJS_LIBRARY}
     raylib
     ${RAYLIB_GLFW_LIBRARY}
-    raym3_prebuilt
-    yogacore_prebuilt
+    raym3
     ${TREESITTER_LIBRARY}
     m3
     ${CURL_LIBRARIES}
@@ -328,7 +313,6 @@ target_link_libraries(rayact_desktop
     ${OPENSSL_LIBRARIES}
     ${CMAKE_DL_LIBS}
 )
-add_dependencies(rayact_desktop raym3_prebuild)
 
 # Platform-specific settings
 if(PLATFORM_LINUX)
@@ -356,8 +340,8 @@ if(PLATFORM_MACOS)
         ${COREFOUNDATION_FRAMEWORK}
         ${OPENGL_FRAMEWORK}
     )
-    # rlmt (Metal backend) needs these; harmless for the OpenGL build.
-    if(RAYACT_USE_RLMT)
+    # The raylib-backends Metal attachment needs these; harmless for OpenGL.
+    if(RAYACT_DESKTOP_USE_METAL)
         target_link_libraries(rayact_desktop
             "-framework Metal" "-framework QuartzCore" "-framework CoreVideo")
         # librlmt.a (built with transpile) references glslang + SPIRV-Cross.

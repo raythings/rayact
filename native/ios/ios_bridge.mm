@@ -81,8 +81,6 @@ std::atomic<bool> g_finishActivityRequested{false};
 std::atomic<bool> g_exitAppRequested{false};
 std::atomic<bool> g_pendingDevMenuToggle{false};
 
-int64_t g_lastRenderFrameNanos = 0;
-
 using PendingTextUpdate = IOSEngineInstance::PendingTextUpdate;
 using PendingKeyboardInsets = IOSEngineInstance::PendingKeyboardInsets;
 std::mutex g_textUpdateMutex;
@@ -328,7 +326,6 @@ void iosEngineLoadInstanceState(IOSEngineInstance* inst) {
     }
     g_pendingImeBlur.store(inst->pendingImeBlur.load());
     g_imeNodeId.store(inst->imeNodeId.load());
-    g_lastRenderFrameNanos = inst->lastRenderFrameNanos;
 }
 
 void iosEngineSaveInstanceState(IOSEngineInstance* inst) {
@@ -358,7 +355,6 @@ void iosEngineSaveInstanceState(IOSEngineInstance* inst) {
     }
     inst->pendingImeBlur.store(g_pendingImeBlur.load());
     inst->imeNodeId.store(g_imeNodeId.load());
-    inst->lastRenderFrameNanos = g_lastRenderFrameNanos;
 }
 
 extern "C" int rayactJniRequestNewSurface() { return callIntoHost_RequestNewSurface(); }
@@ -669,8 +665,8 @@ extern "C" bool RayactIOSSessionRenderFrame(RayactIOSHandle handle, int64_t fram
 
     auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
-    if (now - g_lastRenderFrameNanos < 1000000) return false;
-    g_lastRenderFrameNanos = now;
+    if (now - inst->lastRenderFrameNanos < 1000000) return false;
+    inst->lastRenderFrameNanos = now;
 
     rayact::enginePrepareJSThread();
     if (g_scriptReloadRequested && g_pendingScriptMode >= 0) executePendingScript(true);

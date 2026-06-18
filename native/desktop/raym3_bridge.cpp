@@ -307,6 +307,15 @@ static int utf8NextByteLocal(const std::string& text, int pos) {
     return std::min((int)text.size(), pos + len);
 }
 
+static int utf8PrevByteLocal(const std::string& text, int pos) {
+    if (pos <= 0) return 0;
+    pos = std::min(pos, (int)text.size());
+    do {
+        --pos;
+    } while (pos > 0 && (((unsigned char)text[(size_t)pos] & 0xC0) == 0x80));
+    return pos;
+}
+
 static uint32_t utf8CodepointAtLocal(const std::string& text, int pos) {
     if (pos < 0 || pos >= (int)text.size()) return 0;
     unsigned char c = (unsigned char)text[(size_t)pos];
@@ -2381,7 +2390,7 @@ void rayactExternalViewEmitText(int nodeId, const char* text) {
 }
 
 // Replace an external view's texture with one imported/updated by the platform
-// host (e.g. rlvk AHardwareBuffer wrap). id 0 leaves the texture untouched.
+// host (e.g. backend AHardwareBuffer wrap). id 0 leaves the texture untouched.
 void rayactSetExternalViewTextureInsets(int nodeId, float l, float t, float r, float b) {
     auto it = g_externalViews.find(nodeId);
     if (it == g_externalViews.end()) return;
@@ -4444,6 +4453,73 @@ static std::string focusedTextValue(raym3::v2::Node& node) {
     return {};
 }
 
+static void focusedTextInputMoveCursor(int delta) {
+    raym3::v2::Node* node = focusedRaym3TextInputForIme();
+    if (!node) return;
+    std::string text = focusedTextValue(*node);
+    int cursor = std::clamp(node->textEdit.cursor, 0, (int)text.size());
+    int target = delta < 0 ? utf8PrevByteLocal(text, cursor)
+                           : utf8NextByteLocal(text, cursor);
+    raym3::v2::TextInputSetSelection(*node, target, target, target);
+    raym3::v2::TextInputNotifyEditingState(*node, false);
+}
+
+static void focusedTextInputMoveBoundary(bool toEnd) {
+    raym3::v2::Node* node = focusedRaym3TextInputForIme();
+    if (!node) return;
+    std::string text = focusedTextValue(*node);
+    int target = toEnd ? (int)text.size() : 0;
+    raym3::v2::TextInputSetSelection(*node, target, target, target);
+    raym3::v2::TextInputNotifyEditingState(*node, false);
+}
+
+static bool focusedTextInputSelectionRange(raym3::v2::Node& node, int& s, int& e) {
+    s = node.textEdit.selectionStart;
+    e = node.textEdit.selectionEnd;
+    if (s < 0 || e < 0 || s == e) return false;
+    if (s > e) std::swap(s, e);
+    std::string text = focusedTextValue(node);
+    s = std::clamp(s, 0, (int)text.size());
+    e = std::clamp(e, 0, (int)text.size());
+    return s < e;
+}
+
+static void focusedTextInputDeleteBackward() {
+    raym3::v2::Node* node = focusedRaym3TextInputForIme();
+    if (!node) return;
+    std::string text = focusedTextValue(*node);
+    int cursor = std::clamp(node->textEdit.cursor, 0, (int)text.size());
+    int s = 0;
+    int e = 0;
+    if (focusedTextInputSelectionRange(*node, s, e)) {
+        raym3::v2::TextInputSetSelection(*node, s, e, s);
+        raym3::v2::TextInputReplaceSelection(*node, "");
+        return;
+    }
+    if (cursor <= 0) return;
+    int prev = utf8PrevByteLocal(text, cursor);
+    raym3::v2::TextInputSetSelection(*node, prev, cursor, prev);
+    raym3::v2::TextInputReplaceSelection(*node, "");
+}
+
+static void focusedTextInputDeleteForward() {
+    raym3::v2::Node* node = focusedRaym3TextInputForIme();
+    if (!node) return;
+    std::string text = focusedTextValue(*node);
+    int cursor = std::clamp(node->textEdit.cursor, 0, (int)text.size());
+    int s = 0;
+    int e = 0;
+    if (focusedTextInputSelectionRange(*node, s, e)) {
+        raym3::v2::TextInputSetSelection(*node, s, e, s);
+        raym3::v2::TextInputReplaceSelection(*node, "");
+        return;
+    }
+    if (cursor >= (int)text.size()) return;
+    int next = utf8NextByteLocal(text, cursor);
+    raym3::v2::TextInputSetSelection(*node, cursor, next, cursor);
+    raym3::v2::TextInputReplaceSelection(*node, "");
+}
+
 extern "C" bool rayactMacImeHasFocusedTextInput() {
     return focusedRaym3TextInputForIme() != nullptr;
 }
@@ -4457,6 +4533,64 @@ extern "C" void rayactMacImeInsertText(const char* utf8) {
                                          edit.composingEnd, edit.composingEnd);
     }
     raym3::v2::TextInputReplaceSelection(*node, utf8);
+}
+
+extern "C" void rayactMacImeMoveCursorLeft() {
+    focusedTextInputMoveCursor(-1);
+}
+
+extern "C" void rayactMacImeMoveCursorRight() {
+    focusedTextInputMoveCursor(+1);
+}
+
+extern "C" void rayactMacImeMoveCursorHome() {
+    focusedTextInputMoveBoundary(false);
+}
+
+extern "C" void rayactMacImeMoveCursorEnd() {
+    focusedTextInputMoveBoundary(true);
+}
+
+extern "C" void rayactMacImeDeleteBackward() {
+    focusedTextInputDeleteBackward();
+}
+
+extern "C" void rayactMacImeDeleteForward() {
+    focusedTextInputDeleteForward();
+}
+
+extern "C" void rayactMacImeSelectAll() {
+    raym3::v2::Node* node = focusedRaym3TextInputForIme();
+    if (!node) return;
+    std::string text = focusedTextValue(*node);
+    raym3::v2::TextInputSetSelection(*node, 0, (int)text.size(), (int)text.size());
+    raym3::v2::TextInputNotifyEditingState(*node, false);
+}
+
+extern "C" bool rayactMacImeCopySelection(char* buffer, int capacity) {
+    if (!buffer || capacity <= 0) return false;
+    buffer[0] = '\0';
+    raym3::v2::Node* node = focusedRaym3TextInputForIme();
+    if (!node) return false;
+    int s = 0;
+    int e = 0;
+    if (!focusedTextInputSelectionRange(*node, s, e)) return false;
+    std::string text = focusedTextValue(*node);
+    std::string selected = text.substr((size_t)s, (size_t)(e - s));
+    int n = std::min((int)selected.size(), capacity - 1);
+    std::memcpy(buffer, selected.data(), (size_t)n);
+    buffer[n] = '\0';
+    return n > 0;
+}
+
+extern "C" void rayactMacImeDeleteSelection() {
+    raym3::v2::Node* node = focusedRaym3TextInputForIme();
+    if (!node) return;
+    int s = 0;
+    int e = 0;
+    if (!focusedTextInputSelectionRange(*node, s, e)) return;
+    raym3::v2::TextInputSetSelection(*node, s, e, s);
+    raym3::v2::TextInputReplaceSelection(*node, "");
 }
 
 extern "C" void rayactMacImeSetMarkedText(const char* utf8, int selectedLocation,

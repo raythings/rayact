@@ -429,6 +429,20 @@ async function packageDesktopApp(
     break;
   }
 
+  // Material icon metadata: ship the generated lookup table too so the desktop
+  // host can resolve `Icon name="..."` even when launched from a packaged app.
+  const iconMapCandidates = [
+    path.join(cwd, 'packages/rayact-shared/dist/material_icons.js'),
+    path.join(cwd, 'packages/rayact-shared/dist/material_icons.jsc'),
+    path.join(binRoot, 'packages/rayact-shared/dist/material_icons.js'),
+    path.join(binRoot, 'packages/rayact-shared/dist/material_icons.jsc'),
+  ];
+  for (const src of iconMapCandidates) {
+    if (!existsSync(src)) continue;
+    await copyInto(src, path.join(outDir, 'resources/fonts', path.basename(src)));
+    break;
+  }
+
   console.log(`Desktop app packaged: ${outDir}`);
   console.log(`Run: cd ${path.relative(cwd, outDir) || '.'} && ./${binName} bundle.js`);
 }

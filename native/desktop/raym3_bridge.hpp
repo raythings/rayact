@@ -90,7 +90,7 @@ void rayactSetTextInputContent(int nodeId, const char *text, int selectionStart 
 void rayactBlurFocusedTextInput();
 
 // External (platform) views: host callbacks for layout-rect pushes and input
-// forwarding, plus texture replacement (e.g. rlvk AHardwareBuffer imports).
+// forwarding, plus texture replacement (e.g. backend AHardwareBuffer imports).
 void rayactSetExternalViewHostCallbacks(
     void (*rectCb)(int nodeId, const char* kind, float x, float y, float w, float h),
     void (*inputCb)(int nodeId, int action, float localX, float localY),

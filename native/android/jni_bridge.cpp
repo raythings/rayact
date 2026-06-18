@@ -2,7 +2,7 @@
 //
 // Connects the process-level Rayact engine (native/core/engine.hpp) to N
 // Android SurfaceViews via the raylib-backends PLATFORM_ANDROID_SURFACE backend
-// (backends/rlvk/platforms/rcore_android_surface.{c,h}). The Kotlin host owns
+// (raylib-backends Android surface platform glue). The Kotlin host owns
 // threading: each RayactSurfaceView runs a render thread, drives a
 // Choreographer frame callback, and calls nativeRenderFrame() once per vsync.
 // The engine itself is NOT tied to any Activity — it is created once per
@@ -122,8 +122,6 @@ std::atomic<bool> g_finishActivityRequested{false};
 // Set by JS calling __rayactHostExitApp. Same pattern as g_pendingBackPress.
 std::atomic<bool> g_exitAppRequested{false};
 std::atomic<bool> g_pendingDevMenuToggle{false};
-
-static int64_t g_lastRenderFrameNanos = 0;
 
 using PendingTextUpdate = AndroidEngineInstance::PendingTextUpdate;
 using PendingKeyboardInsets = AndroidEngineInstance::PendingKeyboardInsets;
@@ -398,7 +396,6 @@ void androidEngineLoadInstanceState(AndroidEngineInstance* inst) {
     // Insets are NOT swapped: they are process-global device truth and each
     // instance self-syncs from it in the publish block. Nothing to load here.
     g_imeNodeId.store(inst->imeNodeId.load());
-    g_lastRenderFrameNanos = inst->lastRenderFrameNanos;
 }
 
 void androidEngineSaveInstanceState(AndroidEngineInstance* inst) {
@@ -429,7 +426,6 @@ void androidEngineSaveInstanceState(AndroidEngineInstance* inst) {
     inst->pendingImeBlur.store(g_pendingImeBlur.load());
     // Insets are process-global device truth — not saved per instance.
     inst->imeNodeId.store(g_imeNodeId.load());
-    inst->lastRenderFrameNanos = g_lastRenderFrameNanos;
 }
 
 struct InstanceScope {
@@ -1315,8 +1311,8 @@ Java_com_rayact_engine_RayactEngineSession_nativeRenderFrame(JNIEnv*, jclass, jl
     if (!androidEngineGraphicsValid()) return JNI_FALSE;
 
     int64_t now = RcoreAndroidSurface_NowNanos();
-    if (now - g_lastRenderFrameNanos < 1000000) return JNI_FALSE;
-    g_lastRenderFrameNanos = now;
+    if (now - inst->lastRenderFrameNanos < 1000000) return JNI_FALSE;
+    inst->lastRenderFrameNanos = now;
 
     // The initial JS_Eval + React scheduling runs on the UI thread (surfaceCreated),
     // but this pump runs on the render thread. QuickJS captures the JS stack base

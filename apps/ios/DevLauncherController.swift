@@ -106,10 +106,12 @@ final class DevLauncherController: UIViewController {
         let hadProject = activePane == .project
         if hadProject {
             stopProjectDebugTools()
+            projectSession?.nativeBlurTextInput()
             unmountCurrentPane()
         }
         activePane = .launcher
         launcherBackBlockedUntil = uptimeMs() + 1200
+        if hadProject { loadLauncherJs() }
         mountPane(.launcher, host: launcherHost, session: launcherSession)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -128,6 +130,7 @@ final class DevLauncherController: UIViewController {
 
         if activePane == .project {
             stopProjectDebugTools()
+            projectSession?.nativeBlurTextInput()
             unmountCurrentPane()
             destroyProjectSession()
         }
@@ -274,6 +277,7 @@ final class DevLauncherController: UIViewController {
 
     private func unmountCurrentPane() {
         guard let host = activeHost(), let session = activeSession() else { return }
+        session.nativeBlurTextInput()
         if host.superview === rootContainer {
             host.removeFromSuperview()
         }
@@ -282,6 +286,7 @@ final class DevLauncherController: UIViewController {
 
     private func destroyProjectSession() {
         guard let session = projectSession else { return }
+        session.nativeBlurTextInput()
         if projectHost?.superview === rootContainer {
             projectHost?.removeFromSuperview()
         }

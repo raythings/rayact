@@ -32,22 +32,44 @@ if [ ! -x "$BIN" ]; then
 fi
 
 echo "[desktop-smoke] running desktop..."
-RAYACT_SHOT=1 "$BIN" "$PROJECT/dist/bundle.js" >"$OUT/stdout.log" 2>"$OUT/stderr.log" || true
-
-if [ -f "$PROJECT/shot.png" ]; then
-  mv "$PROJECT/shot.png" "$OUT/shot.png"
-  echo "PASS: screenshot captured" | tee "$OUT/status.txt"
-elif [ -f "$REPO/shot.png" ]; then
-  mv "$REPO/shot.png" "$OUT/shot.png"
-  echo "PASS: screenshot captured" | tee "$OUT/status.txt"
+"$BIN" "$PROJECT/dist/bundle.js" >"$OUT/stdout.log" 2>"$OUT/stderr.log" &
+pid=$!
+status=0
+for _ in $(seq 1 20); do
+  if grep -q "Successfully executed JavaScript file" "$OUT/stdout.log" 2>/dev/null; then
+    break
+  fi
+  if ! kill -0 "$pid" 2>/dev/null; then
+    break
+  fi
+  sleep 0.25
+done
+if kill -0 "$pid" 2>/dev/null; then
+  kill "$pid" || true
+  wait "$pid" || status=$?
 else
-  if grep -qiE "Successfully loaded|Loaded file|Engine initialized" "$OUT/stdout.log" 2>/dev/null; then
-    echo "PASS: bundle loaded" | tee "$OUT/status.txt"
-  else
-    echo "FAIL" | tee "$OUT/status.txt"
+  wait "$pid" || status=$?
+fi
+if [ "$status" -eq 143 ]; then
+  status=0
+fi
+
+if grep -qiE "Successfully loaded|Loaded file|Engine initialized" "$OUT/stdout.log" 2>/dev/null; then
+  if [ "$status" -ne 0 ]; then
+    echo "FAIL: desktop runtime exited with status $status" | tee "$OUT/status.txt"
     tail -30 "$OUT/stderr.log" || tail -30 "$OUT/stdout.log"
     exit 1
   fi
+  if grep -qiE "Segmentation fault|core dumped" "$OUT/stderr.log" 2>/dev/null; then
+    echo "FAIL: desktop runtime crashed" | tee "$OUT/status.txt"
+    tail -30 "$OUT/stderr.log" || tail -30 "$OUT/stdout.log"
+    exit 1
+  fi
+  echo "PASS: bundle loaded" | tee "$OUT/status.txt"
+else
+  echo "FAIL" | tee "$OUT/status.txt"
+  tail -30 "$OUT/stderr.log" || tail -30 "$OUT/stdout.log"
+  exit 1
 fi
 
 echo "[desktop-smoke] artifacts: $OUT"

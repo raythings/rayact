@@ -355,8 +355,16 @@ static int lwsCallback(struct lws* wsi, enum lws_callback_reasons reason,
                        void* user, void* in, size_t len)
 {
     auto* conn=static_cast<LWSConnData*>(user);
-    if (!conn||!conn->handle) return 0;
-    WSHandle* h=conn->handle;
+    if (!conn) return 0;
+
+    if (reason == LWS_CALLBACK_WSI_CREATE) {
+        conn->handle = static_cast<WSHandle*>(lws_get_opaque_user_data(wsi));
+        return 0;
+    }
+
+    WSHandle* h = conn->handle;
+    if (!h) h = static_cast<WSHandle*>(lws_get_opaque_user_data(wsi));
+    if (!h) return 0;
 
     switch (reason) {
     case LWS_CALLBACK_CLIENT_ESTABLISHED: {
@@ -453,10 +461,15 @@ static void runWSThread(std::string url, int wsId,
     }
     handle->lwsCtx=lwsCtx;
 
+    std::string hostHdr = parsed.host;
+    if (parsed.port != (parsed.useTLS ? 443 : 80))
+        hostHdr += ":" + std::to_string(parsed.port);
+
     struct lws_client_connect_info cc{};
     cc.context=lwsCtx; cc.address=parsed.host.c_str(); cc.port=parsed.port;
-    cc.path=parsed.path.c_str(); cc.host=parsed.host.c_str(); cc.origin=parsed.host.c_str();
+    cc.path=parsed.path.c_str(); cc.host=hostHdr.c_str(); cc.origin=parsed.host.c_str();
     cc.protocol=protos[0].name;
+    cc.opaque_user_data=handle;
     if (parsed.useTLS) cc.ssl_connection=LCCSCF_USE_SSL;
 
     struct lws* wsi=lws_client_connect_via_info(&cc);

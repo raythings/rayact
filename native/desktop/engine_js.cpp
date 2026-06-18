@@ -649,7 +649,22 @@ static JSValue JS_initRaylib(JSContext* ctx, JSValue this_val,
     JS_FreeCString(ctx, title);
     return JS_UNDEFINED;
 #else
-    // Initialize raylib window
+    if (IsWindowReady()) {
+        // Dev-client project loads happen inside an already initialized host
+        // window. Re-running InitWindow tears down/recreates platform graphics
+        // state under live raym3 resources and can crash during launcher->project.
+        SetWindowTitle(title);
+        if (width > 0 && height > 0 &&
+            (GetScreenWidth() != width || GetScreenHeight() != height)) {
+            SetWindowSize(width, height);
+        }
+        SetTargetFPS(g_targetFPS);
+        raym3::Theme::Initialize();
+        printf("Reused raylib window: %dx%d \"%s\"\n", width, height, title);
+        JS_FreeCString(ctx, title);
+        return JS_UNDEFINED;
+    }
+
     SetConfigFlags(g_configFlags);
     InitWindow(width, height, title);
     SetTargetFPS(g_targetFPS);
@@ -887,37 +902,30 @@ static void injectMaterialIcons(JSContext* ctx) {
         if (tryEvalSource(path)) return;
     }
 
-    const char* jscCandidates[] = {
-        "./rayact/packages/rayact-shared/dist/material_icons.jsc",
-        "rayact/packages/rayact-shared/dist/material_icons.jsc",
-        "./packages/rayact-shared/dist/material_icons.jsc",
-        "packages/rayact-shared/dist/material_icons.jsc",
-        "./rayact/resources/fonts/material_icons.jsc",
-        "rayact/resources/fonts/material_icons.jsc",
-        "./resources/fonts/material_icons.jsc",
-        "resources/fonts/material_icons.jsc",
-        nullptr
+    auto tryParentSearch = [&](const std::filesystem::path& start) -> bool {
+        if (start.empty()) return false;
+        std::filesystem::path dir = start;
+        for (int depth = 0; depth < 6; ++depth) {
+            const std::filesystem::path shared = dir / "packages/rayact-shared/dist/material_icons.js";
+            if (tryEvalSource(shared.c_str())) return true;
+            const std::filesystem::path sharedJsc = dir / "packages/rayact-shared/dist/material_icons.jsc";
+            if (tryEvalBytecode(sharedJsc.c_str())) return true;
+            const std::filesystem::path nodeModules = dir / "node_modules/@rayact/shared/dist/material_icons.js";
+            if (tryEvalSource(nodeModules.c_str())) return true;
+            const std::filesystem::path fontsJs = dir / "resources/fonts/material_icons.js";
+            if (tryEvalSource(fontsJs.c_str())) return true;
+            const std::filesystem::path fontsJsc = dir / "resources/fonts/material_icons.jsc";
+            if (tryEvalBytecode(fontsJsc.c_str())) return true;
+            if (!dir.has_parent_path()) break;
+            const auto parent = dir.parent_path();
+            if (parent == dir) break;
+            dir = parent;
+        }
+        return false;
     };
-    for (int i = 0; jscCandidates[i]; i++) {
-        if (tryEvalBytecode(jscCandidates[i])) return;
-    }
 
-    const char* candidates[] = {
-        "./rayact/packages/rayact-shared/src/material_icons.js",
-        "rayact/packages/rayact-shared/src/material_icons.js",
-        "./rayact/packages/rayact-shared/dist/material_icons.js",
-        "rayact/packages/rayact-shared/dist/material_icons.js",
-        "./packages/rayact-shared/src/material_icons.js",
-        "packages/rayact-shared/src/material_icons.js",
-        "./packages/rayact-shared/dist/material_icons.js",
-        "packages/rayact-shared/dist/material_icons.js",
-        "./node_modules/@rayact/shared/dist/material_icons.js",
-        "node_modules/@rayact/shared/dist/material_icons.js",
-        nullptr
-    };
-    for (int i = 0; candidates[i]; i++) {
-        if (tryEvalSource(candidates[i])) return;
-    }
+    if (tryParentSearch(std::filesystem::current_path())) return;
+    if (!g_releaseAssetBaseDir.empty() && tryParentSearch(g_releaseAssetBaseDir)) return;
     printf("material_icons.js not found — icon names won't resolve\n");
 }
 
@@ -1373,8 +1381,6 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
     g_devServerUrl = devServer;
     g_devModuleHmr = parseJsonStringField(manifest, "hmrMode") == "module";
 
-    ensureDevWindow();
-
     std::string bootstrapPath = "/rayact/bootstrap.js";
     std::string bootstrapUrl = parseJsonStringField(manifest, "bootstrapUrl");
     if (!bootstrapUrl.empty()) {
@@ -1489,6 +1495,9 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
     if (!loaded) {
         showDevErrorOverlay(ctx, "Failed to load dev bundle bytecode");
         return false;
+    }
+    if (!g_devModuleHmr && !IsWindowReady()) {
+        ensureDevWindow();
     }
 
     return true;

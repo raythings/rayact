@@ -133,10 +133,12 @@ class DevLauncherActivity : AppCompatActivity() {
         val hadProject = activePane == ActivePane.PROJECT
         if (hadProject) {
             stopProjectDebugTools()
+            projectSession?.nativeBlurTextInput()
             unmountCurrentPane()
         }
         activePane = ActivePane.LAUNCHER
         launcherBackBlockedUntilMs = SystemClock.uptimeMillis() + 1200L
+        if (hadProject) loadLauncherJs()
         mountPane(ActivePane.LAUNCHER, launcherHost, launcherSession)
         launcherHost.post {
             launcherHost.syncSurfacesToCurrentLayout()
@@ -155,6 +157,7 @@ class DevLauncherActivity : AppCompatActivity() {
 
         if (activePane == ActivePane.PROJECT) {
             stopProjectDebugTools()
+            projectSession?.nativeBlurTextInput()
             unmountCurrentPane()
             destroyProjectSession()
         }
@@ -293,6 +296,7 @@ class DevLauncherActivity : AppCompatActivity() {
     private fun unmountCurrentPane() {
         val host = activeHost() ?: return
         val session = activeSession() ?: return
+        session.nativeBlurTextInput()
         if (host.parent === root) {
             root.removeView(host)
         }
@@ -301,6 +305,7 @@ class DevLauncherActivity : AppCompatActivity() {
 
     private fun destroyProjectSession() {
         val session = projectSession ?: return
+        session.nativeBlurTextInput()
         if (projectHost?.parent === root) {
             root.removeView(projectHost)
         }
