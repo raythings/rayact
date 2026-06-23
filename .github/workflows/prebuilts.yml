@@ -1,0 +1,148 @@
+name: Rayact Prebuilts
+
+# Manual-only until the native deps (quickjs/raylib/raym3/fovea/cssparser/wasm3)
+# are vendored as submodules — a fresh CI clone can't build the engine without
+# them. Re-enable the tag trigger once they're in the repo.
+on:
+  workflow_dispatch:
+
+jobs:
+  prebuilts-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Resolve RAYACT_ROOT
+        run: |
+          if [ -d rayact ]; then echo "RAYACT_ROOT=${{ github.workspace }}/rayact" >> "$GITHUB_ENV"
+          else echo "RAYACT_ROOT=${{ github.workspace }}" >> "$GITHUB_ENV"; fi
+
+      - name: Build Android + Linux prebuilts (Docker)
+        working-directory: ${{ env.RAYACT_ROOT }}
+        run: node scripts/build-prebuilts.mjs --target android --target linux
+
+      - name: Upload linux/android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuilts-linux-android
+          path: |
+            ${{ env.RAYACT_ROOT }}/packages/prebuilt-android-arm64/**
+            ${{ env.RAYACT_ROOT }}/packages/prebuilt-linux-x64/**
+            ${{ env.RAYACT_ROOT }}/packages/rayact-mmkv/android/**
+            ${{ env.RAYACT_ROOT }}/packages/rayact-secure-store/android/**
+
+  prebuilts-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Resolve RAYACT_ROOT
+        run: |
+          if [ -d rayact ]; then echo "RAYACT_ROOT=${{ github.workspace }}/rayact" >> "$GITHUB_ENV"
+          else echo "RAYACT_ROOT=${{ github.workspace }}" >> "$GITHUB_ENV"; fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Build CLI packages
+        run: |
+          cd "$RAYACT_ROOT/packages/rayact-prebuild" && npm install --ignore-scripts && npm run build
+          cd "$RAYACT_ROOT/packages/rayact-dev-server" && npm install --ignore-scripts && npm run build
+          cd "$RAYACT_ROOT/packages/rayact-cli" && npm install --ignore-scripts && npm run build
+        env:
+          RAYACT_ROOT: ${{ env.RAYACT_ROOT }}
+
+      - name: Build macOS prebuilts + dev-app iOS
+        working-directory: ${{ env.RAYACT_ROOT }}
+        run: node scripts/build-prebuilts.mjs --target darwin --target ios --target dev-app
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuilts-macos
+          path: |
+            ${{ env.RAYACT_ROOT }}/packages/prebuilt-darwin-*/**
+            ${{ env.RAYACT_ROOT }}/packages/prebuilt-ios-arm64/**
+            ${{ env.RAYACT_ROOT }}/packages/rayact-mmkv/darwin-arm64/**
+            ${{ env.RAYACT_ROOT }}/packages/rayact-secure-store/darwin-arm64/**
+            ${{ env.RAYACT_ROOT }}/apps/dev-app/dist/**
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [prebuilts-linux, prebuilts-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve RAYACT_ROOT
+        run: |
+          if [ -d rayact ]; then echo "RAYACT_ROOT=${{ github.workspace }}/rayact" >> "$GITHUB_ENV"
+          else echo "RAYACT_ROOT=${{ github.workspace }}" >> "$GITHUB_ENV"; fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: prebuilts-*
+          merge-multiple: true
+          path: merged
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Merge artifacts into packages tree
+        run: rsync -av merged/ "$RAYACT_ROOT/"
+        env:
+          RAYACT_ROOT: ${{ env.RAYACT_ROOT }}
+
+      - name: Verify prebuilts
+        working-directory: ${{ env.RAYACT_ROOT }}
+        run: |
+          chmod +x scripts/verify-prebuilts.sh
+          ./scripts/verify-prebuilts.sh
+
+      - name: Build publishable JS packages
+        working-directory: ${{ env.RAYACT_ROOT }}
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+          npm run build:cli
+          npm run build:prebuild
+          npm run build:create-app
+
+      - name: Verify package whitelists
+        working-directory: ${{ env.RAYACT_ROOT }}
+        run: node scripts/verify-packages.mjs
+
+      - name: npm pack every publishable package
+        working-directory: ${{ env.RAYACT_ROOT }}
+        run: |
+          mkdir -p release-tarballs
+          for dir in packages/*/; do
+            name=$(node -e "const p=require('./$dir/package.json');process.stdout.write(p.private?'':p.name||'')")
+            [ -z "$name" ] && continue
+            (cd "$dir" && npm pack --ignore-scripts && mv *.tgz "$OLDPWD/release-tarballs/")
+          done
+
+      - name: Create SHA256SUMS
+        working-directory: ${{ env.RAYACT_ROOT }}
+        run: shasum -a 256 release-tarballs/*.tgz apps/dev-app/dist/rayact-dev-app* > SHA256SUMS || true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.RAYACT_ROOT }}/release-tarballs/*.tgz
+            ${{ env.RAYACT_ROOT }}/apps/dev-app/dist/rayact-dev-app.apk
+            ${{ env.RAYACT_ROOT }}/apps/dev-app/dist/rayact-dev-app-device-unsigned.ipa
+            ${{ env.RAYACT_ROOT }}/apps/dev-app/dist/rayact-dev-app-simulator.zip
+            ${{ env.RAYACT_ROOT }}/SHA256SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
