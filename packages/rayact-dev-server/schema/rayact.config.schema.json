@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://rayact.dev/rayact.config.schema.json",
+  "title": "Rayact project configuration",
+  "description": "Schema for rayact.config.json. Fields omitted fall back to built-in defaults; only set a field to override a default.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "rayactAppKey": {
+      "type": "string",
+      "description": "Stable app identifier. Also seeds the container-pack obfuscation key."
+    },
+    "entry": {
+      "type": "string",
+      "description": "Entry source file (e.g. src/App.tsx), relative to the project root."
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["desktop", "android", "ios", "web"],
+      "description": "Default build/run target."
+    },
+    "devServer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": { "type": "string" },
+        "port": { "type": "integer" },
+        "cdpPort": { "type": "integer" }
+      }
+    },
+    "android": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "package": { "type": "string" },
+        "projectDir": { "type": "string", "description": "Gradle project dir (contains gradlew), relative to project root." },
+        "activity": { "type": "string" },
+        "appName": { "type": "string" },
+        "packageName": { "type": "string" },
+        "icon": { "type": "string" }
+      }
+    },
+    "ios": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectDir": { "type": "string" },
+        "bundleId": { "type": "string" }
+      }
+    },
+    "nativeModules": {
+      "type": "array",
+      "description": "Native plugin modules the host bundles / the project requires.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "description": "Bus module id JS reaches via the native invoke bridge." },
+          "lib": { "type": "string", "description": "dlopen library base name (librayact_<lib>.{so,dylib}); empty for built-ins." },
+          "jsPackage": { "type": "string", "description": "npm wrapper exposing the typed API." }
+        }
+      }
+    },
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per-build-mode transforms. Defaults: dev=false, debug=false, release=true.",
+      "properties": {
+        "minify": { "$ref": "#/$defs/modeFlags" },
+        "bytecode": { "$ref": "#/$defs/modeFlags" }
+      }
+    },
+    "pack": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Container (.rayactpack) packaging options for release/platform builds.",
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Extra (non-standard) file globs to opt into the pack, relative to the project root."
+        },
+        "obfuscate": {
+          "type": "boolean",
+          "description": "XOR-obfuscate pack entries with a key derived from rayactAppKey. Default false."
+        },
+        "maxChunkSize": {
+          "type": "integer",
+          "description": "Max bytes per pack chunk before splitting. Default 104857600 (100 MB)."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "modeFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dev": { "type": "boolean" },
+        "debug": { "type": "boolean" },
+        "release": { "type": "boolean" }
+      }
+    }
+  }
+}

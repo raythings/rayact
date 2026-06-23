@@ -1,0 +1,793 @@
+# Rayact — full documentation
+
+> Rayact is a cross-platform React renderer with a native raylib + QuickJS backend. You write React (with react-navigation, CSS, Material components) and it renders natively on desktop, Android, iOS, and the web — no DOM, no platform WebView.
+
+
+---
+# Source: guide/getting-started.md
+
+# Getting started
+
+Scaffold a new app, run it in development, then build a release.
+
+## Create an app
+
+```sh
+npx create-rayact-app my-app
+cd my-app
+npm install
+```
+
+The generated project has a `rayact.config.json` (see the [config reference](/reference/config)), a `src/App.tsx` entry, and the `@rayact/*` dependencies for your chosen template.
+
+## Develop
+
+```sh
+npm run dev
+```
+
+`rayact dev` starts the Vite-powered dev server and a terminal UI. The desktop host hot-reloads as you edit; a device running the dev app connects over the same dev server (scan the QR code).
+
+## Run
+
+```sh
+rayact run --desktop          # build + launch on desktop
+rayact run --desktop --dev     # launch against the running dev server
+rayact run --android           # build + install + launch on a device
+```
+
+`rayact run` replaces the old `run.sh` / `run-android.sh` shell scripts — there are no user-facing shell scripts.
+
+## Build a release
+
+```sh
+rayact build --release             # desktop release (bytecode + .rayactpack)
+rayact build --release --android   # release APK
+rayact build --release --ios       # release iOS app
+```
+
+Release builds compile the JS bundle to QuickJS bytecode and emit a single [`.rayactpack`](/reference/rayactpack) container. The native host needed to compile bytecode is fetched automatically — see [Installation](/guide/install).
+
+
+---
+# Source: guide/install.md
+
+# Installation
+
+Rayact splits into small `@rayact/*` JavaScript packages plus per-platform
+**prebuilt native hosts**. App builds never compile C++ — the right prebuilt is
+resolved or downloaded for you.
+
+## Prebuilt resolution
+
+The CLI resolves the desktop host (`rayact_desktop`) in this order:
+
+1. an explicit `--desktop-bin` / `RAYACT_DESKTOP_BIN`,
+2. a source-tree `build/bin/rayact_desktop` (maintainers),
+3. an installed `@rayact/prebuilt-<platform>-<arch>` package in `node_modules`,
+4. the per-user cache `~/.rayact/prebuilts/<version>/<platform>-<arch>/`.
+
+If none are present, `rayact prebuild` downloads the matching prebuilt from the
+GitHub release for your engine version and verifies it against `SHA256SUMS`.
+
+```sh
+rayact prebuild   # ensure the host binary is available (resolve or download)
+```
+
+The desktop prebuilts are wired as `optionalDependencies` of `@rayact/cli` with
+`os`/`cpu` fields, so a package manager installs only the one matching your
+machine. Android and iOS engine libraries are pulled per-project when you target
+those platforms (kept off desktop installs — the Android engine alone is ~80 MB).
+
+## Git now, npm later
+
+Until the packages are on the npm registry, install the framework packages from
+git and let the prebuilt resolver fetch native hosts from GitHub releases. The
+release also attaches an `npm pack` tarball for every publishable package, so
+`create-rayact-app` can reference those tarball URLs in the interim.
+
+Override the download source with environment variables when needed:
+
+| Variable | Purpose |
+| --- | --- |
+| `RAYACT_DESKTOP_BIN` | Use a specific host binary |
+| `RAYACT_CACHE_DIR` | Where downloaded prebuilts are cached |
+| `RAYACT_PREBUILT_BASE_URL` | Alternate release/CDN base URL |
+| `RAYACT_PREBUILT_TAG` | Release tag to download from |
+
+
+---
+# Source: index.md
+
+# Rayact
+
+Rayact is a cross-platform React renderer with a native raylib + QuickJS backend. You write React (with `react-navigation`, CSS, Material components) and it renders natively on desktop, Android, iOS, and the web — no DOM, no platform WebView.
+
+## Highlights
+
+- **Real React 19** via a custom `react-reconciler` host config.
+- **Native rendering** through raylib / raym3 (Flexbox via Yoga, Material 3, CSS).
+- **QuickJS** engine with ahead-of-time **bytecode** (`.qjsbc`) for instant release boot.
+- **One container** — release apps ship a single [`.rayactpack`](/reference/rayactpack) carrying bytecode + CSS + icons + images.
+- **Prebuilt native hosts** delivered per platform, so app builds need no C++ toolchain.
+
+## Quick start
+
+```sh
+npx create-rayact-app my-app
+cd my-app && npm install
+npm run dev            # dev server + TUI
+```
+
+Then build and run:
+
+```sh
+rayact run --desktop   # build + launch on desktop
+rayact run --android   # build + install + launch on a device
+rayact build --release # release bundle (bytecode + container)
+```
+
+See [Getting started](/guide/getting-started), [Installation](/guide/install), and the [CLI reference](/reference/cli).
+
+
+---
+# Source: multi-window-system.md
+
+# Multi-Window System Documentation
+
+## Overview
+
+The Rayact multi-window system allows a single QuickJS runtime instance to manage multiple windows/activities/viewcontrollers, enabling native navigation stacks and complex multi-window applications.
+
+## Architecture
+
+### Single Runtime, Multiple Contexts
+
+```
+QuickJS Runtime (1 instance)
+├── Context 1 (Window 1)
+├── Context 2 (Window 2)
+├── Context 3 (Window 3)
+└── ...
+```
+
+Each window gets its own JavaScript context while sharing the same QuickJS runtime, enabling efficient memory management and shared JavaScript state.
+
+### Window Management
+
+```cpp
+// Global window management
+extern RayactWindow** g_windows;
+extern int g_windowCount;
+extern RayactWindow* g_currentWindow;
+```
+
+## API Reference
+
+### Window Creation
+
+#### `createWindow(width, height, title)`
+Create a new window managed by the QuickJS runtime.
+
+```javascript
+const windowId = createWindow(800, 600, "My Window");
+
+// Parameters:
+// - width: Window width (integer)
+// - height: Window height (integer)
+// - title: Window title (string)
+
+// Returns:
+// - windowId: The unique identifier for the new window
+```
+
+**Example:**
+```javascript
+const win1 = createWindow(800, 600, "Window 1");
+const win2 = createWindow(600, 400, "Window 2");
+console.log("Window count:", getWindowCount());
+```
+
+### Window Management
+
+#### `getCurrentWindow()`
+Get the currently active window.
+
+```javascript
+const window = getCurrentWindow();
+if (window !== null) {
+    console.log("Current window:", window);
+}
+```
+
+**Returns:** Window ID or null if no window is active
+
+#### `setCurrentWindow(windowId)`
+Switch the current window context.
+
+```javascript
+setCurrentWindow(1); // Switch to window 1
+console.log("Current window:", getCurrentWindow());
+```
+
+#### `closeWindow(windowId)`
+Close a specific window.
+
+```javascript
+closeWindow(1); // Close window 1
+console.log("Window count:", getWindowCount());
+```
+
+#### `getWindowCount()`
+Get the total number of windows.
+
+```javascript
+const count = getWindowCount();
+console.log("There are " + count + " windows open");
+```
+
+**Returns:** Integer count of active windows
+
+### Navigation System
+
+The navigation system maintains a stack of screens that can be navigated between, similar to iOS navigation controllers or browser history.
+
+#### `registerScreen(name, script)`
+Register a screen with navigation capabilities.
+
+```javascript
+registerScreen("home", `
+    initRaylib(800, 600, "Home Screen");
+    renderRect(100, 100, 200, 150, 0xFF0000FF);
+    updateFrame();
+`);
+
+// Parameters:
+// - name: Unique screen name
+// - script: JavaScript code to execute when screen is shown
+```
+
+#### `navigateToScreen(name)`
+Navigate to a specific screen.
+
+```javascript
+navigateToScreen("home");
+navigateToScreen("profile");
+```
+
+#### `navigateBack()`
+Navigate to the previous screen in the stack.
+
+```javascript
+navigateToScreen("screen1");
+navigateToScreen("screen2");
+navigateToScreen("screen3");
+
+// To go back:
+navigateBack(); // Goes to screen 2
+```
+
+#### `navigateForward()`
+Navigate to the next screen in the stack.
+
+```javascript
+// After going back:
+navigateBack(); // Now on screen 2
+navigateForward(); // Goes back to screen 3
+```
+
+#### `clearNavigationStack()`
+Clear all navigation history and go to the beginning.
+
+```javascript
+clearNavigationStack();
+// Navigation stack is now empty
+```
+
+#### `getCurrentScreen()`
+Get the currently active screen.
+
+```javascript
+const screen = getCurrentScreen();
+if (screen) {
+    console.log("Current screen:", screen.name);
+}
+```
+
+**Returns:** Screen object with name property, or null
+
+#### `printNavigationStatus()`
+Print the current navigation stack status to console.
+
+```javascript
+printNavigationStatus();
+// Output:
+// === Navigation Status ===
+// Current Screen: screen1
+// Navigation Stack:
+//   [0] screen1 <- Current
+//   [1] screen2
+//   [2] screen3
+// ==========================
+```
+
+### Utilities
+
+#### `getCurrentContext()`
+Get the current window's JavaScript context (internal function).
+
+```javascript
+// This function is for internal use only
+const ctx = getCurrentContext();
+```
+
+## Usage Patterns
+
+### Pattern 1: Simple Navigation
+
+```javascript
+// Register screens
+registerScreen("login", "initRaylib(800, 600, 'Login'); updateFrame();");
+registerScreen("dashboard", "initRaylib(800, 600, 'Dashboard'); updateFrame();");
+
+// Navigate between screens
+navigateToScreen("login");
+navigateToScreen("dashboard");
+```
+
+### Pattern 2: Multiple Windows
+
+```javascript
+// Create multiple windows
+const win1 = createWindow(800, 600, "Main App");
+const win2 = createWindow(600, 400, "Settings");
+
+// Manage windows
+setCurrentWindow(win1);
+navigateToScreen("home");
+
+setCurrentWindow(win2);
+navigateToScreen("settings");
+```
+
+### Pattern 3: Window-Specific Screens
+
+```javascript
+// Register windows first
+const mainWindow = createWindow(800, 600, "Main");
+const settingsWindow = createWindow(600, 400, "Settings");
+
+// Add navigation for main window
+registerScreen("main-home", "initRaylib(800, 600, 'Home'); ...");
+registerScreen("main-about", "initRaylib(800, 600, 'About'); ...");
+
+// Add navigation for settings window
+registerScreen("settings-general", "initRaylib(600, 400, 'General'); ...");
+registerScreen("settings-appearance", "initRaylib(600, 400, 'Appearance'); ...");
+
+// Navigate based on current window
+const currentWindow = getCurrentWindow();
+if (currentWindow === mainWindow) {
+    navigateToScreen("main-home");
+} else if (currentWindow === settingsWindow) {
+    navigateToScreen("settings-general");
+}
+```
+
+### Pattern 4: Complex Multi-Window App
+
+```javascript
+// Create main application window
+const appWindow = createWindow(1024, 768, "My Application");
+
+// Create panel windows
+const sidebarWindow = createWindow(300, 768, "Sidebar");
+const propertiesWindow = createWindow(400, 768, "Properties");
+
+// Register screens for main window
+registerScreen("app-dashboard", "initRaylib(1024, 768, 'Dashboard'); ...");
+registerScreen("app-editor", "initRaylib(1024, 768, 'Editor'); ...");
+registerScreen("app-settings", "initRaylib(1024, 768, 'Settings'); ...");
+
+// Register screens for sidebar
+registerScreen("sidebar-files", "initRaylib(300, 768, 'Files'); ...");
+registerScreen("sidebar-examples", "initRaylib(300, 768, 'Examples'); ...");
+
+// Manage complex navigation
+function switchToWindow(windowId) {
+    setCurrentWindow(windowId);
+}
+
+function navigateHome() {
+    navigateToScreen("app-dashboard");
+}
+
+function navigateFiles() {
+    setCurrentWindow(sidebarWindow);
+    navigateToScreen("sidebar-files");
+}
+
+function navigateEditor() {
+    switchToWindow(appWindow);
+    navigateToScreen("app-editor");
+}
+
+// Initialize app
+setCurrentWindow(appWindow);
+navigateToScreen("app-dashboard");
+```
+
+## Window Lifecycle
+
+### Creation Flow
+1. Call `createWindow()` - Creates context and initializes window
+2. `initRaylib()` called automatically for new window
+3. Register screen scripts
+4. Navigate to initial screen
+
+### Cleanup Flow
+1. Call `closeWindow()` - Removes context and frees memory
+2. Handles focus management
+3. Updates current window pointer
+
+## Memory Management
+
+### Automatic Cleanup
+- Contexts are automatically cleaned up when windows are closed
+- JavaScript memory is freed when contexts are destroyed
+- Shapes and resources are cleaned up automatically
+
+### Window Limits
+- Maximum windows: 16 (configurable in main.cpp)
+- Each window gets 32MB QuickJS heap (configurable)
+
+## Advanced Features
+
+### Shared State
+Multiple windows can share global state through the QuickJS runtime:
+
+```javascript
+// Create shared state
+window.__global = {
+    user: { name: "John", loggedIn: true },
+    settings: { theme: "dark" }
+};
+
+// Can access from any window
+console.log("Current user:", window.__global.user.name);
+```
+
+### Window-Specific State
+Each window maintains its own context and state:
+
+```javascript
+// Create unique state for each window
+setCurrentWindow(window1);
+window1.__local = { count: 0 };
+
+setCurrentWindow(window2);
+window2.__local = { count: 0 };
+```
+
+### Event Handling
+Each window can have its own event handlers:
+
+```javascript
+// Register handlers per window
+setCurrentWindow(mainWindow);
+window.addEventListener('resize', handleResize);
+
+setCurrentWindow(settingsWindow);
+window.addEventListener('close', handleWindowClose);
+```
+
+## Platform Integration
+
+### Desktop (Windows/Linux/macOS)
+- Native window management via raylib
+- Multiple window support
+- Focus/blur events
+- Window positioning
+
+### Android (Future)
+- Activity management
+- View controller stack
+- Back navigation support
+- Activity lifecycle events
+
+### Web (Future)
+- Browser tabs/windows
+- Canvas elements
+- DOM window management
+- Visibility API
+
+## Best Practices
+
+1. **Initialize Windows Early**: Create all windows before complex navigation
+2. **Clean Up Properly**: Always close unused windows to free memory
+3. **Manage Navigation Carefully**: Don't create circular navigation
+4. **Use Screen Names Wisely**: Choose unique, descriptive screen names
+5. **Handle Focus Changes**: Update UI when switching windows
+6. **Maintain Window Context**: Always call `setCurrentWindow()` before navigation
+
+## Common Patterns
+
+### Main Menu Pattern
+```javascript
+registerScreen("menu", "initRaylib(800, 600, 'Main Menu'); ...");
+registerScreen("game", "initRaylib(800, 600, 'Game'); ...");
+registerScreen("settings", "initRaylib(800, 600, 'Settings'); ...");
+
+function showMenu() {
+    navigateToScreen("menu");
+}
+```
+
+### Tabbed Interface Pattern
+```javascript
+const window1 = createWindow(800, 600, "Tab 1");
+const window2 = createWindow(800, 600, "Tab 2");
+
+registerScreen("tab1-content", "initRaylib(800, 600, 'Content 1'); ...");
+registerScreen("tab2-content", "initRaylib(800, 600, 'Content 2'); ...");
+
+function switchTab(tabId) {
+    setCurrentWindow(tabId);
+    navigateToScreen(tabId + "-content");
+}
+```
+
+### Modal Pattern
+```javascript
+const mainWindow = createWindow(800, 600, "Main");
+const modalWindow = createWindow(500, 300, "Modal");
+
+registerScreen("main-content", "initRaylib(800, 600, 'Main Content'); ...");
+registerScreen("modal-content", "initRaylib(500, 300, 'Modal Content'); ...");
+
+function showModal() {
+    setCurrentWindow(modalWindow);
+    navigateToScreen("modal-content");
+}
+
+function showModalAndKeepMain() {
+    // Keep main window open
+    navigateToScreen("modal-content");
+}
+```
+
+## Troubleshooting
+
+### Issue: "No current window"
+**Solution**: Ensure you've created a window before navigation
+```javascript
+const win = createWindow(800, 600, "Test");
+setCurrentWindow(win);
+```
+
+### Issue: "Window not found"
+**Solution**: Verify the window ID exists
+```javascript
+const winId = 1;
+const win = getWindowById(winId);
+if (!win) {
+    console.error("Window", winId, "not found");
+}
+```
+
+### Issue: "Screen not found"
+**Solution**: Register screen before navigation
+```javascript
+registerScreen("my-screen", "initRaylib(800, 600, 'Test'); ...");
+navigateToScreen("my-screen");
+```
+
+---
+
+**Version**: 0.1.0
+**Status**: Desktop Only - Android/Web Coming
+**Next Features**: View transitions, multi-window optimization
+
+
+---
+# Source: reference/cli.md
+
+# CLI reference
+
+The `rayact` command (from `@rayact/cli`) drives development, building, and running.
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `rayact dev` | Start the dev server + bundler + terminal UI |
+| `rayact run --desktop` | Build and launch on desktop (`--dev` to attach to the dev server) |
+| `rayact run --android` | Build, install, and launch on a device (`--dev` wires `adb reverse`) |
+| `rayact run --ios` | Build, install, and launch on the iOS simulator |
+| `rayact build` | Build a bundle (add `--android` / `--ios` / `--desktop`) |
+| `rayact build --release` | Release build: minify + bytecode + `.rayactpack` |
+| `rayact export` | Alias for `rayact build --release` |
+| `rayact compile <in> <out>` | Compile a JS bundle to QuickJS bytecode |
+| `rayact prebuild` | Ensure the native host + plugin shells are present |
+| `rayact init [name]` | Scaffold a new app (alias for `create-rayact-app`) |
+
+## Common options
+
+| Flag | Effect |
+| --- | --- |
+| `--android` / `--ios` / `--desktop` | Target platform |
+| `--install` | Install + launch on device after an Android/iOS build |
+| `--release` / `--debug` | Build mode |
+| `--minify` / `--no-minify` | Override the config's minify setting |
+| `--bytecode` / `--no-bytecode` | Override bytecode emission |
+| `--entry <path>` | App entry file |
+| `--out <dir>` | Output directory |
+| `--desktop-bin <path>` | Use a specific `rayact_desktop` host |
+
+## No shell scripts
+
+Everything end users need is a `rayact` subcommand — there are no `.sh` / `.bat`
+/ `.ps1` scripts in the user-facing flow. The maintainer-only native build
+scripts live under `tools/dev/`.
+
+
+---
+# Source: reference/config.md
+
+# Configuration: `rayact.config.json`
+
+<!-- GENERATED by docs/scripts/gen-config-reference.mjs from rayact.config.schema.json. Do not edit. -->
+
+Schema for rayact.config.json. Fields omitted fall back to built-in defaults; only set a field to override a default.
+
+Add the `$schema` key for editor autocomplete:
+
+```json
+{
+  "$schema": "./node_modules/@rayact/dev-server/schema/rayact.config.schema.json",
+  "rayactAppKey": "my-app",
+  "entry": "src/App.tsx",
+  "platform": "desktop"
+}
+```
+
+## Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `rayactAppKey` | string | Stable app identifier. Also seeds the container-pack obfuscation key. |
+| `entry` | string | Entry source file (e.g. src/App.tsx), relative to the project root. |
+| `platform` | `desktop` \| `android` \| `ios` \| `web` | Default build/run target. |
+| `devServer` | object |  |
+| `devServer.host` | string |  |
+| `devServer.port` | integer |  |
+| `devServer.cdpPort` | integer |  |
+| `android` | object |  |
+| `android.package` | string |  |
+| `android.projectDir` | string | Gradle project dir (contains gradlew), relative to project root. |
+| `android.activity` | string |  |
+| `android.appName` | string |  |
+| `android.packageName` | string |  |
+| `android.icon` | string |  |
+| `ios` | object |  |
+| `ios.projectDir` | string |  |
+| `ios.bundleId` | string |  |
+| `nativeModules` | object[] | Native plugin modules the host bundles / the project requires. |
+| `transform` | object | Per-build-mode transforms. Defaults: dev=false, debug=false, release=true. |
+| `transform.minify` | object |  |
+| `transform.minify.dev` | boolean |  |
+| `transform.minify.debug` | boolean |  |
+| `transform.minify.release` | boolean |  |
+| `transform.bytecode` | object |  |
+| `transform.bytecode.dev` | boolean |  |
+| `transform.bytecode.debug` | boolean |  |
+| `transform.bytecode.release` | boolean |  |
+| `pack` | object | Container (.rayactpack) packaging options for release/platform builds. |
+| `pack.include` | string[] | Extra (non-standard) file globs to opt into the pack, relative to the project root. |
+| `pack.obfuscate` | boolean | XOR-obfuscate pack entries with a key derived from rayactAppKey. Default false. |
+| `pack.maxChunkSize` | integer | Max bytes per pack chunk before splitting. Default 104857600 (100 MB). |
+
+> Transforms default to `dev=false, debug=false, release=true`. Only record an
+> override — e.g. `"transform": { "bytecode": { "release": false } }`.
+
+
+---
+# Source: reference/packages.md
+
+# Packages & platforms
+
+Rayact is a monorepo of small `@rayact/*` packages plus per-platform prebuilts.
+
+## JavaScript packages
+
+| Package | Role |
+| --- | --- |
+| `@rayact/cli` | `rayact` command — dev, build, run, prebuild |
+| `@rayact/dev-server` | Vite bundler, dev server, config loader + schema |
+| `@rayact/prebuild` | Prebuilt resolution, downloader, plugin autolinking |
+| `@rayact/react` | React adapter for the host runtime |
+| `@rayact/runtime` | Renderer-agnostic host runtime |
+| `@rayact/core` | React reconciler host config |
+| `@rayact/renderer` | raylib graphics backend bindings |
+| `@rayact/quickjs` | QuickJS engine integration |
+| `@rayact/navigation` | `react-navigation` bindings |
+| `@rayact/shared` / `@rayact/types` | Shared utilities + ambient types |
+| `@rayact/mmkv` / `@rayact/secure-store` | Native storage plugins |
+| `create-rayact-app` | Project scaffolder |
+
+## Prebuilt native hosts
+
+| Package | Platform | Ships |
+| --- | --- | --- |
+| `@rayact/prebuilt-darwin-arm64` | macOS arm64 | `rayact_desktop` + plugin dylibs |
+| `@rayact/prebuilt-darwin-x64` | macOS x64 | `rayact_desktop` + plugin dylibs |
+| `@rayact/prebuilt-linux-x64` | Linux x64 | `rayact_desktop` + plugin `.so` |
+| `@rayact/prebuilt-android-arm64` | Android arm64 | engine + plugin `.so` (JNI) |
+| `@rayact/prebuilt-ios-arm64` | iOS arm64 | `RayactEngine.xcframework` |
+
+Each prebuilt carries a `manifest.json` (`engineVersion`, `moduleAbiVersion`,
+platform, arch). The CLI gates on `moduleAbiVersion` before using a prebuilt.
+
+## Platform support
+
+| Target | Status |
+| --- | --- |
+| Desktop (macOS / Linux / Windows) | Supported |
+| Android | Supported |
+| iOS | Supported |
+| Web (WASM) | Engine builds; container not used (loose embed) |
+
+
+---
+# Source: reference/rayactpack.md
+
+# Container format (`.rayactpack`)
+
+Release builds ship a single self-contained container instead of a loose tree of
+files. It carries the Rayact-internal assets only — QuickJS bytecode, CSS, icon
+fonts, and images. WebAssembly is excluded; non-standard files are opt-in via
+`pack.include`.
+
+The layout mirrors the fovea packer, with a rayact magic and a self-describing
+header (an embedded key makes a pack loadable without an external project file).
+
+## Binary layout
+
+All integers little-endian:
+
+```
+magic     : "RAYACTPK"            (8 bytes)
+version   : u32 = 1
+flags     : u32                   (bit0 = obfuscated)
+keyLen    : u32                   (obfuscation key length; 0 if not obfuscated)
+key       : keyLen bytes          (rayactAppKey used to derive the XOR keystream)
+fileCount : u32
+table     : fileCount × { u32 pathLen, path[pathLen], u64 offset, u64 size }
+blobs     : payload (XOR-encoded iff obfuscated)
+```
+
+Obfuscation is light tamper-resistance: a stable FNV-1a-derived XOR keystream
+keyed by `rayactAppKey + "/" + path` (cross-platform stable, unlike `std::hash`).
+Enable it with `"pack": { "obfuscate": true }`.
+
+## Chunking
+
+By default a single **core** chunk holds everything. When the staged size exceeds
+`pack.maxChunkSize` (default 100 MB) extra files spill into sibling chunks
+(`app.rayactpack.1`, `.2`, …); `app.qjsbc` always stays in chunk 0 so the host
+can boot from the base file alone.
+
+## Tooling
+
+The native host produces and inspects containers:
+
+```sh
+rayact_desktop --pack <stageDir> <out.rayactpack> [--obfuscate <key>]
+rayact_desktop --verify <out.rayactpack>     # list contents + sizes
+rayact_desktop --check  <out.rayactpack>     # boot it headlessly, then exit
+```
+
+`rayact build` emits the container automatically. On desktop the host loads a
+`.rayactpack` directly (extracting once to a scratch dir so existing CSS/font/
+image loaders work unchanged). Mobile hosts copy the pack out of app assets and
+call `engineLoadPackFile`.

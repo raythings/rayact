@@ -1,0 +1,23 @@
+# Rayact
+
+> Rayact is a cross-platform React renderer with a native raylib + QuickJS backend. You write React (with react-navigation, CSS, Material components) and it renders natively on desktop, Android, iOS, and the web — no DOM, no platform WebView.
+
+## Guide
+
+- [Getting started](https://rayact.dev/guide/getting-started): Scaffold a new app, run it in development, then build a release.
+- [Installation](https://rayact.dev/guide/install): Rayact splits into small @rayact/ JavaScript packages plus per-platform
+
+## Pages
+
+- [Multi-Window System Documentation](https://rayact.dev/multi-window-system): The Rayact multi-window system allows a single QuickJS runtime instance to manage multiple windows/activities/viewcontrollers, enabling native navigation stacks and complex multi-window applications.
+
+## Reference
+
+- [CLI reference](https://rayact.dev/reference/cli): The rayact command (from @rayact/cli) drives development, building, and running.
+- [Configuration: `rayact.config.json`](https://rayact.dev/reference/config): Schema for rayact.config.json. Fields omitted fall back to built-in defaults; only set a field to override a default.
+- [Packages & platforms](https://rayact.dev/reference/packages): Rayact is a monorepo of small @rayact/ packages plus per-platform prebuilts.
+- [Container format (`.rayactpack`)](https://rayact.dev/reference/rayactpack): Release builds ship a single self-contained container instead of a loose tree of
+
+## Full corpus
+
+- [llms-full.txt](https://rayact.dev/llms-full.txt): every page concatenated as Markdown

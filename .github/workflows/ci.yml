@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      - name: Version lockstep check
+        run: node scripts/bump-version.mjs --check
+
+      - name: Build publishable JS packages
+        run: |
+          npm run build
+          npm run build:cli
+          npm run build:prebuild
+          npm run build:create-app
+
+      - name: Unit tests (config, resolver, packer-download, CLI)
+        run: npm run test:packages
+
+      - name: Native container round-trip test
+        run: npm run test:native
+
+      - name: Package whitelist verification (no src/tsconfig leaks)
+        run: npm run verify:packages
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify generated docs are up to date
+        working-directory: docs
+        run: |
+          npm install --no-audit --no-fund
+          npm run check
