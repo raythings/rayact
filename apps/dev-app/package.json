@@ -1,7 +1,7 @@
 {
   "name": "@rayact/dev-app",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.0.1",
   "type": "module",
   "description": "Standalone Rayact dev app — Expo-Go-style prebuilt host bundling native plugins + the dev client launcher (QR scan, HMR).",
   "scripts": {

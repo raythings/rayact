@@ -7,6 +7,7 @@
 #include "engine_thread.hpp"
 #include "raym3_bridge.hpp"
 #include "../core/engine.hpp"
+#include "../shared/rayactpack.h"
 
 #include <raym3/raym3.h>
 #include <raym3/v2/Density.h>
@@ -208,7 +209,7 @@ int main(int argc, char** argv) {
 
     std::cout << "========================================" << std::endl;
     std::cout << "  Rayact - QuickJS Desktop Renderer" << std::endl;
-    std::cout << "  Version 0.1.0" << std::endl;
+    std::cout << "  Version 0.0.1" << std::endl;
     std::cout << "========================================" << std::endl;
 
     PlatformBridge::printPlatformInfo();
@@ -229,6 +230,44 @@ int main(int argc, char** argv) {
         std::string result = compileJSToBytecode(g_ctx, src, out);
         rayact::engineDestroy();
         return result.empty() ? 1 : 0;
+    }
+
+    // --pack <stageDir> <out.rayactpack> [--obfuscate <key>]  — build container, exit
+    if (argc >= 4 && std::string(argv[1]) == "--pack") {
+        rayact::PackOptions opts;
+        std::string key = getArgValue(argc, argv, "--obfuscate");
+        if (!key.empty()) opts.obfuscateKey = key;
+        int chunks = rayact::writePack(argv[2], argv[3], opts);
+        rayact::engineDestroy();
+        if (chunks <= 0) { fprintf(stderr, "pack: failed\n"); return 1; }
+        printf("Wrote %s (%d chunk%s)\n", argv[3], chunks, chunks == 1 ? "" : "s");
+        return 0;
+    }
+
+    // --check <file>  — load a bundle/.qjsbc/.rayactpack headlessly and exit
+    // (no render loop). Used by CI to verify a release artifact boots.
+    if (argc >= 3 && std::string(argv[1]) == "--check") {
+        bool ok = rayact::engineLoadFile(argv[2]);
+        rayact::engineDestroy();
+        printf(ok ? "check: OK (%s)\n" : "check: FAILED (%s)\n", argv[2]);
+        return ok ? 0 : 1;
+    }
+
+    // --verify <pack.rayactpack>  — list container contents and exit
+    if (argc >= 3 && std::string(argv[1]) == "--verify") {
+        std::vector<rayact::RayactPackEntry> entries;
+        bool obf = false;
+        bool ok = rayact::listPack(argv[2], entries, obf);
+        rayact::engineDestroy();
+        if (!ok) { fprintf(stderr, "verify: cannot read %s\n", argv[2]); return 1; }
+        unsigned long long total = 0;
+        printf("%s (%zu files%s)\n", argv[2], entries.size(), obf ? ", obfuscated" : "");
+        for (auto& e : entries) {
+            printf("  %s (%llu bytes)\n", e.path.c_str(), (unsigned long long)e.size);
+            total += e.size;
+        }
+        printf("Total: %zu files, %llu bytes\n", entries.size(), total);
+        return 0;
     }
 
     // Load JavaScript application

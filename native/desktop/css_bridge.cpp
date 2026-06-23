@@ -27,6 +27,9 @@
 
 using CSSPropMap = raym3::CSSPropMap;
 
+// Defined in engine_js.cpp — the release/pack asset base dir importCSS resolves against.
+namespace rayact { std::string rayactAssetBaseDir(); }
+
 // ─── string helpers ───────────────────────────────────────────────────────────
 
 static std::string trimStr(const std::string& s) {
@@ -720,7 +723,14 @@ JSValue JS_importCSS(JSContext* ctx, JSValue /*this_val*/,
     std::string path = pathCStr;
     JS_FreeCString(ctx, pathCStr);
 
-    static const std::vector<std::string> prefixes = {"","./","apps/desktop/","../apps/desktop/"};
+    std::vector<std::string> prefixes = {"","./","apps/desktop/","../apps/desktop/"};
+    // Release builds (and mounted .rayactpack containers) stage CSS under the
+    // asset base dir; consult it so importCSS resolves outside the CWD.
+    std::string base = rayact::rayactAssetBaseDir();
+    if (!base.empty()) {
+        prefixes.push_back(base + "/");
+        prefixes.push_back(base + "/runtime/");
+    }
     std::string content;
     bool found = false;
     for (auto& pfx : prefixes) {

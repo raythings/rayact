@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(rayact_quickjs_desktop VERSION 0.1.0 LANGUAGES CXX C)
+project(rayact_quickjs_desktop VERSION 0.0.1 LANGUAGES CXX C)
 if(APPLE)
     enable_language(OBJCXX)
 endif()
@@ -265,6 +265,9 @@ set(SOURCES
     # background-color reads). Same sources are linked into the Android
     # shared library via apps/android/app/src/main/cpp/CMakeLists.txt.
     ../core/config_loader.cpp
+    # shared/ provides the .rayactpack container reader/writer (also linked by
+    # the Android/iOS engine libs).
+    ../shared/rayactpack.cpp
     ${TS_TYPESCRIPT_SOURCES}
     ${CSSPARSER_SOURCES}
 )
@@ -287,6 +290,7 @@ add_executable(rayact_desktop ${SOURCES})
 target_include_directories(rayact_desktop PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../core
+    ${CMAKE_CURRENT_SOURCE_DIR}/../shared
     ${YOGA_DIR}
     ${CURL_INCLUDE_DIRS}
     ${LWS_INCLUDE_DIRS}

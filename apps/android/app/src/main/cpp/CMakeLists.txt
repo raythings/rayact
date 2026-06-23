@@ -129,6 +129,7 @@ target_include_directories(cssparser PUBLIC ${OUTER}/cssparser)
 # ---------------------------------------------------------------------------
 set(ENGINE_SRC
     ${RAYACT}/native/core/config_loader.cpp
+    ${RAYACT}/native/shared/rayactpack.cpp
     ${RAYACT}/native/desktop/color_parse.cpp
     ${RAYACT}/native/desktop/theme_bridge.cpp
     ${RAYACT}/native/desktop/main.cpp
@@ -229,7 +230,7 @@ if (RAYACT_ANDROID_USE_RAYLIB_BACKEND)
 endif()
 
 # ---------------------------------------------------------------------------
-# Bundled native plugins (Expo-Go-style prebuilt dev app). Built as standalone
+# Bundled native plugins (prebuilt Rayact dev app). Built as standalone
 # shared libs so the NDK packages them into the APK jniLibs; at runtime the
 # module bus's plugin loader dlopen's them from the app's nativeLibraryDir
 # (loadPlugins(libDir) in jni_bridge.cpp) — adding a module needs no rebuild of

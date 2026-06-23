@@ -1,6 +1,6 @@
 {
   "name": "@rayact/react",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "React adapter for the Rayact host runtime",
   "type": "module",
   "main": "dist/index.js",
@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@callstack/react-theme-provider": "^3.0.9",
-    "@rayact/runtime": "0.1.0",
+    "@rayact/runtime": "0.0.1",
     "react": "^19.0.0",
     "react-reconciler": "^0.31.0"
   },
@@ -25,5 +25,20 @@
   "peerDependencies": {
     "react": "^19.0.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rayact/rayact.git",
+    "directory": "packages/rayact-react"
+  },
+  "homepage": "https://github.com/rayact/rayact#readme",
+  "bugs": {
+    "url": "https://github.com/rayact/rayact/issues"
+  }
 }

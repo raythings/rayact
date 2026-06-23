@@ -1,6 +1,6 @@
 {
   "name": "@rayact/dev-client",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Rayact dev launcher — connect, discover, reload",
   "type": "module",
   "main": "dist/index.js",
@@ -20,5 +20,20 @@
     "@types/react": "^19.0.0",
     "typescript": "^5.8.3"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rayact/rayact.git",
+    "directory": "packages/rayact-dev-client"
+  },
+  "homepage": "https://github.com/rayact/rayact#readme",
+  "bugs": {
+    "url": "https://github.com/rayact/rayact/issues"
+  }
 }

@@ -1,4 +1,5 @@
 {
+  "$schema": "../../node_modules/@rayact/dev-server/schema/rayact.config.schema.json",
   "rayactAppKey": "rayact-dev-app",
   "devServer": {
     "host": "0.0.0.0",
@@ -25,7 +26,6 @@
     { "name": "secure-store", "lib": "rayact_secure_store", "jsPackage": "@rayact/secure-store" }
   ],
   "transform": {
-    "minify": { "dev": false, "debug": false, "release": true },
-    "bytecode": { "dev": false, "debug": false, "release": false }
+    "bytecode": { "release": false }
   }
 }

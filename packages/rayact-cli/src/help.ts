@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+
 export function printHelp(): void {
   console.log(`
 Rayact CLI — cross-platform React + QuickJS + raylib
@@ -53,5 +55,7 @@ Examples:
 }
 
 export function printVersion(): void {
-  console.log('@rayact/cli 0.1.0');
+  const require = createRequire(import.meta.url);
+  const { version } = require('../package.json') as { version: string };
+  console.log(`@rayact/cli ${version}`);
 }

@@ -2,6 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/**
+ * Version range scaffolded (non-monorepo) apps pin @rayact/* dependencies to.
+ * Bumped in lockstep with the published package versions — keep this the single
+ * source of truth so a release bump is a one-line change here.
+ */
+const RAYACT_VERSION = '0.0.1';
+
 export interface CreateOptions {
   projectName: string;
   targetDir: string;
@@ -54,14 +61,14 @@ function depBlock(
   }
   return {
     dependencies: {
-      '@rayact/react': '0.1.0',
-      '@rayact/runtime': '0.1.0',
-      '@rayact/shared': '0.1.0',
+      '@rayact/react': RAYACT_VERSION,
+      '@rayact/runtime': RAYACT_VERSION,
+      '@rayact/shared': RAYACT_VERSION,
       react: '^19.0.0'
     },
     devDependencies: {
-      '@rayact/cli': '0.1.0',
-      '@rayact/dev-server': '0.1.0',
+      '@rayact/cli': RAYACT_VERSION,
+      '@rayact/dev-server': RAYACT_VERSION,
       '@types/react': '^19.0.0',
       '@vitejs/plugin-react': '^5.1.1',
       'react-refresh': '^0.18.0',

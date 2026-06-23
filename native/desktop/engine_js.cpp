@@ -31,6 +31,10 @@
 #ifndef RAYACT_NO_TS
 #include "utils/TypeStripper.h"
 #include "utils/ScriptValidator.h"
+#include "../shared/rayactpack.h"
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
 #endif
 
 extern "C" {
@@ -1007,7 +1011,10 @@ std::string compileJSToBytecode(JSContext* ctx, const char* srcFile, const char*
     }
 
     size_t outLen = 0;
-    uint8_t* bytes = JS_WriteObject(ctx, &outLen, fn, JS_WRITE_OBJ_BYTECODE);
+    // STRIP_SOURCE drops the embedded source text (smaller release bytecode);
+    // matches the fovea packer's ScriptCompiler. Read path is unaffected.
+    uint8_t* bytes = JS_WriteObject(ctx, &outLen, fn,
+                                    JS_WRITE_OBJ_BYTECODE | JS_WRITE_OBJ_STRIP_SOURCE);
     JS_FreeValue(ctx, fn);
     if (!bytes) { fprintf(stderr, "compile: JS_WriteObject failed\n"); return ""; }
 
@@ -1620,8 +1627,45 @@ bool engineApplyModuleUpdate(const std::string& path, const std::string& source)
     return true;
 }
 
+// Asset base dir other translation units (css_bridge) consult so importCSS and
+// font lookups resolve files staged next to the bundle (or extracted from a pack).
+std::string rayactAssetBaseDir() {
+    return g_releaseAssetBaseDir.string();
+}
+
+// Mount a .rayactpack: extract its chunks to a scratch dir, point the asset base
+// at the staged runtime/ tree, and boot from app.qjsbc (or app.js). Extracting
+// once lets every existing fopen-based loader (CSS, fonts, images) work unchanged.
+bool engineLoadPackFile(const std::string& packPath) {
+    namespace fs = std::filesystem;
+#if !defined(_WIN32)
+    std::string uniq = std::to_string((long)getpid());
+#else
+    std::string uniq = "0";
+#endif
+    fs::path scratch = fs::temp_directory_path() / ("rayact-pack-" + uniq);
+    std::error_code ec;
+    fs::remove_all(scratch, ec);
+    fs::create_directories(scratch, ec);
+    if (!rayact::mountPack(packPath, scratch.string())) {
+        fprintf(stderr, "Failed to mount pack: %s\n", packPath.c_str());
+        return false;
+    }
+    g_releaseAssetBaseDir = fs::exists(scratch / "runtime") ? (scratch / "runtime") : scratch;
+
+    fs::path qjsbc = scratch / "app.qjsbc";
+    fs::path js = scratch / "app.js";
+    if (fs::exists(qjsbc)) return loadBytecodeFile(g_ctx, qjsbc.string().c_str());
+    if (fs::exists(js)) return loadJavaScriptFile(g_ctx, js.string().c_str());
+    fprintf(stderr, "pack has no app.qjsbc or app.js: %s\n", packPath.c_str());
+    return false;
+}
+
 bool engineLoadFile(const std::string& path) {
     std::filesystem::path scriptPath(path);
+    if (scriptPath.extension() == ".rayactpack") {
+        return engineLoadPackFile(path);
+    }
     g_releaseAssetBaseDir = scriptPath.has_parent_path()
         ? scriptPath.parent_path()
         : std::filesystem::current_path();

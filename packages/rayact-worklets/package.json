@@ -1,6 +1,6 @@
 {
   "name": "@rayact/worklets",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,5 +12,21 @@
   },
   "devDependencies": {
     "typescript": "^5.6.0"
+  },
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rayact/rayact.git",
+    "directory": "packages/rayact-worklets"
+  },
+  "homepage": "https://github.com/rayact/rayact#readme",
+  "bugs": {
+    "url": "https://github.com/rayact/rayact/issues"
   }
 }

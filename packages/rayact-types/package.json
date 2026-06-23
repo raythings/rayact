@@ -1,15 +1,34 @@
 {
   "name": "@rayact/types",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Ambient TypeScript declarations for rayact host globals (Storage, module bus, workers, assets)",
   "types": "index.d.ts",
-  "files": ["index.d.ts"],
+  "files": [
+    "index.d.ts"
+  ],
   "scripts": {
     "build": "tsc --noEmit index.d.ts"
   },
   "devDependencies": {
     "typescript": "^5.8.3"
   },
-  "keywords": ["rayact", "types", "ambient", "globals"],
-  "license": "MIT"
+  "keywords": [
+    "rayact",
+    "types",
+    "ambient",
+    "globals"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rayact/rayact.git",
+    "directory": "packages/rayact-types"
+  },
+  "homepage": "https://github.com/rayact/rayact#readme",
+  "bugs": {
+    "url": "https://github.com/rayact/rayact/issues"
+  }
 }

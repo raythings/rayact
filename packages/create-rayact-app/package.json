@@ -1,6 +1,6 @@
 {
   "name": "create-rayact-app",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Scaffold a new Rayact app (like create-expo-app)",
   "type": "module",
   "bin": {
@@ -22,5 +22,14 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rayact/rayact.git",
+    "directory": "packages/create-rayact-app"
+  },
+  "homepage": "https://github.com/rayact/rayact#readme",
+  "bugs": {
+    "url": "https://github.com/rayact/rayact/issues"
+  }
 }

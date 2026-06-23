@@ -1,6 +1,6 @@
 {
   "name": "@rayact/navigation",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "react-navigation bindings for rayact (custom navigator over @react-navigation/core)",
   "main": "src/index.tsx",
   "types": "src/index.tsx",
@@ -23,5 +23,20 @@
     "@react-navigation/core": "*",
     "@react-navigation/routers": "*"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rayact/rayact.git",
+    "directory": "packages/rayact-navigation"
+  },
+  "homepage": "https://github.com/rayact/rayact#readme",
+  "bugs": {
+    "url": "https://github.com/rayact/rayact/issues"
+  }
 }

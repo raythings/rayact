@@ -1,6 +1,6 @@
 {
   "name": "@rayact/renderer",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Raylib graphics backend for rayact",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,9 +11,9 @@
     "prepare": "npm run build"
   },
   "dependencies": {
-    "@rayact/core": "0.1.0",
-    "@rayact/runtime": "0.1.0",
-    "@rayact/shared": "0.1.0"
+    "@rayact/core": "0.0.1",
+    "@rayact/runtime": "0.0.1",
+    "@rayact/shared": "0.0.1"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
@@ -24,5 +24,20 @@
     "graphics",
     "backend"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rayact/rayact.git",
+    "directory": "packages/rayact-renderer"
+  },
+  "homepage": "https://github.com/rayact/rayact#readme",
+  "bugs": {
+    "url": "https://github.com/rayact/rayact/issues"
+  }
 }

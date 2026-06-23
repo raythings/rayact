@@ -10,6 +10,7 @@ import {
   writeRayactBuild
 } from '@rayact/dev-server';
 import type { RayactBuildMode, RayactConfig } from '@rayact/dev-server';
+import { ensureDesktopPrebuilt } from '@rayact/prebuild';
 import type { CliFlags } from '../parse.js';
 import { resolveDesktopBin } from '../desktop.js';
 
@@ -123,6 +124,16 @@ export async function runBuild(flags: CliFlags): Promise<void> {
   );
   const outDir = path.resolve(process.cwd(), flags.outDir);
 
+  // Bytecode compile runs through the rayact_desktop host. Ensure it's present
+  // (source build → installed prebuilt → cache → download) before bundling, so
+  // a consumer with no native checkout still gets a working release build.
+  let desktopBin = flags.desktopBin;
+  if (bytecode) {
+    const host = await ensureDesktopPrebuilt(process.cwd(), flags.desktopBin);
+    desktopBin = host.bin;
+    console.log(`Bytecode host: ${host.bin} (${host.source})`);
+  }
+
   const output = await writeRayactBuild({
     root: process.cwd(),
     entry: flags.entry,
@@ -131,7 +142,7 @@ export async function runBuild(flags: CliFlags): Promise<void> {
     outDir,
     minify,
     bytecode,
-    desktopBin: flags.desktopBin
+    desktopBin
   });
 
   console.log(`Rayact ${output.mode} build written to ${outDir}`);
@@ -382,7 +393,7 @@ async function packageDesktopApp(
   const bin = resolveDesktopBin(cwd, flags.desktopBin);
   if (!bin) {
     console.error('rayact_desktop not found — cannot package the desktop app.');
-    console.error('Build the native host (e.g. ./build_macos.sh) or set RAYACT_DESKTOP_BIN.');
+    console.error('Run `rayact prebuild` to fetch the host, or set RAYACT_DESKTOP_BIN.');
     process.exit(1);
   }
 

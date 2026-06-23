@@ -1,11 +1,11 @@
 #!/bin/bash
-# macOS Build Script for Rayact Desktop
-# This script helps build the Rayact project on macOS
+# Linux Build Script for Rayact Desktop
+# This script helps build the Rayact project on Linux
 
 set -e  # Exit on error
 
 echo "========================================"
-echo "  Rayact macOS Build Script"
+echo "  Rayact Linux Build Script"
 echo "========================================"
 echo ""
 
@@ -16,7 +16,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Check if QuickJS is built
-if [ ! -f "../quickjs/build/libqjs.a" ]; then
+if [ ! -f "../quickjs/build/libqjs.so" ] && [ ! -f "../quickjs/build/libqjs.dylib" ]; then
     echo -e "${YELLOW}QuickJS not found. Building QuickJS...${NC}"
     cd ../quickjs
     if [ ! -d build ]; then
@@ -33,16 +33,16 @@ else
 fi
 
 # Check if Raylib is built
-if [ ! -f "../raylib/build/raylib/libraylib.a" ]; then
+if [ ! -f "../raylib/build/src/libraylib.so" ] && [ ! -f "../raylib/build/libraylib.dylib" ]; then
     echo -e "${YELLOW}Raylib not found. Building Raylib...${NC}"
     cd ../raylib
     if [ ! -d build ]; then
         mkdir build
     fi
-    echo "cmake -B build -DPLATFORM=Desktop -DOPENGL_VERSION=3.3 -DCMAKE_BUILD_TYPE=Release"
-    cmake -B build -DPLATFORM=Desktop -DOPENGL_VERSION=3.3 -DCMAKE_BUILD_TYPE=Release
-    echo "cmake --build build --parallel"
-    cmake --build build --parallel
+    echo "cmake -B build -DPLATFORM=Desktop -DOPENGL_VERSION=4.3 -DCMAKE_BUILD_TYPE=Release"
+    cmake -B build -DPLATFORM=Desktop -DOPENGL_VERSION=4.3 -DCMAKE_BUILD_TYPE=Release
+    echo "cmake --build build"
+    cmake --build build
     cd ../rayact
     echo -e "${GREEN}✓ Raylib build complete!${NC}"
 else
@@ -74,8 +74,8 @@ echo -e "${GREEN}  ✓ Build complete!${NC}"
 echo "========================================"
 echo ""
 
-# Build bundled native plugins (librayact_*.dylib) into build/modules so the CLI
-# can package them next to the host (Expo-Go-style prebuilt dev app).
+# Build bundled native plugins (librayact_*.so) into build/modules so the CLI
+# can package them next to the host (prebuilt Rayact dev app).
 echo -e "${YELLOW}Building bundled native plugins...${NC}"
 cmake -B build/plugins -S native/plugins \
   -DCMAKE_LIBRARY_OUTPUT_DIRECTORY="$(pwd)/build/modules" -DCMAKE_BUILD_TYPE=Release

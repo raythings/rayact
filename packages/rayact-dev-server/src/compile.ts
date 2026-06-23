@@ -2,14 +2,24 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { resolveDesktopBinPrebuilt } from '@rayact/prebuild';
 
 export async function compileToBytecode(
   jsSource: string,
   options: { root: string; desktopBin?: string; outName?: string }
 ): Promise<Buffer> {
-  const desktopBin = path.resolve(options.root, options.desktopBin ?? 'build/bin/rayact_desktop');
-  if (!fs.existsSync(desktopBin)) {
-    throw new Error(`Bytecode compile requires native binary at ${desktopBin}`);
+  // A caller-supplied desktopBin is taken verbatim; otherwise resolve the host
+  // (source build → installed prebuilt → cache). Downloading is handled earlier
+  // by `rayact prebuild` / the build command, so here we only locate it.
+  const resolved = options.desktopBin
+    ? { bin: path.resolve(options.root, options.desktopBin) }
+    : resolveDesktopBinPrebuilt(options.root);
+  const desktopBin = resolved?.bin;
+  if (!desktopBin || !fs.existsSync(desktopBin)) {
+    throw new Error(
+      'Bytecode compile requires the rayact_desktop host. Run `rayact prebuild` to ' +
+        'fetch it, or set RAYACT_DESKTOP_BIN / build the native host from source.'
+    );
   }
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rayact-compile-'));

@@ -33,6 +33,10 @@ bool engineApplyModuleUpdate(const std::string& path, const std::string& source)
 bool engineLoadFile(const std::string& path);          // sets release asset base dir
 bool engineLoadSource(const std::string& source, const std::string& name);
 bool engineLoadBytecode(const uint8_t* data, size_t len, const char* label = "app.qjsbc");
+// Mount a .rayactpack container (extract to scratch, set asset base) and boot
+// from its app.qjsbc/app.js. Mobile hosts copy the pack from app assets into a
+// writable dir and call this; desktop engineLoadFile dispatches here for .rayactpack.
+bool engineLoadPackFile(const std::string& packPath);
 
 // Load the optional app config (app.json / app.config.js / app.config.ts).
 // Idempotent. Safe to call once after engineCreate() and before

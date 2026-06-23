@@ -18,6 +18,10 @@ targets:
       - path: ../../native/core
         excludes:
           - "*.hpp"
+      - path: ../../native/shared
+        excludes:
+          - "*.h"
+          - test_rayactpack.cpp
       - path: ../../native/desktop
         excludes:
           - main.cpp

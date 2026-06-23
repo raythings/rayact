@@ -1,21 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { resolveDesktopBinPrebuilt } from '@rayact/prebuild';
 
+/**
+ * Locate the rayact_desktop host: explicit/env override, source-tree build,
+ * installed @rayact/prebuilt-<host> package, or the per-user cache. Returns null
+ * if absent — run `rayact prebuild` to download it.
+ */
 export function resolveDesktopBin(cwd: string, configured?: string): string | null {
-  const candidates = [
-    configured,
-    process.env.RAYACT_DESKTOP_BIN,
-    path.join(cwd, 'build/bin/rayact_desktop'),
-    path.join(cwd, '../../build/bin/rayact_desktop'),
-    path.join(cwd, '../../../build/bin/rayact_desktop')
-  ].filter((v): v is string => Boolean(v));
-
-  for (const candidate of candidates) {
-    const resolved = path.isAbsolute(candidate) ? candidate : path.resolve(cwd, candidate);
-    if (fs.existsSync(resolved)) return resolved;
-  }
-  return null;
+  return resolveDesktopBinPrebuilt(cwd, configured)?.bin ?? null;
 }
 
 export function runDesktopHost(options: {
@@ -28,7 +22,7 @@ export function runDesktopHost(options: {
   const bin = resolveDesktopBin(options.cwd, options.desktopBin);
   if (!bin) {
     console.error('rayact_desktop not found.');
-    console.error('Build the native desktop host or set RAYACT_DESKTOP_BIN.');
+    console.error('Run `rayact prebuild` to fetch the host, or set RAYACT_DESKTOP_BIN.');
     return 1;
   }
 

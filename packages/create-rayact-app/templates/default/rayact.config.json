@@ -1,4 +1,5 @@
 {
+  "$schema": "./node_modules/@rayact/dev-server/schema/rayact.config.schema.json",
   "rayactAppKey": "__APP_KEY__",
   "devServer": {
     "host": "0.0.0.0",
@@ -6,9 +7,5 @@
     "cdpPort": 9229
   },
   "entry": "src/App.tsx",
-  "platform": "desktop",
-  "transform": {
-    "minify": { "dev": false, "debug": false, "release": true },
-    "bytecode": { "dev": false, "debug": false, "release": false }
-  }
+  "platform": "desktop"
 }
