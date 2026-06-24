@@ -1,0 +1,28 @@
+.DS_Store
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+*.tgz
+*.qjsbc
+*.rayactpack
+
+# Prebuilt native binaries — shipped via GitHub Releases / npm pack, never git
+packages/prebuilt-*/jni/
+packages/prebuilt-*/bin/
+packages/prebuilt-*/modules/
+packages/prebuilt-ios-arm64/RayactEngine.xcframework/
+packages/rayact-mmkv/android/
+packages/rayact-mmkv/darwin-arm64/
+packages/rayact-secure-store/android/
+packages/rayact-secure-store/darwin-arm64/
+
+# Docs build/cache
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+
+# Logs
+*.log
+npm-debug.log*

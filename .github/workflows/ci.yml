@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # --ignore-scripts: skip per-package prepare (build order is handled below).
+      - name: Install
+        run: npm install --no-audit --no-fund --ignore-scripts
+
+      - name: Version lockstep check
+        run: node scripts/bump-version.mjs --check
+
+      - name: Build + unit-test distribution packages (config, resolver, packer, CLI)
+        run: npm test
+
+      - name: Package whitelist verification (no src/tsconfig leaks)
+        run: npm run verify:packages

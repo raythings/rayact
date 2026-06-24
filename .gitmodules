@@ -1,0 +1,33 @@
+[submodule "packages/rayact-react"]
+	path = packages/rayact-react
+	url = https://github.com/raythings/rayact-react.git
+[submodule "packages/rayact-runtime"]
+	path = packages/rayact-runtime
+	url = https://github.com/raythings/rayact-runtime.git
+[submodule "packages/rayact-worklets"]
+	path = packages/rayact-worklets
+	url = https://github.com/raythings/rayact-worklets.git
+[submodule "packages/rayact-navigation"]
+	path = packages/rayact-navigation
+	url = https://github.com/raythings/rayact-navigation.git
+[submodule "packages/rayact-mmkv"]
+	path = packages/rayact-mmkv
+	url = https://github.com/raythings/rayact-mmkv.git
+[submodule "packages/rayact-secure-store"]
+	path = packages/rayact-secure-store
+	url = https://github.com/raythings/rayact-secure-store.git
+[submodule "packages/rayact-dev-client"]
+	path = packages/rayact-dev-client
+	url = https://github.com/raythings/rayact-dev-client.git
+[submodule "packages/rayact-dev-server"]
+	path = packages/rayact-dev-server
+	url = https://github.com/raythings/rayact-dev-server.git
+[submodule "packages/rayact-prebuild"]
+	path = packages/rayact-prebuild
+	url = https://github.com/raythings/rayact-prebuild.git
+[submodule "packages/rayact-cli"]
+	path = packages/rayact-cli
+	url = https://github.com/raythings/rayact-cli.git
+[submodule "packages/create-rayact-app"]
+	path = packages/create-rayact-app
+	url = https://github.com/raythings/create-rayact-app.git

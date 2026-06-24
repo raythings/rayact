@@ -1,0 +1,29 @@
+{
+  "name": "@rayact/prebuilt-darwin-arm64",
+  "version": "0.0.1",
+  "description": "Prebuilt Rayact desktop host for macOS arm64",
+  "files": [
+    "bin",
+    "modules",
+    "manifest.json"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/prebuilt-darwin-arm64"
+  },
+  "homepage": "https://github.com/rayact/rayact#readme",
+  "bugs": {
+    "url": "https://github.com/rayact/rayact/issues"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ]
+}

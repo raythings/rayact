@@ -1,0 +1,38 @@
+{
+  "name": "rayact",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Rayact — cross-platform React renderer with a native raylib + QuickJS backend (@rayact/* packages)",
+  "homepage": "https://github.com/raythings/rayact#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git"
+  },
+  "bugs": {
+    "url": "https://github.com/raythings/rayact/issues"
+  },
+  "license": "MIT",
+  "workspaces": [
+    "packages/rayact-*",
+    "packages/create-rayact-app"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "npm run build -w @rayact/shared -w @rayact/runtime -w @rayact/react -w @rayact/dev-client -w @rayact/dev-server -w @rayact/core -w @rayact/quickjs -w @rayact/renderer -w @rayact/prebuild -w @rayact/cli -w create-rayact-app",
+    "test": "npm test -w @rayact/prebuild -w @rayact/dev-server -w @rayact/cli",
+    "verify:packages": "node scripts/verify-packages.mjs",
+    "bump": "node scripts/bump-version.mjs"
+  },
+  "dependencies": {
+    "@types/react": "^19.2.16",
+    "@types/react-reconciler": "^0.31.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-reconciler": "^0.31.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

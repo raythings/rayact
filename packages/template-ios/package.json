@@ -1,0 +1,25 @@
+{
+  "name": "@rayact/template-ios",
+  "version": "0.0.1",
+  "description": "Thin iOS XcodeGen shell for Rayact apps — links prebuilt RayactEngine.xcframework",
+  "files": [
+    "*.swift",
+    "Info.plist",
+    "Assets.xcassets",
+    "project.yml",
+    "README.md"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/template-ios"
+  },
+  "homepage": "https://github.com/rayact/rayact#readme",
+  "bugs": {
+    "url": "https://github.com/rayact/rayact/issues"
+  }
+}

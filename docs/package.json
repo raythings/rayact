@@ -1,0 +1,21 @@
+{
+  "name": "@rayact/docs",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Rayact documentation site (Vitepress) + llms.txt generation",
+  "scripts": {
+    "gen:config": "node scripts/gen-config-reference.mjs",
+    "gen:llms": "node scripts/gen-llms.mjs",
+    "gen": "npm run gen:config && npm run gen:llms",
+    "check": "node scripts/gen-config-reference.mjs --check && node scripts/gen-llms.mjs --check",
+    "predev": "npm run gen",
+    "dev": "vitepress dev",
+    "prebuild": "npm run gen",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@rayact/template-android",
+  "version": "0.0.1",
+  "description": "Thin Android Gradle shell for Rayact apps — links prebuilt native libs, no engine CMake",
+  "files": [
+    "app",
+    "gradle",
+    "gradlew",
+    "gradlew.bat",
+    "build.gradle",
+    "settings.gradle",
+    "gradle.properties"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/template-android"
+  },
+  "homepage": "https://github.com/rayact/rayact#readme",
+  "bugs": {
+    "url": "https://github.com/rayact/rayact/issues"
+  }
+}
