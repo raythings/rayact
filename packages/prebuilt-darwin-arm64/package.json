@@ -5,7 +5,8 @@
   "files": [
     "bin",
     "modules",
-    "manifest.json"
+    "manifest.json",
+    "resources"
   ],
   "license": "MIT",
   "publishConfig": {

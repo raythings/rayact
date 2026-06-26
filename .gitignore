@@ -26,3 +26,6 @@ docs/.vitepress/cache/
 # Logs
 *.log
 npm-debug.log*
+
+# Prebuilt bundled fonts (delivered via release; staged at engine build)
+packages/prebuilt-*/resources/
