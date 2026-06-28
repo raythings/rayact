@@ -1,34 +1,95 @@
 # Getting started
 
-Scaffold a new app, run it in development, then build a release.
+Rayact runs your React app on a **prebuilt native engine** — you write the app, the engine is already compiled. This guide goes from zero to a running app on desktop, a device, and the web.
+
+## Prerequisites
+
+- **Node.js 18+** and npm.
+- A **64-bit** OS. Every target is 64-bit (macOS x64/arm64, Linux x64, Android arm64, iOS arm64, web wasm32); 32-bit is not planned.
+- **No C++ toolchain, CMake, or NDK** for a normal app — the engine arrives precompiled. You only need a toolchain if you write your own native or WebAssembly module (see [Native & WASM modules](#native--wasm-modules)).
+- To deploy on a device:
+  - **Android** — `adb` (platform-tools) and a device with USB debugging on.
+  - **iOS** — Xcode (simulator), or a signing profile for a real device.
 
 ## Create an app
 
 ```sh
-npx create-rayact-app my-app
+npx github:raythings/create-rayact-app#v0.0.1 my-app
 cd my-app
-npm install
+npm install        # installs the @rayact/* packages from GitHub
 ```
 
-The generated project has a `rayact.config.json` (see the [config reference](/reference/config)), a `src/App.tsx` entry, and the `@rayact/*` dependencies for your chosen template.
+> Rayact isn't on the npm registry yet — packages install straight from GitHub. The scaffold wires every `@rayact/*` dependency to `github:raythings/…#v0.0.1`, so a plain `npm install` just works. The prebuilt native host is downloaded from the GitHub release the first time you build.
+
+The project has a `rayact.config.json` ([config reference](/reference/config)), a `src/App.tsx` entry, and the `@rayact/*` dependencies (pinned to GitHub).
+
+## Your first component
+
+```tsx
+import { useState } from 'react';
+import { View, Text, Button, render } from '@rayact/react';
+
+function App() {
+  const [count, setCount] = useState(0);
+  return (
+    <View style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 12 }}>
+      <Text>You tapped {count} times</Text>
+      <Button label="Tap me" onPress={() => setCount(count + 1)} />
+    </View>
+  );
+}
+
+render(<App />);
+```
+
+The same `src/App.tsx` runs unchanged on every platform.
 
 ## Develop
 
 ```sh
-npm run dev
+npm run dev        # = rayact dev
 ```
 
-`rayact dev` starts the Vite-powered dev server and a terminal UI. The desktop host hot-reloads as you edit; a device running the dev app connects over the same dev server (scan the QR code).
+`rayact dev` starts the Vite-powered dev server + bundler with Fast Refresh. Connect a target while it runs:
 
-## Run
+- **Device / simulator** — open the Rayact **dev app** (a prebuilt host, like Expo Go) and point it at the dev server: scan the QR code, or pass the URL. Edits hot-reload over USB or your local network.
+- **Desktop** — `rayact run:desktop` opens a native window; it connects to the dev server if one is running, otherwise loads the built bundle.
+
+## Run & build per platform
+
+Building your app links your JS bundle to the prebuilt engine for the target — no engine compile. There are no user-facing shell scripts; everything is a `rayact` subcommand.
 
 ```sh
-rayact run --desktop          # build + launch on desktop
-rayact run --desktop --dev     # launch against the running dev server
-rayact run --android           # build + install + launch on a device
+# Desktop
+rayact run:desktop                 # build + launch a native window
+rayact build --desktop             # package a self-contained desktop app folder
+
+# Android  (device with USB debugging + adb)
+rayact run:android                 # run against the dev server (adb reverse)
+rayact build --android --install   # build an APK, install it, launch it
+
+# iOS  (Xcode)
+rayact run:ios                     # build + run on the iOS simulator
+rayact build --ios --install       # build + install on the simulator
+
+# Web  (WebGPU browser)
+rayact build --web                 # WASM/WebGPU build you can serve
 ```
 
-`rayact run` replaces the old `run.sh` / `run-android.sh` shell scripts — there are no user-facing shell scripts.
+See [`rayact --help`](/reference/cli) for the full option list.
+
+## GPU backends
+
+Each platform renders through its native modern GPU API — nothing to configure:
+
+| Platform        | Backend |
+|-----------------|---------|
+| macOS / iOS     | Metal   |
+| Android / Linux | Vulkan  |
+| Web             | WebGPU  |
+| Windows         | DX12 *(coming soon)* |
+
+Each backend **emulates the OpenGL 3.3 API 1:1** (with a few minor quirks), so the renderer behaves the same across Metal, Vulkan, and WebGPU.
 
 ## Build a release
 
@@ -38,4 +99,13 @@ rayact build --release --android   # release APK
 rayact build --release --ios       # release iOS app
 ```
 
-Release builds compile the JS bundle to QuickJS bytecode and emit a single [`.rayactpack`](/reference/rayactpack) container. The native host needed to compile bytecode is fetched automatically — see [Installation](/guide/install).
+Release builds compile the JS bundle to QuickJS bytecode and emit a single [`.rayactpack`](/reference/rayactpack) container. The native host that compiles bytecode is fetched automatically — see [Installation](/guide/install).
+
+## Native & WASM modules
+
+A pure JS/TS app needs no toolchain. To add your own **native module** or **WebAssembly worker**, you implement the module ABI and compile *only your module* against the prebuilt engine — a fast incremental build, not an engine rebuild. This is the one path that requires a local toolchain.
+
+## Next steps
+
+- [Installation](/guide/install) — how the prebuilt engine is resolved and cached.
+- [CLI reference](/reference/cli) · [Configuration](/reference/config) · [Packages](/reference/packages)

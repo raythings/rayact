@@ -20,17 +20,25 @@ GitHub release for your engine version and verifies it against `SHA256SUMS`.
 rayact prebuild   # ensure the host binary is available (resolve or download)
 ```
 
-The desktop prebuilts are wired as `optionalDependencies` of `@rayact/cli` with
-`os`/`cpu` fields, so a package manager installs only the one matching your
-machine. Android and iOS engine libraries are pulled per-project when you target
-those platforms (kept off desktop installs — the Android engine alone is ~80 MB).
+The native host is **not** installed from a package registry. The CLI's prebuild
+resolver downloads the matching host (and the Android/iOS engine libraries when
+you target those platforms) from the GitHub release for your engine version,
+verified against `SHA256SUMS`. The Android engine alone is ~80 MB, so it's pulled
+per-project only when you build for Android — never on a desktop install.
 
 ## Git now, npm later
 
-Until the packages are on the npm registry, install the framework packages from
-git and let the prebuilt resolver fetch native hosts from GitHub releases. The
-release also attaches an `npm pack` tarball for every publishable package, so
-`create-rayact-app` can reference those tarball URLs in the interim.
+The `@rayact/*` packages are **not on the npm registry yet** — they install
+straight from GitHub. Scaffold with the github spec:
+
+```sh
+npx github:raythings/create-rayact-app#v0.0.1 my-app
+```
+
+The generated `package.json` pins every `@rayact/*` dependency to
+`github:raythings/<repo>#v0.0.1`, so a plain `npm install` pulls the JS packages
+from GitHub, and the first build downloads the prebuilt native host from the
+release. No npm account or registry config is required.
 
 Override the download source with environment variables when needed:
 
