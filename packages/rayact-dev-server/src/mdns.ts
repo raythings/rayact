@@ -21,7 +21,12 @@ export interface RayactMdnsService {
 }
 
 export function advertiseRayactServer(options: MdnsAdvertiseOptions): RayactMdnsService {
-  const bonjour = new Bonjour();
+  // Discovery is best-effort: multicast send errors (EHOSTUNREACH when an
+  // interface drops, VPN toggles, etc.) must never crash the dev server —
+  // without this callback bonjour's dgram error is an uncaught exception.
+  const bonjour = new Bonjour(undefined, (err: Error) => {
+    console.warn(`[rayact:mdns] discovery error (non-fatal): ${err.message}`);
+  });
   const ips = getLanAddresses();
   const service: Service = bonjour.publish({
     name: `rayact-${options.appKey}`,

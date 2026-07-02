@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc; node scripts/copy-shared.mjs",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
     "prepare": "npm run build"
@@ -23,11 +23,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rayact/rayact.git",
+    "url": "git+https://github.com/raythings/rayact.git",
     "directory": "packages/rayact-runtime"
   },
-  "homepage": "https://github.com/rayact/rayact#readme",
+  "homepage": "https://github.com/raythings/rayact#readme",
   "bugs": {
-    "url": "https://github.com/rayact/rayact/issues"
+    "url": "https://github.com/raythings/rayact/issues"
   }
 }
