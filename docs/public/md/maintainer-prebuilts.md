@@ -1,6 +1,6 @@
 # Maintainer: Prebuilt Native Libraries
 
-**App developers never run these scripts.** They install `@rayact/prebuilt-*` from npm (GitHub Release tarballs) and dev-app binaries via `npx @rayact/dev-app install`.
+**App developers never run these scripts.** They install `@rayact/prebuilt-*` from npm (GitHub Release tarballs) and dev-app binaries via `rayact dev-app`.
 
 ## Quick reference
 
@@ -73,9 +73,9 @@ Install with Xcode Devices, `ios-deploy`, or Apple Configurator.
 ### Install via npm script
 
 ```bash
-npx @rayact/dev-app install --platform android
-npx @rayact/dev-app install --platform ios-device
-npx @rayact/dev-app install --platform ios-simulator
+rayact dev-app --android
+rayact dev-app --ios-device
+rayact dev-app --ios-simulator
 ```
 
 ## CI

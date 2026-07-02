@@ -4,7 +4,7 @@
 
 ## Guide
 
-- [Getting started](https://rayact.dev/guide/getting-started): Scaffold a new app, run it in development, then build a release.
+- [Getting started](https://rayact.dev/guide/getting-started): Rayact runs your React app on a prebuilt native engine — you write the app, the engine is already compiled. This guide goes from zero to a running app on desktop, a device, and the web.
 - [Installation](https://rayact.dev/guide/install): Rayact splits into small @rayact/ JavaScript packages plus per-platform
 
 ## Pages

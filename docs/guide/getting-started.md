@@ -47,13 +47,37 @@ The same `src/App.tsx` runs unchanged on every platform.
 ## Develop
 
 ```sh
-npm run dev        # = rayact dev
+npm run dev        # = rayact dev — dev server + bundler, QR code, Fast Refresh
 ```
 
-`rayact dev` starts the Vite-powered dev server + bundler with Fast Refresh. Connect a target while it runs:
+Then connect a target. There are two ways to run on a phone — same split as Expo:
 
-- **Device / simulator** — open the Rayact **dev app** (a prebuilt host, like Expo Go) and point it at the dev server: scan the QR code, or pass the URL. Edits hot-reload over USB or your local network.
-- **Desktop** — `rayact run:desktop` opens a native window; it connects to the dev server if one is running, otherwise loads the built bundle.
+### Use the prebuilt dev app (Expo Go style)
+
+No native build at all. One command downloads the prebuilt dev app from the GitHub release and installs it:
+
+```sh
+npm run dev-app:android    # USB-connected Android device (adb)
+npm run dev-app:ios        # iOS simulator
+```
+
+The dev app launches and connects to your dev server — scan the QR from `npm run dev`, pick the server from local-network discovery, or use the USB-forwarded localhost URL. Edits hot-reload.
+
+### Build your own dev client (expo-dev-client style)
+
+When you add your own native modules, build a dev client that includes them:
+
+```sh
+npm run prebuild             # once: scaffold android/ + ios/ shell projects
+npm run dev-client:android   # build + install your custom dev client
+npm run dev-client:ios       # iOS simulator variant
+```
+
+`prebuild` copies thin native shells into your project and links the **prebuilt engine** (downloaded from the GitHub release) — so the dev-client build compiles only the shell + your modules, never the engine. This is the one flow that needs a native toolchain (Android SDK / Xcode).
+
+### Desktop
+
+- `rayact run:desktop` opens a native window; it connects to the dev server if one is running, otherwise loads the built bundle.
 
 ## Run & build per platform
 

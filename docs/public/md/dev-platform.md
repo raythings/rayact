@@ -11,7 +11,7 @@ npm run dev
 **Tier 1 — zero native (default):** use the prebuilt dev app:
 
 ```bash
-npx @rayact/dev-app install --platform android
+rayact dev-app --android
 npm run dev   # scan QR in the dev app
 ```
 
@@ -97,7 +97,7 @@ Native bridge: global `devCall(method, data, callback)` wired to Kotlin `DevClie
 
 ## Dev App distribution
 
-- **Now:** GitHub Releases sideload + `npx @rayact/dev-app install --platform android`
+- **Now:** GitHub Releases sideload + `rayact dev-app --android`
 - **Follow-up:** Play Store internal testing + TestFlight
 
 ## HMR

@@ -25,6 +25,15 @@ npm install      # installs the @rayact/* packages from GitHub
 npm run dev      # first run downloads the prebuilt engine from the GitHub release
 ```
 
+Run it on a phone with the **prebuilt dev app** (Expo Go style — no native build):
+
+```bash
+npm run dev-app:android   # or dev-app:ios — installs + launches the dev app,
+                          # which hot-reloads from your dev server
+```
+
+Adding your own native modules? `npm run prebuild` scaffolds native shells, then `npm run dev-client:android` builds your **custom dev client** (expo-dev-client style) — only the thin shell compiles; the engine stays prebuilt.
+
 > Packages aren't on npm yet — they install straight from GitHub (the scaffold wires the `@rayact/*` deps to `github:raythings/…`), and the prebuilt engine is fetched from the GitHub release on first build.
 
 ## Your first component
