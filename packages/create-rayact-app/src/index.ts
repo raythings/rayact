@@ -71,9 +71,17 @@ console.log(`\n✓ Created Rayact app at ${targetDir}`);
 
 if (install) {
   console.log('\nInstalling dependencies...');
-  const result = spawnSync('npm', ['install', '--ignore-scripts'], {
+  // No --ignore-scripts here: the @rayact/* packages install from git and are
+  // built by their `prepare` scripts — skipping scripts ships them without
+  // dist/ ("rayact: command not found"). Also drop any npm_config_* the outer
+  // npx/npm run injected, so this install behaves like a plain `npm install`.
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([k]) => !/^npm_config_/i.test(k))
+  ) as NodeJS.ProcessEnv;
+  const result = spawnSync('npm', ['install'], {
     cwd: targetDir,
-    stdio: 'inherit'
+    stdio: 'inherit',
+    env
   });
   if (result.status !== 0) {
     console.warn('npm install failed — run manually inside the project.');
