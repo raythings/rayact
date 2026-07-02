@@ -45,7 +45,6 @@ function depBlock(
       dependencies: {
         '@rayact/react': pkg('rayact-react'),
         '@rayact/runtime': pkg('rayact-runtime'),
-        '@rayact/shared': pkg('rayact-shared'),
         react: '^19.0.0'
       },
       devDependencies: {
@@ -59,16 +58,16 @@ function depBlock(
       }
     };
   }
+  const gh = (repo: string) => `github:raythings/${repo}#v${RAYACT_VERSION}`;
   return {
     dependencies: {
-      '@rayact/react': RAYACT_VERSION,
-      '@rayact/runtime': RAYACT_VERSION,
-      '@rayact/shared': RAYACT_VERSION,
+      '@rayact/react': gh('rayact-react'),
+      '@rayact/runtime': gh('rayact-runtime'),
       react: '^19.0.0'
     },
     devDependencies: {
-      '@rayact/cli': RAYACT_VERSION,
-      '@rayact/dev-server': RAYACT_VERSION,
+      '@rayact/cli': gh('rayact-cli'),
+      '@rayact/dev-server': gh('rayact-dev-server'),
       '@types/react': '^19.0.0',
       '@vitejs/plugin-react': '^5.1.1',
       'react-refresh': '^0.18.0',
@@ -149,6 +148,13 @@ export function createRayactApp(options: CreateOptions): void {
     description: 'Rayact app',
     scripts: {
       dev: 'rayact dev',
+      // Expo Go path: install + launch the prebuilt dev app on a device/simulator.
+      'dev-app:android': 'rayact dev-app --android',
+      'dev-app:ios': 'rayact dev-app --ios-simulator',
+      // expo-dev-client path: scaffold native shells once, then build your own dev client.
+      prebuild: 'rayact prebuild',
+      'dev-client:android': 'rayact build --debug --android --install',
+      'dev-client:ios': 'rayact build --debug --ios --install',
       build: 'rayact build --release',
       'build:desktop': 'rayact build --release --desktop',
       'build:android': 'rayact build --release --android',

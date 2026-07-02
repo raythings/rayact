@@ -145,6 +145,51 @@ function sha256(file: string): string {
 }
 
 /**
+ * Download a release asset by name into `destDir`, verifying it against the
+ * release SHA256SUMS when present (missing sums file / unlisted asset = warn,
+ * hash mismatch = throw). Returns the downloaded file path. Shared by the
+ * prebuilt-engine and dev-app fetchers.
+ */
+export async function downloadReleaseAsset(
+  assetName: string,
+  destDir: string,
+  opts: { version?: string } = {}
+): Promise<string> {
+  const version = opts.version ?? RAYACT_ENGINE_VERSION;
+  const base = releaseBaseUrl(version);
+  const dest = path.join(destDir, assetName);
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rayact-dl-'));
+  const tmpPath = path.join(tmp, assetName);
+  try {
+    console.log(`Downloading ${assetName} from ${base}/${assetName} ...`);
+    await fetchToFile(`${base}/${assetName}`, tmpPath);
+
+    const sums = await fetchText(`${base}/SHA256SUMS`);
+    if (sums) {
+      const want = sums.split('\n').map((l) => l.trim()).find((l) => l.endsWith(assetName));
+      if (want) {
+        const expected = want.split(/\s+/)[0];
+        const got = sha256(tmpPath);
+        if (expected !== got) {
+          throw new Error(`SHA256 mismatch for ${assetName}: expected ${expected}, got ${got}`);
+        }
+      } else {
+        console.warn(`warning: ${assetName} not listed in SHA256SUMS — skipping integrity check`);
+      }
+    } else {
+      console.warn('warning: release SHA256SUMS not found — skipping integrity check');
+    }
+
+    fs.mkdirSync(destDir, { recursive: true });
+    fs.rmSync(dest, { force: true });
+    fs.copyFileSync(tmpPath, dest);
+    return dest;
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+/**
  * Download + verify + unpack the prebuilt for `key` into the per-user cache,
  * returning the cache dir (layout matches an installed package: bin/, modules/,
  * manifest.json). Verifies the tarball against the release SHA256SUMS when present.
@@ -153,30 +198,11 @@ export async function downloadPrebuilt(
   key: string,
   version = RAYACT_ENGINE_VERSION
 ): Promise<string> {
-  const base = releaseBaseUrl(version);
   const tarName = prebuiltTarballName(key, version);
   const dest = prebuiltCacheDir(version, key);
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rayact-dl-'));
-  const tarPath = path.join(tmp, tarName);
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rayact-unpack-'));
   try {
-    console.log(`Downloading prebuilt ${key} from ${base}/${tarName} ...`);
-    await fetchToFile(`${base}/${tarName}`, tarPath);
-
-    const sums = await fetchText(`${base}/SHA256SUMS`);
-    if (sums) {
-      const want = sums.split('\n').map((l) => l.trim()).find((l) => l.endsWith(tarName));
-      if (want) {
-        const expected = want.split(/\s+/)[0];
-        const got = sha256(tarPath);
-        if (expected !== got) {
-          throw new Error(`SHA256 mismatch for ${tarName}: expected ${expected}, got ${got}`);
-        }
-      } else {
-        console.warn(`warning: ${tarName} not listed in SHA256SUMS — skipping integrity check`);
-      }
-    } else {
-      console.warn('warning: release SHA256SUMS not found — skipping integrity check');
-    }
+    const tarPath = await downloadReleaseAsset(tarName, tmp, { version });
 
     // npm pack wraps content under package/ — strip it so the cache mirrors an installed package.
     fs.rmSync(dest, { recursive: true, force: true });
@@ -191,6 +217,68 @@ export async function downloadPrebuilt(
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
+}
+
+// --- Dev app (prebuilt Expo-Go-style host) -----------------------------------
+
+export type DevAppPlatform = 'android' | 'ios-simulator' | 'ios-device';
+
+const DEV_APP_ASSETS: Record<DevAppPlatform, string> = {
+  android: 'rayact-dev-app.apk',
+  'ios-simulator': 'rayact-dev-app-simulator.zip',
+  'ios-device': 'rayact-dev-app-device-unsigned.ipa'
+};
+
+/** Per-user cache dir for downloaded dev-app binaries. */
+export function devAppCacheDir(version = RAYACT_ENGINE_VERSION): string {
+  const base = process.env.RAYACT_CACHE_DIR || path.join(os.homedir(), '.rayact');
+  // RAYACT_CACHE_DIR points at the prebuilts root; keep dev-app beside it.
+  const root = process.env.RAYACT_CACHE_DIR ? path.dirname(base) : base;
+  return path.join(root, 'dev-app', version);
+}
+
+/**
+ * Ensure the prebuilt dev app for `platform` is in the per-user cache,
+ * downloading it from the GitHub release if missing. Returns the installable
+ * path: an .apk (android), an unzipped Rayact.app dir (ios-simulator), or an
+ * unsigned .ipa (ios-device).
+ */
+export async function ensureDevApp(
+  platform: DevAppPlatform,
+  version = RAYACT_ENGINE_VERSION
+): Promise<string> {
+  const assetName = DEV_APP_ASSETS[platform];
+  const dir = devAppCacheDir(version);
+  const assetPath = path.join(dir, assetName);
+
+  if (platform === 'ios-simulator') {
+    const appPath = path.join(dir, 'Rayact.app');
+    if (fs.existsSync(appPath)) return appPath;
+    if (!fs.existsSync(assetPath)) await downloadReleaseAsset(assetName, dir, { version });
+    const res = spawnSync('unzip', ['-oq', assetPath, '-d', dir], { stdio: 'inherit' });
+    if (res.status !== 0) throw new Error(`unzip failed for ${assetName}`);
+    // The zip may contain Rayact.app at the root or one level down.
+    if (!fs.existsSync(appPath)) {
+      const found = findDirNamed(dir, 'Rayact.app');
+      if (!found) throw new Error(`${assetName} did not contain Rayact.app`);
+      fs.renameSync(found, appPath);
+    }
+    return appPath;
+  }
+
+  if (fs.existsSync(assetPath)) return assetPath;
+  return downloadReleaseAsset(assetName, dir, { version });
+}
+
+function findDirNamed(root: string, name: string): string | null {
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const p = path.join(root, entry.name);
+    if (entry.name === name) return p;
+    const nested = findDirNamed(p, name);
+    if (nested) return nested;
+  }
+  return null;
 }
 
 /**

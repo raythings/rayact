@@ -83,7 +83,16 @@ if (install) {
 console.log(`
 Next steps:
   cd ${projectName}
-  npm run dev          # start dev server
-  npm run start        # run desktop host (after build)
-  rayact start --dev   # desktop + live dev server
+  npm run dev                # start the dev server (QR + hot reload)
+
+On a phone or simulator (prebuilt dev app, Expo Go style):
+  npm run dev-app:android    # install + launch on a USB-connected Android device
+  npm run dev-app:ios        # install + launch on the iOS simulator
+
+Build your own dev client (expo-dev-client style):
+  npm run prebuild           # scaffold android/ + ios/ shells (engine stays prebuilt)
+  npm run dev-client:android # build + install your custom dev client
+
+On desktop:
+  rayact start --dev         # native window connected to the dev server
 `);
