@@ -1,0 +1,43 @@
+name: RayactIOS
+options:
+  bundleIdPrefix: com.rayact
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    DEVELOPMENT_TEAM: ""
+    SWIFT_VERSION: "5.9"
+targets:
+  RayactIOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: .
+        excludes:
+          - project.yml
+          - README.md
+          - package.json
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rayact.ios
+        INFOPLIST_FILE: Info.plist
+        OTHER_LDFLAGS:
+          - -framework
+          - RayactEngine
+        FRAMEWORK_SEARCH_PATHS:
+          - $(inherited)
+          - $(PROJECT_DIR)/Frameworks
+          - $(PROJECT_DIR)/../node_modules/@rayact/prebuilt-ios-arm64
+    preBuildScripts:
+      - name: SyncRayactAssets
+        script: |
+          ASSETS="${PROJECT_DIR}/../rayact-assets"
+          DEST="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
+          if [ -d "$ASSETS" ]; then
+            mkdir -p "$DEST/runtime"
+            cp -R "$ASSETS/"* "$DEST/" 2>/dev/null || true
+            [ -f "$ASSETS/app.js" ] && cp "$ASSETS/app.js" "$DEST/" || true
+            [ -f "$ASSETS/app.qjsbc" ] && cp "$ASSETS/app.qjsbc" "$DEST/" || true
+          fi
+        basedOnDependencyAnalysis: false

@@ -290,12 +290,20 @@ async function buildIosApp(
   }
   console.log(`iOS project: ${iosDir}`);
 
-  const androidAssets = path.resolve(iosDir, '../../android/app/src/main/assets');
-  await fs.mkdir(androidAssets, { recursive: true });
+  // Template-scaffolded projects (rayact prebuild) bundle assets from the
+  // app's rayact-assets/ via the SyncRayactAssets build phase — write there.
+  // The monorepo engine project shares the Android assets dir instead.
+  const projectYml = path.join(iosDir, 'project.yml');
+  const ymlText = existsSync(projectYml) ? await fs.readFile(projectYml, 'utf8') : '';
+  const usesRayactAssets = ymlText.includes('rayact-assets');
+  const iosAssets = usesRayactAssets
+    ? path.resolve(iosDir, '..', 'rayact-assets')
+    : path.resolve(iosDir, '../../android/app/src/main/assets');
+  await fs.mkdir(iosAssets, { recursive: true });
   if (bundleFormat === 'qjsbc' && bytecode) {
-    await fs.writeFile(path.join(androidAssets, 'app.qjsbc'), bytecode);
+    await fs.writeFile(path.join(iosAssets, 'app.qjsbc'), bytecode);
   } else {
-    await fs.writeFile(path.join(androidAssets, 'app.js'), code);
+    await fs.writeFile(path.join(iosAssets, 'app.js'), code);
   }
 
   for (const ref of cssFiles) {
@@ -303,17 +311,35 @@ async function buildIosApp(
       console.warn(`warning: bundle references missing CSS file: ${ref.src}`);
       continue;
     }
-    await copyInto(ref.src, path.join(androidAssets, 'runtime', ref.rel));
+    await copyInto(ref.src, path.join(iosAssets, 'runtime', ref.rel));
   }
-  await writeNativeModules(config, path.join(androidAssets, 'runtime', 'native-modules.json'));
+  await writeNativeModules(config, path.join(iosAssets, 'runtime', 'native-modules.json'));
 
   const distAssets = path.join(outDir, 'assets');
   if (existsSync(distAssets)) {
     for (const name of await fs.readdir(distAssets)) {
       const src = path.join(distAssets, name);
       if (!(await fs.stat(src)).isFile()) continue;
-      await copyInto(src, path.join(androidAssets, 'runtime/assets', name));
-      await copyInto(src, path.join(androidAssets, 'runtime/assets/assets', name));
+      await copyInto(src, path.join(iosAssets, 'runtime/assets', name));
+      await copyInto(src, path.join(iosAssets, 'runtime/assets/assets', name));
+    }
+  }
+
+  // The scheme/target is the project name — rayact prebuild renames the
+  // template's "RayactIOS" to the app name (no spaces).
+  const scheme = ymlText.match(/^name:\s*(\S+)/m)?.[1] ?? 'RayactIOS';
+
+  // Template projects link the prebuilt engine as RayactEngine.xcframework.
+  // The current release ships only a placeholder there (no Info.plist) — the
+  // real iOS engine framework isn't published yet, so fail with guidance
+  // instead of a cryptic xcodebuild error.
+  if (usesRayactAssets) {
+    const fw = path.join(iosDir, 'Frameworks/RayactEngine.xcframework');
+    if (!existsSync(path.join(fw, 'Info.plist'))) {
+      console.error('iOS custom dev-client builds are not supported yet: the prebuilt');
+      console.error('RayactEngine.xcframework has not been published (placeholder only).');
+      console.error('Use the prebuilt dev app instead:  rayact dev-app --ios-simulator');
+      process.exit(1);
     }
   }
 
@@ -326,7 +352,7 @@ async function buildIosApp(
   const xcodebuild = spawnSync(
     'xcodebuild',
     [
-      '-scheme', 'RayactIOS',
+      '-scheme', scheme,
       '-configuration', configuration,
       '-destination', 'generic/platform=iOS Simulator',
       'build'
@@ -339,9 +365,9 @@ async function buildIosApp(
     iosDir,
     'build',
     configuration + '-iphonesimulator',
-    'Rayact.app'
+    `${scheme}.app`
   );
-  const fallback = spawnSync('xcodebuild', ['-showBuildSettings', '-scheme', 'RayactIOS'], {
+  const fallback = spawnSync('xcodebuild', ['-showBuildSettings', '-scheme', scheme], {
     cwd: iosDir,
     encoding: 'utf8'
   });
@@ -355,8 +381,8 @@ async function buildIosApp(
   }
 
   if (existsSync(appPath)) {
-    await copyInto(appPath, path.join(outDir, 'Rayact.app'));
-    console.log(`iOS app: ${path.join(outDir, 'Rayact.app')}`);
+    await copyInto(appPath, path.join(outDir, `${scheme}.app`));
+    console.log(`iOS app: ${path.join(outDir, `${scheme}.app`)}`);
   }
 
   if (flags.install) {
@@ -383,7 +409,10 @@ async function buildIosApp(
       return;
     }
     spawnSync('xcrun', ['simctl', 'install', deviceId, appPath], { stdio: 'inherit' });
-    const bundleId = config.ios?.bundleId ?? 'com.rayact.ios';
+    // config wins; else the scaffolded project.yml's PRODUCT_BUNDLE_IDENTIFIER
+    // (rayact prebuild patches it to the app's package name); else the engine default.
+    const ymlBundleId = ymlText.match(/PRODUCT_BUNDLE_IDENTIFIER:\s*(\S+)/)?.[1];
+    const bundleId = config.ios?.bundleId ?? ymlBundleId ?? 'com.rayact.ios';
     spawnSync('xcrun', ['simctl', 'launch', deviceId, bundleId], { stdio: 'inherit' });
   }
 }
