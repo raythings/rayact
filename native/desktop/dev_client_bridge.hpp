@@ -20,4 +20,9 @@ std::string iosDevCall(const char* method, const char* dataJson);
 std::string iosDevFetch(const char* url);
 #endif
 
+#if defined(RAYACT_WEB)
+// Synchronous browser XHR (web_stubs.cpp) — the web build has no libcurl.
+std::string webDevFetch(const std::string& url);
+#endif
+
 } // namespace rayact

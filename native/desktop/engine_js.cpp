@@ -31,10 +31,13 @@
 #ifndef RAYACT_NO_TS
 #include "utils/TypeStripper.h"
 #include "utils/ScriptValidator.h"
+#endif
+// rayactpack (.rayactpack mount) and getpid() are used by engineLoadPackFile
+// unconditionally, so they must not sit under RAYACT_NO_TS (which the web build
+// sets to drop the TS stripper) — rayactpack.cpp is compiled into every target.
 #include "../shared/rayactpack.h"
 #if !defined(_WIN32)
 #include <unistd.h>
-#endif
 #endif
 
 extern "C" {
@@ -216,7 +219,7 @@ static JSValue JS_getCurrentContext(JSContext* ctx, JSValue this_val,
 #ifndef RAYACT_NO_NET
 static bool httpGet(const std::string& url, std::string& body, std::string& error);
 #endif
-#if !defined(RAYACT_NO_NET) || defined(__ANDROID__) || defined(RAYACT_IOS)
+#if !defined(RAYACT_NO_NET) || defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
 static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst* argv);
 #endif
 
@@ -615,7 +618,7 @@ static void registerNativeFunctions(JSContext* ctx) {
     }
 #endif
     rayact::installModuleBindings(ctx, global);
-#if !defined(RAYACT_NO_NET) || defined(__ANDROID__) || defined(RAYACT_IOS)
+#if !defined(RAYACT_NO_NET) || defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
     JS_SetPropertyStr(ctx, global, "rayactDevFetch",
                       JS_NewCFunction(ctx, JS_rayactDevFetch, "rayactDevFetch", 1));
 #endif
@@ -902,6 +905,10 @@ static void injectMaterialIcons(JSContext* ctx) {
         char path[1024];
         snprintf(path, sizeof(path), "%s/resources/fonts/material_icons.jsc", assets);
         if (tryEvalBytecode(path)) return;
+        snprintf(path, sizeof(path), "%s/resources/fonts/material_icons.js", assets);
+        if (tryEvalSource(path)) return;
+        snprintf(path, sizeof(path), "%s/node_modules/@rayact/runtime/dist/shared/material_icons.js", assets);
+        if (tryEvalSource(path)) return;
         snprintf(path, sizeof(path), "%s/node_modules/@rayact/shared/dist/material_icons.js", assets);
         if (tryEvalSource(path)) return;
     }
@@ -1183,7 +1190,7 @@ static bool httpGetBytes(const std::string& url, std::vector<uint8_t>& body, std
 // networking goes through Java (androidDevFetch) so the binding must exist even
 // though RAYACT_NO_NET strips the curl path; otherwise the dev bootstrap calls
 // an undefined rayactDevFetch and the project pane renders black.
-#if !defined(RAYACT_NO_NET) || defined(__ANDROID__) || defined(RAYACT_IOS)
+#if !defined(RAYACT_NO_NET) || defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
 static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;
     const char* url = JS_ToCString(ctx, argv[0]);
@@ -1193,6 +1200,8 @@ static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst
     body = rayact::androidDevFetch(url);
 #elif defined(RAYACT_IOS)
     body = rayact::iosDevFetch(url);
+#elif defined(RAYACT_WEB)
+    body = rayact::webDevFetch(url);
 #else
     std::string error;
     if (!httpGet(url, body, error)) {
@@ -1203,7 +1212,7 @@ static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst
     JS_FreeCString(ctx, url);
     return JS_NewString(ctx, body.c_str());
 }
-#endif // !RAYACT_NO_NET || __ANDROID__ || RAYACT_IOS
+#endif // !RAYACT_NO_NET || __ANDROID__ || RAYACT_IOS || RAYACT_WEB
 
 static std::string jsObjectString(JSContext* ctx, JSValue obj, const char* key) {
     JSValue value = JS_GetPropertyStr(ctx, obj, key);
@@ -1369,7 +1378,48 @@ static void showDevErrorOverlay(JSContext* ctx, const std::string& message) {
 }
 
 static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
-#ifdef RAYACT_NO_NET
+#if defined(RAYACT_WEB)
+    // Web (?dev=<origin>): no libcurl here — fetch the module-HMR bootstrap via
+    // the synchronous-XHR shim (webDevFetch) and let the JS ModuleHmrRuntime
+    // drive module loading through __rayactDevFetch; HMR signals arrive over
+    // the browser WebSocket bridge (web_websocket.cpp).
+    printf("Connecting to Rayact dev server: %s\n", devServer.c_str());
+    setGlobalString(ctx, "__RAYACT_DEV_SERVER__", devServer);
+    {
+        const char* devFetchSetup =
+            "globalThis.__rayactDevFetch = function(url) { return rayactDevFetch(url); };";
+        JSValue fetchSetup = JS_Eval(ctx, devFetchSetup, strlen(devFetchSetup),
+                                     "rayact_dev_fetch.js", JS_EVAL_TYPE_GLOBAL);
+        if (JS_IsException(fetchSetup)) {
+            JS_FreeValue(ctx, fetchSetup);
+            showDevErrorOverlay(ctx, "Failed to install dev fetch hook");
+            return false;
+        }
+        JS_FreeValue(ctx, fetchSetup);
+    }
+    {
+        std::string bootstrap = rayact::webDevFetch(devServer + "/rayact/bootstrap.js");
+        if (bootstrap.empty()) {
+            showDevErrorOverlay(ctx, "Failed to fetch dev bootstrap from " + devServer);
+            return false;
+        }
+        JSValue result = JS_Eval(ctx, bootstrap.c_str(), bootstrap.size(),
+                                 "rayact_dev_bootstrap.js", JS_EVAL_TYPE_GLOBAL);
+        if (JS_IsException(result)) {
+            JSValue exception = JS_GetException(ctx);
+            const char* exceptionStr = JS_ToCString(ctx, exception);
+            std::string message = exceptionStr ? exceptionStr : "Unknown JavaScript exception";
+            JS_FreeCString(ctx, exceptionStr);
+            JS_FreeValue(ctx, exception);
+            JS_FreeValue(ctx, result);
+            showDevErrorOverlay(ctx, "Failed to evaluate dev bootstrap:\n" + message);
+            return false;
+        }
+        JS_FreeValue(ctx, result);
+        printf("Successfully loaded Rayact dev bootstrap (web)\n");
+    }
+    return true;
+#elif defined(RAYACT_NO_NET)
     (void)ctx; (void)devServer;
     fprintf(stderr, "Rayact: dev-server load needs the net subsystem (not built here)\n");
     return false;

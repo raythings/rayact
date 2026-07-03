@@ -138,7 +138,11 @@ class DevLauncherActivity : AppCompatActivity() {
         }
         activePane = ActivePane.LAUNCHER
         launcherBackBlockedUntilMs = SystemClock.uptimeMillis() + 1200L
-        if (hadProject) loadLauncherJs()
+        // Do NOT reload app.js here: the launcher session survives the project
+        // (deactivated, not destroyed), so its React tree + module state are
+        // intact. Re-evaluating the bundle into the live context creates a
+        // second React instance and the next render dies with
+        // "useMemoCache of null" (two ReactSharedInternals, one reconciler).
         mountPane(ActivePane.LAUNCHER, launcherHost, launcherSession)
         launcherHost.post {
             launcherHost.syncSurfacesToCurrentLayout()

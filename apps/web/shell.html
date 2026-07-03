@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rayact (Web / WebGPU)</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #12121a; color: #ddd; font-family: monospace; }
+    #wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px; }
+    canvas { background: #000; display: block; border: 1px solid #333; }
+    #log { width: 960px; max-width: 95vw; height: 96px; overflow: auto; font-size: 12px; white-space: pre-wrap; }
+    .rayact-ime {
+      position: fixed;
+      left: -1000px;
+      top: -1000px;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+      resize: none;
+      border: 0;
+      padding: 0;
+      outline: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="canvas" width="960" height="540" oncontextmenu="event.preventDefault()" tabindex="0"></canvas>
+    <input id="rayact-ime-input" class="rayact-ime" autocomplete="off" autocapitalize="none" spellcheck="false">
+    <textarea id="rayact-ime-textarea" class="rayact-ime" autocomplete="off" autocapitalize="none" spellcheck="false"></textarea>
+    <div id="log"></div>
+  </div>
+  <script>
+    if (!navigator.gpu) {
+      document.getElementById('log').textContent =
+        'WebGPU not available in this browser. Use a recent Chrome/Edge with WebGPU enabled.';
+    }
+    var Module = {
+      canvas: (function() { return document.getElementById('canvas'); })(),
+      print: function(text) {
+        var el = document.getElementById('log');
+        el.textContent += text + '\n';
+        el.scrollTop = el.scrollHeight;
+      },
+      printErr: function(text) { Module.print('[err] ' + text); },
+      // Consumer bundles: fetch a same-origin app bundle into MEMFS before
+      // main() runs, so loadBundledApp() finds /app.qjsbc or /app.js without
+      // the bundle being embedded at link time. Missing files are fine (the
+      // host falls through to ?dev= or the demo).
+      preRun: [function() {
+        if (/[?&]dev=/.test(location.search)) return; // dev server mode
+        addRunDependency('rayact-app-bundle');
+        var tryLoad = function(name, next) {
+          fetch(name).then(function(res) {
+            if (!res.ok) throw new Error(String(res.status));
+            return res.arrayBuffer();
+          }).then(function(buf) {
+            FS.writeFile('/' + name, new Uint8Array(buf));
+            removeRunDependency('rayact-app-bundle');
+          }).catch(function() {
+            if (next) next(); else removeRunDependency('rayact-app-bundle');
+          });
+        };
+        tryLoad('app.qjsbc', function() { tryLoad('app.js', null); });
+      }]
+    };
+    window.Module = Module;
+    (function() {
+      var encoder = new TextEncoder();
+      var activeNode = -1;
+      var activeEl = null;
+      var composing = false;
+      var canvas = document.getElementById('canvas');
+      var lastPointerEventTime = 0;
+      var mouseFallbackDown = false;
+
+      // Calling an exported native function before the wasm runtime has
+      // finished initializing triggers emscripten's `assert(runtimeInitialized)`
+      // which ABORTS the whole module (permanent black screen). The exported
+      // wrappers exist on Module immediately, so a `typeof` check is not enough —
+      // gate every native call on this readiness flag, set once the runtime is up.
+      var runtimeReady = false;
+      var prevOnRuntimeInit = Module.onRuntimeInitialized;
+      Module.onRuntimeInitialized = function() {
+        runtimeReady = true;
+        if (typeof prevOnRuntimeInit === 'function') prevOnRuntimeInit();
+      };
+
+      function canvasPoint(eventLike) {
+        if (!canvas) return null;
+        var rect = canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return null;
+        return {
+          x: (eventLike.clientX - rect.left) * (canvas.width / rect.width),
+          y: (eventLike.clientY - rect.top) * (canvas.height / rect.height)
+        };
+      }
+
+      function sendPointer(action, eventLike) {
+        if (!runtimeReady || typeof Module._rayactWebPointer !== 'function') return;
+        var point = canvasPoint(eventLike);
+        if (!point) return;
+        Module._rayactWebPointer(action, 0, point.x, point.y);
+      }
+
+      if (canvas) {
+        canvas.style.touchAction = 'none';
+        canvas.addEventListener('pointerdown', function(event) {
+          lastPointerEventTime = Date.now();
+          canvas.focus({ preventScroll: true });
+          canvas.setPointerCapture(event.pointerId);
+          sendPointer(0, event);
+          event.preventDefault();
+        });
+        canvas.addEventListener('pointermove', function(event) {
+          lastPointerEventTime = Date.now();
+          sendPointer(2, event);
+          event.preventDefault();
+        });
+        canvas.addEventListener('pointerup', function(event) {
+          lastPointerEventTime = Date.now();
+          sendPointer(1, event);
+          if (canvas.hasPointerCapture && canvas.hasPointerCapture(event.pointerId)) {
+            canvas.releasePointerCapture(event.pointerId);
+          }
+          event.preventDefault();
+        });
+        canvas.addEventListener('pointercancel', function(event) {
+          lastPointerEventTime = Date.now();
+          sendPointer(1, event);
+          event.preventDefault();
+        });
+        canvas.addEventListener('mousedown', function(event) {
+          if (Date.now() - lastPointerEventTime < 500) return;
+          mouseFallbackDown = true;
+          canvas.focus({ preventScroll: true });
+          sendPointer(0, event);
+          event.preventDefault();
+        });
+        canvas.addEventListener('mousemove', function(event) {
+          if (!mouseFallbackDown || Date.now() - lastPointerEventTime < 500) return;
+          sendPointer(2, event);
+          event.preventDefault();
+        });
+        window.addEventListener('mouseup', function(event) {
+          if (!mouseFallbackDown || Date.now() - lastPointerEventTime < 500) return;
+          mouseFallbackDown = false;
+          sendPointer(1, event);
+          event.preventDefault();
+        });
+        canvas.addEventListener('touchstart', function(event) {
+          if (Date.now() - lastPointerEventTime < 500 || !event.changedTouches.length) return;
+          canvas.focus({ preventScroll: true });
+          sendPointer(0, event.changedTouches[0]);
+          event.preventDefault();
+        }, { passive: false });
+        canvas.addEventListener('touchmove', function(event) {
+          if (Date.now() - lastPointerEventTime < 500 || !event.changedTouches.length) return;
+          sendPointer(2, event.changedTouches[0]);
+          event.preventDefault();
+        }, { passive: false });
+        canvas.addEventListener('touchend', function(event) {
+          if (Date.now() - lastPointerEventTime < 500 || !event.changedTouches.length) return;
+          sendPointer(1, event.changedTouches[0]);
+          event.preventDefault();
+        }, { passive: false });
+        canvas.addEventListener('touchcancel', function(event) {
+          if (Date.now() - lastPointerEventTime < 500 || !event.changedTouches.length) return;
+          sendPointer(1, event.changedTouches[0]);
+          event.preventDefault();
+        }, { passive: false });
+      }
+
+      function utf8Offset(value, utf16Offset) {
+        if (utf16Offset == null || utf16Offset < 0) return -1;
+        return encoder.encode(value.slice(0, utf16Offset)).length;
+      }
+
+      function sendState(textChanged) {
+        if (!runtimeReady || !activeEl || activeNode < 0 || typeof Module._rayactWebImeUpdate !== 'function') return;
+        var value = activeEl.value || '';
+        var ptr = stringToNewUTF8(value);
+        try {
+          Module._rayactWebImeUpdate(
+            activeNode,
+            ptr,
+            utf8Offset(value, activeEl.selectionStart),
+            utf8Offset(value, activeEl.selectionEnd),
+            composing ? utf8Offset(value, activeEl.selectionStart) : -1,
+            composing ? utf8Offset(value, activeEl.selectionEnd) : -1,
+            textChanged ? 1 : 0
+          );
+        } finally {
+          _free(ptr);
+        }
+      }
+
+      function configure(el, opts) {
+        el.inputMode = opts.inputMode || 'text';
+        el.enterKeyHint = opts.imeAction || 'done';
+        el.autocapitalize = opts.autocapitalize || 'none';
+        el.autocomplete = opts.autocorrect ? 'on' : 'off';
+        el.spellcheck = !!opts.autocorrect;
+        if (el.tagName === 'INPUT') el.type = opts.secure ? 'password' : 'text';
+      }
+
+      function attach(el) {
+        el.addEventListener('input', function() { sendState(true); });
+        el.addEventListener('select', function() { sendState(false); });
+        el.addEventListener('compositionstart', function() { composing = true; sendState(false); });
+        el.addEventListener('compositionend', function() { composing = false; sendState(true); });
+        el.addEventListener('keydown', function(event) {
+          if (event.key === 'Enter' && el.tagName !== 'TEXTAREA') {
+            event.preventDefault();
+            sendState(true);
+            if (runtimeReady && typeof Module._rayactWebImeSubmit === 'function') Module._rayactWebImeSubmit();
+          }
+        });
+      }
+      attach(document.getElementById('rayact-ime-input'));
+      attach(document.getElementById('rayact-ime-textarea'));
+      document.addEventListener('selectionchange', function() {
+        if (document.activeElement === activeEl) sendState(false);
+      });
+
+      Module.rayactTextInput = {
+        show: function(nodeId, value, inputType, autocorrect, secure, imeAction) {
+          activeNode = nodeId;
+          var multiline = inputType === 'multiline';
+          activeEl = document.getElementById(multiline ? 'rayact-ime-textarea' : 'rayact-ime-input');
+          var inputMode = inputType === 'email' ? 'email'
+            : inputType === 'number' ? 'decimal'
+            : inputType === 'phone' ? 'tel'
+            : inputType === 'url' ? 'url'
+            : 'text';
+          configure(activeEl, { inputMode: inputMode, autocorrect: autocorrect, secure: secure, imeAction: imeAction });
+          if (activeEl.value !== value) activeEl.value = value || '';
+          var end = activeEl.value.length;
+          activeEl.focus({ preventScroll: true });
+          activeEl.setSelectionRange(end, end);
+        },
+        hide: function() {
+          if (activeEl) activeEl.blur();
+          activeNode = -1;
+          activeEl = null;
+          composing = false;
+          var canvas = document.getElementById('canvas');
+          if (canvas) canvas.focus({ preventScroll: true });
+        },
+        update: function(nodeId, value, selectionStart, selectionEnd) {
+          if (!activeEl || activeNode !== nodeId) return;
+          if (value != null && activeEl.value !== value) activeEl.value = value;
+          function utf16FromBytes(str, bytes) {
+            if (bytes == null || bytes < 0) return activeEl.value.length;
+            var total = 0;
+            for (var i = 0; i < str.length; i++) {
+              var cp = str.codePointAt(i);
+              var ch = String.fromCodePoint(cp);
+              var next = total + encoder.encode(ch).length;
+              if (next > bytes) return i;
+              total = next;
+              if (cp > 0xffff) i++;
+            }
+            return str.length;
+          }
+          var start = utf16FromBytes(activeEl.value, selectionStart);
+          var end = utf16FromBytes(activeEl.value, selectionEnd);
+          activeEl.setSelectionRange(start, end);
+        }
+      };
+    })();
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

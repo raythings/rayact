@@ -29,5 +29,15 @@
   "homepage": "https://github.com/raythings/rayact#readme",
   "bugs": {
     "url": "https://github.com/raythings/rayact/issues"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./material-icons": {
+      "types": "./dist/shared/material_icons.d.ts",
+      "default": "./dist/shared/material_icons.js"
+    }
   }
 }
