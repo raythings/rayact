@@ -10,7 +10,13 @@ import {
   writeRayactBuild
 } from '@rayact/dev-server';
 import type { RayactBuildMode, RayactConfig } from '@rayact/dev-server';
-import { ensureDesktopPrebuilt } from '@rayact/prebuild';
+import {
+  ensureDesktopPrebuilt,
+  resolvePrebuiltAndroidDir,
+  resolvePackageDir,
+  prebuiltCacheDir,
+  downloadPrebuilt
+} from '@rayact/prebuild';
 import type { CliFlags } from '../parse.js';
 import { resolveDesktopBin } from '../desktop.js';
 
@@ -149,6 +155,11 @@ export async function runBuild(flags: CliFlags): Promise<void> {
   console.log(`Bundle: ${output.bundleFormat === 'qjsbc' ? 'bundle.qjsbc' : 'bundle.js'}`);
   console.log(`Assets: ${output.assets.length}`);
 
+  if (flags.platform === 'web' && !flags.android && !flags.ios) {
+    await assembleWebApp(output.bundleFormat, output.bytecode, output.code, outDir);
+    return;
+  }
+
   if (!flags.android && !flags.ios && !flags.desktopApp) return;
 
   const { code, cssFiles } = normalizeCssRefs(output.code, process.cwd());
@@ -210,6 +221,11 @@ async function buildAndroidApk(
     ? path.resolve(androidDir, '..', 'rayact-assets')
     : path.join(androidDir, 'app/src/main/assets');
   await fs.mkdir(apkAssets, { recursive: true });
+  // Remove the other bundle form first: the standalone loader prefers
+  // app.qjsbc, so a stale one would shadow a fresh app.js build (and vice
+  // versa a stale dev-client app.js must not ride along in a release APK).
+  await fs.rm(path.join(apkAssets, 'app.js'), { force: true });
+  await fs.rm(path.join(apkAssets, 'app.qjsbc'), { force: true });
   if (bundleFormat === 'qjsbc' && bytecode) {
     await fs.writeFile(path.join(apkAssets, 'app.qjsbc'), bytecode);
   } else {
@@ -237,6 +253,29 @@ async function buildAndroidApk(
       if (!(await fs.stat(src)).isFile()) continue;
       await copyInto(src, path.join(apkAssets, 'runtime/assets', name));
       await copyInto(src, path.join(apkAssets, 'runtime/assets/assets', name));
+    }
+  }
+
+  // Icon/emoji fonts: RayactBundledAssets.kt extracts assets/runtime/* -> filesDir
+  // at first launch, and the engine looks for resources/fonts/ there. Sourced
+  // from @rayact/prebuilt-android-arm64 (falls back to the per-user prebuilt
+  // cache / GitHub download, same resolution chain `rayact prebuild` uses for
+  // the .so). Without this, release APKs ship with zero fonts (tofu icons).
+  {
+    let androidPrebuiltDir = resolvePrebuiltAndroidDir(cwd);
+    if (!androidPrebuiltDir || !existsSync(path.join(androidPrebuiltDir, 'resources/fonts'))) {
+      const cached = prebuiltCacheDir(undefined, 'android-arm64');
+      androidPrebuiltDir = existsSync(path.join(cached, 'resources/fonts'))
+        ? cached
+        : await downloadPrebuilt('android-arm64');
+    }
+    const fontsDir = path.join(androidPrebuiltDir, 'resources/fonts');
+    if (existsSync(fontsDir)) {
+      for (const name of await fs.readdir(fontsDir)) {
+        await copyInto(path.join(fontsDir, name), path.join(apkAssets, 'runtime/resources/fonts', name));
+      }
+    } else {
+      console.warn('warning: no resources/fonts found in @rayact/prebuilt-android-arm64 — icons will render as tofu');
     }
   }
 
@@ -272,6 +311,38 @@ async function buildAndroidApk(
   }
 }
 
+/**
+ * `rayact build --web`: pair the app bundle with the prebuilt WASM/WebGPU host
+ * (downloaded from the GitHub release) into a servable <outDir>/web directory.
+ * The host's shell fetches ./app.qjsbc or ./app.js into its filesystem at boot.
+ */
+async function assembleWebApp(
+  bundleFormat: 'js' | 'qjsbc',
+  bytecode: Buffer | undefined,
+  code: string,
+  outDir: string
+): Promise<void> {
+  const { ensureWebHost } = await import('@rayact/prebuild');
+  const hostDir = await ensureWebHost();
+  const webDir = path.join(outDir, 'web');
+  await fs.mkdir(webDir, { recursive: true });
+  for (const name of ['rayact.html', 'rayact.js', 'rayact.wasm']) {
+    await fs.copyFile(path.join(hostDir, name), path.join(webDir, name));
+  }
+  // index.html so `serve dist/web` just works.
+  await fs.copyFile(path.join(hostDir, 'rayact.html'), path.join(webDir, 'index.html'));
+  if (bundleFormat === 'qjsbc' && bytecode) {
+    await fs.writeFile(path.join(webDir, 'app.qjsbc'), bytecode);
+  } else {
+    await fs.writeFile(path.join(webDir, 'app.js'), code);
+  }
+  console.log(`Web app assembled: ${webDir}`);
+  console.log('Serve it with any static server, e.g.:');
+  console.log(`  npx serve ${path.relative(process.cwd(), webDir) || '.'}`);
+  console.log('(WebGPU browser required. For live dev: rayact dev, then open');
+  console.log(' rayact.html?dev=http://localhost:8081)');
+}
+
 async function buildIosApp(
   flags: CliFlags,
   config: RayactConfig,
@@ -300,6 +371,10 @@ async function buildIosApp(
     ? path.resolve(iosDir, '..', 'rayact-assets')
     : path.resolve(iosDir, '../../android/app/src/main/assets');
   await fs.mkdir(iosAssets, { recursive: true });
+  // Same stale-bundle guard as Android: never let app.js and app.qjsbc from
+  // different builds coexist in the staged assets.
+  await fs.rm(path.join(iosAssets, 'app.js'), { force: true });
+  await fs.rm(path.join(iosAssets, 'app.qjsbc'), { force: true });
   if (bundleFormat === 'qjsbc' && bytecode) {
     await fs.writeFile(path.join(iosAssets, 'app.qjsbc'), bytecode);
   } else {
@@ -322,6 +397,28 @@ async function buildIosApp(
       if (!(await fs.stat(src)).isFile()) continue;
       await copyInto(src, path.join(iosAssets, 'runtime/assets', name));
       await copyInto(src, path.join(iosAssets, 'runtime/assets/assets', name));
+    }
+  }
+
+  // Icon/emoji fonts: IOSBundledAssets.swift extracts runtime/* -> Documents
+  // at launch (same runtime/ prefix convention as Android), and the engine
+  // looks for resources/fonts/ there. Sourced from @rayact/prebuilt-ios-arm64.
+  // Without this, release builds ship with zero fonts (tofu icons).
+  {
+    let iosPrebuiltDir = resolvePackageDir(cwd, '@rayact/prebuilt-ios-arm64');
+    if (!iosPrebuiltDir || !existsSync(path.join(iosPrebuiltDir, 'resources/fonts'))) {
+      const cached = prebuiltCacheDir(undefined, 'ios-arm64');
+      iosPrebuiltDir = existsSync(path.join(cached, 'resources/fonts'))
+        ? cached
+        : await downloadPrebuilt('ios-arm64');
+    }
+    const fontsDir = path.join(iosPrebuiltDir, 'resources/fonts');
+    if (existsSync(fontsDir)) {
+      for (const name of await fs.readdir(fontsDir)) {
+        await copyInto(path.join(fontsDir, name), path.join(iosAssets, 'runtime/resources/fonts', name));
+      }
+    } else {
+      console.warn('warning: no resources/fonts found in @rayact/prebuilt-ios-arm64 — icons will render as tofu');
     }
   }
 

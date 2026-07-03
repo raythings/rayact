@@ -107,6 +107,7 @@ static JSRuntime* g_rt = nullptr;
 JSContext* g_ctx = nullptr;
 static bool g_running = false;
 static std::filesystem::path g_releaseAssetBaseDir;
+namespace rayact { std::string rayactAssetBaseDir(); } // defined below; used by injectMaterialIcons above its definition point
 
 // Default: MSAA 4x + HighDPI. User can override before initRaylib() via setConfigFlags().
 static unsigned int g_configFlags = FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI;
@@ -585,6 +586,12 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_setIconProps, "setIconProps", 4));
     JS_SetPropertyStr(ctx, global, "registerFont",
                       JS_NewCFunction(ctx, JS_registerFont, "registerFont", 2));
+    JS_SetPropertyStr(ctx, global, "loadFont",
+                      JS_NewCFunction(ctx, JS_loadFont, "loadFont", 2));
+    JS_SetPropertyStr(ctx, global, "loadIcons",
+                      JS_NewCFunction(ctx, JS_loadIcons, "loadIcons", 3));
+    JS_SetPropertyStr(ctx, global, "loadEmoji",
+                      JS_NewCFunction(ctx, JS_loadEmoji, "loadEmoji", 1));
     JS_SetPropertyStr(ctx, global, "resolveAssetUrl",
                       JS_NewCFunction(ctx, JS_resolveAssetUrl, "resolveAssetUrl", 1));
     JS_SetPropertyStr(ctx, global, "resolveAssetPath",
@@ -845,7 +852,7 @@ static JSValue JS_printNavigationStatus(JSContext* ctx, JSValue this_val,
 
 // Auto-inject material_icons once so all user scripts have the Icons map.
 // Prefers .jsc bytecode (faster load, no parse) if present alongside the .js.
-static void injectMaterialIcons(JSContext* ctx) {
+static void injectMaterialIconsRaw(JSContext* ctx) {
     static bool injected = false;
     if (injected) return;
     injected = true;
@@ -938,6 +945,59 @@ static void injectMaterialIcons(JSContext* ctx) {
     if (tryParentSearch(std::filesystem::current_path())) return;
     if (!g_releaseAssetBaseDir.empty() && tryParentSearch(g_releaseAssetBaseDir)) return;
     printf("material_icons.js not found — icon names won't resolve\n");
+}
+
+// After globalThis.Icons is populated (by injectMaterialIconsRaw, whose
+// fragile multi-path search is left untouched here), mirror the name ->
+// codepoint table into raym3's IconRenderer as the "material" set, so
+// ResolveIconCodepoint(setName, name) is the single resolution path for both
+// the default set and any app-loaded custom sets. Runs once.
+static void registerMaterialIconNamesIntoRaym3(JSContext* ctx) {
+    static bool registered = false;
+    if (registered) return;
+
+    JSValue globalObj = JS_GetGlobalObject(ctx);
+    JSValue iconsMap = JS_GetPropertyStr(ctx, globalObj, "Icons");
+    if (JS_IsObject(iconsMap)) {
+        std::unordered_map<std::string, int> names;
+        JSPropertyEnum* props = nullptr;
+        uint32_t count = 0;
+        if (JS_GetOwnPropertyNames(ctx, &props, &count, iconsMap,
+                                   JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) == 0) {
+            for (uint32_t i = 0; i < count; i++) {
+                const char* key = JS_AtomToCString(ctx, props[i].atom);
+                JSValue v = JS_GetProperty(ctx, iconsMap, props[i].atom);
+                int32_t cp = 0;
+                JS_ToInt32(ctx, &cp, v);
+                if (key) names[key] = cp;
+                JS_FreeCString(ctx, key);
+                JS_FreeValue(ctx, v);
+                JS_FreeAtom(ctx, props[i].atom);
+            }
+            js_free(ctx, props);
+        }
+        if (!names.empty()) {
+            raym3::v2::RegisterIconNames("material", names);
+            registered = true;
+        }
+    }
+    JS_FreeValue(ctx, iconsMap);
+    JS_FreeValue(ctx, globalObj);
+}
+
+static void injectMaterialIcons(JSContext* ctx) {
+    // Desktop never calls engineLoadConfig() (Android's only caller of
+    // SetIconFontSearchPrefix), so without this the "material" set's font
+    // fallback search has no prefix to search under and always misses,
+    // rendering tofu. rayactAssetBaseDir() (derived from the loaded bundle's
+    // own directory, e.g. dist/) is the right base on desktop — appAssetsPath()
+    // resolves to the *engine binary's* directory here, not the app's, so it's
+    // only used as a fallback for platforms where it IS the app dir (Android).
+    std::string releaseBase = rayact::rayactAssetBaseDir();
+    const char* assets = !releaseBase.empty() ? releaseBase.c_str() : rayact::appAssetsPath();
+    if (assets && *assets) raym3::v2::SetIconFontSearchPrefix(assets);
+    injectMaterialIconsRaw(ctx);
+    registerMaterialIconNamesIntoRaym3(ctx);
 }
 
 static bool evalBytecodeBuffer(JSContext* ctx, const uint8_t* data, size_t len, const char* label) {
@@ -1765,7 +1825,9 @@ void enginePrepareJSThread() {
 }
 
 void engineFinishLoad() {
-    buildIconSpriteSheet();
+    // Icon atlas building is now owned entirely by raym3::v2::IconRenderer and
+    // happens lazily on first DrawIcon call (same as Checkbox/RadioButton/
+    // Switch already behaved) — no eager pre-build needed here.
     // Shapes/text batching uses the font white-glyph region by default; on Vulkan
     // Android that atlas upload can sample black — use the 1x1 default texture for
     // solid shape fills (text still uses the font texture via DrawTextEx).

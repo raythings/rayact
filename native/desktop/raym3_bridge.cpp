@@ -11,6 +11,7 @@
 #include <raym3/v2/Components.h>
 #include <raym3/v2/Density.h>
 #include <raym3/v2/IconRenderer.h>
+#include <raym3/v2/EmojiFont.h>
 #include <raym3/v2/Input.h>
 #include <raym3/v2/MaterialDefaults.h>
 #include <raym3/v2/MaterialTokens.h>
@@ -399,30 +400,11 @@ void resolvePopoverAnchors() {
     }
 }
 
-// ─── icon sprite sheet ─────────────────────────────────────────────────────
-// All icons used by the app are rasterized once into a single RenderTexture.
-// Rendering uses DrawTextureRec (one UV copy) instead of DrawTextEx (glyph
-// lookup + advance loop). All icons on screen share one texture → Raylib
-// batches every icon draw call into a single GPU draw.
-
-struct IconKey {
-    int cp;   // Unicode codepoint
-    int size; // pixel size (float rounded to int)
-    bool filled;
-    bool operator<(const IconKey& o) const {
-        if (cp != o.cp) return cp < o.cp;
-        if (size != o.size) return size < o.size;
-        return filled < o.filled;
-    }
-};
-
-struct IconFontKey {
-    int size;
-    bool filled;
-    bool operator<(const IconFontKey& o) const {
-        return size != o.size ? size < o.size : filled < o.filled;
-    }
-};
+// ─── icon rendering ────────────────────────────────────────────────────────
+// Font resolution, atlas building and drawing all live in raym3::v2's
+// IconRenderer (single source of truth, shared across desktop/android/ios).
+// The bridge only keeps per-node UI bookkeeping (which icon/size/color/filled
+// a given node id should draw) and calls raym3::v2::DrawIcon directly.
 
 struct IconRenderState {
     std::string glyph;
@@ -431,49 +413,10 @@ struct IconRenderState {
     Color color = WHITE;
     bool filled = false;
     std::string variant = "rounded";
+    std::string set = "material";
 };
 
-static std::map<IconFontKey, Font> g_iconFonts; // (size, fill) → Font
-static std::set<int>            g_iconCPSet;    // codepoints loaded into fonts
-static std::size_t              g_iconCPSetVer = 0;
-static std::map<IconFontKey, std::size_t> g_iconFontVer;
 static std::map<int, IconRenderState> g_iconRenderStates;
-
-// Sprite sheet state — built once after JS init via buildIconSpriteSheet()
-static std::set<IconKey>         g_iconRequests;  // (cp, size) pairs registered during init
-static Texture2D                 g_iconSheet = {0};
-static std::map<IconKey, Rectangle> g_iconSheetRects; // UV pixel rects in g_iconSheet
-
-// Search order must match material_icons.js. That map currently uses classic
-// Material Icons codepoints; loading Material Symbols first produces .notdef
-// glyphs for many names.
-static const char* kFilledIconFontCandidates[] = {
-    "./rayact/resources/fonts/MaterialIcons-Regular.ttf",
-    "./rayact/resources/fonts/MaterialSymbolsRounded-Filled.ttf",
-    "./rayact/resources/fonts/MaterialSymbolsRounded.ttf",
-    "./resources/fonts/MaterialIcons-Regular.ttf",
-    "./resources/fonts/MaterialSymbolsRounded-Filled.ttf",
-    "./resources/fonts/MaterialSymbolsRounded.ttf",
-    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-    "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "C:/Windows/Fonts/segoeui.ttf",
-    nullptr
-};
-
-static const char* kOutlinedIconFontCandidates[] = {
-    "./rayact/resources/fonts/MaterialIcons-Regular.ttf",
-    "./rayact/resources/fonts/MaterialSymbolsRounded.ttf",
-    "./rayact/resources/fonts/MaterialSymbolsRounded-Filled.ttf",
-    "./resources/fonts/MaterialIcons-Regular.ttf",
-    "./resources/fonts/MaterialSymbolsRounded.ttf",
-    "./resources/fonts/MaterialSymbolsRounded-Filled.ttf",
-    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-    "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "C:/Windows/Fonts/segoeui.ttf",
-    nullptr
-};
 
 static void DrawSliderTrackSegment(Rectangle r, float leftRadius,
                                    float rightRadius, Color color) {
@@ -677,189 +620,47 @@ static int iconPixelSize(int sizeDp) {
     return raym3::v2::Density::RasterPixels((float)sizeDp);
 }
 
-static const char* findIconFontPath(bool filled) {
-    static std::string s_found;
-    auto tryPath = [&](const std::string& p) -> const char* {
-        FILE* f = fopen(p.c_str(), "rb");
-        if (f) { fclose(f); s_found = p; return s_found.c_str(); }
-        return nullptr;
-    };
-    const char* assets = rayact::appAssetsPath();
-    if (assets && *assets) {
-        const char* rels[] = {
-            "resources/fonts/MaterialIcons-Regular.ttf",
-            filled ? "resources/fonts/MaterialSymbolsRounded-Filled.ttf"
-                   : "resources/fonts/MaterialSymbolsRounded.ttf",
-            filled ? "resources/fonts/MaterialSymbolsRounded.ttf"
-                   : "resources/fonts/MaterialSymbolsRounded-Filled.ttf",
-            nullptr
-        };
-        for (int i = 0; rels[i]; i++) {
-            if (auto hit = tryPath(std::string(assets) + "/" + rels[i])) return hit;
-        }
-    }
-    const char** candidates = filled ? kFilledIconFontCandidates : kOutlinedIconFontCandidates;
-    for (int i = 0; candidates[i]; i++) {
-        if (auto hit = tryPath(candidates[i])) return hit;
-    }
-    return nullptr;
+// Register a (codepoint, size, filled) request with raym3's icon renderer —
+// raym3 owns the font/atlas cache; the bridge no longer keeps its own copy.
+static void requireIcon(int cp, int size, bool filled, const std::string& setName = "material") {
+    raym3::v2::RegisterIcon(cp, size, filled, setName);
 }
 
-// Register a (codepoint, size) pair. Also invalidates font cache if new CP.
-static void requireIcon(int cp, int size, bool filled) {
-    g_iconRequests.insert({cp, size, filled});
-    raym3::v2::RegisterMaterialIcon(cp, size, filled);
-    if (!g_iconCPSet.count(cp)) {
-        g_iconCPSet.insert(cp);
-        g_iconCPSetVer++;
-        for (auto& [sz, font] : g_iconFonts)
-            if (font.texture.id != 0) ::UnloadFont(font);
-        g_iconFonts.clear();
-        g_iconFontVer.clear();
+// Resolves an icon name to its glyph (UTF-8 codepoint bytes) via raym3's
+// IconRenderer name table, registering it for atlas inclusion. If `name`
+// isn't a plain-ASCII identifier (i.e. it's already a raw glyph), returns it
+// unchanged. File-scope (not the anonymous namespace below) since both
+// JS_createIcon and the RTYPE_ICON binary decoder need it.
+static std::string iconGlyphFromNameBinary(const std::string& name, int size, bool filled,
+                                           int& resolvedCp, const std::string& setName = "material") {
+    resolvedCp = 0;
+    bool looksLikeName = !name.empty();
+    for (unsigned char c : name) {
+        if (c > 127) { looksLikeName = false; break; }
     }
-}
+    if (!looksLikeName) return name;
 
-// Returns a font loaded with ONLY the codepoints that have been requested via
-// createIcon — keeps the atlas small (one glyph per icon used, not all 2188).
-static Font getIconFont(int size, bool filled) {
-    IconFontKey fontKey{size, filled};
-    auto verIt = g_iconFontVer.find(fontKey);
-    if (verIt != g_iconFontVer.end() && verIt->second == g_iconCPSetVer) {
-        return g_iconFonts[fontKey]; // cache hit, CP set unchanged
+    int cp = raym3::v2::ResolveIconCodepoint(setName, name);
+    if (cp <= 0) return name;
+    resolvedCp = cp;
+    requireIcon(resolvedCp, (int)roundf((float)size), filled, setName);
+    char utf8[5] = {};
+    if (cp < 0x80) {
+        utf8[0] = (char)cp;
+    } else if (cp < 0x800) {
+        utf8[0] = (char)(0xC0 | (cp >> 6));
+        utf8[1] = (char)(0x80 | (cp & 0x3F));
+    } else if (cp < 0x10000) {
+        utf8[0] = (char)(0xE0 | (cp >> 12));
+        utf8[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        utf8[2] = (char)(0x80 | (cp & 0x3F));
+    } else {
+        utf8[0] = (char)(0xF0 | (cp >> 18));
+        utf8[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+        utf8[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        utf8[3] = (char)(0x80 | (cp & 0x3F));
     }
-
-    // Unload stale entry for this size if present
-    auto it = g_iconFonts.find(fontKey);
-    if (it != g_iconFonts.end() && it->second.texture.id != 0)
-        ::UnloadFont(it->second);
-
-    const char* path = findIconFontPath(filled);
-    Font font = {0};
-    if (path && !g_iconCPSet.empty()) {
-        std::vector<int> cps(g_iconCPSet.begin(), g_iconCPSet.end());
-        font = LoadFontEx(path, iconPixelSize(size), cps.data(), (int)cps.size());
-        printf("Icon font: loaded %d %s glyph(s) at size %d\n",
-               (int)cps.size(), filled ? "filled" : "outlined", size);
-    }
-    if (font.texture.id == 0) font = GetFontDefault();
-    g_iconFonts[fontKey]    = font;
-    g_iconFontVer[fontKey]  = g_iconCPSetVer;
-    return font;
-}
-
-// Drop all GPU-side icon-sheet state WITHOUT unloading: the graphics device
-// was re-initialized, so the held texture/font ids are stale (and may already
-// be reused by the new device). g_iconRequests/g_iconCPSet are kept so
-// buildIconSpriteSheet() can rebuild from the same registrations (icon fonts
-// reload from disk on demand).
-void rayactResetIconSheet() {
-    g_iconSheet = {0};
-    g_iconSheetRects.clear();
-    g_iconFonts.clear();
-    g_iconFontVer.clear();
-}
-
-// Build sprite sheet from all (cp, size) pairs registered during JS init.
-// Called once after JS finishes executing, before the render loop starts.
-// After this, all icon render lambdas use DrawTextureRec instead of DrawTextEx.
-void buildIconSpriteSheet() {
-    // g_iconRequests travels with the runtime (per-runtime storage), but
-    // g_iconCPSet is process-global and gets reset when another engine
-    // runtime bootstraps. Re-derive it here so a post-re-init rebuild loads
-    // the real icon font instead of falling back to the default font (which
-    // baked "?" tofu glyphs into the sheet).
-    for (const auto& key : g_iconRequests) {
-        if (g_iconCPSet.insert(key.cp).second) g_iconCPSetVer++;
-    }
-    if (g_iconRequests.empty() || !IsWindowReady()) return;
-
-    const int PAD = 2;
-
-    // UTF-8 encode a codepoint
-    auto cpToUtf8 = [](int cp, char out[5]) {
-        if (cp < 0x80) {
-            out[0] = (char)cp; out[1] = 0;
-        } else if (cp < 0x800) {
-            out[0] = (char)(0xC0|(cp>>6));   out[1] = (char)(0x80|(cp&0x3F)); out[2]=0;
-        } else {
-            out[0] = (char)(0xE0|(cp>>12));
-            out[1] = (char)(0x80|((cp>>6)&0x3F));
-            out[2] = (char)(0x80|(cp&0x3F)); out[3]=0;
-        }
-    };
-
-    // Each icon gets a SQUARE dpi-scaled cell. Font metrics (offsetY, advance,
-    // line height) do NOT reliably center the visual glyph — different icons have
-    // different ink bearings, so trusting metrics leaves them sitting high/low.
-    // Instead build the atlas on the CPU: scan each glyph bitmap for its actual
-    // ink bounds (first/last opaque pixel) and blit ONLY the ink, centered, into
-    // the cell. This centers every icon by its real pixels, uniformly.
-    struct Entry { IconKey key; float x; float cellPx; };
-    std::vector<Entry> entries;
-    float curX = PAD;
-    int maxCell = 0;
-    for (const auto& key : g_iconRequests) {
-        int cellPx = iconPixelSize(key.size);
-        entries.push_back({key, curX, (float)cellPx});
-        curX += cellPx + PAD * 2;
-        maxCell = std::max(maxCell, cellPx);
-    }
-    if (entries.empty()) return;
-
-    // Round up to power-of-2 dimensions
-    int texW = 1, texH = 1;
-    int rawW = (int)curX + PAD, rawH = maxCell + PAD * 2;
-    while (texW < rawW) texW <<= 1;
-    while (texH < rawH) texH <<= 1;
-
-    Image atlas = GenImageColor(texW, texH, Color{0, 0, 0, 0});
-    ImageFormat(&atlas, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-    for (auto& e : entries) {
-        Font font = getIconFont(e.key.size, e.key.filled);
-        float cell = e.cellPx;
-        int gidx = GetGlyphIndex(font, e.key.cp);
-        Image g = font.glyphs[gidx].image; // rasterized glyph bitmap at baseSize
-        // Actual ink bounds (alpha or luminance > threshold).
-        int top = g.height, bot = -1, left = g.width, right = -1;
-        for (int y = 0; y < g.height; ++y)
-            for (int x = 0; x < g.width; ++x) {
-                Color p = GetImageColor(g, x, y);
-                if (p.a > 16 || p.r > 16) {
-                    if (y < top) top = y;
-                    if (y > bot) bot = y;
-                    if (x < left) left = x;
-                    if (x > right) right = x;
-                }
-            }
-        if (bot >= top && right >= left) {
-            float inkW = (float)(right - left + 1), inkH = (float)(bot - top + 1);
-            float scale = font.baseSize > 0 ? cell / (float)font.baseSize : 1.0f;
-            float dw = inkW * scale, dh = inkH * scale;
-            // Never exceed the cell (keep aspect) for unusually large glyphs.
-            float fit = std::min(1.0f, std::min(cell / dw, cell / dh));
-            dw *= fit; dh *= fit;
-            Rectangle src = {(float)left, (float)top, inkW, inkH};
-            Rectangle dst = {e.x + (cell - dw) * 0.5f, PAD + (cell - dh) * 0.5f, dw, dh};
-            ImageDrawImagePro(&atlas, g, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
-        }
-        g_iconSheetRects[e.key] = {e.x, (float)PAD, cell, cell};
-    }
-
-    if (g_iconSheet.id != 0) UnloadTexture(g_iconSheet);
-    g_iconSheet = LoadTextureFromImage(atlas);
-    SetTextureFilter(g_iconSheet, TEXTURE_FILTER_BILINEAR);
-    if (std::getenv("RAYACT_ATLAS_DBG")) ExportImage(atlas, "atlas.png");
-    UnloadImage(atlas);
-
-    // Icon fonts no longer needed for rendering — all glyphs are now in the
-    // sprite sheet. Unloading frees the per-size font texture atlases from VRAM/RAM.
-    for (auto& [sz, font] : g_iconFonts)
-        if (font.texture.id != 0) ::UnloadFont(font);
-    g_iconFonts.clear();
-    g_iconFontVer.clear();
-
-    printf("Icon sprite sheet built: %dx%d px, %zu icon(s)\n",
-           texW, texH, entries.size());
+    return std::string(utf8);
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────
@@ -3849,11 +3650,18 @@ JSValue JS_createIcon(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
         const char* v = JS_ToCString(ctx, argv[4]);
         if (v) { variantStr = v; JS_FreeCString(ctx, v); }
     }
-    // argv[5]: explicit filled bool; default true
-    bool filled = true;
+    // argv[5]: explicit filled bool; default outlined (false), matching
+    // Material Symbols' own FILL=0 default and the `<Icon>` component's default.
+    bool filled = false;
     if (argc >= 6 && !JS_IsUndefined(argv[5]) && !JS_IsNull(argv[5])) {
         int b = 0;
         if (JS_ToInt32(ctx, &b, argv[5]) == 0) filled = (b != 0);
+    }
+    // argv[6]: icon set name; default "material" (built-in, zero setup).
+    std::string setName = "material";
+    if (argc >= 7 && !JS_IsUndefined(argv[6]) && !JS_IsNull(argv[6])) {
+        const char* s = JS_ToCString(ctx, argv[6]);
+        if (s) { setName = s; JS_FreeCString(ctx, s); }
     }
 
     const char* glyph = JS_ToCString(ctx, argv[0]);
@@ -3863,46 +3671,7 @@ JSValue JS_createIcon(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
 
     // Resolved codepoint (0 = raw UTF-8 glyph, no sprite sheet entry needed).
     int resolvedCp = 0;
-
-    // If the string looks like an icon name (all ASCII, no spaces), look it up
-    // in the global Icons map loaded from material_icons.js.
-    bool looksLikeName = !glyphStr.empty();
-    for (unsigned char c : glyphStr) {
-        if (c > 127) { looksLikeName = false; break; }
-    }
-    if (looksLikeName) {
-        JSValue globalObj = JS_GetGlobalObject(ctx);
-        JSValue iconsMap  = JS_GetPropertyStr(ctx, globalObj, "Icons");
-        if (JS_IsObject(iconsMap)) {
-            JSValue cpVal = JS_GetPropertyStr(ctx, iconsMap, glyphStr.c_str());
-            uint32_t cp = 0;
-            if (!JS_IsUndefined(cpVal) && JS_ToUint32(ctx, &cp, cpVal) == 0 && cp > 0) {
-                resolvedCp = (int)cp;
-                requireIcon(resolvedCp, (int)roundf(size), filled);
-                // Convert codepoint to UTF-8
-                char utf8[5] = {};
-                if (cp < 0x80) {
-                    utf8[0] = (char)cp;
-                } else if (cp < 0x800) {
-                    utf8[0] = (char)(0xC0 | (cp >> 6));
-                    utf8[1] = (char)(0x80 | (cp & 0x3F));
-                } else if (cp < 0x10000) {
-                    utf8[0] = (char)(0xE0 | (cp >> 12));
-                    utf8[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
-                    utf8[2] = (char)(0x80 | (cp & 0x3F));
-                } else {
-                    utf8[0] = (char)(0xF0 | (cp >> 18));
-                    utf8[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
-                    utf8[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
-                    utf8[3] = (char)(0x80 | (cp & 0x3F));
-                }
-                glyphStr = std::string(utf8);
-            }
-            JS_FreeValue(ctx, cpVal);
-        }
-        JS_FreeValue(ctx, iconsMap);
-        JS_FreeValue(ctx, globalObj);
-    }
+    glyphStr = iconGlyphFromNameBinary(glyphStr, (int)roundf(size), filled, resolvedCp, setName);
 
     // M3 default icon color is onSurfaceVariant (contrasts surface containers),
     // not WHITE — a white default vanishes on the light surfaces most icons sit
@@ -3927,32 +3696,15 @@ JSValue JS_createIcon(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
     if (!props.style.flexShrink) props.style.flexShrink = 0.0f;
 
     int id = nextNativeNodeId();
-    g_iconRenderStates[id] = IconRenderState{glyphStr, resolvedCp, size, color, filled, variantStr};
+    g_iconRenderStates[id] = IconRenderState{glyphStr, resolvedCp, size, color, filled, variantStr, setName};
 
     auto node = raym3::v2::Custom(props, [id](Rectangle layout) {
         auto stateIt = g_iconRenderStates.find(id);
         if (stateIt == g_iconRenderStates.end()) return;
         const IconRenderState& icon = stateIt->second;
-        // Prefer sprite sheet (single GPU batch for all icons).
-        if (icon.codepoint != 0 && g_iconSheet.id != 0) {
-            IconKey key{icon.codepoint, (int)roundf(icon.size), icon.filled};
-            auto it = g_iconSheetRects.find(key);
-            if (it != g_iconSheetRects.end()) {
-                Rectangle src = it->second;
-                // Atlas is a normal top-down texture (LoadTextureFromImage), so
-                // no vertical flip needed when sampling.
-                Rectangle drawSrc = {src.x, src.y, src.width, src.height};
-                float drawSize = icon.size;
-                Rectangle dest = {layout.x + (layout.width - drawSize) * 0.5f,
-                                  layout.y + (layout.height - drawSize) * 0.5f,
-                                  drawSize, drawSize};
-                DrawTexturePro(g_iconSheet, drawSrc, dest, {0.0f, 0.0f}, 0.0f, icon.color);
-                return;
-            }
-        }
         if (icon.codepoint != 0) {
-            raym3::v2::DrawMaterialIcon(icon.codepoint, layout, icon.color,
-                                        (int)roundf(icon.size), icon.filled);
+            raym3::v2::DrawIcon(icon.codepoint, layout, icon.color,
+                                (int)roundf(icon.size), icon.filled, icon.set);
         }
     });
 
@@ -3972,11 +3724,17 @@ JSValue JS_setIconProps(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     }
 
     IconRenderState& icon = stateIt->second;
+    // argv[6]: icon set override — applied first so a later name/filled
+    // change in this same call resolves against the (possibly new) set.
+    if (argc >= 7 && !JS_IsUndefined(argv[6]) && !JS_IsNull(argv[6])) {
+        const char* s = JS_ToCString(ctx, argv[6]);
+        if (s) { icon.set = s; JS_FreeCString(ctx, s); }
+    }
     if (argc >= 2 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1])) {
         double d = 0.0;
         if (JS_ToFloat64(ctx, &d, argv[1]) == 0 && d > 0.0) {
             icon.size = (float)d;
-            if (icon.codepoint != 0) requireIcon(icon.codepoint, (int)roundf(icon.size), icon.filled);
+            if (icon.codepoint != 0) requireIcon(icon.codepoint, (int)roundf(icon.size), icon.filled, icon.set);
             auto& style = nodeIt->second->style;
             if (!style.width || *style.width <= 0.0f) style.width = icon.size;
             if (!style.height || *style.height <= 0.0f) style.height = icon.size;
@@ -3996,26 +3754,9 @@ JSValue JS_setIconProps(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
         if (nameStr) {
             std::string nameS(nameStr);
             JS_FreeCString(ctx, nameStr);
-            // Resolve name through the Icons global map (same path as createIcon)
-            JSValue globalObj = JS_GetGlobalObject(ctx);
-            JSValue iconsMap  = JS_GetPropertyStr(ctx, globalObj, "Icons");
-            if (JS_IsObject(iconsMap)) {
-                JSValue cpVal = JS_GetPropertyStr(ctx, iconsMap, nameS.c_str());
-                uint32_t cp = 0;
-                if (!JS_IsUndefined(cpVal) && JS_ToUint32(ctx, &cp, cpVal) == 0 && cp > 0) {
-                    icon.codepoint = (int)cp;
-                    requireIcon(icon.codepoint, (int)roundf(icon.size), icon.filled);
-                    char utf8[5] = {};
-                    if (cp < 0x80)        { utf8[0] = (char)cp; }
-                    else if (cp < 0x800)  { utf8[0]=(char)(0xC0|(cp>>6)); utf8[1]=(char)(0x80|(cp&0x3F)); }
-                    else if (cp < 0x10000){ utf8[0]=(char)(0xE0|(cp>>12)); utf8[1]=(char)(0x80|((cp>>6)&0x3F)); utf8[2]=(char)(0x80|(cp&0x3F)); }
-                    else                  { utf8[0]=(char)(0xF0|(cp>>18)); utf8[1]=(char)(0x80|((cp>>12)&0x3F)); utf8[2]=(char)(0x80|((cp>>6)&0x3F)); utf8[3]=(char)(0x80|(cp&0x3F)); }
-                    icon.glyph = std::string(utf8);
-                }
-                JS_FreeValue(ctx, cpVal);
-            }
-            JS_FreeValue(ctx, iconsMap);
-            JS_FreeValue(ctx, globalObj);
+            int resolvedCp = 0;
+            icon.glyph = iconGlyphFromNameBinary(nameS, (int)roundf(icon.size), icon.filled, resolvedCp, icon.set);
+            if (resolvedCp != 0) icon.codepoint = resolvedCp;
         }
     }
     // argv[5]: explicit filled bool override
@@ -4025,7 +3766,7 @@ JSValue JS_setIconProps(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
             bool nextFilled = (b != 0);
             if (icon.filled != nextFilled) {
                 icon.filled = nextFilled;
-                if (icon.codepoint != 0) requireIcon(icon.codepoint, (int)roundf(icon.size), icon.filled);
+                if (icon.codepoint != 0) requireIcon(icon.codepoint, (int)roundf(icon.size), icon.filled, icon.set);
             }
         }
     }
@@ -4086,6 +3827,175 @@ JSValue JS_registerFont(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueC
     JS_FreeCString(ctx, name);
     JS_FreeCString(ctx, path);
     return JS_UNDEFINED;
+}
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+// Writes bytes into the wasm MEMFS at runtime so the path-based native APIs
+// (FontManager::RegisterFont, raym3::v2::LoadIconSetFromPaths) work uniformly
+// on web too, without a second in-memory code path just for Emscripten. Only
+// used for JS-driven runtime loads — build-time assets keep using --embed-file.
+static std::string writeBytesToMemfs(const std::string& virtualPath,
+                                     const unsigned char* data, size_t len) {
+    EM_ASM({
+        var path = UTF8ToString($0);
+        var dir = path.substring(0, path.lastIndexOf('/'));
+        if (dir) FS.mkdirTree(dir);
+        FS.writeFile(path, HEAPU8.subarray($1, $1 + $2));
+    }, virtualPath.c_str(), data, len);
+    return virtualPath;
+}
+#endif
+
+// Reads a JS value that is either a string (treated as a native filesystem
+// path) or a Uint8Array (raw bytes). Native code never needs to know about
+// RayactAsset — the JS-side loadFont/loadIcons/loadEmoji wrappers resolve
+// RayactAsset.bytes() to a Uint8Array before calling in. Returns true and
+// sets exactly one of outPath/outBytes.
+static bool readPathOrBytes(JSContext* ctx, JSValueConst v, std::string& outPath,
+                            std::vector<unsigned char>& outBytes) {
+    if (JS_IsString(v)) {
+        const char* s = JS_ToCString(ctx, v);
+        if (!s) return false;
+        outPath = s;
+        JS_FreeCString(ctx, s);
+        return true;
+    }
+    size_t len = 0;
+    uint8_t* data = JS_GetUint8Array(ctx, &len, v);
+    if (!data) return false;
+    outBytes.assign(data, data + len);
+    return true;
+}
+
+// loadFont(name: string, source: string | Uint8Array)
+JSValue JS_loadFont(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "loadFont: expected (name, source)");
+    const char* name = JS_ToCString(ctx, argv[0]);
+    if (!name) return JS_ThrowTypeError(ctx, "loadFont: name must be a string");
+    std::string path;
+    std::vector<unsigned char> bytes;
+    bool ok = readPathOrBytes(ctx, argv[1], path, bytes);
+    if (!ok) {
+        JS_FreeCString(ctx, name);
+        return JS_ThrowTypeError(ctx, "loadFont: source must be a string path or Uint8Array");
+    }
+#ifdef __EMSCRIPTEN__
+    if (!bytes.empty()) {
+        path = writeBytesToMemfs("/rayact-runtime-assets/fonts/" + std::string(name) + ".ttf",
+                                 bytes.data(), bytes.size());
+        bytes.clear();
+    }
+#endif
+    if (!bytes.empty())
+        raym3::FontManager::RegisterFontFromMemory(std::string(name), std::move(bytes));
+    else
+        raym3::FontManager::RegisterFont(std::string(name), path);
+    JS_FreeCString(ctx, name);
+    return JS_UNDEFINED;
+}
+
+// loadIcons(setName: string, nameToCodepoint: Record<string,number>,
+//           variants: Record<string, string|Uint8Array>)
+JSValue JS_loadIcons(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
+    if (argc < 3) return JS_ThrowTypeError(ctx, "loadIcons: expected (setName, names, variants)");
+    const char* setNameC = JS_ToCString(ctx, argv[0]);
+    if (!setNameC) return JS_ThrowTypeError(ctx, "loadIcons: setName must be a string");
+    std::string setName = setNameC;
+    JS_FreeCString(ctx, setNameC);
+
+    if (!JS_IsObject(argv[1]) || !JS_IsObject(argv[2])) {
+        return JS_ThrowTypeError(ctx, "loadIcons: names and variants must be objects");
+    }
+
+    std::unordered_map<std::string, int> names;
+    {
+        JSPropertyEnum* props = nullptr;
+        uint32_t count = 0;
+        if (JS_GetOwnPropertyNames(ctx, &props, &count, argv[1], JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) == 0) {
+            for (uint32_t i = 0; i < count; i++) {
+                const char* key = JS_AtomToCString(ctx, props[i].atom);
+                JSValue v = JS_GetProperty(ctx, argv[1], props[i].atom);
+                int32_t cp = 0;
+                JS_ToInt32(ctx, &cp, v);
+                if (key) names[key] = cp;
+                JS_FreeCString(ctx, key);
+                JS_FreeValue(ctx, v);
+                JS_FreeAtom(ctx, props[i].atom);
+            }
+            js_free(ctx, props);
+        }
+    }
+
+    std::unordered_map<std::string, std::string> variantPaths;
+    std::unordered_map<std::string, std::vector<unsigned char>> variantBytes;
+    {
+        JSPropertyEnum* props = nullptr;
+        uint32_t count = 0;
+        if (JS_GetOwnPropertyNames(ctx, &props, &count, argv[2], JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) == 0) {
+            for (uint32_t i = 0; i < count; i++) {
+                const char* key = JS_AtomToCString(ctx, props[i].atom);
+                JSValue v = JS_GetProperty(ctx, argv[2], props[i].atom);
+                std::string path;
+                std::vector<unsigned char> bytes;
+                if (key && readPathOrBytes(ctx, v, path, bytes)) {
+#ifdef __EMSCRIPTEN__
+                    if (!bytes.empty()) {
+                        path = writeBytesToMemfs("/rayact-runtime-assets/icons/" + setName + "-" + key + ".ttf",
+                                                 bytes.data(), bytes.size());
+                        bytes.clear();
+                    }
+#endif
+                    if (!bytes.empty()) variantBytes[key] = std::move(bytes);
+                    else variantPaths[key] = path;
+                }
+                JS_FreeCString(ctx, key);
+                JS_FreeValue(ctx, v);
+                JS_FreeAtom(ctx, props[i].atom);
+            }
+            js_free(ctx, props);
+        }
+    }
+
+    if (!names.empty()) raym3::v2::RegisterIconNames(setName, names);
+    if (!variantBytes.empty()) raym3::v2::LoadIconSet(setName, variantBytes);
+    if (!variantPaths.empty()) raym3::v2::LoadIconSetFromPaths(setName, variantPaths);
+    return JS_UNDEFINED;
+}
+
+// loadEmoji(source: string | Uint8Array) -> 'os' | 'bundled' | 'none'
+JSValue JS_loadEmoji(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "loadEmoji: expected (source)");
+    std::string path;
+    std::vector<unsigned char> bytes;
+    if (!readPathOrBytes(ctx, argv[0], path, bytes)) {
+        return JS_ThrowTypeError(ctx, "loadEmoji: source must be a string path or Uint8Array");
+    }
+    if (bytes.empty() && !path.empty()) {
+        FILE* f = fopen(path.c_str(), "rb");
+        if (f) {
+            fseek(f, 0, SEEK_END);
+            long sz = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            if (sz > 0) {
+                bytes.resize((size_t)sz);
+                if (fread(bytes.data(), 1, (size_t)sz, f) != (size_t)sz) bytes.clear();
+            }
+            fclose(f);
+        }
+    }
+    if (!bytes.empty()) {
+        raym3::v2::EmojiFont::Instance().RegisterCustomEmojiFont(
+            std::vector<std::uint8_t>(bytes.begin(), bytes.end()));
+    }
+    auto backend = raym3::v2::EmojiFont::Instance().ActiveBackend();
+    const char* result = "none";
+    switch (backend) {
+        case raym3::v2::EmojiFont::BackendKind::OsRasterizer: result = "os"; break;
+        case raym3::v2::EmojiFont::BackendKind::Bundled: result = "bundled"; break;
+        default: result = "none"; break;
+    }
+    return JS_NewString(ctx, result);
 }
 
 // ─── screen lifecycle (multi-surface navigation) ─────────────────────────
@@ -4702,20 +4612,16 @@ struct Raym3RuntimeStorage {
     SafeAreaInsets safeAreaInsets;
     std::map<int, raym3::v2::Style> safeAreaBaseStyles;
     std::map<int, IconRenderState> iconRenderStates;
-    std::set<IconKey> iconRequests;
 };
 
+// Icon registration (raym3's IconRenderer) is process-global and additive —
+// registering the same or more codepoints when switching between runtime
+// instances is harmless, so unlike node/callback state it is NOT saved or
+// restored per-runtime here.
 static void raym3UnloadGpuCaches() {
     for (auto& tex : g_textures) UnloadTexture(tex);
     g_textures.clear();
-    for (auto& [size, font] : g_iconFonts)
-        if (font.texture.id != 0) ::UnloadFont(font);
-    g_iconFonts.clear();
-    g_iconFontVer.clear();
-    g_iconCPSet.clear();
-    g_iconCPSetVer = 0;
-    g_iconSheetRects.clear();
-    if (g_iconSheet.id != 0) { UnloadTexture(g_iconSheet); g_iconSheet = {0}; }
+    raym3::v2::ResetAllIconAtlases();
 }
 
 Raym3RuntimeStorage* raym3BridgeNewRuntimeStorage() {
@@ -4759,7 +4665,6 @@ void raym3BridgeExportRuntimeStorage(Raym3RuntimeStorage& out) {
     out.safeAreaInsets = g_safeAreaInsets;
     out.safeAreaBaseStyles = std::move(g_safeAreaBaseStyles);
     out.iconRenderStates = std::move(g_iconRenderStates);
-    out.iconRequests = std::move(g_iconRequests);
     raym3BridgeClearRuntimeGlobals();
 }
 
@@ -4801,7 +4706,6 @@ void raym3BridgeImportRuntimeStorage(const Raym3RuntimeStorage& in) {
     g_safeAreaInsets = in.safeAreaInsets;
     g_safeAreaBaseStyles = in.safeAreaBaseStyles;
     g_iconRenderStates = in.iconRenderStates;
-    g_iconRequests = in.iconRequests;
 }
 
 void raym3BridgeClearRuntimeGlobals() {
@@ -4837,7 +4741,6 @@ void raym3BridgeClearRuntimeGlobals() {
     g_safeAreaInsets = SafeAreaInsets{};
     g_safeAreaBaseStyles.clear();
     g_iconRenderStates.clear();
-    g_iconRequests.clear();
     raym3UnloadGpuCaches();
 }
 #endif
@@ -4914,15 +4817,7 @@ void cleanupRaym3Bridge(JSContext* ctx, bool unloadGpuCaches) {
     if (unloadGpuCaches) {
         for (auto& tex : g_textures) UnloadTexture(tex);
         g_textures.clear();
-        for (auto& [size, font] : g_iconFonts)
-            if (font.texture.id != 0) ::UnloadFont(font);
-        g_iconFonts.clear();
-        g_iconFontVer.clear();
-        g_iconCPSet.clear();
-        g_iconCPSetVer = 0;
-        g_iconRequests.clear();
-        g_iconSheetRects.clear();
-        if (g_iconSheet.id != 0) { UnloadTexture(g_iconSheet); g_iconSheet = {0}; }
+        raym3::v2::ResetAllIconAtlases();
     }
     // else: the GPU caches stay attached to the live graphics device (owned
     // by another engine instance, or already dropped with the device).
@@ -5940,50 +5835,6 @@ void createNodeFromBuffer(int id, int typeId, const raym3::v2::Style& style) {
     }
 }
 
-static std::string iconGlyphFromNameBinary(const std::string& name, int size, bool filled, int& resolvedCp) {
-    resolvedCp = 0;
-    bool looksLikeName = !name.empty();
-    for (unsigned char c : name) {
-        if (c > 127) { looksLikeName = false; break; }
-    }
-    if (!looksLikeName || !g_bridge_ctx) return name;
-
-    JSValue globalObj = JS_GetGlobalObject(g_bridge_ctx);
-    JSValue iconsMap = JS_GetPropertyStr(g_bridge_ctx, globalObj, "Icons");
-    if (JS_IsObject(iconsMap)) {
-        JSValue cpVal = JS_GetPropertyStr(g_bridge_ctx, iconsMap, name.c_str());
-        uint32_t cp = 0;
-        if (!JS_IsUndefined(cpVal) && JS_ToUint32(g_bridge_ctx, &cp, cpVal) == 0 && cp > 0) {
-            resolvedCp = (int)cp;
-            requireIcon(resolvedCp, (int)roundf((float)size), filled);
-            char utf8[5] = {};
-            if (cp < 0x80) {
-                utf8[0] = (char)cp;
-            } else if (cp < 0x800) {
-                utf8[0] = (char)(0xC0 | (cp >> 6));
-                utf8[1] = (char)(0x80 | (cp & 0x3F));
-            } else if (cp < 0x10000) {
-                utf8[0] = (char)(0xE0 | (cp >> 12));
-                utf8[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
-                utf8[2] = (char)(0x80 | (cp & 0x3F));
-            } else {
-                utf8[0] = (char)(0xF0 | (cp >> 18));
-                utf8[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
-                utf8[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
-                utf8[3] = (char)(0x80 | (cp & 0x3F));
-            }
-            JS_FreeValue(g_bridge_ctx, cpVal);
-            JS_FreeValue(g_bridge_ctx, iconsMap);
-            JS_FreeValue(g_bridge_ctx, globalObj);
-            return std::string(utf8);
-        }
-        JS_FreeValue(g_bridge_ctx, cpVal);
-    }
-    JS_FreeValue(g_bridge_ctx, iconsMap);
-    JS_FreeValue(g_bridge_ctx, globalObj);
-    return name;
-}
-
 void createParamNodeFromBuffer(
     int id,
     int typeId,
@@ -6024,9 +5875,14 @@ void createParamNodeFromBuffer(
         });
     } else if (typeId == RTYPE_ICON) {
         float iconSize = (flags & RPARAM_HAS_SIZE) ? sizeArg : 16.0f;
-        bool filled = (flags & RPARAM_HAS_FILLED) ? ((flags & RPARAM_FILLED) != 0) : true;
+        // Default outlined (FILL=0), matching Material Symbols' own default and
+        // what the web build has always rendered (see apps/web/CMakeLists.txt —
+        // it only embeds the outlined font). Was defaulting true here, which made
+        // Android/iOS/desktop render filled by default while web silently fell
+        // back to outlined — an inconsistent default across platforms.
+        bool filled = (flags & RPARAM_HAS_FILLED) ? ((flags & RPARAM_FILLED) != 0) : false;
         int resolvedCp = 0;
-        std::string glyph = iconGlyphFromNameBinary(param, (int)roundf(iconSize), filled, resolvedCp);
+        std::string glyph = iconGlyphFromNameBinary(param, (int)roundf(iconSize), filled, resolvedCp, "material");
         Color color = (flags & RPARAM_HAS_COLOR)
             ? colorFromUint(colorArg)
             : raym3::Theme::GetColorScheme().onSurfaceVariant;
@@ -6038,26 +5894,14 @@ void createParamNodeFromBuffer(
         if (!props.style.minWidth) props.style.minWidth = props.style.width;
         if (!props.style.minHeight) props.style.minHeight = props.style.height;
         if (!props.style.flexShrink) props.style.flexShrink = 0.0f;
-        g_iconRenderStates[id] = IconRenderState{glyph, resolvedCp, iconSize, color, filled, variantStr};
+        g_iconRenderStates[id] = IconRenderState{glyph, resolvedCp, iconSize, color, filled, variantStr, "material"};
         g_nodes[id] = raym3::v2::Custom(props, [id](Rectangle layout) {
             auto stateIt = g_iconRenderStates.find(id);
             if (stateIt == g_iconRenderStates.end()) return;
             const IconRenderState& icon = stateIt->second;
-            if (icon.codepoint != 0 && g_iconSheet.id != 0) {
-                IconKey key{icon.codepoint, (int)roundf(icon.size), icon.filled};
-                auto it = g_iconSheetRects.find(key);
-                if (it != g_iconSheetRects.end()) {
-                    Rectangle src = it->second;
-                    Rectangle dest = {layout.x + (layout.width - icon.size) * 0.5f,
-                                      layout.y + (layout.height - icon.size) * 0.5f,
-                                      icon.size, icon.size};
-                    DrawTexturePro(g_iconSheet, src, dest, {0.0f, 0.0f}, 0.0f, icon.color);
-                    return;
-                }
-            }
             if (icon.codepoint != 0) {
-                raym3::v2::DrawMaterialIcon(icon.codepoint, layout, icon.color,
-                                            (int)roundf(icon.size), icon.filled);
+                raym3::v2::DrawIcon(icon.codepoint, layout, icon.color,
+                                    (int)roundf(icon.size), icon.filled, icon.set);
             }
         });
     } else if (typeId == RTYPE_TEXT_INPUT) {

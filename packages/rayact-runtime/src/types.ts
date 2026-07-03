@@ -160,8 +160,12 @@ export interface RayactGlobal {
   createText?: (text: string, props?: Record<string, unknown>) => number;
   createButton?: (label: string, props?: Record<string, unknown>) => number;
   createImage?: (src: string | RayactAsset, props?: Record<string, unknown>) => number | null;
-  createIcon?: (name: string, size?: number, color?: number | string, props?: Record<string, unknown>, variant?: string, filled?: boolean) => number;
-  setIconProps?: (nodeId: number, size?: number, color?: number | string, variant?: string, name?: string, filled?: boolean) => void;
+  createIcon?: (name: string, size?: number, color?: number | string, props?: Record<string, unknown>, variant?: string, filled?: boolean, set?: string) => number;
+  setIconProps?: (nodeId: number, size?: number, color?: number | string, variant?: string, name?: string, filled?: boolean, set?: string) => void;
+  registerFont?: (name: string, path: string) => void;
+  loadFont?: (name: string, source: string | Uint8Array) => void;
+  loadIcons?: (setName: string, names: Record<string, number>, variants: Record<string, string | Uint8Array>) => void;
+  loadEmoji?: (source: string | Uint8Array) => 'os' | 'bundled' | 'none';
   createTextInput?: (value: string, props?: Record<string, unknown>) => number;
   createScrollView?: (props?: Record<string, unknown>) => number;
   createModal?: (props?: Record<string, unknown>) => number;

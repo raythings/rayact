@@ -24,6 +24,8 @@ export {
 } from './assets';
 export { createBridge } from './bridge';
 export { createDevClient, installConsoleForwarding } from './devClient';
+export { loadFont, loadIcons, loadEmoji } from './fonts';
+export type { FontSource, IconSetVariants } from './fonts';
 export {
   installModuleHmrRuntime,
   ModuleHmrRuntime,
@@ -84,3 +86,6 @@ export function getDefaultRuntime(): RayactRuntime {
   }
   return globalObject.__rayactRuntime;
 }
+
+// Foundational shared types/utils (merged from @rayact/shared)
+export * from './shared';

@@ -1029,7 +1029,6 @@ Java_com_rayact_engine_RayactEngineSession_nativeCreateSurface(JNIEnv* env, jcla
                 }
                 raym3::FontManager::ResetDeviceCache();
                 raym3::v2::IconRendererResetDeviceCache();
-                rayactResetIconSheet();
                 raym3::FontManager::Initialize();
                 rayact::engineLoadConfig(g_dataPath.c_str());
                 rayact::engineFinishLoad();

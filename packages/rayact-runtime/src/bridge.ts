@@ -283,7 +283,8 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
               typeof props.color === 'number' || typeof props.color === 'string' ? props.color : undefined,
               style,
               typeof props.variant === 'string' ? props.variant : undefined,
-              typeof props.filled === 'boolean' ? props.filled : undefined
+              typeof props.filled === 'boolean' ? props.filled : undefined,
+              typeof props.set === 'string' ? props.set : undefined
             ),
             type
           ), style);
@@ -348,7 +349,8 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
           typeof props.color === 'number' || typeof props.color === 'string' ? props.color : undefined,
           typeof props.variant === 'string' ? props.variant : undefined,
           typeof props.name === 'string' ? props.name : typeof props.icon === 'string' ? props.icon : undefined,
-          typeof props.filled === 'boolean' ? props.filled : undefined
+          typeof props.filled === 'boolean' ? props.filled : undefined,
+          typeof props.set === 'string' ? props.set : undefined
         );
       }
 
@@ -393,7 +395,7 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
 
     setEventHandler(node, eventName: HostEventName, handler) {
       if (eventName === 'press' || eventName === 'click') {
-        requireFunction(native.setOnPress, 'setOnPress')(node.id, handler ?? null);
+        requireFunction(native.setOnPress, 'setOnPress')(node.id, (handler ?? null) as (() => void) | null);
       } else if (eventName === 'changeText' && typeof native.setOnChangeText === 'function') {
         native.setOnChangeText(node.id, handler as ((value: string) => void) | null);
       } else if (eventName === 'changeValue' && typeof native.setOnChangeValue === 'function') {
@@ -401,11 +403,11 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
       } else if (eventName === 'scroll' && typeof native.setOnScroll === 'function') {
         native.setOnScroll(node.id, handler as ((event: unknown) => void) | null);
       } else if (eventName === 'requestClose' && typeof native.setOnRequestClose === 'function') {
-        native.setOnRequestClose(node.id, handler ?? null);
+        native.setOnRequestClose(node.id, (handler ?? null) as (() => void) | null);
       } else if (eventName === 'focus' && typeof native.setOnFocus === 'function') {
-        native.setOnFocus(node.id, handler ?? null);
+        native.setOnFocus(node.id, (handler ?? null) as (() => void) | null);
       } else if (eventName === 'blur' && typeof native.setOnBlur === 'function') {
-        native.setOnBlur(node.id, handler ?? null);
+        native.setOnBlur(node.id, (handler ?? null) as (() => void) | null);
       } else if (eventName === 'submitEditing' && typeof native.setOnSubmitEditing === 'function') {
         native.setOnSubmitEditing(node.id, handler as ((e: { nativeEvent: { text: string } }) => void) | null);
       } else if (eventName === 'endEditing' && typeof native.setOnEndEditing === 'function') {

@@ -1,0 +1,24 @@
+{
+  "name": "@rayact/prebuilt-android-arm64",
+  "version": "0.0.1",
+  "description": "Prebuilt Rayact engine native libraries for Android arm64-v8a",
+  "files": [
+    "jni",
+    "include",
+    "manifest.json",
+    "resources"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rayact/rayact.git",
+    "directory": "packages/prebuilt-android-arm64"
+  },
+  "homepage": "https://github.com/rayact/rayact#readme",
+  "bugs": {
+    "url": "https://github.com/rayact/rayact/issues"
+  }
+}

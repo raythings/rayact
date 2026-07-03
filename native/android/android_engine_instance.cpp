@@ -306,7 +306,6 @@ static void releaseGraphicsLocked(AndroidEngineInstance* inst) {
     if (IsWindowReady()) CloseWindow();
     raym3::FontManager::ResetDeviceCache();
     raym3::v2::IconRendererResetDeviceCache();
-    rayactResetIconSheet();
     inst->graphicsActive.store(false, std::memory_order_release);
     // The global raym3/raylib device caches were just torn down (CloseWindow +
     // ResetDeviceCache above). No instance may render until nativeCreateSurface

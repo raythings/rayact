@@ -12,11 +12,13 @@
     "prepare": "npm run build"
   },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@types/node": "^22.20.0"
   },
   "license": "MIT",
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "publishConfig": {
     "access": "public"
@@ -35,9 +37,25 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./shared": {
+      "types": "./dist/shared/index.d.ts",
+      "default": "./dist/shared/index.js"
+    },
+    "./quickjs": {
+      "types": "./dist/quickjs/index.d.ts",
+      "default": "./dist/quickjs/index.js"
+    },
+    "./crypto": {
+      "types": "./dist/crypto/index.d.ts",
+      "default": "./dist/crypto/index.js"
+    },
     "./material-icons": {
       "types": "./dist/shared/material_icons.d.ts",
       "default": "./dist/shared/material_icons.js"
+    },
+    "./fonts": {
+      "types": "./dist/fonts.d.ts",
+      "default": "./dist/fonts.js"
     }
   }
 }

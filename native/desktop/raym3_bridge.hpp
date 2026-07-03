@@ -73,6 +73,9 @@ JSValue JS_createImage(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createIcon(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setIconProps(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_registerFont(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_loadFont(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_loadIcons(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_loadEmoji(JSContext*, JSValue, int, JSValueConst*);
 
 #if defined(__ANDROID__) || defined(RAYACT_IOS)
 void AndroidKeyboard_ShowForNode(int nodeId, const std::string &inputType,
@@ -103,10 +106,6 @@ void rayactSetExternalViewTextureInsets(int nodeId, float l, float t, float r, f
 // Invoke the node's JS onChangeText with producer text (JS thread only).
 void rayactExternalViewEmitText(int nodeId, const char* text);
 
-void buildIconSpriteSheet();
-// Drop GPU icon-sheet state without unloading (device re-init invalidated the
-// ids); sheet rebuilds from retained registrations via buildIconSpriteSheet().
-void rayactResetIconSheet();
 // unloadGpuCaches: free the process-global GPU caches (icon fonts/sheet,
 // image textures). Only safe when this teardown also owns the live graphics
 // device (desktop full shutdown). Android per-instance teardown must pass

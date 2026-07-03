@@ -154,7 +154,10 @@ export interface IconProps extends BaseProps {
   size?: number;
   color?: ColorValue;
   variant?: 'outlined' | 'rounded' | 'sharp';
+  /** Fill weight of the glyph. Default: `false` (outlined) on every platform. */
   filled?: boolean;
+  /** Named icon set to resolve `name` against. Default: `"material"` (built in, zero setup). Register custom sets with `loadIcons()`. */
+  set?: string;
 }
 
 /** react-native TextInput.keyboardType (cross-platform subset + common iOS/Android values). */
