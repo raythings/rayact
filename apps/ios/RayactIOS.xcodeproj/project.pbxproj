@@ -8,163 +8,306 @@
 
 /* Begin PBXBuildFile section */
 		02255831225A0E37156DE97C /* Renderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C34A484593D51A0FD3FE50B /* Renderer.cpp */; };
+		031F9C50CC40D4A40A7CB0EA /* Log.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 86D7ADA32D292808F71E2343 /* Log.cpp */; };
 		0398FB8BB5F0A35AB3A0BBDE /* plugin_loader.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B41AFF549810185CB5F306B0 /* plugin_loader.cpp */; };
 		03A2EF37828D106246A1B256 /* css_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6E51B3E4F4E82FE60F28FD4E /* css_bridge.cpp */; };
+		0449A51B3DF236FED529B680 /* dtoa.c in Sources */ = {isa = PBXBuildFile; fileRef = 22210114E93A4132C4F7029E /* dtoa.c */; };
+		0469E140A7B340046F2806A5 /* RadioButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AB3FD221D5E0461011D76DC5 /* RadioButton.cpp */; };
 		04AB7A1A8A510840F079FB0E /* Stylesheet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E1CF60B5E9FEAA7F77B23D43 /* Stylesheet.cpp */; };
 		0533AEB8C6AAF1DF2F21503E /* AssertFatal.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0496DF4A4603751341FC16FD /* AssertFatal.cpp */; };
+		05C61624E774D5578F5EC6BB /* Card.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 729BCF3CAF33A83E39CAA174 /* Card.cpp */; };
 		0628A5A434A2F6A2CC61E2EB /* Transitions.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 31F943538A558EB7C99C35BD /* Transitions.cpp */; };
 		0680F7AB30870D565359F4F9 /* Divider.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7E215ED7819E79879A768848 /* Divider.cpp */; };
+		06E524FDD81D005CD12DE30C /* engine_render.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7ECC0C8C334F47DFAA15AD64 /* engine_render.cpp */; };
+		082095F94FE51B39A377AEEF /* Container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9D7D73423A19565149CE17F2 /* Container.cpp */; };
 		0844E720DAD4AEC45A348EF4 /* CalculateLayout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7BB87A76EC7C75004E1CAD68 /* CalculateLayout.cpp */; };
 		0AA922A924C0C14035AED05B /* RayactRenderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67BDFB073956694F1E0D55E1 /* RayactRenderScheduler.swift */; };
 		0AB7F22628B85249C014E248 /* TextMeasureCache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 394F9D7799DD790573E5CC67 /* TextMeasureCache.cpp */; };
+		0BDE071553F93E3CFDECF316 /* tests.conf in Resources */ = {isa = PBXBuildFile; fileRef = AD29354857DD2F2C1DCA7296 /* tests.conf */; };
+		0C5A44CC8CBA390CD341027E /* AssertFatal.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0496DF4A4603751341FC16FD /* AssertFatal.cpp */; };
 		0CCE1126D396A593E53F71C4 /* RayactEngineHostCallbacks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F8F85A38D8A5C2AC10C2543 /* RayactEngineHostCallbacks.swift */; };
+		0D3F857AE7D6D00666F5A651 /* YGNodeLayout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FF147B193D6F2772911F3C38 /* YGNodeLayout.cpp */; };
+		0DCCFC0F0DC082373825C5FE /* plugin_loader.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B41AFF549810185CB5F306B0 /* plugin_loader.cpp */; };
+		0DE152FF202D9F529469452B /* Stylesheet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E1CF60B5E9FEAA7F77B23D43 /* Stylesheet.cpp */; };
 		13CCED586250C021D60F20F3 /* Snackbar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 22018002A09CFD74E653EA9C /* Snackbar.cpp */; };
 		1401A1530FBA01EA02C60D92 /* CSSDeNest.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 81E31863B107845C0A8FE311 /* CSSDeNest.cpp */; };
+		1420A7A3DFBF956FA57873EC /* engine_thread.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7D6CD8BB50B297A17E45231F /* engine_thread.cpp */; };
+		14B79CF652517C46393DF766 /* worker_wasm.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C58A0CFF34752083F59A291E /* worker_wasm.cpp */; };
 		1577608A9789B12F0FA486D2 /* FloatingActionButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2349AA101E797DF097B7183D /* FloatingActionButton.cpp */; };
 		15BCDF543FED685FFE548917 /* RayactMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C768E6E1A5A2A97A150ED997 /* RayactMetalView.swift */; };
+		1760B07EFF2949AE3570F480 /* TabBar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 21FF49F13CA289D1BB264848 /* TabBar.cpp */; };
+		180D163F39BA633734B264A1 /* test262.conf in Resources */ = {isa = PBXBuildFile; fileRef = 595E57CC00CEEEC3D3D2C3B3 /* test262.conf */; };
+		1811375977EEC31A60F856DC /* Theme.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FF5EFD75635045D7F31B8AF4 /* Theme.cpp */; };
 		19C0068226BAF95EEED4C21F /* m3_function.c in Sources */ = {isa = PBXBuildFile; fileRef = F3A43D53B829B514AC4FCBD1 /* m3_function.c */; };
 		1A4BFE18FFBA9D3069B3EB6E /* Navigation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3650E902931A9E55A504E0FA /* Navigation.cpp */; };
 		1A99D0765DBF15CACDD636E5 /* data_dir.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9089E6D8BE1FFB1B63D3F8FE /* data_dir.cpp */; };
+		1A9FF9386FAB48A5C6B1D608 /* system_appearance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 49E704D3FE6E22A46FA74C75 /* system_appearance.cpp */; };
+		1AEBFFCDF019A64B531FFB77 /* window_manager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A9DFE135C70DA0D8EDD07FAD /* window_manager.cpp */; };
+		1B06B50E94D1C45A16DD1F86 /* RenderContext.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5CB06F040A4CC6DF6B4A9B82 /* RenderContext.cpp */; };
 		1BCA7FAED4BC3B515D74A6DD /* quickjs_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 25205A3983407A326A8FA64A /* quickjs_bridge.cpp */; };
+		1CD3157CB91BB83C6CA0D917 /* config_loader.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F7053D1A9402E92BD2189BFC /* config_loader.cpp */; };
 		1DCEA2C01E99AC6608B02B29 /* unicode_download.sh in Resources */ = {isa = PBXBuildFile; fileRef = D93EDE6AE087FBDE206BC5D2 /* unicode_download.sh */; };
 		1E28D84F1AD986DF8F475877 /* ios_engine_instance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EE0F30DA7DE7D611C4DB1AD6 /* ios_engine_instance.cpp */; };
+		21CE15B28BCDCFF8A94F408C /* LayoutNode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B76037309E6EA19C79832353 /* LayoutNode.cpp */; };
+		22FB7658CE410B82B35939F2 /* YGNodeStyle.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2E2665334F34A0BE8CDCD2BC /* YGNodeStyle.cpp */; };
 		23C3808D2732443AE859140C /* m3_compile.c in Sources */ = {isa = PBXBuildFile; fileRef = 1A975362667BD597D2506176 /* m3_compile.c */; };
 		2570C3966D3A3A2C5F5769B3 /* CSSProperties.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E7E768F73E5954CCE6181D6 /* CSSProperties.cpp */; };
+		25D93C8772A048BE0BD82148 /* CSSDeNest.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 81E31863B107845C0A8FE311 /* CSSDeNest.cpp */; };
+		2855BDB66A3375014919F930 /* commit_queue.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C1414C05570DD9C44E3EAA1A /* commit_queue.cpp */; };
 		29718BB6BB5CF7F4EB74F6A2 /* Dialog.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 364E7ADD53511EAAD220CE0C /* Dialog.cpp */; };
+		2A1D6653F45DD8F9C9A8F42C /* Button.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6BC4638C75044DF07841D17B /* Button.cpp */; };
 		2C6DBCAED66F18DE40BF9C97 /* ButtonGroup.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CB7693B1C166BE54A1A0A885 /* ButtonGroup.cpp */; };
+		2D42DEC965E5851E5A750E8F /* Controls.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F1D8A2C57EC5F03592EC0DE /* Controls.cpp */; };
 		2DA12B685C581ED14B7ED2D3 /* utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D64CE86C42AA969248D4F78D /* utils.cpp */; };
 		2F04B521DF14E6F7D609B3C0 /* EmojiRasterizerApple.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4FAAD9A25EC18CD490DB9A8F /* EmojiRasterizerApple.mm */; };
+		30B97B19B96B5C002EA6083E /* m3_module.c in Sources */ = {isa = PBXBuildFile; fileRef = BC38A370866BEEDE4CC8DE7C /* m3_module.c */; };
+		30DB880E984FF777D388B7A7 /* rmodels.c in Sources */ = {isa = PBXBuildFile; fileRef = 62D5F1BAB64A9A455402D29E /* rmodels.c */; };
+		32349FFF5A169B6309CD46F7 /* quickjs_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 25205A3983407A326A8FA64A /* quickjs_bridge.cpp */; };
 		32D560D5DE4574CE9C962FA0 /* worker_wasm.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C58A0CFF34752083F59A291E /* worker_wasm.cpp */; };
+		33BDE968D6EAB368B4A48F98 /* kv_store.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5652D373531BC05A07AF0E14 /* kv_store.cpp */; };
 		33C5777855FC285C8558821F /* YGNodeLayout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FF147B193D6F2772911F3C38 /* YGNodeLayout.cpp */; };
+		349F2F879479D48ACFDEE00F /* View3D.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 26A2363B4CBAC90587376E4F /* View3D.cpp */; };
+		361A16594C5FA547BFF5024D /* m3_exec.c in Sources */ = {isa = PBXBuildFile; fileRef = 52155F1D199F9A0244BFE97D /* m3_exec.c */; };
+		3620C3A7E1CE32BEC4597587 /* Renderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C34A484593D51A0FD3FE50B /* Renderer.cpp */; };
 		386BE0BEB14BBDAAD0F44BBA /* RangeSlider.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4ADA129237C4AD20879A6BB1 /* RangeSlider.cpp */; };
+		39DE2399E8AC558B5522990F /* quickjs-libc.c in Sources */ = {isa = PBXBuildFile; fileRef = B146E609AC0016988E08B024 /* quickjs-libc.c */; };
+		3A50DF258529727021A88304 /* EmojiFont.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1CF8EAFC4FD8B1B033557097 /* EmojiFont.cpp */; };
 		3A62D21DEF7029A946CC1E8E /* RayactHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = D32180F57BB9218D21FCB74A /* RayactHost.swift */; };
+		3AB71A6F4E0C02576C18A091 /* Input.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2EDA5ACC9660444D2043B5D7 /* Input.cpp */; };
+		3CDC80A53EC9FBCA4897E206 /* devtools_ios.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 05F70DD7DDDC9C7206B25D03 /* devtools_ios.cpp */; };
+		3CF10FD22D3CAF40F85E480D /* ProgressIndicator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 959C077460A1797D73B425EC /* ProgressIndicator.cpp */; };
 		3D2E97B654F79878611BECDA /* YGPixelGrid.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C8F3DDC9E7B377238A96AB9D /* YGPixelGrid.cpp */; };
 		3E95F06000CF7539F34FDD98 /* tests.conf in Resources */ = {isa = PBXBuildFile; fileRef = AD29354857DD2F2C1DCA7296 /* tests.conf */; };
 		3EB7FE22A69EA4B68D23C904 /* SvgRenderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7917706AECFD76A3C61A1BC2 /* SvgRenderer.cpp */; };
+		3F98DC24B3F6C17AB7934649 /* libregexp.c in Sources */ = {isa = PBXBuildFile; fileRef = 3B66654088E57B2DA773C955 /* libregexp.c */; };
+		41DF2BDDEBB79F25B9F1EA39 /* Chip.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 15B78893FEC9E2EB16EAEA93 /* Chip.cpp */; };
 		41EF64C12FB89FCAF4105024 /* DevServerLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 131E130C48A79923A9CC645E /* DevServerLoader.swift */; };
+		423C80B48F09B2BFA2894DF0 /* SvgRenderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7917706AECFD76A3C61A1BC2 /* SvgRenderer.cpp */; };
 		426928DE67400FF16038961C /* TextSelectionOverlay.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6492F076A3C93508C738F9B5 /* TextSelectionOverlay.cpp */; };
+		4294C14CED8017E11E4CC9A4 /* rtextures.c in Sources */ = {isa = PBXBuildFile; fileRef = 2946B84A4A7FF9FF1C43DFC2 /* rtextures.c */; };
 		4375DACB1DE367D79A6D553F /* ColorScheme.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EAAAB3A0A7F5BAC4E0953F4F /* ColorScheme.cpp */; };
 		43F5CAB09AA6F418A7414C59 /* secure_store_mac.mm in Sources */ = {isa = PBXBuildFile; fileRef = F8BB7EB6F101597A14C788BC /* secure_store_mac.mm */; };
 		442715F30051F8458E70C4D0 /* dev_client_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B3FBF2187FCB8F5B48BA59B3 /* dev_client_bridge.cpp */; };
 		44419C81F245695CDF5154BD /* SystemAppearance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 90C676A667D5EF5515A6016E /* SystemAppearance.cpp */; };
+		45A5CFC92B22D3133A4A96C1 /* SystemAppearance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 90C676A667D5EF5515A6016E /* SystemAppearance.cpp */; };
 		462CFD47C996CD463152D5A8 /* Chip.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 15B78893FEC9E2EB16EAEA93 /* Chip.cpp */; };
 		483A104948CDE8DE8AD87E59 /* Modal.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EE8DF0A2D484B19EFDBDC81A /* Modal.cpp */; };
 		491FCFE837071667BA57689A /* commit_queue.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C1414C05570DD9C44E3EAA1A /* commit_queue.cpp */; };
 		498347526014CBE05C94F61C /* RadioButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AB3FD221D5E0461011D76DC5 /* RadioButton.cpp */; };
+		49C2456364D96A94CDE951D6 /* Mutations.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8567FB0243169DBFCDEEE936 /* Mutations.cpp */; };
+		49F0B4352C862A984819AF1D /* CSSUtils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4B39956F06DD9AC33A73C936 /* CSSUtils.cpp */; };
+		4A393F40D6A6F07C286D2B87 /* ButtonGroup.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CB7693B1C166BE54A1A0A885 /* ButtonGroup.cpp */; };
+		4AF030A0A949D52CC31A4701 /* SegmentedButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 07412C116ED17EEBC93CAE53 /* SegmentedButton.cpp */; };
 		4C3931369CB053819607D39B /* YGEnums.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3285FF667288E76ED26EB9CF /* YGEnums.cpp */; };
 		4C7A7E876C47316F1D3C1430 /* rlmt.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5174C51F9A1A937C22FFAC48 /* rlmt.mm */; };
 		4E36514D213619DE8BEAF32C /* TabBar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 21FF49F13CA289D1BB264848 /* TabBar.cpp */; };
 		4E86BB4C3AE21F3A95523095 /* window_manager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A9DFE135C70DA0D8EDD07FAD /* window_manager.cpp */; };
+		4EE39914C9F59739AAD0AD6A /* AppBar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E02CD5F98842E4310FC445C /* AppBar.cpp */; };
 		506CEC36326498B6DFDF3CA2 /* workers.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D99BD61C508B4DF48014172B /* workers.cpp */; };
 		50A815DCFD48C472F31543F2 /* YGConfig.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CA04DB257606DA6B39C22160 /* YGConfig.cpp */; };
 		51451761E5DC5C9C00F4FF77 /* Container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9D7D73423A19565149CE17F2 /* Container.cpp */; };
+		51497134BDA5919DC1F5F7C3 /* FloatingActionButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2349AA101E797DF097B7183D /* FloatingActionButton.cpp */; };
 		51BCE200DDB7822DD7183F1D /* FlexLine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32646D3D3C2A74F0CC05ACB2 /* FlexLine.cpp */; };
+		52A4E84D9708F2A1CB1F24C7 /* m3_bind.c in Sources */ = {isa = PBXBuildFile; fileRef = C58AEE8443393184359FB2F8 /* m3_bind.c */; };
+		537CCDA908F3E0374A73C04F /* Divider.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7E215ED7819E79879A768848 /* Divider.cpp */; };
+		538753ED8A08C7D98FD01566 /* MaterialDefaults.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C4149BFBCA91BDC435ADB975 /* MaterialDefaults.cpp */; };
+		53CBDA720ACC2F5FE3A15C57 /* worker_js.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1354574C79B5EE1A0B8671AB /* worker_js.cpp */; };
+		54C80B22FF5F0BD7A69A4BBE /* RenderQueue.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 87F684E9CC8E8356DBE55C8F /* RenderQueue.cpp */; };
 		54F564DF6771C2C6A5179401 /* InputLayer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 31656B737E95A2F23DEBE135 /* InputLayer.cpp */; };
+		550D5B50BB62CF7C4C1BC08C /* libunicode.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0870FE08C0BDD271C3343 /* libunicode.c */; };
+		552C0E4C9B2A7D2F01234E74 /* AbsoluteLayout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0505A61CF3B74FC77872B757 /* AbsoluteLayout.cpp */; };
 		56526A79EC94831822DDC853 /* PixelGrid.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FF9239B7D3A72E7AEED1ECF5 /* PixelGrid.cpp */; };
 		565A81D984B089F55EE4E6A9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 359CA33638B664F07A1AA061 /* AppDelegate.swift */; };
+		568F637CE4C5228CD92EBC6A /* Config.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C9B01CFCF12E1D04B242A54F /* Config.cpp */; };
 		5733A093EEB0ADEC6B7168F7 /* system_appearance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 49E704D3FE6E22A46FA74C75 /* system_appearance.cpp */; };
+		576CE4C33B9FB3D702CE94D3 /* YGPixelGrid.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C8F3DDC9E7B377238A96AB9D /* YGPixelGrid.cpp */; };
 		5782BF7C040F7B1090CC310E /* m3_bind.c in Sources */ = {isa = PBXBuildFile; fileRef = C58AEE8443393184359FB2F8 /* m3_bind.c */; };
 		587149023A8B3C82FE6993A4 /* module_bus.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 831D0F39EBE86FFE17FFF5B0 /* module_bus.cpp */; };
 		59B9264006E4AF897A8E9C1E /* RayactSurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C863A2828BD0228178D84024 /* RayactSurfaceView.swift */; };
 		59CD87EDA549956C34D448B5 /* YGNodeStyle.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2E2665334F34A0BE8CDCD2BC /* YGNodeStyle.cpp */; };
+		59FC97BC9909E7A140D78F7E /* TextField.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F5B08C908128E9379859CC94 /* TextField.cpp */; };
 		59FE09DA198D86B92F4DA164 /* ProgressIndicator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 959C077460A1797D73B425EC /* ProgressIndicator.cpp */; };
 		5B351EE64377A8ED540964D0 /* IconButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3D39846B38E4EB78300E70AB /* IconButton.cpp */; };
 		5C14FA105A60DA91226627A4 /* Log.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 86D7ADA32D292808F71E2343 /* Log.cpp */; };
 		5C7B9AC5E0D2D59F255A5A23 /* Renderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1F6AAFA3FCBAA3AF64FF07A9 /* Renderer.cpp */; };
+		5CDD0C46D2A573EFDA0447AD /* secure_store_mac.mm in Sources */ = {isa = PBXBuildFile; fileRef = F8BB7EB6F101597A14C788BC /* secure_store_mac.mm */; };
 		5CE3B84B1EB98CC9FB5ABE2C /* libunicode.c in Sources */ = {isa = PBXBuildFile; fileRef = 1EC0870FE08C0BDD271C3343 /* libunicode.c */; };
+		5D260F69616A4C55EA2900DC /* engine_js.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B6C45258FBFE071D0EC11F50 /* engine_js.cpp */; };
 		5E166E5862E5EEFEBF39A337 /* config_loader.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F7053D1A9402E92BD2189BFC /* config_loader.cpp */; };
 		5E669D1C510857B5D40CC7A5 /* m3_exec.c in Sources */ = {isa = PBXBuildFile; fileRef = 52155F1D199F9A0244BFE97D /* m3_exec.c */; };
+		5F19279D6EA20866DD6594B1 /* engine_runtime.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 74DBCA3944A8B9E724BFB3DC /* engine_runtime.cpp */; };
 		60B35A3066CF0607A42FEAF5 /* IconRenderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A542F6F40A2E3A2B38CECD8D /* IconRenderer.cpp */; };
+		650BC3D408DCAC68657E5D94 /* YGEnums.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3285FF667288E76ED26EB9CF /* YGEnums.cpp */; };
+		67596AC9C7C6F02D85EB6043 /* Transitions.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 31F943538A558EB7C99C35BD /* Transitions.cpp */; };
+		6845A286025EF47EFE66632F /* List.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6058EEEEED5EBA2479FC7DD7 /* List.cpp */; };
+		6878C96065A674DCCC2B0A0A /* m3_info.c in Sources */ = {isa = PBXBuildFile; fileRef = ECF39F19F0783E95837FDC50 /* m3_info.c */; };
+		68F0CB12C19C3EA4DA343B82 /* m3_env.c in Sources */ = {isa = PBXBuildFile; fileRef = B0C5482E94942DF05E7860D2 /* m3_env.c */; };
+		69C313BEE54637A6C8E10ADB /* platform_ios.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 161ECA68BB5DDAA75415F0FD /* platform_ios.cpp */; };
+		6A596B0C57184A0FD0065EA8 /* Ripple.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BF2DA98AEDA8C4CD32294A86 /* Ripple.cpp */; };
+		6AE718E36FB7EA82983AE96C /* gesture_recognizer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 125987C1814763C5DD732C3C /* gesture_recognizer.cpp */; };
 		6B12C5BFCEAA0892D0075487 /* engine_render.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7ECC0C8C334F47DFAA15AD64 /* engine_render.cpp */; };
 		6B869D41DDEB91E02E2B03EB /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EB865D7A2EB827CB554084F /* SceneDelegate.swift */; };
 		6C163CCE8358518F7005D90D /* engine_js.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B6C45258FBFE071D0EC11F50 /* engine_js.cpp */; };
 		6D503DB88D62F54F3F24B0AF /* rcore_ios_metal_overlay.c in Sources */ = {isa = PBXBuildFile; fileRef = BDE397E69B0DF3A4FC9352E7 /* rcore_ios_metal_overlay.c */; };
+		6D7C223685172389977AAB6E /* SearchBar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 48F44CFC99F7429EB11B4BF5 /* SearchBar.cpp */; };
 		6DA29412479C45AE815B46B1 /* Tooltip.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B532A16A4117E91655AB71CE /* Tooltip.cpp */; };
 		6EF4E8EB480D270827EA75EC /* IOSBundledAssets.swift in Sources */ = {isa = PBXBuildFile; fileRef = D871AAC601732161AF2747A3 /* IOSBundledAssets.swift */; };
+		6FDAD799251285017952CD73 /* ios_engine_instance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EE0F30DA7DE7D611C4DB1AD6 /* ios_engine_instance.cpp */; };
 		7029EBECF7F9F588A3C51073 /* LayoutNode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B76037309E6EA19C79832353 /* LayoutNode.cpp */; };
+		708E61F339EB260E7C79BE4E /* raym3_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4509BE0DB4D7D7B1ED6BEAF8 /* raym3_bridge.cpp */; };
 		719DC52B8B5913ECE2471DEE /* Mutations.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8567FB0243169DBFCDEEE936 /* Mutations.cpp */; };
+		72781B9A46EB548F276EC7CB /* mmkv_plugin.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5978B0F37C9B424062E35D9D /* mmkv_plugin.cpp */; };
 		72D223B8411CBD028D9474EF /* RenderContext.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5CB06F040A4CC6DF6B4A9B82 /* RenderContext.cpp */; };
+		748C568A5FCB85B3AD62A15D /* shadow_tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C2FF8D3204D04C57EF6C3CE5 /* shadow_tree.cpp */; };
+		749B7B48C978B5A727914A11 /* rayactpack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 77FCB5613F3516AB0744BDE9 /* rayactpack.cpp */; };
+		75FC46EA046DC480BE8CA6F7 /* rayactpack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 77FCB5613F3516AB0744BDE9 /* rayactpack.cpp */; };
 		760CDAF3F5BF0866AA55D0A9 /* m3_core.c in Sources */ = {isa = PBXBuildFile; fileRef = 75A2A660FA80E67CEA4DCD9E /* m3_core.c */; };
 		77421B4ED24C40F240DD9419 /* test262.conf in Resources */ = {isa = PBXBuildFile; fileRef = 595E57CC00CEEEC3D3D2C3B3 /* test262.conf */; };
 		78356034A860CDD81EAD7FF2 /* Switch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A6823BC8335C79C6CD1BC7EE /* Switch.cpp */; };
 		7A4B23999FB8B6F78A1AA124 /* DevMenuOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADA048B96ADC9AFDA99C4C08 /* DevMenuOverlay.swift */; };
+		7AFAD6CC6B790B2B900DC357 /* RangeSlider.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4ADA129237C4AD20879A6BB1 /* RangeSlider.cpp */; };
 		7B647ADE10FFBC547FC6B847 /* worklet_runtime.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 70D8D848C09D583397C08FB7 /* worklet_runtime.cpp */; };
+		7C16ACE15382DF3FC0BF4F31 /* ColorScheme.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EAAAB3A0A7F5BAC4E0953F4F /* ColorScheme.cpp */; };
+		7C4661C182B7F414D225EF70 /* CalculateLayout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7BB87A76EC7C75004E1CAD68 /* CalculateLayout.cpp */; };
 		7C696CA0756E5D2289D53FB2 /* ios_plugins_register.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C582FBEF2363981B5ABDA8BF /* ios_plugins_register.cpp */; };
 		7C9AD967B12DEF49FF0AA129 /* RayactEngineSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00B60127D0AF9FF82D317CC9 /* RayactEngineSession.swift */; };
+		7CC27FF2A43FBFBDAD1973C5 /* async_storage.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 01B5A1D12126E302B2F63632 /* async_storage.cpp */; };
+		7CFCE5EE5674039E9577DBEB /* TextInput.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C8D38712A957FD5697015BC3 /* TextInput.cpp */; };
+		809198ABF67593FBB1A61B81 /* test262-fast.conf in Resources */ = {isa = PBXBuildFile; fileRef = 779530731ADFBA7776BCD386 /* test262-fast.conf */; };
 		80A013227ADE6AA970845C76 /* SearchBar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 48F44CFC99F7429EB11B4BF5 /* SearchBar.cpp */; };
 		8168632487675DFF099F6FB9 /* Baseline.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 020F88A4AD4E13A283EA9DD3 /* Baseline.cpp */; };
 		8256805485BA1EBFF65F52A4 /* devtools_ios.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 05F70DD7DDDC9C7206B25D03 /* devtools_ios.cpp */; };
 		82F2EE47D37AE050CDEC3638 /* Cache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A0BD219E6A1366278E61EBCB /* Cache.cpp */; };
+		83FE650F9EF5F6D54EFCF4DD /* TextEngine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8D9B685A8DE5801F02A3EDAC /* TextEngine.cpp */; };
+		8541CCB5B35E434B9BA8B08A /* Tooltip.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B532A16A4117E91655AB71CE /* Tooltip.cpp */; };
 		877AD2A3BFAE7486B46730E1 /* Button.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6BC4638C75044DF07841D17B /* Button.cpp */; };
+		87CF33760E4F2541FBECC19B /* ios_plugins_register.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C582FBEF2363981B5ABDA8BF /* ios_plugins_register.cpp */; };
 		898AB0E4C7400BD90D65CB0B /* rtext.c in Sources */ = {isa = PBXBuildFile; fileRef = 033D06CBD69C1A750204C7F1 /* rtext.c */; };
 		8AB41411FECA2FC3AB9711FF /* YGNode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2EDBDE36DAE581834D13867D /* YGNode.cpp */; };
+		8AEC684306E9F88EB3A1EA06 /* FontManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A73914BE9936EC5E072E99C9 /* FontManager.cpp */; };
 		8D2BC51FD45F2099DE163954 /* rshapes.c in Sources */ = {isa = PBXBuildFile; fileRef = D4F92D27F9383E1B90D2AB1F /* rshapes.c */; };
 		8DDB8789F9AC2391D5233DE5 /* m3_parse.c in Sources */ = {isa = PBXBuildFile; fileRef = 4DD415575E09D0EE82B83F4C /* m3_parse.c */; };
 		90D2CD8A4B3A39C8206AC591 /* color_parse.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D338089586A9E4D25A64C8FA /* color_parse.cpp */; };
 		91248E8395507EA272E2CF82 /* accessibility_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A176FB6E02D45A0F886BAECD /* accessibility_bridge.cpp */; };
 		9188F6F40DE13083F9C4E337 /* event.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F131ED1BCD99188B3EA6615C /* event.cpp */; };
 		9192CD0DB5ECBAA84C7F1CC0 /* View.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6E9E2BDB6DE2D9AE8AE0CB7A /* View.cpp */; };
+		91E620714CA8FBFACD268E1A /* theme_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11D8580FA38B56405E57F90C /* theme_bridge.cpp */; };
 		91F4FE368ED312D28C5BE32F /* m3_env.c in Sources */ = {isa = PBXBuildFile; fileRef = B0C5482E94942DF05E7860D2 /* m3_env.c */; };
+		92221A3458B66C437E55137D /* css_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6E51B3E4F4E82FE60F28FD4E /* css_bridge.cpp */; };
 		931BDCBE94EA3ED8F1AA8F4F /* AbsoluteLayout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0505A61CF3B74FC77872B757 /* AbsoluteLayout.cpp */; };
 		944FD0C549D5A987A55307A9 /* raym3_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4509BE0DB4D7D7B1ED6BEAF8 /* raym3_bridge.cpp */; };
+		9668C4FFE59AD49E5B81CF68 /* FlexLine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32646D3D3C2A74F0CC05ACB2 /* FlexLine.cpp */; };
 		96962E57BF045D889E3AAEDA /* platform_ios.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 161ECA68BB5DDAA75415F0FD /* platform_ios.cpp */; };
+		9809CFEAE52F6F62ED35559A /* TextSelectionOverlay.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6492F076A3C93508C738F9B5 /* TextSelectionOverlay.cpp */; };
 		98EE116EDE894DBB7F9EB2BB /* Checkbox.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2D844D815300F23880FBE1FA /* Checkbox.cpp */; };
+		9956E022EFEBDBB93D612A96 /* utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D64CE86C42AA969248D4F78D /* utils.cpp */; };
+		9BB7B97C353DE21D06FD1726 /* YGConfig.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CA04DB257606DA6B39C22160 /* YGConfig.cpp */; };
 		9BD0E98122F875EC2B1E70D2 /* FontManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A73914BE9936EC5E072E99C9 /* FontManager.cpp */; };
+		9D281A13E252314334F6D8B8 /* Style.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E5AB9052D5A582E28D603A6 /* Style.cpp */; };
 		9DCB48FEF9126013AE4A4EC8 /* quickjs-libc.c in Sources */ = {isa = PBXBuildFile; fileRef = B146E609AC0016988E08B024 /* quickjs-libc.c */; };
 		9DF44BC282A74D2379DA263C /* libregexp.c in Sources */ = {isa = PBXBuildFile; fileRef = 3B66654088E57B2DA773C955 /* libregexp.c */; };
 		9E6D3980058E37AAC430F584 /* Node.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 77D94C1DADD5AB4D125DE57D /* Node.cpp */; };
 		9F186EB555AD7647CD02B657 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 390CE3FE919320CBB64E90B5 /* Assets.xcassets */; };
 		A136622FA5AD4DA957BBF15B /* MaterialDefaults.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C4149BFBCA91BDC435ADB975 /* MaterialDefaults.cpp */; };
+		A1FE45E1B2DB343FC78FAF85 /* worker_native.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CB3C855D36B51CE29E8AAA3A /* worker_native.cpp */; };
 		A3DAD6180F0CFC39540A8839 /* DevClientBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A2DAB3DA708FD3FD8F533FC /* DevClientBridge.swift */; };
 		A4A54E28B804963EA472EFB7 /* Theme.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FF5EFD75635045D7F31B8AF4 /* Theme.cpp */; };
 		A50E4A706D46B27E9C009C8D /* DevShakeDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2504A8EEDDEE6DE370CF8E42 /* DevShakeDetector.swift */; };
 		A633B49D47788CB85D2FAB10 /* EmojiFont.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1CF8EAFC4FD8B1B033557097 /* EmojiFont.cpp */; };
+		A8113A86442C500C8B597872 /* Density.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 68469D2FE07DBA277E1658B0 /* Density.cpp */; };
 		A8FECD0B4BA5E98A70298A95 /* AppBar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E02CD5F98842E4310FC445C /* AppBar.cpp */; };
+		AA0B378F4226BD056359881F /* color_parse.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D338089586A9E4D25A64C8FA /* color_parse.cpp */; };
 		AA4EB0BBE4E733EF16E2A671 /* rtextures.c in Sources */ = {isa = PBXBuildFile; fileRef = 2946B84A4A7FF9FF1C43DFC2 /* rtextures.c */; };
+		AAB5AD349E5D678534F951CB /* accessibility_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A176FB6E02D45A0F886BAECD /* accessibility_bridge.cpp */; };
+		AB26A09F3A1B1E49D384E222 /* Layout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 34CDCD40C0C701946B2232F9 /* Layout.cpp */; };
+		AC30CC98E9364E1F1F05872D /* m3_function.c in Sources */ = {isa = PBXBuildFile; fileRef = F3A43D53B829B514AC4FCBD1 /* m3_function.c */; };
 		ADFBA51BFE00F4CE13FFE980 /* SystemAppearance.mm in Sources */ = {isa = PBXBuildFile; fileRef = 78460481074191BFF35CD1D8 /* SystemAppearance.mm */; };
 		AEB7DD0BF6E2EB77866AD698 /* SvgModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F580CD4E2F9FFAA4B1341D35 /* SvgModel.cpp */; };
+		AEF0E6947E6B375489895303 /* js_stdlib.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 20F92CF43B7F1D037FF2CC55 /* js_stdlib.cpp */; };
+		AF8059D83456435A7DF8F939 /* unicode_download.sh in Resources */ = {isa = PBXBuildFile; fileRef = D93EDE6AE087FBDE206BC5D2 /* unicode_download.sh */; };
 		B063B63DAF0AE710F05A3B08 /* engine_thread.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7D6CD8BB50B297A17E45231F /* engine_thread.cpp */; };
+		B163052AB462F707A3531F83 /* YGValue.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5636239CF32FB134C77058DE /* YGValue.cpp */; };
 		B20E9499A79EB3FFF1377EDF /* engine_runtime.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 74DBCA3944A8B9E724BFB3DC /* engine_runtime.cpp */; };
+		B31D98AA1304428D32A17532 /* Dialog.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 364E7ADD53511EAAD220CE0C /* Dialog.cpp */; };
 		B3CDA4E49203E1A34EE4392E /* RayactNativeBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3C7D1E2BC8A5A32056664A /* RayactNativeBridge.swift */; };
 		B41A1BAB1F083D8548230FAB /* raym3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F9A1AF35922E1BA96BE97CBE /* raym3.cpp */; };
 		B42F038E071BA6FEA29CA0D2 /* ProjectHmrClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60C506A65430CF60588D22FB /* ProjectHmrClient.swift */; };
+		B440EA9FE884C9E2B7EECCB9 /* m3_compile.c in Sources */ = {isa = PBXBuildFile; fileRef = 1A975362667BD597D2506176 /* m3_compile.c */; };
+		B48F30E27484F3A8BE4BEE7B /* TextMeasureCache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 394F9D7799DD790573E5CC67 /* TextMeasureCache.cpp */; };
+		B4BEF2F7BC6F00783BA5B289 /* View.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6E9E2BDB6DE2D9AE8AE0CB7A /* View.cpp */; };
+		B5015465399CBBA70ECBC10C /* Modal.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EE8DF0A2D484B19EFDBDC81A /* Modal.cpp */; };
 		B515274692716764B1514243 /* Density.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 68469D2FE07DBA277E1658B0 /* Density.cpp */; };
 		B5CED7E033874AC24BF72E85 /* Components.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E2CEE3EBA53166EBF92326B7 /* Components.cpp */; };
+		B674CC7DE84151560BED4F1F /* rtext.c in Sources */ = {isa = PBXBuildFile; fileRef = 033D06CBD69C1A750204C7F1 /* rtext.c */; };
 		B7C4A8713642E5B49364B07B /* secure_store_plugin.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4AE641ED164D08DAC13A924E /* secure_store_plugin.cpp */; };
 		B81F127C71B41115425C7181 /* TextField.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F5B08C908128E9379859CC94 /* TextField.cpp */; };
+		B870195D94778C6A4768EFD9 /* SystemAppearance.mm in Sources */ = {isa = PBXBuildFile; fileRef = 78460481074191BFF35CD1D8 /* SystemAppearance.mm */; };
 		BA0B8531C69D7AF1CA02DDEE /* CSSParser.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E69B05E520CE0BDC11E5E814 /* CSSParser.cpp */; };
 		BBCB45FC01672B409B0D6C3E /* mmkv_plugin.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5978B0F37C9B424062E35D9D /* mmkv_plugin.cpp */; };
 		BC2B53799DE98B6E7ED6CD29 /* TextEngine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8D9B685A8DE5801F02A3EDAC /* TextEngine.cpp */; };
+		BC4F528470673EAD1C0D51F3 /* Icon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3B3DC4ACB5FED967F2EBDA22 /* Icon.cpp */; };
 		BC8B81AB58B3CE0814462B83 /* RayactScreenViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96196FB533595CED1263FDFB /* RayactScreenViewController.swift */; };
 		BD0673CC6FE8CCCF5663CBFE /* Badge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B842A810A8740B2243A790FD /* Badge.cpp */; };
+		BD7FA53D9617BC4E0D31C4C3 /* m3_parse.c in Sources */ = {isa = PBXBuildFile; fileRef = 4DD415575E09D0EE82B83F4C /* m3_parse.c */; };
+		BD8D1CF27329927B935827C6 /* module_bus.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 831D0F39EBE86FFE17FFF5B0 /* module_bus.cpp */; };
 		BE79C0406D8CAE69BD5D69A7 /* Ripple.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BF2DA98AEDA8C4CD32294A86 /* Ripple.cpp */; };
+		BE8005CECDFFB06DD4410989 /* SvgModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F580CD4E2F9FFAA4B1341D35 /* SvgModel.cpp */; };
+		BEB519CE03A4F74CD4930842 /* Snackbar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 22018002A09CFD74E653EA9C /* Snackbar.cpp */; };
 		BED80B977E8614175592B343 /* Slider.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E92FF35319D5631AC5E15853 /* Slider.cpp */; };
+		BF07E90A7FA534638EC68BED /* m3_extensions.c in Sources */ = {isa = PBXBuildFile; fileRef = 3719A70FF9FB36517B19379F /* m3_extensions.c */; };
 		C0CDFD46ADDEBDA206D8E5B9 /* LayoutResults.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FADFB3523E24CBEFA34FAF8E /* LayoutResults.cpp */; };
 		C1AF0795FCB63DA225E38E44 /* View3D.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 26A2363B4CBAC90587376E4F /* View3D.cpp */; };
 		C3D5B3C3FC9C288BA658D5E4 /* Layout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 34CDCD40C0C701946B2232F9 /* Layout.cpp */; };
+		C4683EF979895AFAF18FB816 /* LayoutResults.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FADFB3523E24CBEFA34FAF8E /* LayoutResults.cpp */; };
 		C4A2D7F4A7E80B7E64537C61 /* worker_native.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CB3C855D36B51CE29E8AAA3A /* worker_native.cpp */; };
 		C58F0EB10DC46B17780E5A8E /* dtoa.c in Sources */ = {isa = PBXBuildFile; fileRef = 22210114E93A4132C4F7029E /* dtoa.c */; };
+		C6665589E50203F7A1E4A877 /* Renderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1F6AAFA3FCBAA3AF64FF07A9 /* Renderer.cpp */; };
 		C67505ABC019F440B6C24A33 /* NavigationHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0212F7D9A4AD975A70B16DF /* NavigationHost.swift */; };
+		C7923DE4E6BB1861C0099B41 /* PixelGrid.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FF9239B7D3A72E7AEED1ECF5 /* PixelGrid.cpp */; };
 		C7E1D152A74C93BDB29AB8AD /* Input.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2EDA5ACC9660444D2043B5D7 /* Input.cpp */; };
+		C9222DAE034A596EFB57946A /* EmojiRasterizerApple.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4FAAD9A25EC18CD490DB9A8F /* EmojiRasterizerApple.mm */; };
+		C933B8705F043DEFC2B1DD98 /* rlmt.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5174C51F9A1A937C22FFAC48 /* rlmt.mm */; };
 		CB11E83D4066E9A2F9A2201E /* gesture_recognizer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 125987C1814763C5DD732C3C /* gesture_recognizer.cpp */; };
 		CC8A0AF0CD9C8EF514002A60 /* TextInput.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C8D38712A957FD5697015BC3 /* TextInput.cpp */; };
+		CCA044874CC03B7682C22636 /* worklet_runtime.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 70D8D848C09D583397C08FB7 /* worklet_runtime.cpp */; };
+		CDE0442F103EDA1E5682F73B /* data_dir.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9089E6D8BE1FFB1B63D3F8FE /* data_dir.cpp */; };
+		CE40867E29384F843E367E47 /* event.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F131ED1BCD99188B3EA6615C /* event.cpp */; };
+		CE78B87556A7B10FC543EDE2 /* CSSParser.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E69B05E520CE0BDC11E5E814 /* CSSParser.cpp */; };
 		CE9756CE17C0832FE9A416D7 /* m3_info.c in Sources */ = {isa = PBXBuildFile; fileRef = ECF39F19F0783E95837FDC50 /* m3_info.c */; };
 		CF07B500A35042E1F6D722C8 /* test262-fast.conf in Resources */ = {isa = PBXBuildFile; fileRef = 779530731ADFBA7776BCD386 /* test262-fast.conf */; };
 		D0588FD07A9B4997E5DF02E9 /* Text.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EF9A50956BDA73CBC0F0D322 /* Text.cpp */; };
 		D072984889A46AB829AEAFAC /* Menu.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F7CC4B0DDADC8CDFC8DD8FF3 /* Menu.cpp */; };
+		D132F200EA7DCC2728242D71 /* Badge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B842A810A8740B2243A790FD /* Badge.cpp */; };
+		D3F87CC8851D88C2A13479D5 /* IconRenderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A542F6F40A2E3A2B38CECD8D /* IconRenderer.cpp */; };
 		D4ED30A57039A079C5AD5BAC /* m3_code.c in Sources */ = {isa = PBXBuildFile; fileRef = 2B8B9763872437656442769F /* m3_code.c */; };
+		D66AC5C935C60BA68C740064 /* Baseline.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 020F88A4AD4E13A283EA9DD3 /* Baseline.cpp */; };
 		D6EBA1156B07921DB450D1DC /* CSSUtils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4B39956F06DD9AC33A73C936 /* CSSUtils.cpp */; };
+		D71158D8D64B7926AB3CC8B4 /* Cache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A0BD219E6A1366278E61EBCB /* Cache.cpp */; };
+		D74BD44DC832B560A2F258FF /* secure_store_plugin.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4AE641ED164D08DAC13A924E /* secure_store_plugin.cpp */; };
+		D7E59D744503CCF444433CB1 /* Text.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EF9A50956BDA73CBC0F0D322 /* Text.cpp */; };
 		D94F2AF9C28C53A16A01675B /* m3_module.c in Sources */ = {isa = PBXBuildFile; fileRef = BC38A370866BEEDE4CC8DE7C /* m3_module.c */; };
 		D99132B5214B01EF3563A232 /* theme_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11D8580FA38B56405E57F90C /* theme_bridge.cpp */; };
+		E116E94D2A5E34457E96FFB2 /* IconButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3D39846B38E4EB78300E70AB /* IconButton.cpp */; };
 		E222EE2C1B7638D43B7721B2 /* ios_bridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = FD79277A49A59E148C2863ED /* ios_bridge.mm */; };
 		E3089CBD9ABA5AFDF8B28701 /* quickjs.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C691D9041EAB7C4D2EC024E /* quickjs.c */; };
 		E3993B3961DFED6BD1A9E306 /* worker_js.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1354574C79B5EE1A0B8671AB /* worker_js.cpp */; };
+		E3C8BCF5391CB755965CDC8A /* workers.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D99BD61C508B4DF48014172B /* workers.cpp */; };
 		E4CE0D54A5BD8F6B1602DEDA /* SegmentedButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 07412C116ED17EEBC93CAE53 /* SegmentedButton.cpp */; };
 		E5C83823BA81676F862A191E /* Style.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E5AB9052D5A582E28D603A6 /* Style.cpp */; };
+		E6344891578754F5C94DC5CD /* Slider.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E92FF35319D5631AC5E15853 /* Slider.cpp */; };
+		E642A7C9984E44C1EF31CF7C /* LayoutCard.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6A61438CFC4542C203113E18 /* LayoutCard.cpp */; };
 		E68899CEA1318D634E3B2629 /* Controls.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F1D8A2C57EC5F03592EC0DE /* Controls.cpp */; };
+		E80780F2507C821276DDF3AB /* quickjs.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C691D9041EAB7C4D2EC024E /* quickjs.c */; };
+		EA38F7F33286B8916E4BC15C /* Components.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E2CEE3EBA53166EBF92326B7 /* Components.cpp */; };
+		EA4439FFE19B2257600A4887 /* InputLayer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 31656B737E95A2F23DEBE135 /* InputLayer.cpp */; };
+		EB0D14660D61535C6A788E06 /* CSSProperties.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E7E768F73E5954CCE6181D6 /* CSSProperties.cpp */; };
+		EB7DE652AAFF3C2C81A0C622 /* raym3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F9A1AF35922E1BA96BE97CBE /* raym3.cpp */; };
+		EBDD171D03B19AD0852FCA08 /* rcore_ios_metal_overlay.c in Sources */ = {isa = PBXBuildFile; fileRef = BDE397E69B0DF3A4FC9352E7 /* rcore_ios_metal_overlay.c */; };
 		EBF2E217E13712272D0D3DDC /* async_storage.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 01B5A1D12126E302B2F63632 /* async_storage.cpp */; };
+		EC087BF88916350A46A015D1 /* Navigation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3650E902931A9E55A504E0FA /* Navigation.cpp */; };
 		ED89BD40E34572A212442113 /* LayoutCard.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6A61438CFC4542C203113E18 /* LayoutCard.cpp */; };
 		ED9D226B6297B05B0228E2F9 /* Icon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3B3DC4ACB5FED967F2EBDA22 /* Icon.cpp */; };
+		EDB4A923434FCF12FF71DDFF /* m3_core.c in Sources */ = {isa = PBXBuildFile; fileRef = 75A2A660FA80E67CEA4DCD9E /* m3_core.c */; };
 		EE121A68EDFC1E76D103F2AB /* rmodels.c in Sources */ = {isa = PBXBuildFile; fileRef = 62D5F1BAB64A9A455402D29E /* rmodels.c */; };
 		EE6BC16D52D0E8B188164B91 /* Config.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C9B01CFCF12E1D04B242A54F /* Config.cpp */; };
 		EFD8025F98E2DB04520DA0FF /* List.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6058EEEEED5EBA2479FC7DD7 /* List.cpp */; };
@@ -172,11 +315,20 @@
 		F2FED92558BF715FE5DBB2AB /* RayactHostCallbacksBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 554DA2B057F68DE0276086F2 /* RayactHostCallbacksBridge.swift */; };
 		F379F0CC178E0EE511674758 /* js_stdlib.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 20F92CF43B7F1D037FF2CC55 /* js_stdlib.cpp */; };
 		F637DEE432114820CBAF51E2 /* Card.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 729BCF3CAF33A83E39CAA174 /* Card.cpp */; };
+		F72DA144DD8122736D94D156 /* ios_bridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = FD79277A49A59E148C2863ED /* ios_bridge.mm */; };
 		F734AA2AE1B0356832AFDC72 /* YGValue.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5636239CF32FB134C77058DE /* YGValue.cpp */; };
+		F740CA37F5C53C449326250E /* rshapes.c in Sources */ = {isa = PBXBuildFile; fileRef = D4F92D27F9383E1B90D2AB1F /* rshapes.c */; };
+		F965975F10CECAB68A8792DF /* dev_client_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B3FBF2187FCB8F5B48BA59B3 /* dev_client_bridge.cpp */; };
+		F98040E0EB63BB04FE4E01B1 /* m3_code.c in Sources */ = {isa = PBXBuildFile; fileRef = 2B8B9763872437656442769F /* m3_code.c */; };
+		FAA2EB9CF6882BF125DA1F27 /* YGNode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2EDBDE36DAE581834D13867D /* YGNode.cpp */; };
+		FB46560CBC1215E7A30F983B /* Node.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 77D94C1DADD5AB4D125DE57D /* Node.cpp */; };
 		FC89F20BE1679C7A74401EDD /* shadow_tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C2FF8D3204D04C57EF6C3CE5 /* shadow_tree.cpp */; };
+		FCC11D5BB7B561EDDDB15C8B /* Switch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A6823BC8335C79C6CD1BC7EE /* Switch.cpp */; };
 		FDCEE6E0CE55DC8500E10F22 /* kv_store.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5652D373531BC05A07AF0E14 /* kv_store.cpp */; };
+		FDFA905B60D4BEBD06612264 /* Checkbox.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2D844D815300F23880FBE1FA /* Checkbox.cpp */; };
 		FF214DB072614CB1C62AA854 /* RenderQueue.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 87F684E9CC8E8356DBE55C8F /* RenderQueue.cpp */; };
 		FF6F20B985EBC656F348D298 /* DevLauncherController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BE5620B1A2988311F03FE0B /* DevLauncherController.swift */; };
+		FFFC79DFC74D48833C2E4C01 /* Menu.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F7CC4B0DDADC8CDFC8DD8FF3 /* Menu.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -300,6 +452,7 @@
 		76A82E5FEF5C36D7504CDBA9 /* worklet_runtime.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = worklet_runtime.hpp; sourceTree = "<group>"; };
 		779530731ADFBA7776BCD386 /* test262-fast.conf */ = {isa = PBXFileReference; path = "test262-fast.conf"; sourceTree = "<group>"; };
 		77D94C1DADD5AB4D125DE57D /* Node.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Node.cpp; sourceTree = "<group>"; };
+		77FCB5613F3516AB0744BDE9 /* rayactpack.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = rayactpack.cpp; sourceTree = "<group>"; };
 		78460481074191BFF35CD1D8 /* SystemAppearance.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SystemAppearance.mm; sourceTree = "<group>"; };
 		7917706AECFD76A3C61A1BC2 /* SvgRenderer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SvgRenderer.cpp; sourceTree = "<group>"; };
 		7BB87A76EC7C75004E1CAD68 /* CalculateLayout.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CalculateLayout.cpp; sourceTree = "<group>"; };
@@ -346,6 +499,7 @@
 		A4E0D57F836EE51563FCBE41 /* quickjs_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = quickjs_bridge.hpp; sourceTree = "<group>"; };
 		A542F6F40A2E3A2B38CECD8D /* IconRenderer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = IconRenderer.cpp; sourceTree = "<group>"; };
 		A6823BC8335C79C6CD1BC7EE /* Switch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Switch.cpp; sourceTree = "<group>"; };
+		A73583B9FBD598A5FF8D87CC /* libRayactEngineStatic.a */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = archive.ar; path = libRayactEngineStatic.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		A73914BE9936EC5E072E99C9 /* FontManager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = FontManager.cpp; sourceTree = "<group>"; };
 		A8553035399C5D547BE08A8E /* LayoutableChildren.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LayoutableChildren.h; sourceTree = "<group>"; };
 		A9DFE135C70DA0D8EDD07FAD /* window_manager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = window_manager.cpp; sourceTree = "<group>"; };
@@ -369,6 +523,7 @@
 		BA3C7D1E2BC8A5A32056664A /* RayactNativeBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactNativeBridge.swift; sourceTree = "<group>"; };
 		BB81FAD003C69100211EB043 /* Log.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Log.h; sourceTree = "<group>"; };
 		BC38A370866BEEDE4CC8DE7C /* m3_module.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_module.c; sourceTree = "<group>"; };
+		BDB7E41A3A023E284FA9E6A4 /* rayact_version.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = rayact_version.h; sourceTree = "<group>"; };
 		BDE397E69B0DF3A4FC9352E7 /* rcore_ios_metal_overlay.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rcore_ios_metal_overlay.c; sourceTree = "<group>"; };
 		BF2DA98AEDA8C4CD32294A86 /* Ripple.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Ripple.cpp; sourceTree = "<group>"; };
 		C1414C05570DD9C44E3EAA1A /* commit_queue.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = commit_queue.cpp; sourceTree = "<group>"; };
@@ -448,6 +603,7 @@
 		0002D496B3EF33707E62A2C5 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				A73583B9FBD598A5FF8D87CC /* libRayactEngineStatic.a */,
 				13B32CCF88CFB21B68DA7B56 /* RayactIOS.app */,
 			);
 			name = Products;
@@ -762,6 +918,15 @@
 			path = ../../native/desktop;
 			sourceTree = "<group>";
 		};
+		AF2C61CF981800432F054C4B /* shared */ = {
+			isa = PBXGroup;
+			children = (
+				77FCB5613F3516AB0744BDE9 /* rayactpack.cpp */,
+			);
+			name = shared;
+			path = ../../native/shared;
+			sourceTree = "<group>";
+		};
 		B95DCD781E7E8815F935AA48 /* enums */ = {
 			isa = PBXGroup;
 			children = (
@@ -867,6 +1032,7 @@
 			children = (
 				F7053D1A9402E92BD2189BFC /* config_loader.cpp */,
 				D524A9973A0039BDEE2A56E5 /* rayact_module_abi.h */,
+				BDB7E41A3A023E284FA9E6A4 /* rayact_version.h */,
 			);
 			name = core;
 			path = ../../native/core;
@@ -952,6 +1118,7 @@
 				E4259D8BF16E3E412BBC27A5 /* quickjs */,
 				7576FF4C5C4A796550B71BC5 /* rlmt */,
 				31FFCE3C188FB5C45B673B43 /* secure-store */,
+				AF2C61CF981800432F054C4B /* shared */,
 				F012CC6B17802DD3B2359B41 /* source */,
 				21F9B6E3C413E7F26E2D2A61 /* src */,
 				DC5ADB45C711D52BCF5C2139 /* src */,
@@ -1019,6 +1186,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		1085A684E49673E8347D14AB /* RayactEngineStatic */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F12DF3BD7C8B8AF1A5AF88D4 /* Build configuration list for PBXNativeTarget "RayactEngineStatic" */;
+			buildPhases = (
+				E648D79138FB51D47A222F60 /* Sources */,
+				C94C1029A5CCCF4B8B4E06CC /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RayactEngineStatic;
+			packageProductDependencies = (
+			);
+			productName = RayactEngineStatic;
+			productReference = A73583B9FBD598A5FF8D87CC /* libRayactEngineStatic.a */;
+			productType = "com.apple.product-type.library.static";
+		};
 		2F43DFF7BD00A1A4C8F2389C /* RayactIOS */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E37C75A626A0CCF22ACADDF2 /* Build configuration list for PBXNativeTarget "RayactIOS" */;
@@ -1048,6 +1233,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					1085A684E49673E8347D14AB = {
+						DevelopmentTeam = "";
+					};
 					2F43DFF7BD00A1A4C8F2389C = {
 						DevelopmentTeam = "";
 					};
@@ -1067,12 +1255,24 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				1085A684E49673E8347D14AB /* RayactEngineStatic */,
 				2F43DFF7BD00A1A4C8F2389C /* RayactIOS */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		C94C1029A5CCCF4B8B4E06CC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				809198ABF67593FBB1A61B81 /* test262-fast.conf in Resources */,
+				180D163F39BA633734B264A1 /* test262.conf in Resources */,
+				0BDE071553F93E3CFDECF316 /* tests.conf in Resources */,
+				AF8059D83456435A7DF8F939 /* unicode_download.sh in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D8A6A84136FB927E6A179ECB /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1276,6 +1476,7 @@
 				9DCB48FEF9126013AE4A4EC8 /* quickjs-libc.c in Sources */,
 				E3089CBD9ABA5AFDF8B28701 /* quickjs.c in Sources */,
 				1BCA7FAED4BC3B515D74A6DD /* quickjs_bridge.cpp in Sources */,
+				749B7B48C978B5A727914A11 /* rayactpack.cpp in Sources */,
 				B41A1BAB1F083D8548230FAB /* raym3.cpp in Sources */,
 				944FD0C549D5A987A55307A9 /* raym3_bridge.cpp in Sources */,
 				6D503DB88D62F54F3F24B0AF /* rcore_ios_metal_overlay.c in Sources */,
@@ -1299,9 +1500,189 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E648D79138FB51D47A222F60 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				552C0E4C9B2A7D2F01234E74 /* AbsoluteLayout.cpp in Sources */,
+				4EE39914C9F59739AAD0AD6A /* AppBar.cpp in Sources */,
+				0C5A44CC8CBA390CD341027E /* AssertFatal.cpp in Sources */,
+				D132F200EA7DCC2728242D71 /* Badge.cpp in Sources */,
+				D66AC5C935C60BA68C740064 /* Baseline.cpp in Sources */,
+				2A1D6653F45DD8F9C9A8F42C /* Button.cpp in Sources */,
+				4A393F40D6A6F07C286D2B87 /* ButtonGroup.cpp in Sources */,
+				25D93C8772A048BE0BD82148 /* CSSDeNest.cpp in Sources */,
+				CE78B87556A7B10FC543EDE2 /* CSSParser.cpp in Sources */,
+				EB0D14660D61535C6A788E06 /* CSSProperties.cpp in Sources */,
+				49F0B4352C862A984819AF1D /* CSSUtils.cpp in Sources */,
+				D71158D8D64B7926AB3CC8B4 /* Cache.cpp in Sources */,
+				7C4661C182B7F414D225EF70 /* CalculateLayout.cpp in Sources */,
+				05C61624E774D5578F5EC6BB /* Card.cpp in Sources */,
+				FDFA905B60D4BEBD06612264 /* Checkbox.cpp in Sources */,
+				41DF2BDDEBB79F25B9F1EA39 /* Chip.cpp in Sources */,
+				7C16ACE15382DF3FC0BF4F31 /* ColorScheme.cpp in Sources */,
+				EA38F7F33286B8916E4BC15C /* Components.cpp in Sources */,
+				568F637CE4C5228CD92EBC6A /* Config.cpp in Sources */,
+				082095F94FE51B39A377AEEF /* Container.cpp in Sources */,
+				2D42DEC965E5851E5A750E8F /* Controls.cpp in Sources */,
+				A8113A86442C500C8B597872 /* Density.cpp in Sources */,
+				B31D98AA1304428D32A17532 /* Dialog.cpp in Sources */,
+				537CCDA908F3E0374A73C04F /* Divider.cpp in Sources */,
+				3A50DF258529727021A88304 /* EmojiFont.cpp in Sources */,
+				C9222DAE034A596EFB57946A /* EmojiRasterizerApple.mm in Sources */,
+				9668C4FFE59AD49E5B81CF68 /* FlexLine.cpp in Sources */,
+				51497134BDA5919DC1F5F7C3 /* FloatingActionButton.cpp in Sources */,
+				8AEC684306E9F88EB3A1EA06 /* FontManager.cpp in Sources */,
+				BC4F528470673EAD1C0D51F3 /* Icon.cpp in Sources */,
+				E116E94D2A5E34457E96FFB2 /* IconButton.cpp in Sources */,
+				D3F87CC8851D88C2A13479D5 /* IconRenderer.cpp in Sources */,
+				3AB71A6F4E0C02576C18A091 /* Input.cpp in Sources */,
+				EA4439FFE19B2257600A4887 /* InputLayer.cpp in Sources */,
+				AB26A09F3A1B1E49D384E222 /* Layout.cpp in Sources */,
+				E642A7C9984E44C1EF31CF7C /* LayoutCard.cpp in Sources */,
+				21CE15B28BCDCFF8A94F408C /* LayoutNode.cpp in Sources */,
+				C4683EF979895AFAF18FB816 /* LayoutResults.cpp in Sources */,
+				6845A286025EF47EFE66632F /* List.cpp in Sources */,
+				031F9C50CC40D4A40A7CB0EA /* Log.cpp in Sources */,
+				538753ED8A08C7D98FD01566 /* MaterialDefaults.cpp in Sources */,
+				FFFC79DFC74D48833C2E4C01 /* Menu.cpp in Sources */,
+				B5015465399CBBA70ECBC10C /* Modal.cpp in Sources */,
+				49C2456364D96A94CDE951D6 /* Mutations.cpp in Sources */,
+				EC087BF88916350A46A015D1 /* Navigation.cpp in Sources */,
+				FB46560CBC1215E7A30F983B /* Node.cpp in Sources */,
+				C7923DE4E6BB1861C0099B41 /* PixelGrid.cpp in Sources */,
+				3CF10FD22D3CAF40F85E480D /* ProgressIndicator.cpp in Sources */,
+				0469E140A7B340046F2806A5 /* RadioButton.cpp in Sources */,
+				7AFAD6CC6B790B2B900DC357 /* RangeSlider.cpp in Sources */,
+				1B06B50E94D1C45A16DD1F86 /* RenderContext.cpp in Sources */,
+				54C80B22FF5F0BD7A69A4BBE /* RenderQueue.cpp in Sources */,
+				C6665589E50203F7A1E4A877 /* Renderer.cpp in Sources */,
+				3620C3A7E1CE32BEC4597587 /* Renderer.cpp in Sources */,
+				6A596B0C57184A0FD0065EA8 /* Ripple.cpp in Sources */,
+				6D7C223685172389977AAB6E /* SearchBar.cpp in Sources */,
+				4AF030A0A949D52CC31A4701 /* SegmentedButton.cpp in Sources */,
+				E6344891578754F5C94DC5CD /* Slider.cpp in Sources */,
+				BEB519CE03A4F74CD4930842 /* Snackbar.cpp in Sources */,
+				9D281A13E252314334F6D8B8 /* Style.cpp in Sources */,
+				0DE152FF202D9F529469452B /* Stylesheet.cpp in Sources */,
+				BE8005CECDFFB06DD4410989 /* SvgModel.cpp in Sources */,
+				423C80B48F09B2BFA2894DF0 /* SvgRenderer.cpp in Sources */,
+				FCC11D5BB7B561EDDDB15C8B /* Switch.cpp in Sources */,
+				45A5CFC92B22D3133A4A96C1 /* SystemAppearance.cpp in Sources */,
+				B870195D94778C6A4768EFD9 /* SystemAppearance.mm in Sources */,
+				1760B07EFF2949AE3570F480 /* TabBar.cpp in Sources */,
+				D7E59D744503CCF444433CB1 /* Text.cpp in Sources */,
+				83FE650F9EF5F6D54EFCF4DD /* TextEngine.cpp in Sources */,
+				59FC97BC9909E7A140D78F7E /* TextField.cpp in Sources */,
+				7CFCE5EE5674039E9577DBEB /* TextInput.cpp in Sources */,
+				B48F30E27484F3A8BE4BEE7B /* TextMeasureCache.cpp in Sources */,
+				9809CFEAE52F6F62ED35559A /* TextSelectionOverlay.cpp in Sources */,
+				1811375977EEC31A60F856DC /* Theme.cpp in Sources */,
+				8541CCB5B35E434B9BA8B08A /* Tooltip.cpp in Sources */,
+				67596AC9C7C6F02D85EB6043 /* Transitions.cpp in Sources */,
+				B4BEF2F7BC6F00783BA5B289 /* View.cpp in Sources */,
+				349F2F879479D48ACFDEE00F /* View3D.cpp in Sources */,
+				9BB7B97C353DE21D06FD1726 /* YGConfig.cpp in Sources */,
+				650BC3D408DCAC68657E5D94 /* YGEnums.cpp in Sources */,
+				FAA2EB9CF6882BF125DA1F27 /* YGNode.cpp in Sources */,
+				0D3F857AE7D6D00666F5A651 /* YGNodeLayout.cpp in Sources */,
+				22FB7658CE410B82B35939F2 /* YGNodeStyle.cpp in Sources */,
+				576CE4C33B9FB3D702CE94D3 /* YGPixelGrid.cpp in Sources */,
+				B163052AB462F707A3531F83 /* YGValue.cpp in Sources */,
+				AAB5AD349E5D678534F951CB /* accessibility_bridge.cpp in Sources */,
+				7CC27FF2A43FBFBDAD1973C5 /* async_storage.cpp in Sources */,
+				AA0B378F4226BD056359881F /* color_parse.cpp in Sources */,
+				2855BDB66A3375014919F930 /* commit_queue.cpp in Sources */,
+				1CD3157CB91BB83C6CA0D917 /* config_loader.cpp in Sources */,
+				92221A3458B66C437E55137D /* css_bridge.cpp in Sources */,
+				CDE0442F103EDA1E5682F73B /* data_dir.cpp in Sources */,
+				F965975F10CECAB68A8792DF /* dev_client_bridge.cpp in Sources */,
+				3CDC80A53EC9FBCA4897E206 /* devtools_ios.cpp in Sources */,
+				0449A51B3DF236FED529B680 /* dtoa.c in Sources */,
+				5D260F69616A4C55EA2900DC /* engine_js.cpp in Sources */,
+				06E524FDD81D005CD12DE30C /* engine_render.cpp in Sources */,
+				5F19279D6EA20866DD6594B1 /* engine_runtime.cpp in Sources */,
+				1420A7A3DFBF956FA57873EC /* engine_thread.cpp in Sources */,
+				CE40867E29384F843E367E47 /* event.cpp in Sources */,
+				6AE718E36FB7EA82983AE96C /* gesture_recognizer.cpp in Sources */,
+				F72DA144DD8122736D94D156 /* ios_bridge.mm in Sources */,
+				6FDAD799251285017952CD73 /* ios_engine_instance.cpp in Sources */,
+				87CF33760E4F2541FBECC19B /* ios_plugins_register.cpp in Sources */,
+				AEF0E6947E6B375489895303 /* js_stdlib.cpp in Sources */,
+				33BDE968D6EAB368B4A48F98 /* kv_store.cpp in Sources */,
+				3F98DC24B3F6C17AB7934649 /* libregexp.c in Sources */,
+				550D5B50BB62CF7C4C1BC08C /* libunicode.c in Sources */,
+				52A4E84D9708F2A1CB1F24C7 /* m3_bind.c in Sources */,
+				F98040E0EB63BB04FE4E01B1 /* m3_code.c in Sources */,
+				B440EA9FE884C9E2B7EECCB9 /* m3_compile.c in Sources */,
+				EDB4A923434FCF12FF71DDFF /* m3_core.c in Sources */,
+				68F0CB12C19C3EA4DA343B82 /* m3_env.c in Sources */,
+				361A16594C5FA547BFF5024D /* m3_exec.c in Sources */,
+				BF07E90A7FA534638EC68BED /* m3_extensions.c in Sources */,
+				AC30CC98E9364E1F1F05872D /* m3_function.c in Sources */,
+				6878C96065A674DCCC2B0A0A /* m3_info.c in Sources */,
+				30B97B19B96B5C002EA6083E /* m3_module.c in Sources */,
+				BD7FA53D9617BC4E0D31C4C3 /* m3_parse.c in Sources */,
+				72781B9A46EB548F276EC7CB /* mmkv_plugin.cpp in Sources */,
+				BD8D1CF27329927B935827C6 /* module_bus.cpp in Sources */,
+				69C313BEE54637A6C8E10ADB /* platform_ios.cpp in Sources */,
+				0DCCFC0F0DC082373825C5FE /* plugin_loader.cpp in Sources */,
+				39DE2399E8AC558B5522990F /* quickjs-libc.c in Sources */,
+				E80780F2507C821276DDF3AB /* quickjs.c in Sources */,
+				32349FFF5A169B6309CD46F7 /* quickjs_bridge.cpp in Sources */,
+				75FC46EA046DC480BE8CA6F7 /* rayactpack.cpp in Sources */,
+				EB7DE652AAFF3C2C81A0C622 /* raym3.cpp in Sources */,
+				708E61F339EB260E7C79BE4E /* raym3_bridge.cpp in Sources */,
+				EBDD171D03B19AD0852FCA08 /* rcore_ios_metal_overlay.c in Sources */,
+				C933B8705F043DEFC2B1DD98 /* rlmt.mm in Sources */,
+				30DB880E984FF777D388B7A7 /* rmodels.c in Sources */,
+				F740CA37F5C53C449326250E /* rshapes.c in Sources */,
+				B674CC7DE84151560BED4F1F /* rtext.c in Sources */,
+				4294C14CED8017E11E4CC9A4 /* rtextures.c in Sources */,
+				5CDD0C46D2A573EFDA0447AD /* secure_store_mac.mm in Sources */,
+				D74BD44DC832B560A2F258FF /* secure_store_plugin.cpp in Sources */,
+				748C568A5FCB85B3AD62A15D /* shadow_tree.cpp in Sources */,
+				1A9FF9386FAB48A5C6B1D608 /* system_appearance.cpp in Sources */,
+				91E620714CA8FBFACD268E1A /* theme_bridge.cpp in Sources */,
+				9956E022EFEBDBB93D612A96 /* utils.cpp in Sources */,
+				1AEBFFCDF019A64B531FFB77 /* window_manager.cpp in Sources */,
+				53CBDA720ACC2F5FE3A15C57 /* worker_js.cpp in Sources */,
+				A1FE45E1B2DB343FC78FAF85 /* worker_native.cpp in Sources */,
+				14B79CF652517C46393DF766 /* worker_wasm.cpp in Sources */,
+				E3C8BCF5391CB755965CDC8A /* workers.cpp in Sources */,
+				CCA044874CC03B7682C22636 /* worklet_runtime.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		11088DBFC925AF58BA086C43 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_CXX_LIBRARY = "libc++";
+				DEVELOPMENT_TEAM = "";
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) RAYACT_NO_NET=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1";
+				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = "$(inherited) ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../../raylib-backends/backends/rlmt ../../../raylib-backends/backends/rlmt/platforms ../../../raylib/src ../../../raym3/include ../../../raym3/build-v2/include ../../../raym3/build-v2-yoga2/_deps/yoga-src ../../../quickjs ../../../lynx/third_party/quickjs/include ../../../wasm3/source ../../../cssparser";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_CFLAGS = "$(inherited) -D_GNU_SOURCE";
+				PRODUCT_BUNDLE_IDENTIFIER = com.rayact.RayactEngineStatic;
+				PRODUCT_NAME = RayactEngine;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				USER_HEADER_SEARCH_PATHS = "$(inherited) ../../../raylib-backends/backends/rlmt ../../../raylib-backends/backends/rlmt/platforms ../../../raylib/src ../../../raym3/include ../../../raym3/build-v2/include ../../../raym3/build-v2-yoga2/_deps/yoga-src ../../../quickjs ../../../lynx/third_party/quickjs/include ../../../wasm3/source ../../../cssparser";
+				USE_HEADERMAP = NO;
+			};
+			name = Debug;
+		};
 		2B9CC2FB49172B5048B29757 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1383,6 +1764,32 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		7A2210CB07C318FE9BC0F4B8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_CXX_LIBRARY = "libc++";
+				DEVELOPMENT_TEAM = "";
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) RAYACT_NO_NET=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1";
+				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = "$(inherited) ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../../raylib-backends/backends/rlmt ../../../raylib-backends/backends/rlmt/platforms ../../../raylib/src ../../../raym3/include ../../../raym3/build-v2/include ../../../raym3/build-v2-yoga2/_deps/yoga-src ../../../quickjs ../../../lynx/third_party/quickjs/include ../../../wasm3/source ../../../cssparser";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_CFLAGS = "$(inherited) -D_GNU_SOURCE";
+				PRODUCT_BUNDLE_IDENTIFIER = com.rayact.RayactEngineStatic;
+				PRODUCT_NAME = RayactEngine;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				USER_HEADER_SEARCH_PATHS = "$(inherited) ../../../raylib-backends/backends/rlmt ../../../raylib-backends/backends/rlmt/platforms ../../../raylib/src ../../../raym3/include ../../../raym3/build-v2/include ../../../raym3/build-v2-yoga2/_deps/yoga-src ../../../quickjs ../../../lynx/third_party/quickjs/include ../../../wasm3/source ../../../cssparser";
+				USE_HEADERMAP = NO;
 			};
 			name = Release;
 		};
@@ -1494,6 +1901,15 @@
 			buildConfigurations = (
 				9158D1AD4249836FBB9A6048 /* Debug */,
 				2B9CC2FB49172B5048B29757 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F12DF3BD7C8B8AF1A5AF88D4 /* Build configuration list for PBXNativeTarget "RayactEngineStatic" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				11088DBFC925AF58BA086C43 /* Debug */,
+				7A2210CB07C318FE9BC0F4B8 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

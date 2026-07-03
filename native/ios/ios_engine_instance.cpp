@@ -172,7 +172,6 @@ static void releaseGraphicsLocked(IOSEngineInstance* inst) {
     if (IsWindowReady()) CloseWindow();
     raym3::FontManager::ResetDeviceCache();
     raym3::v2::IconRendererResetDeviceCache();
-    rayactResetIconSheet();
     inst->graphicsActive.store(false, std::memory_order_release);
     g_graphicsValid.store(false, std::memory_order_release);
     iosEngineLoadInstanceState(inst);

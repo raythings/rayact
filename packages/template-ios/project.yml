@@ -18,17 +18,41 @@ targets:
           - project.yml
           - README.md
           - package.json
+          # RayactEngine.xcframework is linked via `dependencies:` below, not
+          # swept in as a source/resource glob — including it here doubles
+          # it up (once as a Frameworks build-phase entry, once as a bogus
+          # Resources entry) and, worse, without this exclude xcodegen's
+          # glob also descends into build-output dirs sitting alongside it.
+          - Frameworks
+          - .xcode-derived
+          - build
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.rayact.ios
         INFOPLIST_FILE: Info.plist
         OTHER_LDFLAGS:
+          # RayactEngine.xcframework is a plain static-lib xcframework
+          # (-library + -headers, not -framework bundles) — Swift binds to
+          # it purely via @_silgen_name, resolved at link time. Linking is
+          # done via the `dependencies:` entry below (xcodegen resolves the
+          # correct per-slice .a automatically), not raw -l/-L flags. A
+          # static archive doesn't carry its own transitive framework deps
+          # the way an app target's own link flags do, so those must be
+          # listed explicitly here.
           - -framework
-          - RayactEngine
-        FRAMEWORK_SEARCH_PATHS:
-          - $(inherited)
-          - $(PROJECT_DIR)/Frameworks
-          - $(PROJECT_DIR)/../node_modules/@rayact/prebuilt-ios-arm64
+          - Metal
+          - -framework
+          - QuartzCore
+          - -framework
+          - Security
+          # The consumer app target is pure Swift with no C++ sources of its
+          # own, so Xcode doesn't auto-link libc++ — but linking a C++
+          # static archive (libRayactEngine.a) pulls in __cxa_throw/
+          # __gxx_personality_v0/etc, which only libc++ provides.
+          - -lc++
+    dependencies:
+      - framework: Frameworks/RayactEngine.xcframework
+        embed: false
     preBuildScripts:
       - name: SyncRayactAssets
         script: |

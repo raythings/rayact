@@ -10,7 +10,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-ENGINE_VERSION="${ENGINE_VERSION:-0.1.0}"
+ENGINE_VERSION="${ENGINE_VERSION:-0.0.1}"
 ABI_VERSION="${ABI_VERSION:-1}"
 BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 DESKTOP_BIN="$ROOT/build/bin/rayact_desktop"
@@ -82,21 +82,12 @@ if [[ "$DO_DEV_APP" -eq 1 ]]; then
 fi
 
 if [[ "$DO_IOS" -eq 1 ]]; then
-  echo "==> iOS prebuilt-ios-arm64 (dev-app dylibs as v1 placeholder)..."
+  echo "==> iOS prebuilt-ios-arm64 (real XCFramework)..."
   IOS_PKG="$ROOT/packages/prebuilt-ios-arm64"
   mkdir -p "$IOS_PKG"
 
-  # v1: ship dev-app .app slices after build-dev-app; XCFramework extraction deferred.
-  # Write manifest so verify can document partial state.
+  "$ROOT/scripts/build-ios-xcframework.sh"
   write_manifest "$IOS_PKG" "ios" "arm64"
-
-  if [[ -d "$ROOT/apps/dev-app/dist/Rayact.app" ]]; then
-    mkdir -p "$IOS_PKG/RayactEngine.xcframework/ios-arm64-simulator"
-    cp -R "$ROOT/apps/dev-app/dist/Rayact.app" "$IOS_PKG/RayactEngine.xcframework/ios-arm64-simulator/"
-    echo "  copied simulator .app into XCFramework placeholder layout"
-  else
-    echo "  note: run --dev-app first for iOS simulator slice in prebuilt-ios-arm64"
-  fi
 
   # Icon/emoji fonts: `rayact build --ios` stages these from this prebuilt
   # package into the app bundle's resources/fonts/ (IOSBundledAssets.swift
