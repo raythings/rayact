@@ -26,6 +26,7 @@ npm run dev
 rayact run --desktop          # build + launch on desktop
 rayact run --desktop --dev     # launch against the running dev server
 rayact run --android           # build + install + launch on a device
+rayact run --ios               # build + launch on the iOS simulator
 ```
 
 `rayact run` replaces the old `run.sh` / `run-android.sh` shell scripts — there are no user-facing shell scripts.
@@ -36,6 +37,7 @@ rayact run --android           # build + install + launch on a device
 rayact build --release             # desktop release (bytecode + .rayactpack)
 rayact build --release --android   # release APK
 rayact build --release --ios       # release iOS app
+rayact build --web --no-bytecode   # web bundle + WASM/WebGPU host
 ```
 
-Release builds compile the JS bundle to QuickJS bytecode and emit a single [`.rayactpack`](/reference/rayactpack) container. The native host needed to compile bytecode is fetched automatically — see [Installation](/guide/install).
+Native release builds compile the JS bundle to QuickJS bytecode and emit a single [`.rayactpack`](/reference/rayactpack) container. The native host needed to compile bytecode is fetched automatically — see [Installation](/guide/install). Web builds use the WASM/WebGPU host and must be served with COOP/COEP headers for SharedArrayBuffer/WebGPU isolation.

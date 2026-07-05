@@ -28,9 +28,15 @@ those platforms (kept off desktop installs — the Android engine alone is ~80 M
 ## Git now, npm later
 
 Until the packages are on the npm registry, install the framework packages from
-git and let the prebuilt resolver fetch native hosts from GitHub releases. The
-release also attaches an `npm pack` tarball for every publishable package, so
-`create-rayact-app` can reference those tarball URLs in the interim.
+GitHub refs and let the prebuilt resolver fetch native hosts from GitHub
+releases:
+
+```sh
+npx github:raythings/create-rayact-app#v0.0.1 my-app
+```
+
+The release also attaches an `npm pack` tarball for every publishable package, so
+generated templates can reference those tarball URLs in the interim.
 
 Override the download source with environment variables when needed:
 

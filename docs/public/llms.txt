@@ -9,7 +9,7 @@
 
 ## Pages
 
-- [Multi-Window System Documentation](https://rayact.dev/multi-window-system): The Rayact multi-window system allows a single QuickJS runtime instance to manage multiple windows/activities/viewcontrollers, enabling native navigation stacks and complex multi-window applications.
+- [Navigation And Windowing Status](https://rayact.dev/multi-window-system): Rayact no longer exposes the early prototype createWindow / registerScreen
 
 ## Reference
 
