@@ -240,5 +240,29 @@ export function startDevTui(args: ParsedArgs): void {
   cliArgs = args;
   devMinify = args.minify;
   devBytecode = args.bytecode;
+  if (!process.stdin.isTTY || typeof process.stdin.setRawMode !== 'function') {
+    mode = 'log';
+    void startRayactDevServer({
+      ...args,
+      minify: args.minify,
+      bytecode: args.bytecode
+    })
+      .then(async started => {
+        activeServer = started;
+        printLogHeader(started);
+        if (args.android) {
+          const config = loadRayactConfig();
+          const ok = await setupAdbReverse(started.localUrl, config.devServer?.cdpPort ?? 9229);
+          process.stdout.write(ok
+            ? '  adb reverse configured\n'
+            : '  adb reverse skipped - no device?\n');
+        }
+      })
+      .catch(error => {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 1;
+      });
+    return;
+  }
   inkInstance = inkRender(<RayactCli args={args} onEnterLogMode={enterLogMode} />);
 }
