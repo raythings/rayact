@@ -21,6 +21,7 @@ Commands:
   build --ios           Build bundle + iOS app (add --install for simulator)
   build --desktop       Build bundle + package self-contained desktop app
   build --web           Build a web bundle (platform=web) for the WASM/WebGPU host
+  serve [dir]           Serve dist/web with COOP/COEP headers (WebGPU release builds)
   export                Build production bundle (alias for build --release)
   compile <in> <out>    Compile JS bundle to QuickJS bytecode (.qjsbc)
   verify                Run desktop verification script
@@ -31,7 +32,9 @@ Options:
   --host <host>         Dev server host (default: 0.0.0.0)
   --port <port>         Dev server port (default: 8081)
   --entry <path>        App entry (default: src/App.tsx)
-  --platform <name>     Target platform: desktop | android | ios
+  --platform <name>     Target platform: desktop | android | ios | web
+  --web                 dev/build: target the WASM/WebGPU web host
+  --web-port <port>     COEP engine/proxy port for web dev/serve (default: 8768)
   --template <name>     init template: default | blank
   --ios-simulator       dev-app: target the iOS simulator
   --ios-device          dev-app: download the unsigned device IPA
@@ -59,6 +62,8 @@ Examples:
   rayact build --release --desktop
   rayact build --release --android --install
   rayact build --debug --ios --install
+  rayact dev --web
+  rayact build --web && rayact serve
   rayact export
 `.trim());
 }

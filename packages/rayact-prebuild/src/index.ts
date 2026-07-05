@@ -48,3 +48,13 @@ export {
 } from './resolvePrebuilt.js';
 
 export { runPrebuild, type PrebuildOptions } from './prebuild.js';
+
+export {
+  DEFAULT_WEB_ENGINE_PORT,
+  startCoepStaticServer,
+  startCoepDevProxy,
+  webDevOpenUrl,
+  type CoepServerHandle,
+  type CoepStaticServerOptions,
+  type CoepDevProxyOptions
+} from './webServe.js';

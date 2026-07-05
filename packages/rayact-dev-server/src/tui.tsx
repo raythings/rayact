@@ -10,6 +10,7 @@ import qrcode from 'qrcode-terminal';
 import { startRayactDevServer } from './server.js';
 import { loadRayactConfig } from './config.js';
 import { setupAdbReverse } from './adb.js';
+import { startWebDevBridge, type WebDevBridge } from './webDev.js';
 import type { RayactBuildMode } from './bundler.js';
 import type { RayactDevServer } from './types.js';
 
@@ -19,6 +20,7 @@ export interface ParsedArgs {
   port: number;
   entry: string;
   platform: string;
+  webPort: number;
   desktopBin: string;
   mode: RayactBuildMode;
   outDir: string;
@@ -45,6 +47,7 @@ type Mode = 'tui' | 'log';
 let mode: Mode = 'tui';
 let inkInstance: ReturnType<typeof inkRender> | null = null;
 let activeServer: RayactDevServer | null = null;
+let activeWebBridge: WebDevBridge | null = null;
 let cliArgs: ParsedArgs;
 let devMinify = false;
 let devBytecode = false;
@@ -56,6 +59,9 @@ function printLogHeader(server: RayactDevServer): void {
   process.stdout.write(`  URL:   ${server.url}\n`);
   process.stdout.write(`  Local: ${server.localUrl}\n`);
   process.stdout.write(`  Entry: ${server.entry}\n`);
+  if (activeWebBridge) {
+    process.stdout.write(`  Web:   ${activeWebBridge.openUrl}\n`);
+  }
   process.stdout.write(`  QR:    server address list (scan with Rayact dev client)\n`);
   process.stdout.write('\n');
   process.stdout.write(qr + '\n');
@@ -65,10 +71,28 @@ function printLogHeader(server: RayactDevServer): void {
 
 function onLogModeKey(str: string, key: { ctrl?: boolean; name?: string }): void {
   if ((key?.ctrl && key?.name === 'c') || str === 'q' || str === 'Q') {
-    void activeServer?.close().finally(() => process.exit(0));
+    void closeDevSession().finally(() => process.exit(0));
     return;
   }
   if (str === 'c' || str === 'C') enterTuiMode();
+}
+
+async function closeDevSession(): Promise<void> {
+  await activeWebBridge?.close();
+  activeWebBridge = null;
+  await activeServer?.close();
+  activeServer = null;
+}
+
+async function maybeStartWebBridge(
+  server: RayactDevServer,
+  platform: string,
+  webPort?: number
+): Promise<WebDevBridge | null> {
+  if (platform !== 'web') return null;
+  const bridge = await startWebDevBridge(server.localUrl, { port: webPort });
+  activeWebBridge = bridge;
+  return bridge;
 }
 
 function setupLogModeStdin(): void {
@@ -111,6 +135,7 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
   const [minify, setMinify] = useState(devMinify);
   const [bytecode, setBytecode] = useState(devBytecode);
   const [clientCount, setClientCount] = useState(0);
+  const [webOpenUrl, setWebOpenUrl] = useState<string | null>(null);
 
   const qr = useMemo(() => createQr(server?.qrPayload ?? 'rayact'), [server?.qrPayload]);
 
@@ -125,7 +150,17 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
         activeServer = started;
         setServer(started);
         setStatus(`Server ready at ${started.url}`);
-        if (args.android) {
+        if (args.platform === 'web') {
+          try {
+            const bridge = await maybeStartWebBridge(started, args.platform, args.webPort);
+            if (bridge) {
+              setWebOpenUrl(bridge.openUrl);
+              setStatus(`Web ready — open ${bridge.openUrl}`);
+            }
+          } catch (error) {
+            setStatus(error instanceof Error ? error.message : String(error));
+          }
+        } else if (args.android) {
           const config = loadRayactConfig();
           const ok = await setupAdbReverse(started.localUrl, config.devServer?.cdpPort ?? 9229);
           setStatus(ok
@@ -194,8 +229,8 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
   }, []);
 
   const quit = useCallback(() => {
-    void server?.close().finally(() => exit());
-  }, [exit, server]);
+    void closeDevSession().finally(() => exit());
+  }, [exit]);
 
   useInput((input, key) => {
     if (input === 'c' || input === 'C') onEnterLogMode();
@@ -216,6 +251,9 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
         <Text>Local: <Text color="green">{server?.localUrl ?? 'starting...'}</Text></Text>
         <Text>Entry: <Text color="yellow">{server?.entry ?? args.entry}</Text></Text>
         <Text>Platform: {server?.platform ?? args.platform}   Clients: {clientCount}</Text>
+        {webOpenUrl ? (
+          <Text>Web: <Text color="green">{webOpenUrl}</Text></Text>
+        ) : null}
         <Text>Minify: {minify ? 'on' : 'off'}   Bytecode: {bytecode ? 'on' : 'off'}</Text>
       </Box>
       <Box marginTop={1} flexDirection="column">
@@ -249,6 +287,9 @@ export function startDevTui(args: ParsedArgs): void {
     })
       .then(async started => {
         activeServer = started;
+        if (args.platform === 'web') {
+          await maybeStartWebBridge(started, args.platform, args.webPort);
+        }
         printLogHeader(started);
         if (args.android) {
           const config = loadRayactConfig();
