@@ -250,38 +250,21 @@ option(RAYACT_WEB_EMBED_ICONS "Embed the Material icon name->codepoint map + (su
 set(_rayact_icons "${OUTER}/rayact/packages/rayact-shared/dist/material_icons.js")
 set(_rayact_iconfont "${OUTER}/rayact/resources/fonts/MaterialSymbolsRounded.ttf")
 set(_rayact_iconfont_filled "${OUTER}/rayact/resources/fonts/MaterialSymbolsRounded-Filled.ttf")
-set(_rayact_iconmanifest "${CMAKE_CURRENT_SOURCE_DIR}/web-icons.txt")
+set(_rayact_emoji_font "${OUTER}/rayact/resources/fonts/NotoColorEmoji.ttf")
 if(RAYACT_WEB_EMBED_ICONS AND EXISTS "${_rayact_icons}")
     # name->codepoint map (injectMaterialIcons sets globalThis.Icons from this)...
     set(_rayact_embed "${_rayact_embed} --embed-file ${_rayact_icons}@/resources/fonts/material_icons.js")
-    # ...and the icon FONTS (IconRenderer::FindIconFontPath checks these paths — the
-    # outlined one always, the -Filled one when a component sets filled=true). Subset
-    # both the same way: 15 MB catalog -> the manifest's icons only (~100 KB each).
+    # ...and the full icon fonts. The web host is a generic release artifact, so
+    # subsetting to this repo's demo icons breaks consumer apps whose icons are not
+    # known when the host is built.
     if(EXISTS "${_rayact_iconfont}")
-        set(_rayact_iconfont_out "${CMAKE_BINARY_DIR}/MaterialSymbolsRounded.subset.ttf")
-        add_custom_command(
-            OUTPUT "${_rayact_iconfont_out}"
-            COMMAND ${CMAKE_COMMAND} -E echo "Subsetting icon font to ${_rayact_iconmanifest}"
-            COMMAND python3 "${OUTER}/rayact/tools/subset_icon_font.py"
-                    "${_rayact_iconfont}" "${_rayact_iconmanifest}" "${_rayact_icons}" "${_rayact_iconfont_out}"
-            DEPENDS "${_rayact_iconfont}" "${_rayact_iconmanifest}" "${_rayact_icons}"
-                    "${OUTER}/rayact/tools/subset_icon_font.py"
-            VERBATIM)
-        add_custom_target(rayact_icon_font_subset DEPENDS "${_rayact_iconfont_out}")
-        set(_rayact_embed "${_rayact_embed} --embed-file ${_rayact_iconfont_out}@/resources/fonts/MaterialSymbolsRounded.ttf")
+        set(_rayact_embed "${_rayact_embed} --embed-file ${_rayact_iconfont}@/resources/fonts/MaterialSymbolsRounded.ttf")
     endif()
     if(EXISTS "${_rayact_iconfont_filled}")
-        set(_rayact_iconfont_filled_out "${CMAKE_BINARY_DIR}/MaterialSymbolsRounded-Filled.subset.ttf")
-        add_custom_command(
-            OUTPUT "${_rayact_iconfont_filled_out}"
-            COMMAND ${CMAKE_COMMAND} -E echo "Subsetting filled icon font to ${_rayact_iconmanifest}"
-            COMMAND python3 "${OUTER}/rayact/tools/subset_icon_font.py"
-                    "${_rayact_iconfont_filled}" "${_rayact_iconmanifest}" "${_rayact_icons}" "${_rayact_iconfont_filled_out}"
-            DEPENDS "${_rayact_iconfont_filled}" "${_rayact_iconmanifest}" "${_rayact_icons}"
-                    "${OUTER}/rayact/tools/subset_icon_font.py"
-            VERBATIM)
-        add_custom_target(rayact_icon_font_subset_filled DEPENDS "${_rayact_iconfont_filled_out}")
-        set(_rayact_embed "${_rayact_embed} --embed-file ${_rayact_iconfont_filled_out}@/resources/fonts/MaterialSymbolsRounded-Filled.ttf")
+        set(_rayact_embed "${_rayact_embed} --embed-file ${_rayact_iconfont_filled}@/resources/fonts/MaterialSymbolsRounded-Filled.ttf")
+    endif()
+    if(EXISTS "${_rayact_emoji_font}")
+        set(_rayact_embed "${_rayact_embed} --embed-file ${_rayact_emoji_font}@/resources/fonts/NotoColorEmoji.ttf")
     endif()
 endif()
 option(RAYACT_WEB_DEBUG "Build with function names + stack-overflow assertions for diagnosis" OFF)
@@ -305,13 +288,6 @@ if(RAYACT_WEB_EMBED_APP)
     if(_rayact_app_css_files)
         set_property(TARGET rayact APPEND PROPERTY LINK_DEPENDS ${_rayact_app_css_files})
     endif()
-endif()
-
-if(TARGET rayact_icon_font_subset)
-    add_dependencies(rayact rayact_icon_font_subset)
-endif()
-if(TARGET rayact_icon_font_subset_filled)
-    add_dependencies(rayact rayact_icon_font_subset_filled)
 endif()
 
 message(STATUS "rayact web target configured (QuickJS+raym3+rlwg, no ASYNCIFY)")
