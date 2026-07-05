@@ -450,12 +450,18 @@ async function buildIosApp(
 
   const configuration = flags.debug ? 'Debug' : 'Release';
   console.log(`Building iOS app (${configuration})...`);
+  const derivedDataPath = path.join(iosDir, '.xcode-derived', configuration.toLowerCase());
+  const simulatorArchArgs = usesRayactAssets
+    ? ['-sdk', 'iphonesimulator', 'ONLY_ACTIVE_ARCH=YES', 'ARCHS=arm64', 'EXCLUDED_ARCHS=x86_64']
+    : [];
   const xcodebuild = spawnSync(
     'xcodebuild',
     [
       '-scheme', scheme,
       '-configuration', configuration,
       '-destination', 'generic/platform=iOS Simulator',
+      '-derivedDataPath', derivedDataPath,
+      ...simulatorArchArgs,
       'build'
     ],
     { cwd: iosDir, stdio: 'inherit' }
@@ -468,7 +474,7 @@ async function buildIosApp(
     configuration + '-iphonesimulator',
     `${scheme}.app`
   );
-  const fallback = spawnSync('xcodebuild', ['-showBuildSettings', '-scheme', scheme], {
+  const fallback = spawnSync('xcodebuild', ['-showBuildSettings', '-scheme', scheme, '-configuration', configuration, '-derivedDataPath', derivedDataPath, ...simulatorArchArgs], {
     cwd: iosDir,
     encoding: 'utf8'
   });
