@@ -588,6 +588,7 @@ extern "C" void RayactIOSSessionResizeSurface(RayactIOSHandle handle, int surfac
     it->second.pendingHeight = height;
     it->second.density = density;
     it->second.resizePending = true;
+    rayact::engineRequestSurfaceRelayout(surfaceId);
     RcoreIosMetal_ResizeLayer(width, height, density);
 }
 

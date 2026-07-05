@@ -62,7 +62,12 @@ public:
     if (running_.exchange(true)) return; // once per process
     path_ = dataDir + "/kv.store";
     load();
+#ifndef RAYACT_WEB
+    // No background flush thread on web: pthreads are off (std::thread would throw
+    // system_error → abort) and the backing FS is ephemeral MEMFS. Values live in
+    // the in-memory map for the session; IDBFS-backed persistence comes later.
     flushThread_ = std::thread([this] { flushLoop(); });
+#endif
   }
 
   void flushAndStop() {

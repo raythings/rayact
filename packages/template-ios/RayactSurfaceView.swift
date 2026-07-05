@@ -158,7 +158,6 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
     }
 
     func syncSurfaceSizeFromLayout() {
-        guard session.relayoutOnSurfaceResizeEnabled() else { return }
         setNeedsLayout()
         layoutIfNeeded()
         if bounds.width > 0, bounds.height > 0 {

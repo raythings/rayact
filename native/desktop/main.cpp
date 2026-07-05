@@ -7,6 +7,7 @@
 #include "engine_thread.hpp"
 #include "raym3_bridge.hpp"
 #include "../core/engine.hpp"
+#include "../core/config_loader.hpp"
 #include "../shared/rayactpack.h"
 
 #include <raym3/raym3.h>
@@ -203,6 +204,13 @@ int main(int argc, char** argv) {
             std::string dir = slash == std::string::npos ? "." : p.substr(0, slash);
             std::string mod = dir + "/modules";
             setenv("RAYACT_MODULE_PATH", mod.c_str(), 0);
+            // Point the assets root at the host's own dir so bundled resources/
+            // fonts/* (icon fonts + material_icons map) resolve from the prebuilt
+            // for consumers who only downloaded the prebuilt host. Source/dev
+            // runs fall through to the CWD search when no resources/ sits here.
+            if (rayact::appAssetsPath()[0] == '\0') {
+                rayact::setAppAssetsPath((dir + "/..").c_str());
+            }
         }
     }
 #endif

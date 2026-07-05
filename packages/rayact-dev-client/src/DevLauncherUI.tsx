@@ -1,4 +1,4 @@
-import '@rayact/shared/material-icons';
+import '@rayact/runtime/material-icons';
 
 import React, { useEffect, useState } from 'react';
 import {
@@ -90,14 +90,12 @@ function ConnectPage() {
   return (
     <View style={{ ...pageStyle, backgroundColor: colors.surface, flexGrow: 1, gap: 0 }}>
       <View style={sectionStyle}>
-        <Text style={{ text: { color: colors.onSurface, fontSize: 14, fontWeight: 600 } }}>
+        <Text style={{ text: { color: colors.onSurface, fontSize: 20, fontWeight: 600 } }}>
           Connect to dev server
         </Text>
-        <Text style={{ text: { color: colors.onSurface, fontSize: 14 } }}>
-          Start a local development server with: npx rayact dev
-        </Text>
-        <Text style={{ text: { color: colors.onSurface, fontSize: 14 } }}>
-          Then, enter the dev server URL when it appears here.
+        <Text style={{ text: { color: colors.onSurfaceVariant, fontSize: 14 }, marginTop: 4 }}>
+          Start a local dev server with `npx rayact dev`, then enter its URL
+          below or pick it from the list.
         </Text>
         <TextInput
           value={input}
@@ -108,12 +106,13 @@ function ConnectPage() {
           placeholder="192.168.1.50:8081"
           style={{
             ...inputStyle,
+            marginTop: 8,
             backgroundColor: colors.surfaceContainer,
             color: colors.onSurface,
           }}
         />
         {launcher.connectError ? (
-          <Text style={{ text: { color: colors.error, fontSize: 14, marginBottom: 12 } }}>
+          <Text style={{ text: { color: colors.error, fontSize: 14 } }}>
             {launcher.connectError}
           </Text>
         ) : null}
@@ -122,35 +121,36 @@ function ConnectPage() {
             Connecting…
           </Text>
         ) : null}
-        <View style={{ gap: 12, marginTop: 4 }}>
+        <View style={{ gap: 12, marginTop: 8 }}>
           <Button
             label="Connect"
             onPress={() => launcher.openProject(input)}
             style={{ ...primaryButtonStyle, backgroundColor: colors.primary }}
           />
-          <Text style={{ text: { color: colors.onSurface, fontSize: 14, textAlign: 'center' } }}>Or</Text>
+          <Text style={{ text: { color: colors.onSurfaceVariant, fontSize: 13, textAlign: 'center' } }}>or</Text>
           <View
             onPress={launcher.onScanQR}
             style={{ ...secondaryButtonStyle, backgroundColor: colors.surfaceContainer }}
           >
-            <Text style={{ text: { color: 0xffffffff, fontSize: 15, fontWeight: 600 } }}>
+            <Text style={{ text: { color: colors.onSurface, fontSize: 15, fontWeight: 600 } }}>
               Scan QR code
             </Text>
           </View>
         </View>
       </View>
 
-      <View style={{ ...sectionStyle, paddingLeft: 6, paddingRight: 6 }}>
-        <Text style={{ text: { color: colors.onSurface, fontSize: 14, fontWeight: 600, marginBottom: 4 } }}>
+      <View style={{ ...sectionStyle, marginTop: 28, gap: 4 }}>
+        <Text style={{ text: { color: colors.onSurface, fontSize: 16, fontWeight: 600 } }}>
           Servers
         </Text>
-        <Text style={{ text: { color: colors.onSurface, fontSize: 14, marginBottom: 8 } }}>
-          Swipe left on a saved row to delete.
+        <Text style={{ text: { color: colors.onSurfaceVariant, fontSize: 13 } }}>
+          Discovered on your network and saved servers. Swipe left on a saved
+          row to delete it.
         </Text>
       </View>
 
       <ScrollView style={{ flexGrow: 1, flexShrink: 1, minHeight: 0, width: '100%' }}>
-        <View style={{ paddingLeft: 6, paddingRight: 6, paddingBottom: 16, width: '100%' }}>
+        <View style={{ paddingBottom: 16, width: '100%' }}>
           <CombinedServerList
             theme={launcher.theme}
             parseUrl={launcher.parseUrl}

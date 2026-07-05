@@ -1,0 +1,29 @@
+{
+  "name": "@rayact/prebuilt-linux-x64",
+  "version": "0.0.1",
+  "description": "Prebuilt Rayact desktop host for Linux x86_64",
+  "files": [
+    "bin",
+    "modules",
+    "manifest.json"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/prebuilt-linux-x64"
+  },
+  "homepage": "https://github.com/raythings/rayact#readme",
+  "bugs": {
+    "url": "https://github.com/raythings/rayact/issues"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ]
+}

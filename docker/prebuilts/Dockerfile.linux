@@ -1,0 +1,17 @@
+# Maintainer-only: Linux x64 desktop prebuilts.
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake ninja-build git meson pkg-config \
+    libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev \
+    libxinerama-dev libwayland-dev libxkbcommon-dev wayland-protocols \
+    ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+COPY build-linux.sh pack-linux.sh /scripts/
+RUN chmod +x /scripts/*.sh
+
+ENTRYPOINT ["/scripts/build-linux.sh"]

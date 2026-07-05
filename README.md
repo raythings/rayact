@@ -1,7 +1,7 @@
 # 🎨 Rayact - Cross-Platform React Renderer
 
-[![Build Status](https://img.shields.io/badge/build-ready-success)](https://github.com/rayact/rayact)
-[![Platform](https://img.shields.io/badge/platform-desktop-blue)](https://github.com/rayact/rayact)
+[![Build Status](https://img.shields.io/badge/build-ready-success)](https://github.com/raythings/rayact)
+[![Platform](https://img.shields.io/badge/platform-desktop-blue)](https://github.com/raythings/rayact)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 A custom React renderer using **QuickJS** as the JavaScript runtime and **raylib 6.0+** as the graphics backend, supporting Desktop (Windows/Linux/macOS), Mobile (Android), and Web (WASM) platforms.
@@ -33,7 +33,7 @@ See [docs/dev-platform.md](docs/dev-platform.md) for CLI reference.
 ### Create a new app
 
 ```bash
-npx create-rayact-app my-app
+npx github:raythings/create-rayact-app#v0.0.1 my-app
 cd my-app && npm install && npm run dev
 ```
 
@@ -192,8 +192,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 📞 Support
 
-- GitHub Issues: [Report bugs](https://github.com/rayact/rayact/issues)
-- Discussions: [Community chat](https://github.com/rayact/rayact/discussions)
+- GitHub Issues: [Report bugs](https://github.com/raythings/rayact/issues)
+- Discussions: [Community chat](https://github.com/raythings/rayact/discussions)
 
 ## 🎉 What's New
 
@@ -217,4 +217,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 **Built with ❤️ for cross-platform React rendering**
 
-[Star on GitHub](https://github.com/rayact/rayact) ⭐ to show your support!
+[Star on GitHub](https://github.com/raythings/rayact) ⭐ to show your support!

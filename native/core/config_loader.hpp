@@ -57,6 +57,11 @@ const AppConfig& appConfig();
 // Empty string if unset.
 const char* appAssetsPath();
 
+// Set the assets root directly (without loading an app config). Desktop points
+// this at the prebuilt host's own directory so bundled resources/fonts/* (icon
+// fonts + material_icons map) resolve for consumers who only have the prebuilt.
+void setAppAssetsPath(const char* path);
+
 // Parse a color from a JS value. Accepts:
 //   - "#RRGGBB" / "#RRGGBBAA"
 //   - 0xRRGGBB / 0xRRGGBBAA (uint32)

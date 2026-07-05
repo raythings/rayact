@@ -24,6 +24,24 @@ apps/desktop/bundle.js
 # Packaged tarballs (build outputs — produced by npm pack / CI)
 *.tgz
 
+# Prebuilt native binaries — shipped via GitHub Releases / npm pack, never git
+packages/prebuilt-*/jni/
+packages/prebuilt-*/bin/
+packages/prebuilt-*/modules/
+packages/prebuilt-ios-arm64/RayactEngine.xcframework/
+packages/rayact-mmkv/android/
+packages/rayact-mmkv/darwin-arm64/
+packages/rayact-secure-store/android/
+packages/rayact-secure-store/darwin-arm64/
+
+# Build caches / generated app assets
+apps/ios/.xcode-derived/
+apps/*/rayact-assets/
+test-projects/*/rayact-assets/
+__pycache__/
+.rayact/
+.tmp/
+
 # Web / Emscripten build trees
 build-web/
 build-web-*/

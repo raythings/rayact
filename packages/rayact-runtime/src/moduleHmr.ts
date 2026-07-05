@@ -384,9 +384,9 @@ export class ModuleHmrRuntime {
       if (typeof fetchFn !== 'function') {
         throw new Error('Rayact module HMR requires fetch() or __rayactDevFetch()');
       }
-      const response = await fetchFn(url);
+      const response = await fetchFn(url) as { text(): Promise<string>; ok?: boolean; status?: number };
       text = await response.text();
-      if (!response.ok) {
+      if (response.ok === false) {
         throw new Error(`Module fetch failed (${response.status}): ${text.slice(0, 200)}`);
       }
     }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pop exit: the top screen slides out to the right. -->
+<translate xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fromXDelta="0"
+    android:toXDelta="100%p"
+    android:duration="250"
+    android:interpolator="@android:interpolator/fast_out_slow_in" />

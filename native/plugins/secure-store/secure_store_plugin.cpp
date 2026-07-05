@@ -83,7 +83,9 @@ extern "C" int rayact_secure_store_register(const RayactHost* host) {
   return host->register_module("secure-store", &mod);
 }
 
-#if !defined(RAYACT_IOS)
+// Omitted where plugins are static-linked together (iOS, web) to avoid a
+// duplicate rayact_module_register; those hosts call rayact_secure_store_register.
+#if !defined(RAYACT_IOS) && !defined(RAYACT_WEB)
 extern "C" int rayact_module_register(const RayactHost* host) {
   return rayact_secure_store_register(host);
 }

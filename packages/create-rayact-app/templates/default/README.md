@@ -27,4 +27,4 @@ npm run start:dev
 
 ## Docs
 
-- [Rayact dev platform](https://github.com/rayact/rayact/blob/main/docs/dev-platform.md)
+- [Rayact dev platform](https://github.com/raythings/rayact/blob/main/docs/dev-platform.md)

@@ -32,11 +32,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rayact/rayact.git",
+    "url": "git+https://github.com/raythings/rayact.git",
     "directory": "packages/rayact-quickjs"
   },
-  "homepage": "https://github.com/rayact/rayact#readme",
+  "homepage": "https://github.com/raythings/rayact#readme",
   "bugs": {
-    "url": "https://github.com/rayact/rayact/issues"
+    "url": "https://github.com/raythings/rayact/issues"
   }
 }

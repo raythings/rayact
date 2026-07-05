@@ -1,9 +1,11 @@
 {
   "name": "@rayact/dev-app",
-  "private": true,
   "version": "0.0.1",
   "type": "module",
   "description": "Standalone Rayact dev app — Expo-Go-style prebuilt host bundling native plugins + the dev client launcher (QR scan, HMR).",
+  "bin": {
+    "rayact-dev-app": "scripts/install.cjs"
+  },
   "scripts": {
     "build:android": "node scripts/with-branding.cjs build --android",
     "build:android:install": "node scripts/with-branding.cjs build --android --install",
@@ -11,18 +13,34 @@
     "build:desktop": "node scripts/with-branding.cjs build --release --desktop",
     "start:dev": "rayact start --dev"
   },
+  "files": [
+    "scripts/install.cjs",
+    "official-app.json",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact-dev-app.git"
+  },
+  "homepage": "https://github.com/raythings/rayact-dev-app#readme",
+  "bugs": {
+    "url": "https://github.com/raythings/rayact-dev-app/issues"
+  },
   "dependencies": {
-    "@rayact/react": "file:../../packages/rayact-react",
-    "@rayact/runtime": "file:../../packages/rayact-runtime",
-    "@rayact/shared": "file:../../packages/rayact-shared",
-    "@rayact/dev-client": "file:../../packages/rayact-dev-client",
-    "@rayact/mmkv": "file:../../packages/rayact-mmkv",
-    "@rayact/secure-store": "file:../../packages/rayact-secure-store",
+    "@rayact/react": "github:raythings/rayact-react#v0.0.1",
+    "@rayact/runtime": "github:raythings/rayact-runtime#v0.0.1",
+    "@rayact/shared": "github:raythings/rayact-shared#v0.0.1",
+    "@rayact/dev-client": "github:raythings/rayact-dev-client#v0.0.1",
+    "@rayact/mmkv": "github:raythings/rayact-mmkv#v0.0.1",
+    "@rayact/secure-store": "github:raythings/rayact-secure-store#v0.0.1",
     "react": "^19.0.0"
   },
   "devDependencies": {
-    "@rayact/cli": "file:../../packages/rayact-cli",
-    "@rayact/dev-server": "file:../../packages/rayact-dev-server",
+    "@rayact/cli": "github:raythings/rayact-cli#v0.0.1",
+    "@rayact/dev-server": "github:raythings/rayact-dev-server#v0.0.1",
     "@types/react": "^19.0.0",
     "typescript": "^5.8.3"
   }

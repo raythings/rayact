@@ -124,7 +124,10 @@ if(ENABLE_ANDROID)
 endif()
 
 if(ENABLE_WEB)
-    add_subdirectory(native/web ${CMAKE_BINARY_DIR}/native/web EXCLUDE_FROM_ALL)
+    # The web target (rayact.html/.js/.wasm via Emscripten) lives in apps/web,
+    # alongside the android/ios host projects; it compiles the native/web/*.cpp
+    # shims. native/web holds only sources, no CMakeLists of its own.
+    add_subdirectory(apps/web ${CMAKE_BINARY_DIR}/apps/web EXCLUDE_FROM_ALL)
 endif()
 
 # --- Testing ---

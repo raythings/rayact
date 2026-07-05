@@ -1,6 +1,6 @@
 # Maintainer: Prebuilt Native Libraries
 
-**App developers never run these scripts.** They install `@rayact/prebuilt-*` from npm (GitHub Release tarballs) and dev-app binaries via `npx @rayact/dev-app install`.
+**App developers never run these scripts.** Until npm publishing exists, they install Rayact packages from `github:raythings/*#v0.0.1`; native prebuilts and dev-app binaries come from the `raythings/rayact` GitHub release.
 
 ## Quick reference
 
@@ -73,9 +73,9 @@ Install with Xcode Devices, `ios-deploy`, or Apple Configurator.
 ### Install via npm script
 
 ```bash
-npx @rayact/dev-app install --platform android
-npx @rayact/dev-app install --platform ios-device
-npx @rayact/dev-app install --platform ios-simulator
+npx github:raythings/rayact-dev-app#v0.0.1 install --platform android
+npx github:raythings/rayact-dev-app#v0.0.1 install --platform ios-device
+npx github:raythings/rayact-dev-app#v0.0.1 install --platform ios-simulator
 ```
 
 ## CI
@@ -91,7 +91,7 @@ Binaries are **not** committed to git. They ship on GitHub Releases and in npm t
 ## Publishing
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+git tag -f v0.0.1 && git push -f origin v0.0.1
 # CI uploads .tgz + APK + IPAs + SHA256SUMS
 ```
 

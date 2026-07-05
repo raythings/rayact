@@ -3,7 +3,7 @@
 ## Create a new app
 
 ```bash
-npx create-rayact-app my-app
+npx github:raythings/create-rayact-app#v0.0.1 my-app
 cd my-app && npm install
 npm run dev
 ```
@@ -11,14 +11,14 @@ npm run dev
 **Tier 1 — zero native (default):** use the prebuilt dev app:
 
 ```bash
-npx @rayact/dev-app install --platform android
+npx github:raythings/rayact-dev-app#v0.0.1 install --platform android
 npm run dev   # scan QR in the dev app
 ```
 
 **Tier 2 — custom dev-client:**
 
 ```bash
-npx create-rayact-app my-app --dev-client
+npx github:raythings/create-rayact-app#v0.0.1 my-app --dev-client
 cd my-app && npm run dev
 rayact build --debug --android --install
 ```
@@ -26,7 +26,7 @@ rayact build --debug --android --install
 **Tier 3 — production host:**
 
 ```bash
-npx create-rayact-app my-app --with-native
+npx github:raythings/create-rayact-app#v0.0.1 my-app --with-native
 rayact prebuild --production
 rayact build --release --android
 ```
@@ -97,7 +97,7 @@ Native bridge: global `devCall(method, data, callback)` wired to Kotlin `DevClie
 
 ## Dev App distribution
 
-- **Now:** GitHub Releases sideload + `npx @rayact/dev-app install --platform android`
+- **Now:** GitHub Releases sideload + `npx github:raythings/rayact-dev-app#v0.0.1 install --platform android`
 - **Follow-up:** Play Store internal testing + TestFlight
 
 ## HMR
