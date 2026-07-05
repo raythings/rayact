@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ScrollView, View } from 'rayact-react';
+import { ScrollView, View } from '@rayact/react';
 
 export type FlatListProps<T> = {
   data: T[];
@@ -9,6 +9,17 @@ export type FlatListProps<T> = {
   windowSize?: number;
   style?: Record<string, unknown>;
 };
+
+function scrollOffset(event: unknown): number {
+  if (typeof event === 'number') return event;
+  if (event && typeof event === 'object') {
+    const value = (event as { y?: unknown; scrollY?: unknown; contentOffset?: { y?: unknown } });
+    if (typeof value.y === 'number') return value.y;
+    if (typeof value.scrollY === 'number') return value.scrollY;
+    if (typeof value.contentOffset?.y === 'number') return value.contentOffset.y;
+  }
+  return 0;
+}
 
 export function FlatList<T>({
   data,
@@ -27,7 +38,7 @@ export function FlatList<T>({
   return (
     <ScrollView
       style={{ ...style, height: viewport }}
-      onScroll={(y: number) => setScrollY(y)}
+      onScroll={(event) => setScrollY(scrollOffset(event))}
     >
       <View style={{ height: start * itemHeight }} />
       {slice.map((item, i) => (

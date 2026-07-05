@@ -1,0 +1,45 @@
+# Icon manifest for the web build — embeds these Material icon SVGs so they render
+# (raym3's default core-icons.txt is a tiny subset; app icons outside it show as
+# placeholders). App icons (desktop-smoke) + common runtime/navigation icons.
+add
+arrow_back
+arrow_forward
+bar_chart
+center_focus_strong
+check
+check_circle
+chevron_left
+chevron_right
+close
+content_copy
+dark_mode
+delete
+delete_sweep
+directions_run
+done
+edit
+edit_note
+expand_less
+expand_more
+favorite
+flag
+home
+light_mode
+local_fire_department
+menu
+menu_book
+more_horiz
+more_vert
+notifications
+palette
+psychology
+radio_button_unchecked
+search
+self_improvement
+settings
+star
+timeline
+today
+visibility
+visibility_off
+water_drop

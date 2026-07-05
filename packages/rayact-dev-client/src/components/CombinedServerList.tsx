@@ -158,9 +158,9 @@ export function CombinedServerList(props: Props) {
 
   if (merged.length === 0) {
     return (
-      <View style={{ gap: 8, paddingTop: 4, paddingBottom: 24 }}>
-        <Text style={{ text: { color: colors.onSurface, fontSize: 14 } }}>
-          Scanning for servers on your network… Saved servers also appear here.
+      <View style={{ gap: 8, paddingTop: 8, paddingBottom: 24 }}>
+        <Text style={{ text: { color: colors.onSurfaceVariant, fontSize: 13 } }}>
+          Scanning for servers on your network…
         </Text>
       </View>
     );

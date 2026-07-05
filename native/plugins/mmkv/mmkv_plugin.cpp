@@ -217,7 +217,10 @@ extern "C" int rayact_mmkv_register(const RayactHost* host) {
   return host->register_module("mmkv", &mod);
 }
 
-#if !defined(RAYACT_IOS)
+// The generic dlopen entry collides when plugins are static-linked together,
+// so it's omitted wherever linking is static (iOS, web) — those hosts call the
+// unique rayact_mmkv_register directly.
+#if !defined(RAYACT_IOS) && !defined(RAYACT_WEB)
 extern "C" int rayact_module_register(const RayactHost* host) {
   return rayact_mmkv_register(host);
 }

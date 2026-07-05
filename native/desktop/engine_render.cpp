@@ -30,6 +30,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <set>
 #include <string>
@@ -208,7 +209,9 @@ extern "C" { void rlPushMatrix(void); void rlPopMatrix(void); void rlScalef(floa
 
 static std::mutex g_surfaceRelayoutMutex;
 static std::set<int> g_surfaceRelayoutScreens;
-static std::atomic<bool> g_relayoutOnSurfaceResize{false};
+static std::atomic<bool> g_relayoutOnSurfaceResize{true};
+static std::mutex g_surfaceBoundsMutex;
+static std::map<int, std::pair<int, int>> g_lastSurfaceBounds;
 
 void engineSetRelayoutOnSurfaceResize(bool enabled) {
     g_relayoutOnSurfaceResize.store(enabled, std::memory_order_release);
@@ -230,6 +233,17 @@ static bool engineConsumeSurfaceRelayout(int screenId) {
     if (it == g_surfaceRelayoutScreens.end()) return false;
     g_surfaceRelayoutScreens.erase(it);
     return true;
+}
+
+static bool engineSurfaceBoundsChanged(int screenId, int width, int height) {
+    if (screenId <= 0 || width <= 0 || height <= 0) return false;
+    std::lock_guard<std::mutex> lock(g_surfaceBoundsMutex);
+    auto [it, inserted] = g_lastSurfaceBounds.emplace(screenId, std::make_pair(width, height));
+    if (!inserted && (it->second.first != width || it->second.second != height)) {
+        it->second = {width, height};
+        return true;
+    }
+    return inserted;
 }
 
 // Per-screen render body. Caller must have:
@@ -384,7 +398,9 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     const float logicalW = raym3::v2::Density::PxToDp((float)width);
     const float logicalH = raym3::v2::Density::PxToDp((float)height);
     Rectangle bounds = {0.0f, 0.0f, logicalW, logicalH};
-    const bool forceLayout = engineConsumeSurfaceRelayout(screenId);
+    const bool forceLayout =
+        engineConsumeSurfaceRelayout(screenId) ||
+        engineSurfaceBoundsChanged(screenId, width, height);
     float dp = getRenderScaleDpi();
     applyAnimatedStylesToNodes();
     raym3::v2::TickScrollMomentum(g_root);
@@ -405,7 +421,10 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     bool pressed  = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
     bool released = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
     bool down     = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
-#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
+    // Mobile + web drive input through engineQueueTouch (the canvas pointer
+    // handlers in shell.html on web); it's the authoritative source there, not
+    // raylib's GetMousePosition (the browser pointer events are intercepted).
     const bool useQueuedTouch = true;
 #else
     // Desktop: opt into the queued-touch source for scripted input

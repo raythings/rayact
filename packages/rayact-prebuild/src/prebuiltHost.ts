@@ -270,6 +270,46 @@ export async function ensureDevApp(
   return downloadReleaseAsset(assetName, dir, { version });
 }
 
+/** Ensure the release web host files are available and return their directory. */
+export async function ensureWebHost(version = RAYACT_ENGINE_VERSION): Promise<string> {
+  const configured = process.env.RAYACT_WEB_HOST_DIR;
+  if (configured && hasWebHost(configured)) return configured;
+
+  const local = path.resolve(process.cwd(), 'build-web/bin');
+  if (hasWebHost(local)) return local;
+
+  const dir = path.join(prebuiltCacheDir(version, 'web'), 'host');
+  if (hasWebHost(dir)) return dir;
+
+  const archive = await downloadReleaseAsset(`rayact-web-${version}.tar.gz`, path.dirname(dir), { version });
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(dir), { recursive: true });
+  const res = spawnSync('tar', ['-xzf', archive, '-C', path.dirname(dir)], { stdio: 'inherit' });
+  if (res.status !== 0) throw new Error(`tar failed for ${archive}`);
+
+  const extracted = hasWebHost(dir) ? dir : findWebHostDir(path.dirname(dir));
+  if (!extracted) throw new Error(`rayact-web-${version}.tar.gz did not contain rayact.html/js/wasm`);
+  if (extracted !== dir) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.renameSync(extracted, dir);
+  }
+  return dir;
+}
+
+function hasWebHost(dir: string): boolean {
+  return ['rayact.html', 'rayact.js', 'rayact.wasm'].every((name) => fs.existsSync(path.join(dir, name)));
+}
+
+function findWebHostDir(root: string): string | null {
+  if (hasWebHost(root)) return root;
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const found = findWebHostDir(path.join(root, entry.name));
+    if (found) return found;
+  }
+  return null;
+}
+
 function findDirNamed(root: string, name: string): string | null {
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;

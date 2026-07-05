@@ -3,10 +3,10 @@
 Scaffold a new Rayact app (like create-expo-app)
 
 ```sh
-npx create-rayact-app my-app
+npx github:raythings/create-rayact-app#v0.0.1 my-app
 ```
 
-Part of [Rayact](https://github.com/rayact/rayact) — a cross-platform React renderer with a native raylib + QuickJS backend. See the [documentation](https://rayact.dev).
+Part of [Rayact](https://github.com/raythings/rayact) — a cross-platform React renderer with a native raylib + QuickJS backend. See the [documentation](https://rayact.dev).
 
 ## License
 

@@ -1,0 +1,13 @@
+{
+  "name": "rayact-web",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "cd ../../test-projects/desktop-smoke && node ../../packages/rayact-cli/dist/cli.js dev --entry src/App.tsx --platform web",
+    "bundle": "cd ../../test-projects/desktop-smoke && RAYACT_SKIP_WEB_HOST_ASSEMBLY=1 node ../../packages/rayact-cli/dist/cli.js build --web --entry src/App.tsx --out ../../apps/web/dist --no-bytecode",
+    "configure": "emcmake cmake -S ../.. -B ../../build-web -DENABLE_DESKTOP=OFF -DENABLE_WEB=ON -DRAYACT_WEB_EMBED_APP=$PWD/dist/bundle.js",
+    "build:native": "cmake --build ../../build-web --target rayact",
+    "build": "npm run bundle && npm run configure && npm run build:native",
+    "serve": "python3 coep_server.py ../../build-web/bin 8768"
+  }
+}

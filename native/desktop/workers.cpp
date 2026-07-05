@@ -158,7 +158,13 @@ static JSValue JS_spawnWorker(JSContext* ctx, JSValue,
     if (isWasm)
         spawnWASMWorker(id, std::move(filePath), std::move(initJSON), entry);
     else
+#ifdef RAYACT_WEB
+        // The web host only ships the WASM (wasm3) worker backend — there's no
+        // QuickJS-in-worker build — so JS-backed workers aren't available here.
+        fprintf(stderr, "rayact: JS workers are not supported on web (use a .wasm worker)\n");
+#else
         spawnJSWorker(id, std::move(filePath), std::move(initJSON), entry);
+#endif
 
     return JS_NewInt32(ctx, id);
 }

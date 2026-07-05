@@ -31,6 +31,17 @@ npm run build:android:install
 npm run build:desktop
 ```
 
+## Install from the launch release
+
+```bash
+npx github:raythings/rayact-dev-app#v0.0.1 install --platform android
+npx github:raythings/rayact-dev-app#v0.0.1 install --platform ios-simulator
+npx github:raythings/rayact-dev-app#v0.0.1 install --platform ios-device
+```
+
+The installer defaults to release assets from `raythings/rayact`. Override with
+`RAYACT_DEV_APP_REPO` or `RAYACT_DEV_APP_VERSION` only for maintainer testing.
+
 Branding comes from `official-app.json`; the build wrapper
 (`scripts/with-branding.cjs`) injects it and the bundled-module list into the
 dev-client bundle so the launcher's About tab and compatibility check reflect

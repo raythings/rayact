@@ -18,7 +18,8 @@ export {
   downloadPrebuilt,
   ensureDesktopPrebuilt,
   devAppCacheDir,
-  ensureDevApp
+  ensureDevApp,
+  ensureWebHost
 } from './prebuiltHost.js';
 export type { DesktopHostKey, ResolvedDesktop, DevAppPlatform } from './prebuiltHost.js';
 

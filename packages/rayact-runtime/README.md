@@ -3,10 +3,10 @@
 Renderer-agnostic Rayact host runtime and dev client
 
 ```sh
-npm install @rayact/runtime
+npm install github:raythings/rayact-runtime#v0.0.1
 ```
 
-Part of [Rayact](https://github.com/rayact/rayact) — a cross-platform React renderer with a native raylib + QuickJS backend. See the [documentation](https://rayact.dev).
+Part of [Rayact](https://github.com/raythings/rayact) — a cross-platform React renderer with a native raylib + QuickJS backend. See the [documentation](https://rayact.dev).
 
 ## License
 

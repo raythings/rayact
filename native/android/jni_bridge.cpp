@@ -1010,9 +1010,9 @@ Java_com_rayact_engine_RayactEngineSession_nativeCreateSurface(JNIEnv* env, jcla
             setRaym3AndroidDensity(density, layoutDensity);
 
             // Fast path (RLVK): rebind the new window and recreate only the
-            // VkSurface + swapchain. The Vulkan device — and every texture on
-            // it (font atlases, icon sheets, images) — survives, so no GPU
-            // cache needs resetting and nothing leaks per background cycle.
+            // VkSurface + swapchain. The Vulkan device survives, but font/icon
+            // atlases can present stale/invalid contents on the first resumed
+            // frame, so rebuild those GPU-backed caches deterministically.
             int windowId = RcoreAndroidSurface_ResumeWindow(win);
             if (windowId <= 0) {
                 // Fallback: full graphics re-init (GLES path, or swapchain
@@ -1034,6 +1034,10 @@ Java_com_rayact_engine_RayactEngineSession_nativeCreateSurface(JNIEnv* env, jcla
                 rayact::engineFinishLoad();
                 windowId = RcoreAndroidSurface_GetCurrentId();
                 if (windowId <= 0) windowId = 1;
+            } else {
+                raym3::FontManager::InvalidateLiveDeviceCache();
+                raym3::v2::IconRendererInvalidateLiveDeviceCache();
+                raym3::FontManager::Initialize();
             }
             Surface s;
             s.window = win;
@@ -1123,8 +1127,8 @@ Java_com_rayact_engine_RayactEngineSession_nativeResizeSurface(
     auto it = g_surfaces.find(surfaceId);
     if (it == g_surfaces.end()) return;
 
-    // Always record the resize: the swapchain must follow the surface size
-    // regardless of the layout policy. Only the relayout request is opt-in.
+    // Always record the resize: the swapchain and root layout must follow the
+    // surface size so orientation changes reflow without app opt-in.
     g_realDensity = density;
     it->second.density = density;
     it->second.pendingWidth = (int)width;
@@ -1132,8 +1136,7 @@ Java_com_rayact_engine_RayactEngineSession_nativeResizeSurface(
     it->second.resizePending = true;
     LOGI("nativeResizeSurface: surface=%d %dx%d density=%.2f", surfaceId,
          (int)width, (int)height, density);
-    if (rayact::engineRelayoutOnSurfaceResizeEnabled())
-        rayact::engineRequestSurfaceRelayout(surfaceId);
+    rayact::engineRequestSurfaceRelayout(surfaceId);
 }
 
 JNIEXPORT jboolean JNICALL

@@ -254,4 +254,6 @@ const AppConfig& appConfig() { return g_config; }
 
 const char* appAssetsPath() { return g_assetsPath.c_str(); }
 
+void setAppAssetsPath(const char* path) { g_assetsPath = (path && *path) ? path : ""; }
+
 } // namespace rayact

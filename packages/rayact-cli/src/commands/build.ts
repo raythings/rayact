@@ -156,6 +156,10 @@ export async function runBuild(flags: CliFlags): Promise<void> {
   console.log(`Assets: ${output.assets.length}`);
 
   if (flags.platform === 'web' && !flags.android && !flags.ios) {
+    if (process.env.RAYACT_SKIP_WEB_HOST_ASSEMBLY === '1') {
+      console.log('Skipping web host assembly (RAYACT_SKIP_WEB_HOST_ASSEMBLY=1)');
+      return;
+    }
     await assembleWebApp(output.bundleFormat, output.bytecode, output.code, outDir);
     return;
   }

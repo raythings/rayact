@@ -37,7 +37,7 @@ export default defineConfig({
         items: [{ text: 'Multi-window system', link: '/multi-window-system' }]
       }
     ],
-    socialLinks: [{ icon: 'github', link: 'https://github.com/rayact/rayact' }],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/raythings/rayact' }],
     search: { provider: 'local' }
   }
 });
