@@ -11,8 +11,11 @@
       background: #000;
       display: block;
       border: 1px solid #333;
-      width: min(960px, calc(100vw - 24px));
-      height: min(540px, calc(100vh - 140px));
+      width: auto;
+      max-width: calc(100vw - 24px);
+      height: auto;
+      max-height: calc(100vh - 140px);
+      object-fit: contain;
       box-sizing: border-box;
     }
     #log { width: 960px; max-width: 95vw; height: 96px; overflow: auto; font-size: 12px; white-space: pre-wrap; }
