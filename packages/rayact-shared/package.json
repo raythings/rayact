@@ -22,8 +22,7 @@
   "scripts": {
     "build": "tsc && cp src/material_icons.js dist/material_icons.js",
     "dev": "tsc --watch",
-    "clean": "rm -rf dist",
-    "prepare": "npm run build"
+    "clean": "rm -rf dist"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",

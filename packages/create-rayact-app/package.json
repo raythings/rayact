@@ -8,8 +8,7 @@
   },
   "scripts": {
     "build": "tsc && node scripts/copy-templates.mjs",
-    "clean": "rm -rf dist",
-    "prepare": "npm run build"
+    "clean": "rm -rf dist"
   },
   "files": [
     "dist",
