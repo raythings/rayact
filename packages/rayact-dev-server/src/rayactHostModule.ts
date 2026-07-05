@@ -1,4 +1,5 @@
 import type { Connect, ViteDevServer } from 'vite';
+import path from 'node:path';
 
 function toViteTransformId(modulePath: string): string {
   const path = modulePath.split('?')[0] ?? modulePath;
@@ -15,10 +16,13 @@ function toViteTransformId(modulePath: string): string {
 // (/@fs/<abs>, /@id/<virtual>, /src/...). vite's resolveId needs the real
 // importer id, so a relative require (e.g. react-refresh/runtime.js requiring
 // './cjs/...') can be resolved against the importer's actual directory.
-function toViteImporter(from: string): string | undefined {
+function toViteImporter(from: string, root: string): string | undefined {
   if (!from) return undefined;
   if (from.startsWith('/@fs/')) return from.slice('/@fs'.length);
   if (from.startsWith('/@id/')) return toViteTransformId(from);
+  if (from.startsWith('/node_modules/') || from.startsWith('/src/')) {
+    return path.join(root, from.slice(1));
+  }
   return from;
 }
 
@@ -138,7 +142,7 @@ export function createRayactModuleMiddleware(
         return;
       }
       try {
-        const resolved = await vite.pluginContainer.resolveId(spec, toViteImporter(from), { ssr: true });
+        const resolved = await vite.pluginContainer.resolveId(spec, toViteImporter(from, vite.config.root), { ssr: true });
         const id = typeof resolved === 'string' ? resolved : resolved?.id;
         if (!id) {
           res.statusCode = 404;
