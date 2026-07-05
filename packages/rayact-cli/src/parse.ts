@@ -6,6 +6,7 @@ export interface CliFlags {
   subcommand?: string;
   host: string;
   port: number;
+  webPort: number;
   entry: string;
   platform: string;
   desktopBin: string;
@@ -36,6 +37,7 @@ export function parseCli(argv: string[]): CliFlags {
     command: argv[0] ?? 'help',
     host: config.devServer?.host ?? '0.0.0.0',
     port: config.devServer?.port ?? 8081,
+    webPort: 8768,
     entry: config.entry ?? 'src/App.tsx',
     platform: config.platform ?? 'desktop',
     desktopBin: process.env.RAYACT_DESKTOP_BIN ?? 'build/bin/rayact_desktop',
@@ -92,6 +94,7 @@ export function parseCli(argv: string[]): CliFlags {
     else if (arg === '--version' || arg === '-v') flags.version = true;
     else if (arg === '--host' && next) { flags.host = next; i++; }
     else if (arg === '--port' && next) { flags.port = Number(next); i++; }
+    else if (arg === '--web-port' && next) { flags.webPort = Number(next); i++; }
     else if (arg === '--entry' && next) { flags.entry = next; i++; }
     else if (arg === '--platform' && next) { flags.platform = next; i++; }
     else if (arg === '--desktop-bin' && next) { flags.desktopBin = next; i++; }
@@ -142,6 +145,7 @@ export function toDevServerArgs(flags: CliFlags) {
     command: flags.command,
     host: flags.host,
     port: flags.port,
+    webPort: flags.webPort,
     entry: flags.entry,
     platform: flags.platform,
     desktopBin: flags.desktopBin,

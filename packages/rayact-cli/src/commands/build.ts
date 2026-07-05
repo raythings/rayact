@@ -346,10 +346,10 @@ async function assembleWebApp(
     await fs.writeFile(path.join(webDir, 'app.js'), code);
   }
   console.log(`Web app assembled: ${webDir}`);
-  console.log('Serve it with any static server, e.g.:');
-  console.log(`  npx serve ${path.relative(process.cwd(), webDir) || '.'}`);
-  console.log('(WebGPU browser required. For live dev: rayact dev, then open');
-  console.log(' rayact.html?dev=http://localhost:8081)');
+  console.log('Serve with COOP/COEP headers (required for WebGPU):');
+  console.log(`  rayact serve ${path.relative(process.cwd(), webDir) || 'dist/web'}`);
+  console.log('For live dev with HMR:');
+  console.log('  rayact dev --web');
 }
 
 async function buildIosApp(

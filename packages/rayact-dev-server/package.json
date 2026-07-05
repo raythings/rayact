@@ -15,6 +15,7 @@
     "test": "tsc && node --test test/*.test.mjs"
   },
   "dependencies": {
+    "@rayact/prebuild": "github:raythings/rayact-prebuild#v0.0.1",
     "@vitejs/plugin-react": "^5.1.1",
     "bonjour-service": "^1.3.0",
     "chokidar": "^4.0.3",

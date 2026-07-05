@@ -8,6 +8,7 @@ import { runCompile } from './commands/compile.js';
 import { runInit } from './commands/init.js';
 import { runDevApp } from './commands/devApp.js';
 import { runPrebuildCommand } from './commands/prebuild.js';
+import { runServe } from './commands/serve.js';
 
 async function main(): Promise<void> {
   const flags = parseCli(process.argv.slice(2));
@@ -50,6 +51,9 @@ async function main(): Promise<void> {
         break;
       case 'prebuild':
         await runPrebuildCommand(flags);
+        break;
+      case 'serve':
+        await runServe(flags);
         break;
       default:
         console.error(`Unknown command: ${flags.command}`);

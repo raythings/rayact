@@ -23,7 +23,8 @@
   "license": "MIT",
   "files": [
     "dist",
-    "templates"
+    "templates",
+    "scripts"
   ],
   "publishConfig": {
     "access": "public"
