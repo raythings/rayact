@@ -10,7 +10,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rayact/shared": "0.0.1"
+    "@rayact/shared": "github:raythings/rayact-shared#v0.0.1"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",

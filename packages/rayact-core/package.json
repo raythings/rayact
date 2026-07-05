@@ -10,8 +10,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rayact/react": "0.0.1",
-    "@rayact/shared": "0.0.1",
+    "@rayact/react": "github:raythings/rayact-react#v0.0.1",
+    "@rayact/shared": "github:raythings/rayact-shared#v0.0.1",
     "react": "^19.0.0",
     "react-reconciler": "^0.31.0"
   },
