@@ -34,6 +34,19 @@ function packDir(dir, name) {
   return true;
 }
 
+function packWebHost(dir, name) {
+  if (!fs.existsSync(dir)) return false;
+  const stage = path.join(OUT, '.rayact-web-host-stage');
+  fs.rmSync(stage, { recursive: true, force: true });
+  fs.mkdirSync(path.join(stage, 'host'), { recursive: true });
+  for (const file of ['rayact.html', 'rayact.js', 'rayact.wasm']) {
+    fs.copyFileSync(path.join(dir, file), path.join(stage, 'host', file));
+  }
+  run('tar', ['-czf', path.join(OUT, name), '-C', stage, 'host']);
+  fs.rmSync(stage, { recursive: true, force: true });
+  return true;
+}
+
 function npmPack(dir) {
   if (!fs.existsSync(path.join(dir, 'package.json'))) return false;
   run('npm', ['pack', '--ignore-scripts', '--pack-destination', OUT], { cwd: dir });
@@ -66,7 +79,7 @@ add(copyIfExists(path.join(ROOT, 'apps/dev-app/dist/rayact-dev-app-device-unsign
 add(copyIfExists(path.join(ROOT, 'apps/dev-app/dist/rayact-dev-app-simulator.zip')), 'rayact-dev-app-simulator.zip');
 
 const webBin = path.join(ROOT, 'build-web/bin');
-add(packDir(webBin, `rayact-web-${VERSION}.tar.gz`), `rayact-web-${VERSION}.tar.gz`);
+add(packWebHost(webBin, `rayact-web-${VERSION}.tar.gz`), `rayact-web-${VERSION}.tar.gz`);
 
 const releasable = fs.readdirSync(OUT)
   .filter((f) => f !== 'SHA256SUMS' && fs.statSync(path.join(OUT, f)).isFile())
