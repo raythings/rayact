@@ -14,8 +14,7 @@
   "scripts": {
     "build": "tsc",
     "test": "tsc && node --test test/*.test.mjs",
-    "clean": "rm -rf dist",
-    "prepare": "npm run build"
+    "clean": "rm -rf dist"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",

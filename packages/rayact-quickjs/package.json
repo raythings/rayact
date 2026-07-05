@@ -7,8 +7,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "clean": "rm -rf dist",
-    "prepare": "npm run build"
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@rayact/shared": "0.0.1"
