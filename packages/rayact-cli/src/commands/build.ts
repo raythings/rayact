@@ -186,7 +186,7 @@ export async function runBuild(flags: CliFlags): Promise<void> {
   } else if (flags.ios) {
     await buildIosApp(flags, config, code, cssFiles, output.bytecode, output.bundleFormat, outDir);
   } else {
-    await packageDesktopApp(flags, config, cssFiles, outDir);
+    await packageDesktopApp(flags, config, cssFiles, output.bundleFormat, outDir);
   }
 }
 
@@ -537,6 +537,7 @@ async function packageDesktopApp(
   flags: CliFlags,
   config: RayactConfig,
   cssFiles: CssRef[],
+  bundleFormat: 'js' | 'qjsbc',
   outDir: string
 ): Promise<void> {
   const cwd = process.cwd();
@@ -572,6 +573,13 @@ async function packageDesktopApp(
   }
   await writeNativeModules(config, path.join(outDir, 'native-modules.json'));
 
+  const bundleName = bundleFormat === 'qjsbc' ? 'bundle.qjsbc' : 'bundle.js';
+  const hostBundleName = bundleFormat === 'qjsbc' ? 'app.qjsbc' : 'app.js';
+  const bundlePath = path.join(outDir, bundleName);
+  if (existsSync(bundlePath)) {
+    await copyInto(bundlePath, path.join(outDir, hostBundleName));
+  }
+
   for (const ref of cssFiles) {
     if (!existsSync(ref.src)) {
       console.warn(`warning: bundle references missing CSS file: ${ref.src}`);
@@ -604,6 +612,10 @@ async function packageDesktopApp(
     break;
   }
 
+  const pack = path.join(outDir, 'app.rayactpack');
+  const packResult = spawnSync(destBin, ['--pack', outDir, pack], { cwd: outDir, stdio: 'inherit' });
+  if (packResult.status !== 0) process.exit(packResult.status ?? 1);
+
   console.log(`Desktop app packaged: ${outDir}`);
-  console.log(`Run: cd ${path.relative(cwd, outDir) || '.'} && ./${binName} bundle.js`);
+  console.log(`Run: cd ${path.relative(cwd, outDir) || '.'} && ./${binName} app.rayactpack`);
 }
