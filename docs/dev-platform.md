@@ -30,9 +30,10 @@ npm run rayact -- build --debug --android --install
 # Build release with minify + bytecode
 npm run rayact -- build --release --android
 
-# Verify desktop / Android
+# Verify desktop / Android / Web
 npm run verify
 npm run verify:android
+npm run verify:web
 ```
 
 ## Configuration
@@ -47,13 +48,13 @@ CLI flags override config: `--minify`, `--no-minify`, `--bytecode`, `--no-byteco
 
 ## Dev client
 
-Debug Android builds embed `@rayact/dev-client`:
+Debug Android and iOS custom dev-client builds embed `@rayact/dev-client`; the prebuilt dev app uses the same launcher UI:
 
 - **Connect** — enter dev server URL or scan QR
 - **Recent** — persisted URLs with reachability
 - **Discover** — mDNS `_rayact._tcp` (Android NSD)
 
-Native bridge: global `devCall(method, data, callback)` wired to Kotlin `DevClientBridge` on Android.
+Native bridge: global `devCall(method, data, callback)` is wired to the platform dev-client bridge on Android/iOS.
 
 ## HMR
 

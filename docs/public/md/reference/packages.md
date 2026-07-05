@@ -36,7 +36,7 @@ platform, arch). The CLI gates on `moduleAbiVersion` before using a prebuilt.
 
 | Target | Status |
 | --- | --- |
-| Desktop (macOS / Linux / Windows) | Supported |
+| Desktop (macOS / Linux / Windows) | macOS/Linux prebuilts in `v0.0.1`; Windows source/build path |
 | Android | Supported |
 | iOS | Supported |
-| Web (WASM) | Engine builds; container not used (loose embed) |
+| Web (WASM) | Supported; requires COOP/COEP serving for SharedArrayBuffer/WebGPU |
