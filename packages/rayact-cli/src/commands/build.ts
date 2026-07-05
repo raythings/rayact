@@ -104,7 +104,12 @@ function normalizeCssRefs(code: string, root: string): { code: string; cssFiles:
 }
 
 async function copyInto(src: string, dest: string): Promise<void> {
+  const stat = await fs.stat(src);
   await fs.mkdir(path.dirname(dest), { recursive: true });
+  if (stat.isDirectory()) {
+    await fs.cp(src, dest, { recursive: true, force: true });
+    return;
+  }
   await fs.copyFile(src, dest);
 }
 
