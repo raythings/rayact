@@ -72,9 +72,9 @@ function execAt(dir: string): string | null {
 /**
  * Locate the rayact_desktop host without downloading. Order:
  *   1. explicit `configured` path or RAYACT_DESKTOP_BIN env
- *   2. source-tree build/bin (maintainer working in the repo)
- *   3. installed @rayact/prebuilt-<host> package in node_modules
- *   4. per-user cache (a previously downloaded prebuilt)
+ *   2. installed @rayact/prebuilt-<host> package in node_modules
+ *   3. per-user cache (a previously downloaded prebuilt)
+ *   4. source-tree build/bin (maintainer working in the repo)
  * Returns null if none are present (call ensureDesktopPrebuilt to fetch).
  */
 export function resolveDesktopBin(
@@ -89,12 +89,6 @@ export function resolveDesktopBin(
     }
   }
 
-  // Source-tree build output (maintainer dev loop).
-  for (const rel of ['build/bin', '../../build/bin', '../../../build/bin']) {
-    const bin = path.join(path.resolve(projectRoot, rel), desktopBinName());
-    if (fs.existsSync(bin)) return { bin, manifest: null, source: 'source' };
-  }
-
   const key = hostDesktopKey();
   if (key) {
     const pkgDir = resolvePackageDir(projectRoot, PREBUILT_PACKAGES[key]);
@@ -105,6 +99,14 @@ export function resolveDesktopBin(
     const cacheDir = prebuiltCacheDir(RAYACT_ENGINE_VERSION, key);
     const bin = execAt(cacheDir);
     if (bin) return { bin, manifest: readPrebuiltManifest(cacheDir), source: 'cache' };
+  }
+
+  // Source-tree build output (maintainer dev loop). Keep this after package/cache
+  // resolution so a consumer project nested inside a source checkout still uses
+  // the release prebuilt it installed.
+  for (const rel of ['build/bin', '../../build/bin', '../../../build/bin']) {
+    const bin = path.join(path.resolve(projectRoot, rel), desktopBinName());
+    if (fs.existsSync(bin)) return { bin, manifest: null, source: 'source' };
   }
   return null;
 }
