@@ -10,9 +10,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rayact/core": "0.0.1",
-    "@rayact/runtime": "0.0.1",
-    "@rayact/shared": "0.0.1"
+    "@rayact/core": "github:raythings/rayact-core#v0.0.1",
+    "@rayact/runtime": "github:raythings/rayact-runtime#v0.0.1",
+    "@rayact/shared": "github:raythings/rayact-shared#v0.0.1"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",

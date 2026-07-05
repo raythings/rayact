@@ -14,8 +14,8 @@
     "test": "tsc && node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@rayact/dev-server": "0.0.1",
-    "create-rayact-app": "0.0.1"
+    "@rayact/dev-server": "github:raythings/rayact-dev-server#v0.0.1",
+    "create-rayact-app": "github:raythings/create-rayact-app#v0.0.1"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",
@@ -41,8 +41,8 @@
     "url": "https://github.com/raythings/rayact/issues"
   },
   "optionalDependencies": {
-    "@rayact/prebuilt-darwin-arm64": "0.0.1",
-    "@rayact/prebuilt-darwin-x64": "0.0.1",
-    "@rayact/prebuilt-linux-x64": "0.0.1"
+    "@rayact/prebuilt-darwin-arm64": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-prebuilt-darwin-arm64-0.0.1.tgz",
+    "@rayact/prebuilt-darwin-x64": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-prebuilt-darwin-x64-0.0.1.tgz",
+    "@rayact/prebuilt-linux-x64": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-prebuilt-linux-x64-0.0.1.tgz"
   }
 }

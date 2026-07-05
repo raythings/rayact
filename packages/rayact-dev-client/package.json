@@ -10,8 +10,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rayact/react": "*",
-    "@rayact/runtime": "*"
+    "@rayact/react": "github:raythings/rayact-react#v0.0.1",
+    "@rayact/runtime": "github:raythings/rayact-runtime#v0.0.1"
   },
   "peerDependencies": {
     "react": "^19.0.0"
