@@ -6,7 +6,6 @@ import http from 'node:http';
 import assert from 'node:assert/strict';
 import { listenWithFallback } from '../packages/rayact-dev-server/dist/listen.js';
 import { listenWithFallback as prebuildListen } from '../packages/rayact-prebuild/dist/listen.js';
-import { DEFAULT_WEB_ENGINE_PORT } from '../packages/rayact-prebuild/dist/webServe.js';
 
 async function holdPort(host, port) {
   const server = http.createServer();
@@ -33,13 +32,20 @@ async function testDevServerFallback() {
 
 async function testCoepFallback() {
   const host = '127.0.0.1';
-  const blocker = await holdPort(host, DEFAULT_WEB_ENGINE_PORT);
+  const blocker = http.createServer();
+  const basePort = await new Promise((resolve, reject) => {
+    blocker.once('error', reject);
+    blocker.listen(0, host, () => {
+      const addr = blocker.address();
+      resolve(typeof addr === 'object' && addr ? addr.port : 0);
+    });
+  });
   const server = http.createServer((_req, res) => {
     res.writeHead(200);
     res.end('ok');
   });
-  const actual = await prebuildListen(server, host, DEFAULT_WEB_ENGINE_PORT);
-  assert.equal(actual, DEFAULT_WEB_ENGINE_PORT + 1);
+  const actual = await prebuildListen(server, host, basePort);
+  assert.equal(actual, basePort + 1);
   await new Promise(r => server.close(() => r()));
   await new Promise(r => blocker.close(() => r()));
   console.log('PASS COEP proxy port fallback');
