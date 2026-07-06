@@ -42,8 +42,10 @@ for (const repoDir of Object.values(SPLIT_REPO_MAP)) {
   const remote = `https://github.com/${SPLIT_REPO_ORG}/${repoDir}.git`;
 
   if (fs.existsSync(path.join(dest, '.git'))) {
-    console.log(`\n==> pull ${repoDir}`);
-    run('git', ['pull', '--ff-only'], { cwd: dest });
+    console.log(`\n==> sync ${repoDir}`);
+    run('git', ['fetch', 'origin'], { cwd: dest });
+    run('git', ['checkout', 'main'], { cwd: dest });
+    run('git', ['reset', '--hard', 'origin/main'], { cwd: dest });
     ready.push(repoDir);
     continue;
   }
