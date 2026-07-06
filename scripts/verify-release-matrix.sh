@@ -44,6 +44,28 @@ else
   fail "verify-web (see $OUT/verify-web.log)"
 fi
 
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  log "=== desktop release screenshot ==="
+  if bash scripts/verify-desktop.sh >"$OUT/verify-desktop.log" 2>&1; then
+    if [ -f "$OUT/../desktop/shot-release.png" ] 2>/dev/null || find "$ROOT/.rayact/verify" -name 'shot-release.png' -newer "$OUT/verify-desktop.log" 2>/dev/null | grep -q .; then
+      pass "verify-desktop"
+    else
+      pass "verify-desktop (build ok, screenshot optional)"
+    fi
+  else
+    fail "verify-desktop (see $OUT/verify-desktop.log)"
+  fi
+else
+  log "SKIP verify-desktop (not macOS)"
+fi
+
+log "=== port fallback smoke ==="
+if node scripts/smoke-port-fallback.mjs >"$OUT/port-fallback.log" 2>&1; then
+  pass "port-fallback"
+else
+  fail "port-fallback (see $OUT/port-fallback.log)"
+fi
+
 if [ ! -f "$ROOT/release1/SHA256SUMS" ]; then
   fail "release1/SHA256SUMS missing — run npm run pack:release"
 else
@@ -60,6 +82,15 @@ else
   fail "serve-release-assets"
 fi
 
+log "=== release1 asset inventory ==="
+for asset in rayact-dev-app.apk rayact-dev-app-simulator.zip rayact-prebuilt-darwin-arm64-0.0.1.tgz rayact-web-0.0.1.tar.gz; do
+  if curl -sf "http://127.0.0.1:9191/v0.0.1/$asset" -o /dev/null; then
+    pass "release asset $asset"
+  else
+    fail "release asset missing: $asset"
+  fi
+done
+
 export RAYACT_PREBUILT_BASE_URL="http://127.0.0.1:9191/v0.0.1"
 export RAYACT_WEB_HOST_DIR="$ROOT/build-web/bin"
 
@@ -75,6 +106,13 @@ log "=== CLI prebuild ==="
   cd "$SMOKE"
   npx rayact prebuild >"$OUT/smoke-prebuild.log" 2>&1
 ) && pass "rayact prebuild" || fail "rayact prebuild"
+
+log "=== dev-client debug android build ==="
+(
+  cd "$SMOKE"
+  npx rayact build --debug --android --out dist-android-debug-check >"$OUT/smoke-android-debug.log" 2>&1
+  ls dist-android-debug-check/*.apk >/dev/null 2>&1
+) && pass "android dev-client debug build" || fail "android dev-client debug build"
 
 log "=== desktop release build ==="
 (
@@ -102,6 +140,18 @@ log "=== web COEP serve smoke ==="
   echo "$HDRS" | grep -qi "cross-origin-opener-policy: same-origin"
   echo "$HDRS" | grep -qi "cross-origin-embedder-policy: require-corp"
 ) && pass "web COEP headers" || fail "web COEP headers"
+
+log "=== web COEP port fallback ==="
+(
+  node "$ROOT/packages/rayact-cli/dist/cli.js" serve dist-web-check/web --web-port 8768 >"$OUT/smoke-web-serve-block.log" 2>&1 &
+  BLOCK_PID=$!
+  sleep 1
+  node "$ROOT/packages/rayact-cli/dist/cli.js" serve dist-web-check/web --web-port 8768 >"$OUT/smoke-web-serve-fallback.log" 2>&1 &
+  FALL_PID=$!
+  sleep 1
+  curl -sf "http://127.0.0.1:8769/rayact.html" -o /dev/null
+  kill "$BLOCK_PID" "$FALL_PID" 2>/dev/null || true
+) && pass "web COEP port fallback" || fail "web COEP port fallback"
 
 log "=== dev server manifest ==="
 (
@@ -132,9 +182,10 @@ else
 fi
 
 log "=== manual checks (not automated) ==="
-log "  - rayact dev --web → open printed URL, confirm icons/emoji + HMR"
+log "  - rayact dev → desktop window: title single-line, icons, emoji, HMR"
+log "  - rayact dev --web → browser: icons/emoji + HMR"
 log "  - rayact dev-app --android / --ios-simulator → QR connect + HMR"
-log "  - visual: Material icon + emoji render on web and native"
+log "  - compare screenshots across desktop/android/ios/web (.rayact/verify/)"
 
 if [ "$FAILURES" -gt 0 ]; then
   log "$FAILURES automated check(s) failed — artifacts in $OUT"

@@ -8,25 +8,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { SPLIT_REPO_MAP } from './split-repo-map.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SUBREPOS = path.resolve(ROOT, '..', '.subrepos3');
 const DRY = process.argv.includes('--dry-run');
 const TAG = `v${process.env.RAYACT_RELEASE_VERSION || '0.0.1'}`;
-
-const MAP = {
-  'create-rayact-app': 'create-rayact-app',
-  'rayact-cli': 'rayact-cli',
-  'rayact-dev-client': 'rayact-dev-client',
-  'rayact-dev-server': 'rayact-dev-server',
-  'rayact-mmkv': 'rayact-mmkv',
-  'rayact-navigation': 'rayact-navigation',
-  'rayact-prebuild': 'rayact-prebuild',
-  'rayact-react': 'rayact-react',
-  'rayact-runtime': 'rayact-runtime',
-  'rayact-secure-store': 'rayact-secure-store',
-  'rayact-worklets': 'rayact-worklets'
-};
 
 function run(cmd, args, opts = {}) {
   if (DRY) {
@@ -48,11 +35,11 @@ function rsync(src, dest) {
 }
 
 if (!fs.existsSync(SUBREPOS)) {
-  console.error(`Missing ${SUBREPOS}`);
+  console.error(`Missing ${SUBREPOS} — run: node scripts/bootstrap-split-repos.mjs`);
   process.exit(1);
 }
 
-for (const [pkgDir, repoDir] of Object.entries(MAP)) {
+for (const [pkgDir, repoDir] of Object.entries(SPLIT_REPO_MAP)) {
   const src = path.join(ROOT, 'packages', pkgDir);
   const dest = path.join(SUBREPOS, repoDir);
   if (!fs.existsSync(src)) {
@@ -60,7 +47,7 @@ for (const [pkgDir, repoDir] of Object.entries(MAP)) {
     continue;
   }
   if (!fs.existsSync(path.join(dest, '.git'))) {
-    console.warn(`skip ${repoDir}: not a git repo`);
+    console.warn(`skip ${repoDir}: not a git repo (bootstrap first)`);
     continue;
   }
 
