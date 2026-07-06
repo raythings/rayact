@@ -4,6 +4,7 @@
 #include <cstring>
 #include "../desktop/raym3_bridge.hpp"
 #include <raym3/fonts/FontManager.h>
+#include <raym3/v2/EmojiFont.h>
 #include <raym3/v2/IconRenderer.h>
 
 extern "C" void CloseWindow(void);
@@ -172,6 +173,7 @@ static void releaseGraphicsLocked(IOSEngineInstance* inst) {
     if (IsWindowReady()) CloseWindow();
     raym3::FontManager::ResetDeviceCache();
     raym3::v2::IconRendererResetDeviceCache();
+    raym3::v2::EmojiFont::Instance().ResetTextureCache();
     inst->graphicsActive.store(false, std::memory_order_release);
     g_graphicsValid.store(false, std::memory_order_release);
     iosEngineLoadInstanceState(inst);

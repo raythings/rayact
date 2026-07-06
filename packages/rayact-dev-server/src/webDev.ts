@@ -14,13 +14,14 @@ export interface WebDevBridge {
 
 export async function startWebDevBridge(
   devOrigin: string,
-  opts: { port?: number } = {}
+  opts: { port?: number; strictPort?: boolean } = {}
 ): Promise<WebDevBridge> {
   const hostDir = await ensureWebHost();
   const proxy = await startCoepDevProxy({
     engineDir: hostDir,
     devOrigin,
-    port: opts.port ?? DEFAULT_WEB_ENGINE_PORT
+    port: opts.port ?? DEFAULT_WEB_ENGINE_PORT,
+    strictPort: opts.strictPort
   });
   return {
     openUrl: webDevOpenUrl(proxy.url, devOrigin),

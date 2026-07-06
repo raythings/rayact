@@ -1029,6 +1029,7 @@ Java_com_rayact_engine_RayactEngineSession_nativeCreateSurface(JNIEnv* env, jcla
                 }
                 raym3::FontManager::ResetDeviceCache();
                 raym3::v2::IconRendererResetDeviceCache();
+                raym3::v2::EmojiFont::Instance().ResetTextureCache();
                 raym3::FontManager::Initialize();
                 rayact::engineLoadConfig(g_dataPath.c_str());
                 rayact::engineFinishLoad();
@@ -1037,7 +1038,10 @@ Java_com_rayact_engine_RayactEngineSession_nativeCreateSurface(JNIEnv* env, jcla
             } else {
                 raym3::FontManager::InvalidateLiveDeviceCache();
                 raym3::v2::IconRendererInvalidateLiveDeviceCache();
+                raym3::v2::EmojiFont::Instance().ResetTextureCache();
                 raym3::FontManager::Initialize();
+                rayact::engineLoadConfig(g_dataPath.c_str());
+                rayact::engineResyncMaterialIcons();
             }
             Surface s;
             s.window = win;
@@ -1090,6 +1094,7 @@ Java_com_rayact_engine_RayactEngineSession_nativeCreateSurface(JNIEnv* env, jcla
         if (!IsWindowReady()) { LOGE("nativeCreateSurface: InitWindow failed"); ANativeWindow_release(win); return 0; }
         setRaym3AndroidDensity(density, layoutDensity);
         raym3::FontManager::Initialize();
+        raym3::v2::IconRendererInvalidateLiveDeviceCache();
         rayact::engineLoadConfig(g_dataPath.c_str());
         rayact::engineFinishLoad();
         windowId = RcoreAndroidSurface_GetCurrentId();

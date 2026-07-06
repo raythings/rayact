@@ -19,8 +19,20 @@ fi
 
 echo "[verify-ios] xcodegen + build..."
 (cd "$IOS_DIR" && xcodegen generate) 2>"$OUT/xcodegen.log"
+
+# Prefer the already-booted simulator; don't hardcode a device UDID (stale across
+# machines/Xcode versions). Fall back to a recent default name for CI/headless.
+IOS_DEST="generic/platform=iOS Simulator"
+BOOTED_UDID="$(xcrun simctl list devices booted 2>/dev/null | awk -F'[()]' '/Booted/ {print $2; exit}')"
+if [ -n "${BOOTED_UDID:-}" ]; then
+  IOS_DEST="platform=iOS Simulator,id=${BOOTED_UDID}"
+  echo "[verify-ios] using booted simulator: ${BOOTED_UDID}"
+else
+  echo "[verify-ios] no booted simulator; using ${IOS_DEST}"
+fi
+
 (cd "$IOS_DIR" && xcodebuild -scheme RayactIOS -configuration Debug \
-  -destination 'platform=iOS Simulator,id=00EF0C9C-9681-4B4C-8BA7-3B1BDA965F27' build) 2>"$OUT/xcodebuild.log"
+  -destination "$IOS_DEST" build) 2>"$OUT/xcodebuild.log"
 
 echo "PASS" | tee "$OUT/status.txt"
 echo "[verify-ios] artifacts: $OUT"

@@ -131,10 +131,15 @@ class DevLauncherActivity : AppCompatActivity() {
     private fun showLauncher() {
         projectLoadGeneration++
         val hadProject = activePane == ActivePane.PROJECT
+        stopProjectDebugTools()
         if (hadProject) {
-            stopProjectDebugTools()
             projectSession?.nativeBlurTextInput()
             unmountCurrentPane()
+        }
+        // Always destroy any project session — mounted, in-flight from the launcher,
+        // or stale after a cancelled openProject (generation bump).
+        destroyProjectSession()
+        if (hadProject) {
             // Rebuild the launcher runtime from scratch. Re-evaluating app.js into
             // the existing context double-initializes React and nulls the compiler
             // dispatcher ("Cannot read property 'useMemoCache' of null"); merely
@@ -149,7 +154,6 @@ class DevLauncherActivity : AppCompatActivity() {
         launcherHost.post {
             launcherHost.syncSurfacesToCurrentLayout()
             launcherSession.host.renderScheduler.requestFrame()
-            if (hadProject) destroyProjectSession()
         }
     }
 
@@ -165,12 +169,19 @@ class DevLauncherActivity : AppCompatActivity() {
             stopProjectDebugTools()
             projectSession?.nativeBlurTextInput()
             unmountCurrentPane()
-            destroyProjectSession()
+        } else {
+            // Stop the launcher render thread and release the GPU lease before
+            // EngineRuntime::create — creating a project instance while the launcher
+            // is still rendering races the JS pump (SIGSEGV / black screen).
+            parkLauncherPane()
         }
+        destroyProjectSession()
 
         projectUrl = normalized
-        val session = ensureProjectSession()
-        ensureProjectHost(session)
+        val session = RayactEngineSession.create(filesDir.absolutePath)
+            ?: throw IllegalStateException("Failed to create Rayact project session")
+        projectSession = session
+        projectHost = createHost(session)
 
         Thread {
             val result = traceSection("bundle.fetch") {
@@ -239,7 +250,10 @@ class DevLauncherActivity : AppCompatActivity() {
     }
 
     private fun switchToProjectPane(session: RayactEngineSession) {
-        val launcherWasMounted = launcherHost.parent === root
+        // Drop the launcher view + GPU lease before the project host is added.
+        // addView can synchronously run surfaceCreated; acquireGraphics() after
+        // that would CloseWindow() under the new surface (black project pane).
+        parkLauncherPane()
         activePane = ActivePane.PROJECT
         val host = projectHost ?: return
         mountPane(ActivePane.PROJECT, host, session)
@@ -247,28 +261,16 @@ class DevLauncherActivity : AppCompatActivity() {
             host.syncSurfacesToCurrentLayout()
             session.host.renderScheduler.traceNextFrame("project.first.frame")
             session.host.renderScheduler.requestFrame()
-            if (launcherWasMounted) {
-                host.postDelayed({
-                    if (activePane == ActivePane.PROJECT && launcherHost.parent === root) {
-                        root.removeView(launcherHost)
-                        launcherSession.releaseGraphics()
-                    }
-                }, 120L)
-            }
         }
     }
 
-    private fun ensureProjectSession(): RayactEngineSession {
-        projectSession?.let { return it }
-        val session = RayactEngineSession.create(filesDir.absolutePath)
-            ?: throw IllegalStateException("Failed to create Rayact project session")
-        projectSession = session
-        return session
-    }
-
-    private fun ensureProjectHost(session: RayactEngineSession) {
-        if (projectHost != null) return
-        projectHost = createHost(session)
+    private fun parkLauncherPane() {
+        if (!::launcherSession.isInitialized) return
+        launcherSession.nativeBlurTextInput()
+        if (::launcherHost.isInitialized && launcherHost.parent === root) {
+            root.removeView(launcherHost)
+        }
+        if (launcherSession.isAlive()) launcherSession.releaseGraphics()
     }
 
     private fun createHost(session: RayactEngineSession): NavigationHost {
@@ -301,6 +303,7 @@ class DevLauncherActivity : AppCompatActivity() {
     }
 
     private fun mountPane(pane: ActivePane, host: NavigationHost, session: RayactEngineSession) {
+        session.acquireGraphics()
         if (host.parent === root) {
             host.bringToFront()
         } else if (host.parent != null) {
@@ -315,7 +318,6 @@ class DevLauncherActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             ))
         }
-        session.acquireGraphics()
         DevClientBridge.attach(this, session)
         if (pane == ActivePane.PROJECT) {
             startProjectDebugTools(session, host)

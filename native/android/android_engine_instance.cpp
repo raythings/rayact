@@ -2,6 +2,7 @@
 
 #include "../desktop/raym3_bridge.hpp"
 #include <raym3/fonts/FontManager.h>
+#include <raym3/v2/EmojiFont.h>
 #include <raym3/v2/IconRenderer.h>
 
 extern "C" {
@@ -306,6 +307,7 @@ static void releaseGraphicsLocked(AndroidEngineInstance* inst) {
     if (IsWindowReady()) CloseWindow();
     raym3::FontManager::ResetDeviceCache();
     raym3::v2::IconRendererResetDeviceCache();
+    raym3::v2::EmojiFont::Instance().ResetTextureCache();
     inst->graphicsActive.store(false, std::memory_order_release);
     // The global raym3/raylib device caches were just torn down (CloseWindow +
     // ResetDeviceCache above). No instance may render until nativeCreateSurface

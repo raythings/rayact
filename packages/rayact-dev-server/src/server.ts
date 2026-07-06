@@ -13,6 +13,7 @@ import {
   type RayactBuildOutput
 } from './bundler.js';
 import { loadRayactConfig } from './config.js';
+import { listenWithFallback } from './listen.js';
 import { advertiseRayactServer } from './mdns.js';
 import { buildQrPayload } from './qr.js';
 import { createRayactModuleMiddleware, wrapRayactModule } from './rayactHostModule.js';
@@ -91,6 +92,7 @@ function normalizeOptions(options: RayactDevServerOptions): Required<RayactDevSe
     root: path.resolve(options.root ?? process.cwd()),
     host: options.host ?? config.devServer?.host ?? '0.0.0.0',
     port: options.port ?? config.devServer?.port ?? 8081,
+    strictPort: options.strictPort ?? config.devServer?.strictPort ?? false,
     entry: options.entry ?? config.entry ?? 'apps/desktop/src/App.tsx',
     platform: options.platform ?? config.platform ?? 'desktop',
     rayactAppKey: options.rayactAppKey ?? config.rayactAppKey ?? 'rayact-app',
@@ -398,12 +400,9 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     });
   });
 
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(options.port, options.host, () => {
-      server.off('error', reject);
-      resolve();
-    });
+  const requestedPort = options.port;
+  options.port = await listenWithFallback(server, options.host, requestedPort, {
+    strictPort: options.strictPort
   });
 
   const url = `http://${publicHost(options.host)}:${options.port}`;

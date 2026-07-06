@@ -850,12 +850,19 @@ static JSValue JS_printNavigationStatus(JSContext* ctx, JSValue this_val,
     return JS_UNDEFINED;
 }
 
-// Auto-inject material_icons once so all user scripts have the Icons map.
+static bool contextHasIconsMap(JSContext* ctx) {
+    JSValue globalObj = JS_GetGlobalObject(ctx);
+    JSValue iconsMap = JS_GetPropertyStr(ctx, globalObj, "Icons");
+    const bool has = JS_IsObject(iconsMap) && !JS_IsUndefined(iconsMap);
+    JS_FreeValue(ctx, iconsMap);
+    JS_FreeValue(ctx, globalObj);
+    return has;
+}
+
+// Inject material_icons into each JS context that does not already have Icons.
 // Prefers .jsc bytecode (faster load, no parse) if present alongside the .js.
 static void injectMaterialIconsRaw(JSContext* ctx) {
-    static bool injected = false;
-    if (injected) return;
-    injected = true;
+    if (contextHasIconsMap(ctx)) return;
 
     auto tryEvalSource = [&](const char* path) -> bool {
         FILE* f = fopen(path, "r");
@@ -951,11 +958,9 @@ static void injectMaterialIconsRaw(JSContext* ctx) {
 // fragile multi-path search is left untouched here), mirror the name ->
 // codepoint table into raym3's IconRenderer as the "material" set, so
 // ResolveIconCodepoint(setName, name) is the single resolution path for both
-// the default set and any app-loaded custom sets. Runs once.
+// the default set and any app-loaded custom sets. Re-synced on every inject
+// because IconRendererResetDeviceCache() drops GPU atlases across sessions.
 static void registerMaterialIconNamesIntoRaym3(JSContext* ctx) {
-    static bool registered = false;
-    if (registered) return;
-
     JSValue globalObj = JS_GetGlobalObject(ctx);
     JSValue iconsMap = JS_GetPropertyStr(ctx, globalObj, "Icons");
     if (JS_IsObject(iconsMap)) {
@@ -978,7 +983,6 @@ static void registerMaterialIconNamesIntoRaym3(JSContext* ctx) {
         }
         if (!names.empty()) {
             raym3::v2::RegisterIconNames("material", names);
-            registered = true;
         }
     }
     JS_FreeValue(ctx, iconsMap);
@@ -1822,6 +1826,11 @@ void enginePrepareJSThread() {
     if (!g_rt) return;
     JS_SetMaxStackSize(g_rt, 8 * 1024 * 1024);
     JS_UpdateStackTop(g_rt);
+}
+
+void engineResyncMaterialIcons() {
+    if (!g_ctx) return;
+    injectMaterialIcons(g_ctx);
 }
 
 void engineFinishLoad() {

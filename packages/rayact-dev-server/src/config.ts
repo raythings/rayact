@@ -40,6 +40,7 @@ export interface RayactConfig {
     host?: string;
     port?: number;
     cdpPort?: number;
+    strictPort?: boolean;
   };
   entry?: string;
   platform?: string;

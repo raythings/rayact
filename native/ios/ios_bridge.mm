@@ -18,6 +18,7 @@
 #include <raym3/fonts/FontManager.h>
 #include <raym3/styles/Theme.h>
 #include <raym3/v2/Density.h>
+#include <raym3/v2/EmojiFont.h>
 #include <raym3/v2/IconRenderer.h>
 #include <raym3/v2/TextInput.h>
 
@@ -528,11 +529,21 @@ extern "C" int RayactIOSSessionCreateSurface(RayactIOSHandle handle, void* metal
             SetTargetFPS(0);
             InitWindow(0, 0, "Rayact");
             if (!IsWindowReady()) return 0;
+            raym3::FontManager::ResetDeviceCache();
+            raym3::v2::IconRendererResetDeviceCache();
+            raym3::v2::EmojiFont::Instance().ResetTextureCache();
             raym3::FontManager::Initialize();
             rayact::engineLoadConfig(g_dataPath.c_str());
+            rayact::engineResyncMaterialIcons();
             rayact::engineFinishLoad();
         } else {
             RcoreIosMetal_ResizeLayer(widthPx, heightPx, scale);
+            raym3::FontManager::InvalidateLiveDeviceCache();
+            raym3::v2::IconRendererInvalidateLiveDeviceCache();
+            raym3::v2::EmojiFont::Instance().ResetTextureCache();
+            raym3::FontManager::Initialize();
+            rayact::engineLoadConfig(g_dataPath.c_str());
+            rayact::engineResyncMaterialIcons();
         }
         Surface s;
         s.screenId = existingRootId;
@@ -560,6 +571,7 @@ extern "C" int RayactIOSSessionCreateSurface(RayactIOSHandle handle, void* metal
         InitWindow(0, 0, "Rayact");
         if (!IsWindowReady()) return 0;
         raym3::FontManager::Initialize();
+        raym3::v2::IconRendererInvalidateLiveDeviceCache();
         rayact::engineLoadConfig(g_dataPath.c_str());
         rayact::engineFinishLoad();
         ownsContext = true;
@@ -587,6 +599,7 @@ extern "C" void RayactIOSSessionResizeSurface(RayactIOSHandle handle, int surfac
     it->second.pendingWidth = width;
     it->second.pendingHeight = height;
     it->second.density = density;
+    g_realDensity = density;
     it->second.resizePending = true;
     rayact::engineRequestSurfaceRelayout(surfaceId);
     RcoreIosMetal_ResizeLayer(width, height, density);
@@ -795,9 +808,16 @@ extern "C" bool RayactIOSSessionRenderFrame(RayactIOSHandle handle, int64_t fram
     }
 
     for (auto& [id, s] : g_surfaces) {
-        if (s.resizePending) {
-            s.resizePending = false;
-            publishWindowDimensions(s.pendingWidth, s.pendingHeight);
+        if (!s.resizePending) continue;
+        const int resizeW = s.pendingWidth;
+        const int resizeH = s.pendingHeight;
+        s.resizePending = false;
+        if (resizeW > 0 && resizeH > 0) {
+            const float layoutDensity = layoutDensityForWidth(resizeW, s.density);
+            g_realDensity = s.density;
+            setRaym3Density(s.density, layoutDensity);
+            RcoreIosMetal_ResizeLayer(resizeW, resizeH, s.density);
+            publishWindowDimensions(resizeW, resizeH);
         }
     }
 
