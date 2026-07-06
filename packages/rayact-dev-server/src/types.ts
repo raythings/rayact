@@ -2,6 +2,7 @@ export interface RayactDevServerOptions {
   root?: string;
   host?: string;
   port?: number;
+  strictPort?: boolean;
   entry: string;
   platform?: string;
   rayactAppKey?: string;

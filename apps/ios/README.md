@@ -22,7 +22,7 @@ Or manually:
 cd apps/ios
 xcodegen generate
 xcodebuild -scheme RayactIOS -configuration Debug \
-  -destination 'platform=iOS Simulator,name=iPhone 16' build
+  -destination 'generic/platform=iOS Simulator' build
 ```
 
 Use `rayact build --ios --install` to build and install on a booted simulator or connected device.

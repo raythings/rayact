@@ -1556,6 +1556,22 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
             JS_FreeCString(ctx, fname);
         }
         JS_FreeValue(ctx, fv);
+        std::string ws = jsGetString(ctx, textObj, "whiteSpace");
+        if (!ws.empty()) {
+            if (ws == "pre-wrap" || ws == "preWrap")
+                s.text.whiteSpace = raym3::v2::WhiteSpace::PreWrap;
+            else
+                s.text.whiteSpace = raym3::v2::WhiteSpace::Normal;
+        }
+        std::string wb = jsGetString(ctx, textObj, "wordBreak");
+        if (!wb.empty()) {
+            if (wb == "keep-all" || wb == "keepAll")
+                s.text.wordBreak = raym3::v2::WordBreak::KeepAll;
+            else if (wb == "break-word" || wb == "breakWord")
+                s.text.wordBreak = raym3::v2::WordBreak::BreakWord;
+            else
+                s.text.wordBreak = raym3::v2::WordBreak::Normal;
+        }
     }
     JS_FreeValue(ctx, textObj);
 
@@ -1583,6 +1599,24 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
             JS_FreeCString(ctx, fname);
         }
         JS_FreeValue(ctx, fv);
+    }
+    {
+        std::string ws = jsGetString(ctx, obj, "whiteSpace");
+        if (!ws.empty()) {
+            if (ws == "pre-wrap" || ws == "preWrap")
+                s.text.whiteSpace = raym3::v2::WhiteSpace::PreWrap;
+            else
+                s.text.whiteSpace = raym3::v2::WhiteSpace::Normal;
+        }
+        std::string wb = jsGetString(ctx, obj, "wordBreak");
+        if (!wb.empty()) {
+            if (wb == "keep-all" || wb == "keepAll")
+                s.text.wordBreak = raym3::v2::WordBreak::KeepAll;
+            else if (wb == "break-word" || wb == "breakWord")
+                s.text.wordBreak = raym3::v2::WordBreak::BreakWord;
+            else
+                s.text.wordBreak = raym3::v2::WordBreak::Normal;
+        }
     }
 
     // CSS transitions: `transition` shorthand string (from a class rule via

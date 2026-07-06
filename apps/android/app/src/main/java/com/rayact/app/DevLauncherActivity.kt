@@ -131,23 +131,29 @@ class DevLauncherActivity : AppCompatActivity() {
     private fun showLauncher() {
         projectLoadGeneration++
         val hadProject = activePane == ActivePane.PROJECT
+        stopProjectDebugTools()
         if (hadProject) {
-            stopProjectDebugTools()
             projectSession?.nativeBlurTextInput()
             unmountCurrentPane()
         }
+        // Always destroy any project session — mounted, in-flight from the launcher,
+        // or stale after a cancelled openProject (generation bump).
+        destroyProjectSession()
+        if (hadProject) {
+            // Rebuild the launcher runtime from scratch. Re-evaluating app.js into
+            // the existing context double-initializes React and nulls the compiler
+            // dispatcher ("Cannot read property 'useMemoCache' of null"); merely
+            // remounting the parked tree leaves it bound to the torn-down surface
+            // (black screen). A fresh session = clean React context + a fresh render
+            // onto a new surface — the same path openProject uses for the project.
+            rebuildLauncherSession()
+        }
         activePane = ActivePane.LAUNCHER
         launcherBackBlockedUntilMs = SystemClock.uptimeMillis() + 1200L
-        // Do NOT reload app.js here: the launcher session survives the project
-        // (deactivated, not destroyed), so its React tree + module state are
-        // intact. Re-evaluating the bundle into the live context creates a
-        // second React instance and the next render dies with
-        // "useMemoCache of null" (two ReactSharedInternals, one reconciler).
         mountPane(ActivePane.LAUNCHER, launcherHost, launcherSession)
         launcherHost.post {
             launcherHost.syncSurfacesToCurrentLayout()
             launcherSession.host.renderScheduler.requestFrame()
-            if (hadProject) destroyProjectSession()
         }
     }
 
@@ -163,12 +169,19 @@ class DevLauncherActivity : AppCompatActivity() {
             stopProjectDebugTools()
             projectSession?.nativeBlurTextInput()
             unmountCurrentPane()
-            destroyProjectSession()
+        } else {
+            // Stop the launcher render thread and release the GPU lease before
+            // EngineRuntime::create — creating a project instance while the launcher
+            // is still rendering races the JS pump (SIGSEGV / black screen).
+            parkLauncherPane()
         }
+        destroyProjectSession()
 
         projectUrl = normalized
-        val session = ensureProjectSession()
-        ensureProjectHost(session)
+        val session = RayactEngineSession.create(filesDir.absolutePath)
+            ?: throw IllegalStateException("Failed to create Rayact project session")
+        projectSession = session
+        projectHost = createHost(session)
 
         Thread {
             val result = traceSection("bundle.fetch") {
@@ -237,7 +250,10 @@ class DevLauncherActivity : AppCompatActivity() {
     }
 
     private fun switchToProjectPane(session: RayactEngineSession) {
-        val launcherWasMounted = launcherHost.parent === root
+        // Drop the launcher view + GPU lease before the project host is added.
+        // addView can synchronously run surfaceCreated; acquireGraphics() after
+        // that would CloseWindow() under the new surface (black project pane).
+        parkLauncherPane()
         activePane = ActivePane.PROJECT
         val host = projectHost ?: return
         mountPane(ActivePane.PROJECT, host, session)
@@ -245,28 +261,16 @@ class DevLauncherActivity : AppCompatActivity() {
             host.syncSurfacesToCurrentLayout()
             session.host.renderScheduler.traceNextFrame("project.first.frame")
             session.host.renderScheduler.requestFrame()
-            if (launcherWasMounted) {
-                host.postDelayed({
-                    if (activePane == ActivePane.PROJECT && launcherHost.parent === root) {
-                        root.removeView(launcherHost)
-                        launcherSession.releaseGraphics()
-                    }
-                }, 120L)
-            }
         }
     }
 
-    private fun ensureProjectSession(): RayactEngineSession {
-        projectSession?.let { return it }
-        val session = RayactEngineSession.create(filesDir.absolutePath)
-            ?: throw IllegalStateException("Failed to create Rayact project session")
-        projectSession = session
-        return session
-    }
-
-    private fun ensureProjectHost(session: RayactEngineSession) {
-        if (projectHost != null) return
-        projectHost = createHost(session)
+    private fun parkLauncherPane() {
+        if (!::launcherSession.isInitialized) return
+        launcherSession.nativeBlurTextInput()
+        if (::launcherHost.isInitialized && launcherHost.parent === root) {
+            root.removeView(launcherHost)
+        }
+        if (launcherSession.isAlive()) launcherSession.releaseGraphics()
     }
 
     private fun createHost(session: RayactEngineSession): NavigationHost {
@@ -275,7 +279,31 @@ class DevLauncherActivity : AppCompatActivity() {
         return host
     }
 
+    /**
+     * Tear down the parked launcher runtime and stand up a clean one (new QuickJS
+     * context + new host/surface), then load the launcher bundle into it. Used on
+     * back-to-launcher: re-evaluating app.js into the old context double-inits React
+     * (useMemoCache-of-null crash) and reusing the parked tree renders nothing onto
+     * the recreated surface (black screen). Mirrors onCreate's create→host→loadJs.
+     */
+    private fun rebuildLauncherSession() {
+        val oldSession = launcherSession
+        val oldHost = if (::launcherHost.isInitialized) launcherHost else null
+        if (oldHost?.parent === root) root.removeView(oldHost)
+        DevClientBridge.detach(this, oldSession)
+        if (oldSession.isAlive()) oldSession.releaseGraphics()
+        oldSession.destroy()
+
+        val session = RayactEngineSession.create(filesDir.absolutePath)
+            ?: throw IllegalStateException("Failed to recreate Rayact launcher session")
+        launcherSession = session
+        launcherHost = createHost(session)
+        DevClientBridge.init(this, session)
+        loadLauncherJs()
+    }
+
     private fun mountPane(pane: ActivePane, host: NavigationHost, session: RayactEngineSession) {
+        session.acquireGraphics()
         if (host.parent === root) {
             host.bringToFront()
         } else if (host.parent != null) {
@@ -290,7 +318,6 @@ class DevLauncherActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             ))
         }
-        session.acquireGraphics()
         DevClientBridge.attach(this, session)
         if (pane == ActivePane.PROJECT) {
             startProjectDebugTools(session, host)
@@ -351,6 +378,18 @@ class DevLauncherActivity : AppCompatActivity() {
         }
         if (now < launcherBackBlockedUntilMs) return true
 
+        // Standalone apps run the user's bundle in the LAUNCHER pane (loadLauncherJs
+        // loads assets/app.js). Hardware back must reach JS (BackHandler /
+        // react-navigation) — the native drain finishes the Activity only when JS
+        // returns "not handled". The dev-client launcher (project list) has no back
+        // stack, so it keeps the exit-immediately behavior below.
+        if (!BuildConfig.RAYACT_DEV_CLIENT && ::launcherSession.isInitialized) {
+            launcherBackBlockedUntilMs = now + 600L
+            launcherSession.nativeOnBackPressed()
+            launcherSession.host.renderScheduler.requestFrame()
+            return true
+        }
+
         backCallback.isEnabled = false
         onBackPressedDispatcher.onBackPressed()
         backCallback.isEnabled = true
@@ -368,6 +407,14 @@ class DevLauncherActivity : AppCompatActivity() {
     }
 
     private fun loadLauncherJs() {
+        // Standalone/release bundles ship as bytecode (app.qjsbc); prefer it so a
+        // stale app.js from an earlier dev-client build can never shadow the
+        // user's release bundle. Fall back to app.js (dev-client / --no-bytecode).
+        val bytecode = runCatching { assets.open("app.qjsbc").use { it.readBytes() } }.getOrNull()
+        if (bytecode != null && bytecode.isNotEmpty()) {
+            launcherSession.loadBytecode(bytecode)
+            return
+        }
         val src = runCatching { assets.open("app.js").bufferedReader().use { it.readText() } }.getOrNull()
         if (src != null) launcherSession.loadDevClient(src)
     }

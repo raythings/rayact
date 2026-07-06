@@ -26,7 +26,8 @@
       "properties": {
         "host": { "type": "string" },
         "port": { "type": "integer" },
-        "cdpPort": { "type": "integer" }
+        "cdpPort": { "type": "integer" },
+        "strictPort": { "type": "boolean", "description": "Fail if devServer.port is already in use instead of picking the next free port." }
       }
     },
     "android": {

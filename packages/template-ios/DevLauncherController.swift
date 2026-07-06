@@ -104,20 +104,22 @@ final class DevLauncherController: UIViewController {
     private func showLauncher() {
         projectLoadGeneration += 1
         let hadProject = activePane == .project
+        stopProjectDebugTools()
         if hadProject {
-            stopProjectDebugTools()
             projectSession?.nativeBlurTextInput()
             unmountCurrentPane()
         }
+        destroyProjectSession()
+        if hadProject {
+            rebuildLauncherSession()
+        }
         activePane = .launcher
         launcherBackBlockedUntil = uptimeMs() + 1200
-        if hadProject { loadLauncherJs() }
         mountPane(.launcher, host: launcherHost, session: launcherSession)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.launcherHost.syncSurfacesToCurrentLayout()
             self.launcherSession.host.renderScheduler.requestFrame()
-            if hadProject { self.destroyProjectSession() }
         }
     }
 
@@ -132,12 +134,19 @@ final class DevLauncherController: UIViewController {
             stopProjectDebugTools()
             projectSession?.nativeBlurTextInput()
             unmountCurrentPane()
-            destroyProjectSession()
+        } else {
+            parkLauncherPane()
         }
+        destroyProjectSession()
 
         projectUrl = normalized
-        let session = ensureProjectSession()
-        ensureProjectHost(session: session)
+        let dataPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.path
+        guard let session = RayactEngineSession.create(dataPath: dataPath) else {
+            fatalError("Failed to create Rayact project session")
+        }
+        projectSession = session
+        let host = createHost(session: session)
+        projectHost = host
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
@@ -204,7 +213,7 @@ final class DevLauncherController: UIViewController {
     }
 
     private func switchToProjectPane(session: RayactEngineSession) {
-        let launcherWasMounted = launcherHost.superview === rootContainer
+        parkLauncherPane()
         activePane = .project
         guard let host = projectHost else { return }
         mountPane(.project, host: host, session: session)
@@ -213,30 +222,17 @@ final class DevLauncherController: UIViewController {
             host.syncSurfacesToCurrentLayout()
             session.host.renderScheduler.traceNextFrame("project.first.frame")
             session.host.renderScheduler.requestFrame()
-            if launcherWasMounted {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    if self.activePane == .project, self.launcherHost.superview === self.rootContainer {
-                        self.launcherHost.removeFromSuperview()
-                        self.launcherSession.releaseGraphics()
-                    }
-                }
-            }
         }
     }
 
-    private func ensureProjectSession() -> RayactEngineSession {
-        if let projectSession { return projectSession }
-        let dataPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.path
-        guard let session = RayactEngineSession.create(dataPath: dataPath) else {
-            fatalError("Failed to create Rayact project session")
+    private func parkLauncherPane() {
+        launcherSession?.nativeBlurTextInput()
+        if launcherHost.superview === rootContainer {
+            launcherHost.removeFromSuperview()
         }
-        projectSession = session
-        return session
-    }
-
-    private func ensureProjectHost(session: RayactEngineSession) {
-        guard projectHost == nil else { return }
-        projectHost = createHost(session: session)
+        if launcherSession.isAlive() {
+            launcherSession.releaseGraphics()
+        }
     }
 
     private func createHost(session: RayactEngineSession) -> NavigationHost {
@@ -245,7 +241,28 @@ final class DevLauncherController: UIViewController {
         return host
     }
 
+    private func rebuildLauncherSession() {
+        let oldSession = launcherSession!
+        let oldHost = launcherHost!
+        if oldHost.superview === rootContainer {
+            oldHost.removeFromSuperview()
+        }
+        DevClientBridge.detach(self, session: oldSession)
+        if oldSession.isAlive() { oldSession.releaseGraphics() }
+        oldSession.destroy()
+
+        let dataPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.path
+        guard let session = RayactEngineSession.create(dataPath: dataPath) else {
+            fatalError("Failed to recreate Rayact launcher session")
+        }
+        launcherSession = session
+        launcherHost = createHost(session: session)
+        DevClientBridge.initBridge(launcher: session)
+        loadLauncherJs()
+    }
+
     private func mountPane(_ pane: ActivePane, host: NavigationHost, session: RayactEngineSession) {
+        session.acquireGraphics()
         if host.superview === rootContainer {
             rootContainer.bringSubviewToFront(host)
         } else if host.superview != nil {
@@ -268,7 +285,6 @@ final class DevLauncherController: UIViewController {
                 host.bottomAnchor.constraint(equalTo: rootContainer.bottomAnchor),
             ])
         }
-        session.acquireGraphics()
         DevClientBridge.attach(self, session: session)
         if pane == .project {
             startProjectDebugTools(session: session, host: host)
@@ -361,6 +377,11 @@ final class DevLauncherController: UIViewController {
     }
 
     private func loadLauncherJs() {
+        if let url = Bundle.main.url(forResource: "app", withExtension: "qjsbc"),
+           let data = try? Data(contentsOf: url), !data.isEmpty {
+            launcherSession.loadBytecode(data)
+            return
+        }
         guard let url = Bundle.main.url(forResource: "app", withExtension: "js"),
               let src = try? String(contentsOf: url, encoding: .utf8) else { return }
         launcherSession.loadDevClient(src)

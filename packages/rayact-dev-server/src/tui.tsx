@@ -18,6 +18,8 @@ export interface ParsedArgs {
   command: string;
   host: string;
   port: number;
+  strictPort: boolean;
+  strictWebPort: boolean;
   entry: string;
   platform: string;
   webPort: number;
@@ -87,10 +89,11 @@ async function closeDevSession(): Promise<void> {
 async function maybeStartWebBridge(
   server: RayactDevServer,
   platform: string,
-  webPort?: number
+  webPort?: number,
+  strictWebPort?: boolean
 ): Promise<WebDevBridge | null> {
   if (platform !== 'web') return null;
-  const bridge = await startWebDevBridge(server.localUrl, { port: webPort });
+  const bridge = await startWebDevBridge(server.localUrl, { port: webPort, strictPort: strictWebPort });
   activeWebBridge = bridge;
   return bridge;
 }
@@ -152,7 +155,7 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
         setStatus(`Server ready at ${started.url}`);
         if (args.platform === 'web') {
           try {
-            const bridge = await maybeStartWebBridge(started, args.platform, args.webPort);
+            const bridge = await maybeStartWebBridge(started, args.platform, args.webPort, args.strictWebPort);
             if (bridge) {
               setWebOpenUrl(bridge.openUrl);
               setStatus(`Web ready — open ${bridge.openUrl}`);
@@ -288,7 +291,7 @@ export function startDevTui(args: ParsedArgs): void {
       .then(async started => {
         activeServer = started;
         if (args.platform === 'web') {
-          await maybeStartWebBridge(started, args.platform, args.webPort);
+          await maybeStartWebBridge(started, args.platform, args.webPort, args.strictWebPort);
         }
         printLogHeader(started);
         if (args.android) {

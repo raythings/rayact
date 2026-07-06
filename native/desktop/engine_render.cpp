@@ -193,8 +193,9 @@ float getRenderScaleDpi() {
         dp = std::max(dp, (float)renderW / (float)screenW);
     }
     raym3::v2::Density::SetPlatformDensity(dp);
-#if defined(RAYACT_ANDROID)
-    // Layout density is owned by setRaym3AndroidDensity (390dp-normalized policy).
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
+    // Layout density is owned by setRaym3AndroidDensity / setRaym3Density
+    // (390dp-normalized policy). Do not clobber it with the render DPI ratio.
     if (raym3::v2::Density::GetLayoutDensity() <= 0.0f)
         raym3::v2::Density::SetLayoutDensity(dp);
 #else

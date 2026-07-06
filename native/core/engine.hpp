@@ -56,6 +56,10 @@ void enginePrepareJSThread();
 // sheet (needs GL) and run a GC pass. Also brings up raym3 + system appearance.
 void engineFinishLoad();
 
+// Re-apply icon font prefix + raym3 name registration after GPU icon/font caches
+// were torn down while the QuickJS context (globalThis.Icons) is still alive.
+void engineResyncMaterialIcons();
+
 // Per-tick work, split so a host can drive them from its own loop:
 //   - enginePumpJS(): drain QJS jobs/timers/rAF, workers, net, dev-server poll,
 //     and invoke the JS frame-update callback.

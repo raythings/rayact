@@ -31,7 +31,7 @@ adb install -r "$APK" | tail -1 | tee "$OUT/install.log"
 
 adb logcat -c
 adb shell am force-stop com.rayact.app
-adb shell am start -n com.rayact.app/.MainActivity | tee "$OUT/launch.log"
+adb shell am start -n com.rayact.app/.DevLauncherActivity | tee "$OUT/launch.log"
 sleep 4
 
 adb logcat -d -s raylib:I RayactJNI:I JS:I AndroidRuntime:E >"$OUT/logcat.txt"

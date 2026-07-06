@@ -25,6 +25,8 @@ export interface CliFlags {
   devClient: boolean;
   production: boolean;
   force: boolean;
+  strictPort: boolean;
+  strictWebPort: boolean;
   template: string;
   help: boolean;
   version: boolean;
@@ -56,6 +58,8 @@ export function parseCli(argv: string[]): CliFlags {
     devClient: false,
     production: false,
     force: false,
+    strictPort: config.devServer?.strictPort ?? false,
+    strictWebPort: false,
     template: 'default',
     help: false,
     version: false,
@@ -118,7 +122,8 @@ export function parseCli(argv: string[]): CliFlags {
     else if (arg === '--desktop') flags.desktopApp = true;
     else if (arg === '--dev-client') flags.devClient = true;
     else if (arg === '--production') flags.production = true;
-    else if (arg === '--force') flags.force = true;
+    else if (arg === '--strict-port') flags.strictPort = true;
+    else if (arg === '--strict-web-port') flags.strictWebPort = true;
     else if (arg === '--dev') flags.dev = true;
     else if (arg === '--debug') flags.debug = true;
     else if (arg === '--release') { flags.debug = false; flags.mode = 'release'; }
@@ -145,6 +150,8 @@ export function toDevServerArgs(flags: CliFlags) {
     command: flags.command,
     host: flags.host,
     port: flags.port,
+    strictPort: flags.strictPort,
+    strictWebPort: flags.strictWebPort,
     webPort: flags.webPort,
     entry: flags.entry,
     platform: flags.platform,

@@ -155,6 +155,7 @@
 		6FDAD799251285017952CD73 /* ios_engine_instance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EE0F30DA7DE7D611C4DB1AD6 /* ios_engine_instance.cpp */; };
 		7029EBECF7F9F588A3C51073 /* LayoutNode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B76037309E6EA19C79832353 /* LayoutNode.cpp */; };
 		708E61F339EB260E7C79BE4E /* raym3_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4509BE0DB4D7D7B1ED6BEAF8 /* raym3_bridge.cpp */; };
+		719B8E7B6EEDB018C618759B /* TextLineBreak.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 818812982FA7A044805E44EA /* TextLineBreak.cpp */; };
 		719DC52B8B5913ECE2471DEE /* Mutations.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8567FB0243169DBFCDEEE936 /* Mutations.cpp */; };
 		72781B9A46EB548F276EC7CB /* mmkv_plugin.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5978B0F37C9B424062E35D9D /* mmkv_plugin.cpp */; };
 		72D223B8411CBD028D9474EF /* RenderContext.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5CB06F040A4CC6DF6B4A9B82 /* RenderContext.cpp */; };
@@ -198,6 +199,7 @@
 		944FD0C549D5A987A55307A9 /* raym3_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4509BE0DB4D7D7B1ED6BEAF8 /* raym3_bridge.cpp */; };
 		9668C4FFE59AD49E5B81CF68 /* FlexLine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 32646D3D3C2A74F0CC05ACB2 /* FlexLine.cpp */; };
 		96962E57BF045D889E3AAEDA /* platform_ios.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 161ECA68BB5DDAA75415F0FD /* platform_ios.cpp */; };
+		97D7BDA97AFDAB330C925D76 /* TextAnalysis.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9534335DFD81470DF8CB49F1 /* TextAnalysis.cpp */; };
 		9809CFEAE52F6F62ED35559A /* TextSelectionOverlay.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6492F076A3C93508C738F9B5 /* TextSelectionOverlay.cpp */; };
 		98EE116EDE894DBB7F9EB2BB /* Checkbox.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2D844D815300F23880FBE1FA /* Checkbox.cpp */; };
 		9956E022EFEBDBB93D612A96 /* utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D64CE86C42AA969248D4F78D /* utils.cpp */; };
@@ -242,6 +244,7 @@
 		B7C4A8713642E5B49364B07B /* secure_store_plugin.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4AE641ED164D08DAC13A924E /* secure_store_plugin.cpp */; };
 		B81F127C71B41115425C7181 /* TextField.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F5B08C908128E9379859CC94 /* TextField.cpp */; };
 		B870195D94778C6A4768EFD9 /* SystemAppearance.mm in Sources */ = {isa = PBXBuildFile; fileRef = 78460481074191BFF35CD1D8 /* SystemAppearance.mm */; };
+		B9BAD944CAED4AD97C43D833 /* TextAnalysis.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9534335DFD81470DF8CB49F1 /* TextAnalysis.cpp */; };
 		BA0B8531C69D7AF1CA02DDEE /* CSSParser.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E69B05E520CE0BDC11E5E814 /* CSSParser.cpp */; };
 		BBCB45FC01672B409B0D6C3E /* mmkv_plugin.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5978B0F37C9B424062E35D9D /* mmkv_plugin.cpp */; };
 		BC2B53799DE98B6E7ED6CD29 /* TextEngine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8D9B685A8DE5801F02A3EDAC /* TextEngine.cpp */; };
@@ -268,6 +271,7 @@
 		C9222DAE034A596EFB57946A /* EmojiRasterizerApple.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4FAAD9A25EC18CD490DB9A8F /* EmojiRasterizerApple.mm */; };
 		C933B8705F043DEFC2B1DD98 /* rlmt.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5174C51F9A1A937C22FFAC48 /* rlmt.mm */; };
 		CB11E83D4066E9A2F9A2201E /* gesture_recognizer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 125987C1814763C5DD732C3C /* gesture_recognizer.cpp */; };
+		CC54AAEF37DD23D2B3BFA469 /* TextLineBreak.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 818812982FA7A044805E44EA /* TextLineBreak.cpp */; };
 		CC8A0AF0CD9C8EF514002A60 /* TextInput.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C8D38712A957FD5697015BC3 /* TextInput.cpp */; };
 		CCA044874CC03B7682C22636 /* worklet_runtime.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 70D8D848C09D583397C08FB7 /* worklet_runtime.cpp */; };
 		CDE0442F103EDA1E5682F73B /* data_dir.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9089E6D8BE1FFB1B63D3F8FE /* data_dir.cpp */; };
@@ -464,6 +468,7 @@
 		7ECC0C8C334F47DFAA15AD64 /* engine_render.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = engine_render.cpp; sourceTree = "<group>"; };
 		7EF55FEDBEA80C6B265D79FA /* Errata.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Errata.h; sourceTree = "<group>"; };
 		7FD1DD1B2EFB3C83A0CC0A37 /* SmallValueBuffer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SmallValueBuffer.h; sourceTree = "<group>"; };
+		818812982FA7A044805E44EA /* TextLineBreak.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TextLineBreak.cpp; sourceTree = "<group>"; };
 		81E31863B107845C0A8FE311 /* CSSDeNest.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CSSDeNest.cpp; sourceTree = "<group>"; };
 		831D0F39EBE86FFE17FFF5B0 /* module_bus.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = module_bus.cpp; sourceTree = "<group>"; };
 		8567FB0243169DBFCDEEE936 /* Mutations.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Mutations.cpp; sourceTree = "<group>"; };
@@ -484,6 +489,7 @@
 		93579AB401D469E9F819C2C4 /* worker_js.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = worker_js.hpp; sourceTree = "<group>"; };
 		945608FA4A82183CFC3A9FC3 /* main_impl.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = main_impl.hpp; sourceTree = "<group>"; };
 		949583301663294BB1A006AD /* CalculateLayout.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CalculateLayout.h; sourceTree = "<group>"; };
+		9534335DFD81470DF8CB49F1 /* TextAnalysis.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TextAnalysis.cpp; sourceTree = "<group>"; };
 		959C077460A1797D73B425EC /* ProgressIndicator.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ProgressIndicator.cpp; sourceTree = "<group>"; };
 		95C388D3F8DF8DDF20C7E7FC /* ExperimentalFeature.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ExperimentalFeature.h; sourceTree = "<group>"; };
 		96196FB533595CED1263FDFB /* RayactScreenViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactScreenViewController.swift; sourceTree = "<group>"; };
@@ -817,8 +823,10 @@
 				1F6AAFA3FCBAA3AF64FF07A9 /* Renderer.cpp */,
 				BF2DA98AEDA8C4CD32294A86 /* Ripple.cpp */,
 				8E5AB9052D5A582E28D603A6 /* Style.cpp */,
+				9534335DFD81470DF8CB49F1 /* TextAnalysis.cpp */,
 				8D9B685A8DE5801F02A3EDAC /* TextEngine.cpp */,
 				C8D38712A957FD5697015BC3 /* TextInput.cpp */,
+				818812982FA7A044805E44EA /* TextLineBreak.cpp */,
 				394F9D7799DD790573E5CC67 /* TextMeasureCache.cpp */,
 				6492F076A3C93508C738F9B5 /* TextSelectionOverlay.cpp */,
 				31F943538A558EB7C99C35BD /* Transitions.cpp */,
@@ -1418,9 +1426,11 @@
 				ADFBA51BFE00F4CE13FFE980 /* SystemAppearance.mm in Sources */,
 				4E36514D213619DE8BEAF32C /* TabBar.cpp in Sources */,
 				D0588FD07A9B4997E5DF02E9 /* Text.cpp in Sources */,
+				97D7BDA97AFDAB330C925D76 /* TextAnalysis.cpp in Sources */,
 				BC2B53799DE98B6E7ED6CD29 /* TextEngine.cpp in Sources */,
 				B81F127C71B41115425C7181 /* TextField.cpp in Sources */,
 				CC8A0AF0CD9C8EF514002A60 /* TextInput.cpp in Sources */,
+				CC54AAEF37DD23D2B3BFA469 /* TextLineBreak.cpp in Sources */,
 				0AB7F22628B85249C014E248 /* TextMeasureCache.cpp in Sources */,
 				426928DE67400FF16038961C /* TextSelectionOverlay.cpp in Sources */,
 				A4A54E28B804963EA472EFB7 /* Theme.cpp in Sources */,
@@ -1572,9 +1582,11 @@
 				B870195D94778C6A4768EFD9 /* SystemAppearance.mm in Sources */,
 				1760B07EFF2949AE3570F480 /* TabBar.cpp in Sources */,
 				D7E59D744503CCF444433CB1 /* Text.cpp in Sources */,
+				B9BAD944CAED4AD97C43D833 /* TextAnalysis.cpp in Sources */,
 				83FE650F9EF5F6D54EFCF4DD /* TextEngine.cpp in Sources */,
 				59FC97BC9909E7A140D78F7E /* TextField.cpp in Sources */,
 				7CFCE5EE5674039E9577DBEB /* TextInput.cpp in Sources */,
+				719B8E7B6EEDB018C618759B /* TextLineBreak.cpp in Sources */,
 				B48F30E27484F3A8BE4BEE7B /* TextMeasureCache.cpp in Sources */,
 				9809CFEAE52F6F62ED35559A /* TextSelectionOverlay.cpp in Sources */,
 				1811375977EEC31A60F856DC /* Theme.cpp in Sources */,

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import { listenWithFallback } from './listen.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -31,6 +32,7 @@ export interface CoepStaticServerOptions {
   dir: string;
   port?: number;
   host?: string;
+  strictPort?: boolean;
 }
 
 function resolveStaticFile(root: string, urlPath: string): string | null {
@@ -44,9 +46,9 @@ function resolveStaticFile(root: string, urlPath: string): string | null {
   return filePath;
 }
 
-export function startCoepStaticServer(opts: CoepStaticServerOptions): Promise<CoepServerHandle> {
+export async function startCoepStaticServer(opts: CoepStaticServerOptions): Promise<CoepServerHandle> {
   const host = opts.host ?? '127.0.0.1';
-  const port = opts.port ?? DEFAULT_WEB_ENGINE_PORT;
+  const requestedPort = opts.port ?? DEFAULT_WEB_ENGINE_PORT;
   const root = path.resolve(opts.dir);
 
   const server = http.createServer((req, res) => {
@@ -68,20 +70,16 @@ export function startCoepStaticServer(opts: CoepStaticServerOptions): Promise<Co
     });
   });
 
-  return new Promise((resolve, reject) => {
-    server.on('error', reject);
-    server.listen(port, host, () => {
-      const addr = server.address();
-      const actualPort = typeof addr === 'object' && addr ? addr.port : port;
-      const url = `http://${host}:${actualPort}`;
-      console.log(`COEP server: ${url} serving ${root}`);
-      resolve({
-        url,
-        port: actualPort,
-        close: () => new Promise((res, rej) => server.close((err) => (err ? rej(err) : res())))
-      });
-    });
+  const actualPort = await listenWithFallback(server, host, requestedPort, {
+    strictPort: opts.strictPort
   });
+  const url = `http://${host}:${actualPort}`;
+  console.log(`COEP server: ${url} serving ${root}`);
+  return {
+    url,
+    port: actualPort,
+    close: () => new Promise((res, rej) => server.close((err) => (err ? rej(err) : res())))
+  };
 }
 
 export interface CoepDevProxyOptions {
@@ -89,6 +87,7 @@ export interface CoepDevProxyOptions {
   devOrigin: string;
   port?: number;
   host?: string;
+  strictPort?: boolean;
 }
 
 function hostVariants(devOrigin: string): Set<string> {
@@ -154,12 +153,12 @@ async function proxyToDev(
   }
 }
 
-export function startCoepDevProxy(opts: CoepDevProxyOptions): Promise<CoepServerHandle> {
+export async function startCoepDevProxy(opts: CoepDevProxyOptions): Promise<CoepServerHandle> {
   const host = opts.host ?? '127.0.0.1';
-  const port = opts.port ?? DEFAULT_WEB_ENGINE_PORT;
+  const requestedPort = opts.port ?? DEFAULT_WEB_ENGINE_PORT;
   const engineDir = path.resolve(opts.engineDir);
   const devOrigin = opts.devOrigin.replace(/\/$/, '');
-  let selfOrigin = `http://${host}:${port}`;
+  let selfOrigin = `http://${host}:${requestedPort}`;
 
   const server = http.createServer((req, res) => {
     const urlPath = req.url ?? '/';
@@ -185,20 +184,16 @@ export function startCoepDevProxy(opts: CoepDevProxyOptions): Promise<CoepServer
     });
   });
 
-  return new Promise((resolve, reject) => {
-    server.on('error', reject);
-    server.listen(port, host, () => {
-      const addr = server.address();
-      const actualPort = typeof addr === 'object' && addr ? addr.port : port;
-      selfOrigin = `http://${host}:${actualPort}`;
-      console.log(`proxy+coep server: ${selfOrigin} (engine=${engineDir}, /rayact/* -> ${devOrigin})`);
-      resolve({
-        url: selfOrigin,
-        port: actualPort,
-        close: () => new Promise((res, rej) => server.close((err) => (err ? rej(err) : res())))
-      });
-    });
+  const actualPort = await listenWithFallback(server, host, requestedPort, {
+    strictPort: opts.strictPort
   });
+  selfOrigin = `http://${host}:${actualPort}`;
+  console.log(`proxy+coep server: ${selfOrigin} (engine=${engineDir}, /rayact/* -> ${devOrigin})`);
+  return {
+    url: selfOrigin,
+    port: actualPort,
+    close: () => new Promise((res, rej) => server.close((err) => (err ? rej(err) : res())))
+  };
 }
 
 export function webDevOpenUrl(proxyUrl: string, devOrigin: string): string {
