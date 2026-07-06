@@ -186,20 +186,24 @@ void main() {
 }
 #endif
 float getRenderScaleDpi() {
-    float dp = GetWindowScaleDPI().x;
+    const float platformDp = GetWindowScaleDPI().x;
     int screenW = GetScreenWidth();
     int renderW = GetRenderWidth();
+    float layoutDp = platformDp;
     if (screenW > 0 && renderW > 0) {
-        dp = std::max(dp, (float)renderW / (float)screenW);
+        // Layout must follow the actual framebuffer/logical ratio. On macOS the
+        // content scale can be 2.0 while the drawable is 1:1 with logical
+        // window size — using max(scale, ratio) double-scales components.
+        layoutDp = (float)renderW / (float)screenW;
     }
-    raym3::v2::Density::SetPlatformDensity(dp);
+    raym3::v2::Density::SetPlatformDensity(platformDp);
 #if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
     // Layout density is owned by setRaym3AndroidDensity / setRaym3Density
     // (390dp-normalized policy). Do not clobber it with the render DPI ratio.
     if (raym3::v2::Density::GetLayoutDensity() <= 0.0f)
-        raym3::v2::Density::SetLayoutDensity(dp);
+        raym3::v2::Density::SetLayoutDensity(layoutDp);
 #else
-    raym3::v2::Density::SetLayoutDensity(dp);
+    raym3::v2::Density::SetLayoutDensity(layoutDp);
 #endif
     return raym3::v2::Density::GetLayoutDensity();
 }
