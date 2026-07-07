@@ -7,8 +7,8 @@ function App() {
 
   return (
     <View style={{
-      flexGrow: 1,
-      backgroundColor: 0xFF1A237EFF,
+      flex: 1,
+      backgroundColor: 0x1A237EFF,
       padding: 48,
       gap: 20,
       alignItems: 'center',
@@ -17,11 +17,11 @@ function App() {
       <Text style={{ text: { color: 0xFFFFFFFF, fontSize: 28 } }}>
         runtime-app HMR confirmed
       </Text>
-      <Text style={{ text: { color: 0xFF90CAF9FF, fontSize: 16 } }}>
+      <Text style={{ text: { color: 0x90CAF9FF, fontSize: 16 } }}>
         {`Platform: ${Platform.OS} · Taps: ${count}`}
       </Text>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Icon name="alarm" size={32} color={0xFFFFF176FF} />
+        <Icon name="alarm" size={32} color={0xFFF176FF} />
         <Text style={{ text: { color: 0xFFFFFFFF, fontSize: 28 } }}>
           Web icons + emoji ✅ 🚀
         </Text>

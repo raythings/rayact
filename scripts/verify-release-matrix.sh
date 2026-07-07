@@ -98,7 +98,7 @@ log "=== consumer smoke install ==="
 (
   cd "$SMOKE"
   rm -rf node_modules package-lock.json
-  npm install --no-workspaces --no-audit --no-fund --omit=optional --ignore-scripts >"$OUT/smoke-install.log" 2>&1
+  npm install --no-workspaces --no-audit --no-fund --ignore-scripts >"$OUT/smoke-install.log" 2>&1
 ) && pass "consumer npm install" || fail "consumer npm install"
 
 log "=== CLI prebuild ==="

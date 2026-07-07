@@ -258,11 +258,14 @@ function vendorSharePlugin(): Plugin {
       const realId = JSON.stringify(resolved.id);
       return [
         `import * as __ns from ${realId};`,
-        `const __g = (globalThis.__RAYACT_VENDOR__ = globalThis.__RAYACT_VENDOR__ || {});`,
-        `const __pick = (__ns.default && __ns.default.${spec.probe}) ? __ns.default : __ns;`,
-        `const __mod = __g[${JSON.stringify(spec.key)}] || (__g[${JSON.stringify(spec.key)}] = __pick);`,
+        // Rollup can create CommonJS interop reads of this virtual namespace before
+        // the module body runs. Use var exports so those early namespace reads see
+        // undefined instead of throwing a TDZ ReferenceError.
+        `var __g = (globalThis.__RAYACT_VENDOR__ = globalThis.__RAYACT_VENDOR__ || {});`,
+        `var __pick = (__ns.default && __ns.default.${spec.probe}) ? __ns.default : __ns;`,
+        `var __mod = __g[${JSON.stringify(spec.key)}] || (__g[${JSON.stringify(spec.key)}] = __pick);`,
         `export default __mod;`,
-        ...spec.exports.map(name => `export const ${name} = __mod[${JSON.stringify(name)}];`)
+        ...spec.exports.map(name => `export var ${name} = __mod[${JSON.stringify(name)}];`)
       ].join('\n');
     }
   };
@@ -318,9 +321,29 @@ function resolveRayactPackage(root: string, pkg: string, srcRel: string): string
 }
 
 function rayactResolveAliases(root: string): { find: RegExp; replacement: string }[] {
-  return RAYACT_PKG_ALIASES.flatMap(({ find, pkg, src }) => {
+  return [
+    ...reactResolveAliases(root),
+    ...RAYACT_PKG_ALIASES.flatMap(({ find, pkg, src }) => {
+      try {
+        return [{ find, replacement: resolveRayactPackage(root, pkg, src) }];
+      } catch {
+        return [];
+      }
+    })
+  ];
+}
+
+function reactResolveAliases(root: string): { find: RegExp; replacement: string }[] {
+  const projectRoot = path.resolve(root);
+  const req = createRequire(path.join(projectRoot, 'package.json'));
+  const specs = [
+    { find: /^react$/, spec: 'react' },
+    { find: /^react\/jsx-runtime$/, spec: 'react/jsx-runtime' },
+    { find: /^react\/jsx-dev-runtime$/, spec: 'react/jsx-dev-runtime' }
+  ];
+  return specs.flatMap(({ find, spec }) => {
     try {
-      return [{ find, replacement: resolveRayactPackage(root, pkg, src) }];
+      return [{ find, replacement: normalizePath(req.resolve(spec)) }];
     } catch {
       return [];
     }
@@ -578,7 +601,7 @@ export function createRayactViteConfig(options: BundleOptions, input = ENTRY_ID)
       alias: [{ find: /^nanoid\/non-secure$/, replacement: 'nanoid' }]
     },
     plugins: [
-      vendorSharePlugin(),
+      ...(mode === 'release' ? [] : [vendorSharePlugin()]),
       rayactVitePlugin({ ...options, root, mode }, registry),
       nodeCryptoShimPlugin(),
       reactNativeShimPlugin(),
