@@ -14,9 +14,9 @@
     "test": "tsc && node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@rayact/dev-server": "github:raythings/rayact-dev-server#v0.0.1",
-    "@rayact/prebuild": "github:raythings/rayact-prebuild#v0.0.1",
-    "create-rayact-app": "github:raythings/create-rayact-app#v0.0.1"
+    "@rayact/dev-server": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-server-0.0.1.tgz",
+    "@rayact/prebuild": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-prebuild-0.0.1.tgz",
+    "create-rayact-app": "https://github.com/raythings/rayact/releases/download/v0.0.1/create-rayact-app-0.0.1.tgz"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",

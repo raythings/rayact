@@ -4,10 +4,10 @@
 # apps/android/app/src/main/assets/app.js, rebuilds the APK, installs on the
 # connected device, and launches the app.
 #
-# Default entry is apps/desktop/hello.tsx — same as run.sh on desktop.
+# Default entry is the canonical runtime smoke app (same as verify scripts).
 set -e
 
-FILE="${1:-apps/desktop/hello.tsx}"
+FILE="${1:-test-projects/release-consumer-smoke/src/App.tsx}"
 BUNDLE_DIR="/tmp/rayact_android_bundle"
 ASSETS_DIR="apps/android/app/src/main/assets"
 APK="apps/android/app/build/outputs/apk/debug/app-debug.apk"

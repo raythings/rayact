@@ -7,9 +7,11 @@
   "scripts": {
     "dev": "rayact dev",
     "dev:web": "rayact dev --web",
-    "dev-app:android": "rayact dev-app --android",
-    "dev-app:ios": "rayact dev-app --ios-simulator",
+    "android": "rayact dev-app --android",
+    "ios": "rayact dev-app --ios-simulator",
     "prebuild": "rayact prebuild",
+    "android:dev-client": "rayact build --debug --android --install",
+    "ios:dev-client": "rayact build --debug --ios --install",
     "build": "rayact build --release",
     "build:desktop": "rayact build --release --desktop",
     "build:web": "rayact build --web",
@@ -22,16 +24,12 @@
     "start:dev": "rayact start --dev"
   },
   "dependencies": {
-    "@rayact/react": "file:../../release1/rayact-react-0.0.1.tgz",
-    "@rayact/runtime": "file:../../release1/rayact-runtime-0.0.1.tgz",
+    "rayact": "file:../../release1/rayact-0.0.1.tgz",
     "react": "^19.0.0"
   },
   "devDependencies": {
-    "@rayact/cli": "file:../../release1/rayact-cli-0.0.1.tgz",
-    "@rayact/dev-server": "file:../../release1/rayact-dev-server-0.0.1.tgz",
+    "@types/node": "^25.0.0",
     "@types/react": "^19.0.0",
-    "@vitejs/plugin-react": "^5.1.1",
-    "react-refresh": "^0.18.0",
     "typescript": "^5.8.3",
     "vite": "^7.2.6"
   },

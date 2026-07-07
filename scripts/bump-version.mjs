@@ -35,7 +35,11 @@ const edit = (rel, fn) => {
 };
 
 const isInternal = (k) => k.startsWith('@rayact/') || k === 'create-rayact-app' || k === 'rayact';
-const bumpRange = (v) => v.replace(/^(\^|~)?\d+\.\d+\.\d+$/, (_, pre) => (pre || '') + version);
+const bumpRange = (v) => v
+  .replace(/^(\^|~)?\d+\.\d+\.\d+$/, (_, pre) => (pre || '') + version)
+  .replace(/#v\d+\.\d+\.\d+$/, `#v${version}`)
+  .replace(/\/download\/v\d+\.\d+\.\d+\//, `/download/v${version}/`)
+  .replace(/-\d+\.\d+\.\d+\.tgz$/, `-${version}.tgz`);
 
 // All package.json: version + internal dep ranges.
 for (const f of execSync('find packages apps test-projects package.json -name package.json -maxdepth 3', { cwd: ROOT, encoding: 'utf8' }).trim().split('\n')) {

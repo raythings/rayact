@@ -30,17 +30,17 @@
     "url": "https://github.com/raythings/rayact-dev-app/issues"
   },
   "dependencies": {
-    "@rayact/react": "github:raythings/rayact-react#v0.0.1",
-    "@rayact/runtime": "github:raythings/rayact-runtime#v0.0.1",
-    "@rayact/shared": "github:raythings/rayact-shared#v0.0.1",
-    "@rayact/dev-client": "github:raythings/rayact-dev-client#v0.0.1",
-    "@rayact/mmkv": "github:raythings/rayact-mmkv#v0.0.1",
-    "@rayact/secure-store": "github:raythings/rayact-secure-store#v0.0.1",
+    "@rayact/react": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-react-0.0.1.tgz",
+    "@rayact/runtime": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-runtime-0.0.1.tgz",
+    "@rayact/shared": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-shared-0.0.1.tgz",
+    "@rayact/dev-client": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-client-0.0.1.tgz",
+    "@rayact/mmkv": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-mmkv-0.0.1.tgz",
+    "@rayact/secure-store": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-secure-store-0.0.1.tgz",
     "react": "^19.0.0"
   },
   "devDependencies": {
-    "@rayact/cli": "github:raythings/rayact-cli#v0.0.1",
-    "@rayact/dev-server": "github:raythings/rayact-dev-server#v0.0.1",
+    "@rayact/cli": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-cli-0.0.1.tgz",
+    "@rayact/dev-server": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-server-0.0.1.tgz",
     "@types/react": "^19.0.0",
     "typescript": "^5.8.3"
   }

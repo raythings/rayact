@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, render } from '@rayact/react';
+import { View, Text, render } from 'rayact/react';
 
 function App() {
   return (

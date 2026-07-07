@@ -207,6 +207,10 @@ targets:
           if [ -f "${APPJS}" ]; then
             cp "${APPJS}" "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/app.js"
           fi
+          APPQJSBC="${SRCROOT}/../../apps/android/app/src/main/assets/app.qjsbc"
+          if [ -f "${APPQJSBC}" ]; then
+            cp "${APPQJSBC}" "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/app.qjsbc"
+          fi
 
   RayactEngineStatic:
     type: library.static

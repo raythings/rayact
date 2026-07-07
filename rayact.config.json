@@ -6,7 +6,7 @@
     "port": 8081,
     "cdpPort": 9229
   },
-  "entry": "apps/desktop/src/App.tsx",
+  "entry": "test-projects/release-consumer-smoke/src/App.tsx",
   "platform": "desktop",
   "android": {
     "package": "com.rayact.app"

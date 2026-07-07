@@ -34,9 +34,9 @@ npm run build:desktop
 ## Install from the launch release
 
 ```bash
-npx github:raythings/rayact-dev-app#v0.0.1 install --platform android
-npx github:raythings/rayact-dev-app#v0.0.1 install --platform ios-simulator
-npx github:raythings/rayact-dev-app#v0.0.1 install --platform ios-device
+npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform android
+npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform ios-simulator
+npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform ios-device
 ```
 
 The installer defaults to release assets from `raythings/rayact`. Override with

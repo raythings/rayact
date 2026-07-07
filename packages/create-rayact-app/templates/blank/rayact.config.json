@@ -1,5 +1,4 @@
 {
-  "$schema": "./node_modules/@rayact/dev-server/schema/rayact.config.schema.json",
   "rayactAppKey": "__APP_KEY__",
   "devServer": {
     "host": "0.0.0.0",

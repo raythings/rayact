@@ -3,8 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Version range scaffolded (non-monorepo) apps pin @rayact/* dependencies to.
- * Bumped in lockstep with the published package versions — keep this the single
+ * Version range scaffolded (non-monorepo) apps pin rayact to.
+ * Bumped in lockstep with the published package version — keep this the single
  * source of truth so a release bump is a one-line change here.
  */
 const RAYACT_VERSION = '0.0.1';
@@ -43,16 +43,25 @@ function depBlock(
     const pkg = (name: string) => `file:${rel}/packages/${name}`;
     return {
       dependencies: {
+        rayact: `file:${rel}`,
+        '@rayact/cli': pkg('rayact-cli'),
+        '@rayact/crypto': pkg('rayact-crypto'),
+        '@rayact/dev-client': pkg('rayact-dev-client'),
+        '@rayact/dev-server': pkg('rayact-dev-server'),
+        '@rayact/mmkv': pkg('rayact-mmkv'),
+        '@rayact/navigation': pkg('rayact-navigation'),
+        '@rayact/prebuild': pkg('rayact-prebuild'),
         '@rayact/react': pkg('rayact-react'),
         '@rayact/runtime': pkg('rayact-runtime'),
+        '@rayact/secure-store': pkg('rayact-secure-store'),
+        '@rayact/shared': pkg('rayact-shared'),
+        '@rayact/types': pkg('rayact-types'),
+        '@rayact/worklets': pkg('rayact-worklets'),
         react: '^19.0.0'
       },
       devDependencies: {
-        '@rayact/cli': pkg('rayact-cli'),
-        '@rayact/dev-server': pkg('rayact-dev-server'),
+        '@types/node': '^25.0.0',
         '@types/react': '^19.0.0',
-        '@vitejs/plugin-react': '^5.1.1',
-        'react-refresh': '^0.18.0',
         typescript: '^5.8.3',
         vite: '^7.2.6'
       }
@@ -61,16 +70,12 @@ function depBlock(
   const gh = (repo: string) => `github:raythings/${repo}#v${RAYACT_VERSION}`;
   return {
     dependencies: {
-      '@rayact/react': gh('rayact-react'),
-      '@rayact/runtime': gh('rayact-runtime'),
+      rayact: gh('rayact'),
       react: '^19.0.0'
     },
     devDependencies: {
-      '@rayact/cli': gh('rayact-cli'),
-      '@rayact/dev-server': gh('rayact-dev-server'),
+      '@types/node': '^25.0.0',
       '@types/react': '^19.0.0',
-      '@vitejs/plugin-react': '^5.1.1',
-      'react-refresh': '^0.18.0',
       typescript: '^5.8.3',
       vite: '^7.2.6'
     }
@@ -148,18 +153,17 @@ export function createRayactApp(options: CreateOptions): void {
     description: 'Rayact app',
     scripts: {
       dev: 'rayact dev',
-      // Expo Go path: install + launch the prebuilt dev app on a device/simulator.
-      'dev-app:android': 'rayact dev-app --android',
-      'dev-app:ios': 'rayact dev-app --ios-simulator',
-      // expo-dev-client path: scaffold native shells once, then build your own dev client.
+      android: 'rayact dev-app --android',
+      ios: 'rayact dev-app --ios-simulator',
       prebuild: 'rayact prebuild',
-      'dev-client:android': 'rayact build --debug --android --install',
-      'dev-client:ios': 'rayact build --debug --ios --install',
+      'android:dev-client': 'rayact build --debug --android --install',
+      'ios:dev-client': 'rayact build --debug --ios --install',
       build: 'rayact build --release',
       'build:desktop': 'rayact build --release --desktop',
       'build:android': 'rayact build --release --android',
       'build:android:install': 'rayact build --release --android --install',
-      'build:debug': 'vite build',
+      'build:ios': 'rayact build --release --ios',
+      'build:web': 'rayact build --release --web --no-bytecode',
       start: 'rayact start',
       'start:dev': 'rayact start --dev'
     },

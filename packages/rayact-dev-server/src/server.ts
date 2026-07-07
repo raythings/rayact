@@ -93,7 +93,7 @@ function normalizeOptions(options: RayactDevServerOptions): Required<RayactDevSe
     host: options.host ?? config.devServer?.host ?? '0.0.0.0',
     port: options.port ?? config.devServer?.port ?? 8081,
     strictPort: options.strictPort ?? config.devServer?.strictPort ?? false,
-    entry: options.entry ?? config.entry ?? 'apps/desktop/src/App.tsx',
+    entry: options.entry ?? config.entry ?? 'test-projects/release-consumer-smoke/src/App.tsx',
     platform: options.platform ?? config.platform ?? 'desktop',
     rayactAppKey: options.rayactAppKey ?? config.rayactAppKey ?? 'rayact-app',
     cdpPort: options.cdpPort ?? config.devServer?.cdpPort ?? 9229,

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, Button, render } from '@rayact/react';
-import { Platform } from '@rayact/shared';
+import { View, Text, Button, render } from 'rayact/react';
+import { Platform } from 'rayact/shared';
 
 function App() {
   const [count, setCount] = useState(0);

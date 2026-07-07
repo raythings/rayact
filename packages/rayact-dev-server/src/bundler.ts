@@ -64,13 +64,19 @@ export interface RayactBuildOutput {
   entry: string;
   platform: string;
   mode: RayactBuildMode;
-  compiler: 'react-compiler';
+  compiler: RayactCompiler;
   binaryCommands: boolean;
 }
 
+export type RayactCompiler = 'react-compiler' | 'none';
 export const RAYACT_REACT_COMPILER = 'react-compiler' as const;
+export const RAYACT_NO_COMPILER = 'none' as const;
 export const RAYACT_BINARY_COMMANDS = true;
 const reactCompilerBabelPlugin = ['babel-plugin-react-compiler', { target: '19' }] as const;
+
+function compilerForMode(mode: RayactBuildMode): RayactCompiler {
+  return mode === 'release' ? RAYACT_NO_COMPILER : RAYACT_REACT_COMPILER;
+}
 
 function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
@@ -270,6 +276,16 @@ const ENTRY_ID = RAYACT_ENTRY_ID;
 const DEV_CLIENT_ENTRY_ID = 'virtual:rayact-dev-client-entry';
 
 const RAYACT_PKG_ALIASES: { find: RegExp; pkg: string; src: string }[] = [
+  { find: /^rayact\/react$/, pkg: '@rayact/react', src: 'src/index.ts' },
+  { find: /^rayact\/runtime$/, pkg: '@rayact/runtime', src: 'src/index.ts' },
+  { find: /^rayact\/shared$/, pkg: '@rayact/shared', src: 'src/index.ts' },
+  { find: /^rayact\/shared\/material-icons$/, pkg: '@rayact/shared', src: 'src/material_icons.js' },
+  { find: /^rayact\/navigation$/, pkg: '@rayact/navigation', src: 'src/index.tsx' },
+  { find: /^rayact\/navigation\/native$/, pkg: '@rayact/navigation', src: 'src/native.tsx' },
+  { find: /^rayact\/navigation\/stack$/, pkg: '@rayact/navigation', src: 'src/stack.tsx' },
+  { find: /^rayact\/navigation\/bottom-tabs$/, pkg: '@rayact/navigation', src: 'src/bottom-tabs.tsx' },
+  { find: /^rayact\/crypto$/, pkg: '@rayact/crypto', src: 'src/index.ts' },
+  { find: /^rayact\/dev-client$/, pkg: '@rayact/dev-client', src: 'src/index.ts' },
   { find: /^@rayact\/react$/, pkg: '@rayact/react', src: 'src/index.ts' },
   { find: /^@rayact\/runtime$/, pkg: '@rayact/runtime', src: 'src/index.ts' },
   { find: /^@rayact\/shared$/, pkg: '@rayact/shared', src: 'src/index.ts' },
@@ -551,6 +567,7 @@ export function createRayactViteConfig(options: BundleOptions, input = ENTRY_ID)
   const mode = options.mode ?? 'development';
   const root = path.resolve(options.root);
   const isDev = mode === 'development';
+  const compiler = compilerForMode(mode);
   const minify = shouldMinify(options);
   const registry = new AssetRegistry(root);
 
@@ -561,7 +578,7 @@ export function createRayactViteConfig(options: BundleOptions, input = ENTRY_ID)
       alias: [{ find: /^nanoid\/non-secure$/, replacement: 'nanoid' }]
     },
     plugins: [
-      ...(isDev ? [vendorSharePlugin()] : []),
+      vendorSharePlugin(),
       rayactVitePlugin({ ...options, root, mode }, registry),
       nodeCryptoShimPlugin(),
       reactNativeShimPlugin(),
@@ -569,11 +586,10 @@ export function createRayactViteConfig(options: BundleOptions, input = ENTRY_ID)
       react({
         babel: {
           plugins: [
-            // React Compiler — auto-memoizes components + JSX so unchanged
-            // subtrees skip re-render/reconciliation (the dominant update cost in
-            // QuickJS). Must run first; target 19 uses React 19's built-in
-            // compiler runtime (react/compiler-runtime).
-            reactCompilerBabelPlugin,
+            // Release bundles currently run before the standalone native renderer
+            // has a compiler dispatcher installed, so keep compiler transforms to
+            // dev/dev-client paths until the runtime supports them everywhere.
+            ...(compiler === RAYACT_REACT_COMPILER ? [reactCompilerBabelPlugin] : []),
             ...(isDev ? [['react-refresh/babel', { skipEnvCheck: true }]] : [])
           ]
         }
@@ -686,6 +702,7 @@ export async function buildRayactBundle(options: BundleOptions): Promise<RayactB
   const root = path.resolve(options.root);
   const registry = new AssetRegistry(root);
   const input = mode === 'dev-client' ? DEV_CLIENT_ENTRY_ID : ENTRY_ID;
+  const compiler = compilerForMode(mode);
   const code = await runViteBuild({ ...options, root, mode }, registry, input);
 
   const useBytecode = options.bytecode ?? (mode === 'release');
@@ -706,7 +723,7 @@ export async function buildRayactBundle(options: BundleOptions): Promise<RayactB
     entry: normalizePath(path.relative(root, path.resolve(root, options.entry))),
     platform: options.platform,
     mode,
-    compiler: RAYACT_REACT_COMPILER,
+    compiler,
     binaryCommands: RAYACT_BINARY_COMMANDS
   };
 }
