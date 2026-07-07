@@ -56,6 +56,14 @@ function npmPack(dir) {
 const assets = [];
 const add = (ok, name) => { if (ok) assets.push(name); };
 
+{
+  const before = new Set(fs.readdirSync(OUT));
+  npmPack(ROOT);
+  for (const file of fs.readdirSync(OUT)) {
+    if (!before.has(file) && file.endsWith('.tgz')) assets.push(file);
+  }
+}
+
 for (const pkg of fs.readdirSync(path.join(ROOT, 'packages'))) {
   const dir = path.join(ROOT, 'packages', pkg);
   if (!fs.existsSync(path.join(dir, 'package.json'))) continue;

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, Button, Icon, render } from '@rayact/react';
-import { Platform } from '@rayact/shared';
+import { View, Text, Button, Icon, render } from 'rayact/react';
+import { Platform } from 'rayact/shared';
 
 function App() {
   const [count, setCount] = useState(0);
@@ -15,7 +15,7 @@ function App() {
       justifyContent: 'center'
     }}>
       <Text style={{ text: { color: 0xFFFFFFFF, fontSize: 28 } }}>
-        release-consumer-smoke
+        runtime-app HMR confirmed
       </Text>
       <Text style={{ text: { color: 0xFF90CAF9FF, fontSize: 16 } }}>
         {`Platform: ${Platform.OS} · Taps: ${count}`}
@@ -33,7 +33,7 @@ function App() {
 
 const host = globalThis as { initRaylib?: (w: number, h: number, t: string) => void };
 if (typeof host.initRaylib === 'function') {
-  host.initRaylib(800, 600, 'release-consumer-smoke');
+  host.initRaylib(800, 600, 'runtime-app');
 }
 
 render(<App />);

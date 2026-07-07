@@ -75,10 +75,8 @@ console.log(`\n✓ Created Rayact app at ${targetDir}`);
 
 if (install) {
   console.log('\nInstalling dependencies...');
-  // No --ignore-scripts here: the @rayact/* packages install from git and are
-  // built by their `prepare` scripts — skipping scripts ships them without
-  // dist/ ("rayact: command not found"). Also drop any npm_config_* the outer
-  // npx/npm run injected, so this install behaves like a plain `npm install`.
+  // Drop any npm_config_* the outer npx/npm run injected, so this install
+  // behaves like a plain `npm install` in the new app.
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([k]) => !/^npm_config_/i.test(k))
   ) as NodeJS.ProcessEnv;
@@ -98,13 +96,13 @@ Next steps:
   npm run dev                # start the dev server (QR + hot reload)
 
 On a phone or simulator (prebuilt dev app, Expo Go style):
-  npm run dev-app:android    # install + launch on a USB-connected Android device
-  npm run dev-app:ios        # install + launch on the iOS simulator
+  npm run android            # install + launch on a USB-connected Android device
+  npm run ios                # install + launch on the iOS simulator
 
 Build your own dev client (expo-dev-client style):
   npm run prebuild           # scaffold android/ + ios/ shells (engine stays prebuilt)
-  npm run dev-client:android # build + install your custom dev client
+  npm run android:dev-client # build + install your custom dev client
 
 On desktop:
-  rayact start --dev         # native window connected to the dev server
+  npm run start:dev          # native window connected to the dev server
 `);

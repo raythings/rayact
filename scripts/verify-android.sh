@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=verify-common.sh
+source "$ROOT/scripts/verify-common.sh"
 OUT="$ROOT/.rayact/verify/$(date +%Y%m%d-%H%M%S)/android"
 mkdir -p "$OUT"
 
@@ -18,9 +20,10 @@ fi
 
 echo "[verify-android] building dev-server + release bundle..."
 npm run build:dev-server >/dev/null 2>&1 || npm run build:dev-server
-node packages/rayact-dev-server/dist/cli.js build --mode release --entry apps/desktop/src/App.tsx --out /tmp/rayact_verify_bundle 2>"$OUT/build.log"
+node packages/rayact-dev-server/dist/cli.js build --mode release --entry "$VERIFY_APP_ENTRY" --out /tmp/rayact_verify_bundle 2>"$OUT/build.log"
 
 mkdir -p apps/android/app/src/main/assets
+cp /tmp/rayact_verify_bundle/bundle.qjsbc apps/android/app/src/main/assets/app.qjsbc
 cp /tmp/rayact_verify_bundle/bundle.js apps/android/app/src/main/assets/app.js
 
 echo "[verify-android] gradle assembleDebug..."

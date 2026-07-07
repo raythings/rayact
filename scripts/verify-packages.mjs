@@ -8,10 +8,13 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const pkgDirs = fs
+const pkgDirs = [
+  ROOT,
+  ...fs
   .readdirSync(path.join(ROOT, 'packages'))
   .map((d) => path.join(ROOT, 'packages', d))
-  .filter((d) => fs.existsSync(path.join(d, 'package.json')));
+  .filter((d) => fs.existsSync(path.join(d, 'package.json')))
+];
 
 // Files that must never appear in any published tarball. tsconfig is only a leak
 // at the package root — scaffold templates (create-rayact-app) ship one on purpose.

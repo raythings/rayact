@@ -3,7 +3,7 @@
 ## Create a new app
 
 ```bash
-npx github:raythings/create-rayact-app#v0.0.1 my-app
+npx github:raythings/rayact#v0.0.1 init my-app
 cd my-app && npm install
 npm run dev
 ```

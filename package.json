@@ -2,11 +2,93 @@
   "name": "rayact",
   "version": "0.0.1",
   "description": "Cross-platform React renderer with raylib backend",
-  "private": true,
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "bin": {
+    "rayact": "./bin/rayact.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./react": {
+      "types": "./react.d.ts",
+      "default": "./react.js"
+    },
+    "./runtime": {
+      "types": "./runtime.d.ts",
+      "default": "./runtime.js"
+    },
+    "./shared": {
+      "types": "./shared.d.ts",
+      "default": "./shared.js"
+    },
+    "./shared/material-icons": {
+      "types": "./shared-material-icons.d.ts",
+      "default": "./shared-material-icons.js"
+    },
+    "./navigation": {
+      "types": "./navigation.d.ts",
+      "default": "./navigation.js"
+    },
+    "./navigation/native": {
+      "types": "./navigation-native.d.ts",
+      "default": "./navigation-native.js"
+    },
+    "./navigation/stack": {
+      "types": "./navigation-stack.d.ts",
+      "default": "./navigation-stack.js"
+    },
+    "./navigation/bottom-tabs": {
+      "types": "./navigation-bottom-tabs.d.ts",
+      "default": "./navigation-bottom-tabs.js"
+    },
+    "./dev-server": {
+      "types": "./dev-server.d.ts",
+      "default": "./dev-server.js"
+    },
+    "./prebuild": {
+      "types": "./prebuild.d.ts",
+      "default": "./prebuild.js"
+    },
+    "./cli": {
+      "types": "./cli.d.ts",
+      "default": "./cli.js"
+    },
+    "./dev-client": {
+      "types": "./dev-client.d.ts",
+      "default": "./dev-client.js"
+    },
+    "./crypto": {
+      "types": "./crypto.d.ts",
+      "default": "./crypto.js"
+    },
+    "./mmkv": {
+      "types": "./mmkv.d.ts",
+      "default": "./mmkv.js"
+    },
+    "./secure-store": {
+      "types": "./secure-store.d.ts",
+      "default": "./secure-store.js"
+    },
+    "./worklets": {
+      "types": "./worklets.d.ts",
+      "default": "./worklets.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "*.js",
+    "*.d.ts",
+    "README.md",
+    "package.json"
+  ],
   "scripts": {
-    "dev": "npm run rayact -- dev --host 0.0.0.0 --port 8081 --entry apps/desktop/src/App.tsx",
+    "dev": "npm run rayact -- dev --host 0.0.0.0 --port 8081 --entry test-projects/release-consumer-smoke/src/App.tsx",
     "rayact": "node packages/rayact-cli/dist/cli.js",
-    "dev:desktop": "cd apps/desktop && npm run dev",
     "dev:android": "cd apps/android && ./gradlew --warning-mode all",
     "dev:web": "cd apps/web && npm run dev",
     "build": "npm run build:shared && npm run build:runtime && npm run build:react && npm run build:dev-client && npm run build:dev-server && npm run build:prebuild && npm run build:cli && npm run build:core && npm run build:quickjs && npm run build:renderer",
@@ -17,6 +99,7 @@
     "verify:release": "bash scripts/verify-release-matrix.sh",
     "serve:release": "node scripts/serve-release-assets.mjs",
     "pack:release": "node scripts/pack-release-assets.mjs",
+    "release:replace": "node scripts/replace-github-release.mjs",
     "sync:split-repos": "node scripts/sync-split-repos.mjs",
     "publish:split-repos": "node scripts/publish-split-repos.mjs",
     "test:packages": "npm test -w @rayact/prebuild -w @rayact/dev-server -w @rayact/cli",
@@ -66,10 +149,28 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@rayact/cli": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-cli-0.0.1.tgz",
+    "@rayact/crypto": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-crypto-0.0.1.tgz",
+    "@rayact/dev-client": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-client-0.0.1.tgz",
+    "@rayact/dev-server": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-server-0.0.1.tgz",
+    "@rayact/mmkv": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-mmkv-0.0.1.tgz",
+    "@rayact/navigation": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-navigation-0.0.1.tgz",
+    "@rayact/prebuild": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-prebuild-0.0.1.tgz",
+    "@rayact/react": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-react-0.0.1.tgz",
+    "@rayact/runtime": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-runtime-0.0.1.tgz",
+    "@rayact/secure-store": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-secure-store-0.0.1.tgz",
+    "@rayact/shared": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-shared-0.0.1.tgz",
+    "@rayact/types": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-types-0.0.1.tgz",
+    "@rayact/worklets": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-worklets-0.0.1.tgz",
     "@types/react": "^19.2.16",
     "@types/react-reconciler": "^0.31.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-reconciler": "^0.31.0"
+  },
+  "optionalDependencies": {
+    "@rayact/prebuilt-darwin-arm64": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-prebuilt-darwin-arm64-0.0.1.tgz",
+    "@rayact/prebuilt-darwin-x64": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-prebuilt-darwin-x64-0.0.1.tgz",
+    "@rayact/prebuilt-linux-x64": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-prebuilt-linux-x64-0.0.1.tgz"
   }
 }

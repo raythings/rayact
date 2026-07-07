@@ -1,6 +1,6 @@
 #!/bin/bash
 # Usage: ./run.sh [file.jsx|file.tsx|file.ts|file.js]
-FILE="${1:-apps/desktop/App.jsx}"
+FILE="${1:-test-projects/release-consumer-smoke/src/App.tsx}"
 EXT="${FILE##*.}"
 BINARY="./build/bin/rayact_desktop"
 RAYM3_BUILD="../raym3/build-v2-yoga2"

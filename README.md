@@ -2,18 +2,18 @@
 
 Rayact is a cross-platform React renderer with a native raylib/raym3 + QuickJS backend. It runs React apps on desktop, Android, iOS, and the web without a DOM or platform WebView.
 
-`v0.0.1` is distributed through GitHub package refs and GitHub Release assets. npm publishing is planned, but not required for the current launch.
+`v0.0.1` is distributed through the `raythings/rayact` GitHub repo and GitHub Release assets. npm publishing is planned, but not required for the current launch.
 
 ## Install
 
 ```bash
-npx github:raythings/create-rayact-app#v0.0.1 my-app
+npx github:raythings/rayact#v0.0.1 init my-app
 cd my-app
 npm install
 npm run dev
 ```
 
-The generated app uses GitHub refs for Rayact packages until npm packages are published. Native hosts and mobile/web artifacts are resolved from the [`v0.0.1` GitHub release](https://github.com/raythings/rayact/releases/tag/v0.0.1).
+The generated app installs one framework dependency, `rayact`. Internal JS packages, native hosts, mobile/web artifacts, templates, and dev-app binaries are resolved from the [`v0.0.1` GitHub release](https://github.com/raythings/rayact/releases/tag/v0.0.1).
 
 ## What Works Today
 
@@ -31,27 +31,29 @@ The generated app uses GitHub refs for Rayact packages until npm packages are pu
 Rayact includes a first-party dev workflow:
 
 - `rayact dev` starts the Vite-powered dev server, HMR, debugger transport, inspector transport, mDNS discovery, and QR payloads.
-- `@rayact/dev-client` provides the in-app launcher used by custom debug clients.
-- `@rayact/dev-app` is the prebuilt first-party dev app for running project bundles without rebuilding native code.
+- `rayact/dev-client` provides the in-app launcher used by custom debug clients.
+- the prebuilt first-party dev app runs project bundles without rebuilding native code.
 - Release builds can emit QuickJS bytecode and package runtime assets for native hosts.
 
-Install the prebuilt dev app from the launch release:
+Install and launch the prebuilt dev app from a generated app:
 
 ```bash
-npx github:raythings/rayact-dev-app#v0.0.1 install --platform android
-npx github:raythings/rayact-dev-app#v0.0.1 install --platform ios-simulator
+npm run android
+npm run ios
 ```
 
 ## Common Commands
 
 ```bash
 npm run dev                         # start the dev server
-rayact run --desktop                # build + launch desktop
-rayact run --android                # build + install + launch Android
-rayact build --release              # desktop release
-rayact build --release --android    # Android release APK
-rayact build --release --ios        # iOS release app
-rayact build --web --no-bytecode    # web bundle + host assembly
+npm run android                     # launch prebuilt Android dev app
+npm run ios                         # launch prebuilt iOS simulator dev app
+npm run prebuild                    # scaffold native shells linked to prebuilts
+npm run android:dev-client          # build + install custom Android debug client
+npm run build:desktop               # desktop release
+npm run build:android               # Android release APK
+npm run build:ios                   # iOS release app
+npm run build:web                   # web bundle + host assembly
 ```
 
 Maintainer verification commands:
@@ -64,9 +66,9 @@ node scripts/verify-packages.mjs
 node scripts/bump-version.mjs --check
 ```
 
-## Packages
+## Distribution
 
-Rayact is split into small packages:
+Apps depend on `rayact`. The monorepo still builds smaller internal packages so release assets can be cached and version-gated independently:
 
 - `@rayact/cli` — `rayact` command for dev, build, run, prebuild, dev-app, and verify flows.
 - `@rayact/dev-server` — Vite bundler, dev server, config loader, schema, HMR/debugger/inspector transports.

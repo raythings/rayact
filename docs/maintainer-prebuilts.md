@@ -74,15 +74,15 @@ Install with Xcode Devices, `ios-deploy`, or Apple Configurator.
 ### Install via npm script
 
 ```bash
-npx github:raythings/rayact-dev-app#v0.0.1 install --platform android
-npx github:raythings/rayact-dev-app#v0.0.1 install --platform ios-device
-npx github:raythings/rayact-dev-app#v0.0.1 install --platform ios-simulator
+npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform android
+npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform ios-device
+npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform ios-simulator
 ```
 
 For the `v0.0.1` GitHub-only launch, verify the install path with:
 
 ```bash
-npx github:raythings/rayact-dev-app#v0.0.1 install --platform android
+npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform android
 ```
 
 ## Web artifacts

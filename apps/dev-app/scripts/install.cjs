@@ -2,9 +2,9 @@
 /**
  * Install the prebuilt Rayact Dev App from GitHub Releases (sideload).
  *
- *   npx github:raythings/rayact-dev-app#v0.0.1 install --platform android
- *   npx github:raythings/rayact-dev-app#v0.0.1 install --platform ios-device
- *   npx github:raythings/rayact-dev-app#v0.0.1 install --platform ios-simulator
+ *   npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform android
+ *   npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform ios-device
+ *   npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform ios-simulator
  */
 const { spawnSync } = require('child_process');
 const fs = require('fs');

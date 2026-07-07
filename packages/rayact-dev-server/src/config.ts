@@ -80,7 +80,7 @@ export const TRANSFORM_DEFAULTS: Record<'dev' | 'debug' | 'release', boolean> = 
 const DEFAULT_CONFIG: RayactConfig = {
   rayactAppKey: 'rayact-app',
   devServer: { host: '0.0.0.0', port: 8081, cdpPort: 9229 },
-  entry: 'apps/desktop/src/App.tsx',
+  entry: 'test-projects/release-consumer-smoke/src/App.tsx',
   platform: 'desktop'
 };
 
