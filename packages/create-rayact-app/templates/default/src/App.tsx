@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, Button, render } from 'rayact/react';
 import { Platform } from 'rayact/shared';
 
+const isDesktop = Platform.OS === 'macos' || Platform.OS === 'windows' || Platform.OS === 'linux';
+const metrics = isDesktop
+  ? { padding: 28, gap: 14, titleSize: 22, detailSize: 14 }
+  : { padding: 48, gap: 20, titleSize: 28, detailSize: 16 };
+
 function App() {
   const [count, setCount] = useState(0);
 
@@ -9,15 +14,15 @@ function App() {
     <View style={{
       flex: 1,
       backgroundColor: 0x1A237EFF,
-      padding: 48,
-      gap: 20,
+      padding: metrics.padding,
+      gap: metrics.gap,
       alignItems: 'center',
       justifyContent: 'center'
     }}>
-      <Text style={{ text: { color: 0xFFFFFFFF, fontSize: 28 } }}>
+      <Text style={{ text: { color: 0xFFFFFFFF, fontSize: metrics.titleSize } }}>
         __PROJECT_NAME__
       </Text>
-      <Text style={{ text: { color: 0x90CAF9FF, fontSize: 16 } }}>
+      <Text style={{ text: { color: 0x90CAF9FF, fontSize: metrics.detailSize } }}>
         {`Platform: ${Platform.OS} · Taps: ${count}`}
       </Text>
       <Button label="Tap me" onPress={() => setCount(c => c + 1)} />
