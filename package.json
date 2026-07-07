@@ -104,7 +104,7 @@
     "publish:split-repos": "node scripts/publish-split-repos.mjs",
     "test:packages": "npm test -w @rayact/prebuild -w @rayact/dev-server -w @rayact/cli",
     "test:native": "npm run test:desktop-smoke",
-    "test:desktop-smoke": "npm run test:desktop --workspace=rayact-desktop-smoke",
+    "test:desktop-smoke": "cd test-projects/desktop-smoke && npm run test:desktop",
     "build:core": "cd packages/rayact-core && npm run build",
     "build:runtime": "cd packages/rayact-runtime && npm run build",
     "build:react": "cd packages/rayact-react && npm run build",
@@ -126,8 +126,7 @@
   },
   "workspaces": [
     "packages/*",
-    "apps/*",
-    "test-projects/*"
+    "apps/*"
   ],
   "devDependencies": {
     "babel-plugin-react-compiler": "^1.0.0",
