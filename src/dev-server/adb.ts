@@ -25,6 +25,12 @@ export function adbInstall(apkPath: string): boolean {
   return runAdb(['install', '-r', apkPath]);
 }
 
-export function adbLaunch(packageName: string, activity: string): boolean {
-  return runAdb(['shell', 'am', 'start', '-n', `${packageName}/${activity}`]);
+export function adbLaunch(
+  packageName: string,
+  activity: string,
+  extras: Record<string, string> = {}
+): boolean {
+  const args = ['shell', 'am', 'start', '-n', `${packageName}/${activity}`];
+  for (const [key, value] of Object.entries(extras)) args.push('--es', key, value);
+  return runAdb(args);
 }

@@ -1714,7 +1714,7 @@
 				);
 				OTHER_CFLAGS = "$(inherited) -D_GNU_SOURCE";
 				OTHER_LDFLAGS = "$(inherited) -framework Metal -framework QuartzCore -framework UIKit -framework CoreFoundation -framework Security";
-				PRODUCT_BUNDLE_IDENTIFIER = com.rayact.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rayact.app;
 				PRODUCT_NAME = Rayact;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
@@ -1886,7 +1886,7 @@
 				);
 				OTHER_CFLAGS = "$(inherited) -D_GNU_SOURCE";
 				OTHER_LDFLAGS = "$(inherited) -framework Metal -framework QuartzCore -framework UIKit -framework CoreFoundation -framework Security";
-				PRODUCT_BUNDLE_IDENTIFIER = com.rayact.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rayact.app;
 				PRODUCT_NAME = Rayact;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;

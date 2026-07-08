@@ -9,10 +9,13 @@ mkdir -p "$OUT"
 cd "$ROOT"
 
 echo "[verify-desktop] building dev-server..."
-npm run build:dev-server >/dev/null 2>&1 || npm run build:dev-server
+npm run build >/dev/null 2>&1 || npm run build
 
 echo "[verify-desktop] building native desktop (if cmake exists)..."
-if [ -f build/bin/rayact_desktop ]; then
+PREBUILT_BIN="packages/prebuilt-darwin-$(uname -m | sed 's/x86_64/x64/')/bin/rayact_desktop"
+if [ -x "$PREBUILT_BIN" ]; then
+  BIN="$PREBUILT_BIN"
+elif [ -f build/bin/rayact_desktop ]; then
   BIN=build/bin/rayact_desktop
 elif [ -d build ]; then
   cmake --build build --target rayact_desktop -j"$(sysctl -n hw.ncpu 2>/dev/null || echo 4)" 2>"$OUT/cmake.log" || true
@@ -23,7 +26,7 @@ else
 fi
 
 echo "[verify-desktop] release bundle..."
-node packages/rayact-dev-server/dist/cli.js build --mode release --entry "$VERIFY_APP_ENTRY" --out "$OUT/dist" 2>"$OUT/build.log" || {
+node dist/cli/cli.js build --mode release --entry "$VERIFY_APP_ENTRY" --out "$OUT/dist" 2>"$OUT/build.log" || {
   echo "FAIL: release build" | tee "$OUT/status.txt"
   exit 1
 }

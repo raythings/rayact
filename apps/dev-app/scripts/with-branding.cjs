@@ -29,9 +29,10 @@ const nativeModules = Array.isArray(config.nativeModules) ? config.nativeModules
 
 function resolveCli() {
   try {
-    return createRequire(path.join(appRoot, 'package.json')).resolve('@rayact/cli/dist/cli.js');
+    const rayactPackageJson = createRequire(path.join(appRoot, 'package.json')).resolve('rayact/package.json');
+    return path.join(path.dirname(rayactPackageJson), 'bin/rayact.js');
   } catch {
-    return path.resolve(appRoot, '../../packages/rayact-cli/dist/cli.js');
+    return path.resolve(appRoot, '../../dist/cli/cli.js');
   }
 }
 

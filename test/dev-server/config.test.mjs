@@ -11,10 +11,10 @@ import {
   validateRayactConfig,
   rayactConfigSchemaPath,
   TRANSFORM_DEFAULTS
-} from '../dist/config.js';
+} from '../../dist/dev-server/config.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(here, '../../..');
+const repoRoot = path.resolve(here, '../..');
 
 function withTempConfig(json, fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rayact-cfg-'));

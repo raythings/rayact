@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { listenWithFallback } from '../dist/listen.js';
+import { listenWithFallback } from '../../dist/dev-server/listen.js';
 
 test('listenWithFallback binds requested port when free', async () => {
   const server = http.createServer((_req, res) => {

@@ -41,8 +41,11 @@ export function parseCli(argv: string[]): CliFlags {
     port: config.devServer?.port ?? 8081,
     webPort: 8768,
     entry: config.entry ?? 'src/App.tsx',
+    // Target resolution: explicit CLI flag (--desktop/--android/--ios/--web,
+    // applied below) > legacy config.platform (deprecated, warns on load) >
+    // desktop for commands that need a single release target.
     platform: config.platform ?? 'desktop',
-    desktopBin: process.env.RAYACT_DESKTOP_BIN ?? 'build/bin/rayact_desktop',
+    desktopBin: process.env.RAYACT_DESKTOP_BIN ?? '',
     mode: 'development',
     outDir: 'dist',
     minify: null,

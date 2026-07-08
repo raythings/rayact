@@ -17,7 +17,7 @@ import {
   downloadPrebuilt,
   RAYACT_ENGINE_VERSION,
   RAYACT_MODULE_ABI_VERSION
-} from '../dist/index.js';
+} from '../../dist/prebuild/index.js';
 
 function tmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'rayact-pb-'));

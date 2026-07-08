@@ -110,7 +110,7 @@ enum DevServerLoader {
         } else {
             path = "/rayact/bundle"
         }
-        let bytes = try httpGetBytes("\(normalized)\(path)")
+        let bytes = try httpGetBytes("\(normalized)\(path)?\(platformQuery)")
         return BundlePayload(baseUrl: normalized, bundleFormat: bundleFormat, bytes: bytes, hmrMode: hmrMode)
     }
 

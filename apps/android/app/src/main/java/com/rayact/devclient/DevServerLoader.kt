@@ -126,7 +126,7 @@ object DevServerLoader {
             hmrMode == "module" -> "/rayact/bootstrap.js"
             else -> "/rayact/bundle"
         }
-        val bytes = httpGetBytes("$normalized$path")
+        val bytes = httpGetBytes("$normalized$path?$PLATFORM_QUERY")
         return BundlePayload(normalized, bundleFormat, bytes, hmrMode)
     }
 

@@ -139,7 +139,7 @@ log "=== web release build ==="
 log "=== web COEP serve smoke ==="
 (
   cd "$SMOKE"
-  node "$ROOT/packages/rayact-cli/dist/cli.js" serve dist-web-check/web --web-port 8771 >"$OUT/smoke-web-serve.log" 2>&1 &
+  node "$ROOT/dist/cli/cli.js" serve dist-web-check/web --web-port 8771 >"$OUT/smoke-web-serve.log" 2>&1 &
   SERVE_PID=$!
   sleep 1
   HDRS=$(curl -sI "http://127.0.0.1:8771/rayact.html" || true)
@@ -150,10 +150,10 @@ log "=== web COEP serve smoke ==="
 
 log "=== web COEP port fallback ==="
 (
-  node "$ROOT/packages/rayact-cli/dist/cli.js" serve dist-web-check/web --web-port 8768 >"$OUT/smoke-web-serve-block.log" 2>&1 &
+  node "$ROOT/dist/cli/cli.js" serve dist-web-check/web --web-port 8768 >"$OUT/smoke-web-serve-block.log" 2>&1 &
   BLOCK_PID=$!
   sleep 1
-  node "$ROOT/packages/rayact-cli/dist/cli.js" serve dist-web-check/web --web-port 8768 >"$OUT/smoke-web-serve-fallback.log" 2>&1 &
+  node "$ROOT/dist/cli/cli.js" serve dist-web-check/web --web-port 8768 >"$OUT/smoke-web-serve-fallback.log" 2>&1 &
   FALL_PID=$!
   sleep 1
   curl -sf "http://127.0.0.1:8769/rayact.html" -o /dev/null
@@ -163,7 +163,7 @@ log "=== web COEP port fallback ==="
 log "=== dev server manifest ==="
 (
   cd "$SMOKE"
-  node "$ROOT/packages/rayact-dev-server/dist/cli.js" build --mode development --entry src/App.tsx --out /tmp/rayact_release_smoke_bundle >"$OUT/smoke-bundle.log" 2>&1
+  node "$ROOT/dist/cli/cli.js" build --mode development --entry src/App.tsx --out /tmp/rayact_release_smoke_bundle >"$OUT/smoke-bundle.log" 2>&1
   test -s /tmp/rayact_release_smoke_bundle/bundle.js
 ) && pass "dev-server bundle" || fail "dev-server bundle"
 
