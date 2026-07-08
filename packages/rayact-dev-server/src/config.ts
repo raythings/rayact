@@ -43,6 +43,7 @@ export interface RayactConfig {
     strictPort?: boolean;
   };
   entry?: string;
+  /** @deprecated Platform is a CLI/build/dev-server target, not project identity. */
   platform?: string;
   android?: {
     package?: string;
@@ -80,8 +81,7 @@ export const TRANSFORM_DEFAULTS: Record<'dev' | 'debug' | 'release', boolean> = 
 const DEFAULT_CONFIG: RayactConfig = {
   rayactAppKey: 'rayact-app',
   devServer: { host: '0.0.0.0', port: 8081, cdpPort: 9229 },
-  entry: 'test-projects/release-consumer-smoke/src/App.tsx',
-  platform: 'desktop'
+  entry: 'test-projects/release-consumer-smoke/src/App.tsx'
 };
 
 /** Absolute path to the published JSON Schema for rayact.config.json. */
@@ -98,6 +98,11 @@ export function loadRayactConfig(root = process.cwd()): RayactConfig {
     const raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) as RayactConfig;
     for (const issue of validateRayactConfig(raw)) {
       console.warn(`rayact.config.json: ${issue}`);
+    }
+    if (raw.platform != null) {
+      console.warn(
+        'rayact.config.json: "platform" is deprecated; pass --desktop, --android, --ios, or --web instead.'
+      );
     }
     return {
       ...DEFAULT_CONFIG,

@@ -1,1 +1,1 @@
-export * from '@rayact/crypto';
+export * from './dist/crypto/index.js';

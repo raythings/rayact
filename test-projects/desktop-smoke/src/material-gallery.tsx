@@ -1,4 +1,4 @@
-import '@rayact/shared/material-icons';
+import 'rayact/shared/material-icons';
 
 import React, { useState } from 'react';
 import {
@@ -47,7 +47,7 @@ import {
   TimePicker,
   Tooltip,
   View,
-} from '@rayact/react';
+} from 'rayact/react';
 import { useGalleryMode } from './galleryMode';
 
 export function MaterialGallery() {

@@ -135,7 +135,7 @@ async function proxyToDev(
   const body = chunks.length ? Buffer.concat(chunks) : undefined;
 
   try {
-    const upstream = await fetch(`${devOrigin}${urlPath}`, {
+    const upstream = await fetch(`${devOrigin}${withWebPlatform(urlPath)}`, {
       method,
       headers: body ? { 'Content-Type': req.headers['content-type'] ?? 'application/octet-stream' } : undefined,
       body
@@ -151,6 +151,14 @@ async function proxyToDev(
     res.writeHead(502, coepHeaders());
     res.end(error instanceof Error ? error.message : String(error));
   }
+}
+
+function withWebPlatform(urlPath: string): string {
+  const url = new URL(urlPath, 'http://rayact.local');
+  if (!url.searchParams.has('platform')) {
+    url.searchParams.set('platform', 'web');
+  }
+  return `${url.pathname}${url.search}`;
 }
 
 export async function startCoepDevProxy(opts: CoepDevProxyOptions): Promise<CoepServerHandle> {
@@ -196,6 +204,7 @@ export async function startCoepDevProxy(opts: CoepDevProxyOptions): Promise<Coep
   };
 }
 
-export function webDevOpenUrl(proxyUrl: string, devOrigin: string): string {
-  return `${proxyUrl.replace(/\/$/, '')}/rayact.html?dev=${encodeURIComponent(devOrigin)}`;
+export function webDevOpenUrl(proxyUrl: string, _devOrigin: string): string {
+  const origin = proxyUrl.replace(/\/$/, '');
+  return `${origin}/rayact.html?dev=${encodeURIComponent(origin)}&platform=web`;
 }

@@ -25,7 +25,14 @@ test('build --android --install sets android + install', () => {
   const f = parseCli(['build', '--android', '--install']);
   assert.equal(f.command, 'build');
   assert.equal(f.android, true);
+  assert.equal(f.platform, 'android');
   assert.equal(f.install, true);
+});
+
+test('target flags set platform', () => {
+  assert.equal(parseCli(['dev', '--web']).platform, 'web');
+  assert.equal(parseCli(['dev', '--ios']).platform, 'ios');
+  assert.equal(parseCli(['dev', '--desktop']).platform, 'desktop');
 });
 
 test('run --android --dev keeps dev flag', () => {

@@ -40,23 +40,9 @@ function depBlock(
 } {
   if (monorepo && monorepoRoot) {
     const rel = path.relative(targetDir, monorepoRoot).replace(/\\/g, '/');
-    const pkg = (name: string) => `file:${rel}/packages/${name}`;
     return {
       dependencies: {
         rayact: `file:${rel}`,
-        '@rayact/cli': pkg('rayact-cli'),
-        '@rayact/crypto': pkg('rayact-crypto'),
-        '@rayact/dev-client': pkg('rayact-dev-client'),
-        '@rayact/dev-server': pkg('rayact-dev-server'),
-        '@rayact/mmkv': pkg('rayact-mmkv'),
-        '@rayact/navigation': pkg('rayact-navigation'),
-        '@rayact/prebuild': pkg('rayact-prebuild'),
-        '@rayact/react': pkg('rayact-react'),
-        '@rayact/runtime': pkg('rayact-runtime'),
-        '@rayact/secure-store': pkg('rayact-secure-store'),
-        '@rayact/shared': pkg('rayact-shared'),
-        '@rayact/types': pkg('rayact-types'),
-        '@rayact/worklets': pkg('rayact-worklets'),
         react: '^19.0.0'
       },
       devDependencies: {
@@ -153,8 +139,10 @@ export function createRayactApp(options: CreateOptions): void {
     description: 'Rayact app',
     scripts: {
       dev: 'rayact dev',
-      android: 'rayact dev-app --android',
-      ios: 'rayact dev-app --ios-simulator',
+      desktop: 'rayact dev --desktop',
+      android: 'rayact dev --android',
+      ios: 'rayact dev --ios',
+      web: 'rayact dev --web',
       prebuild: 'rayact prebuild',
       'android:dev-client': 'rayact build --debug --android --install',
       'ios:dev-client': 'rayact build --debug --ios --install',

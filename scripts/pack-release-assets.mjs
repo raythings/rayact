@@ -15,6 +15,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'release1');
 const VERSION = process.env.RAYACT_RELEASE_VERSION || '0.0.1';
 
+fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
 
 function run(cmd, args, opts = {}) {
@@ -57,6 +58,7 @@ const assets = [];
 const add = (ok, name) => { if (ok) assets.push(name); };
 
 {
+  run('npm', ['run', 'stage:root'], { cwd: ROOT });
   const before = new Set(fs.readdirSync(OUT));
   npmPack(ROOT);
   for (const file of fs.readdirSync(OUT)) {
@@ -64,7 +66,13 @@ const add = (ok, name) => { if (ok) assets.push(name); };
   }
 }
 
-for (const pkg of fs.readdirSync(path.join(ROOT, 'packages'))) {
+const releasePackageDirs = fs.readdirSync(path.join(ROOT, 'packages'))
+  .filter((pkg) =>
+    pkg === 'create-rayact-app' ||
+    pkg.startsWith('prebuilt-')
+  );
+
+for (const pkg of releasePackageDirs) {
   const dir = path.join(ROOT, 'packages', pkg);
   if (!fs.existsSync(path.join(dir, 'package.json'))) continue;
   const before = new Set(fs.readdirSync(OUT));

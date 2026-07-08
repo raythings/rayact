@@ -1,1 +1,1 @@
-export * from '@rayact/worklets';
+export * from './dist/worklets/index.js';

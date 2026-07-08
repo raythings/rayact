@@ -34,6 +34,27 @@ const MIME_TYPES: Record<string, string> = {
 };
 
 const ENTRY_MODULE_PATH = '/rayact/entry.js';
+const SUPPORTED_PLATFORMS = ['desktop', 'android', 'ios', 'web'] as const;
+type DevPlatform = typeof SUPPORTED_PLATFORMS[number];
+
+interface PlatformContext {
+  platform: DevPlatform;
+  bundleOptions: {
+    root: string;
+    entry: string;
+    platform: DevPlatform;
+    mode: 'development';
+    minify: boolean;
+    bytecode: false;
+  };
+  bootstrapCode: string | null;
+  bootstrapError: Error | null;
+  bootstrapInFlight: Promise<string> | null;
+  revision: number;
+  assets: RayactBuildOutput['assets'];
+  vite: ViteDevServer | null;
+  middleware: ReturnType<typeof createRayactModuleMiddleware> | null;
+}
 
 function sendJson(response: http.ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, {
@@ -86,6 +107,14 @@ function isPathInsideRoot(root: string, candidate: string): boolean {
   return resolved === base || resolved.startsWith(base + path.sep);
 }
 
+function normalizePlatform(value: string | undefined | null, fallback: DevPlatform): DevPlatform {
+  return SUPPORTED_PLATFORMS.includes(value as DevPlatform) ? value as DevPlatform : fallback;
+}
+
+function platformQuery(platform: DevPlatform): string {
+  return `platform=${encodeURIComponent(platform)}`;
+}
+
 function normalizeOptions(options: RayactDevServerOptions): Required<RayactDevServerOptions> {
   const config = loadRayactConfig(options.root ?? process.cwd());
   return {
@@ -94,7 +123,7 @@ function normalizeOptions(options: RayactDevServerOptions): Required<RayactDevSe
     port: options.port ?? config.devServer?.port ?? 8081,
     strictPort: options.strictPort ?? config.devServer?.strictPort ?? false,
     entry: options.entry ?? config.entry ?? 'test-projects/release-consumer-smoke/src/App.tsx',
-    platform: options.platform ?? config.platform ?? 'desktop',
+    platform: normalizePlatform(options.platform ?? config.platform, 'desktop'),
     rayactAppKey: options.rayactAppKey ?? config.rayactAppKey ?? 'rayact-app',
     cdpPort: options.cdpPort ?? config.devServer?.cdpPort ?? 9229,
     minify: options.minify ?? false,
@@ -115,41 +144,6 @@ function createWsBroadcast(wss: WebSocketServer) {
 export async function startRayactDevServer(rawOptions: RayactDevServerOptions): Promise<RayactDevServer> {
   const options = normalizeOptions(rawOptions);
   const nativeModules = loadRayactConfig(options.root).nativeModules ?? [];
-
-  let bootstrapCode: string | null = null;
-  let bootstrapError: Error | null = null;
-  let bootstrapInFlight: Promise<string> | null = null;
-  let revision = 1;
-  let assetRegistry: RayactBuildOutput['assets'] = [];
-
-  const bundleOptions = {
-    root: options.root,
-    entry: options.entry,
-    platform: options.platform,
-    mode: 'development' as const,
-    minify: options.minify,
-    bytecode: false
-  };
-
-  const rebuildBootstrap = async () => {
-    if (bootstrapInFlight) return bootstrapInFlight;
-    bootstrapInFlight = (async () => {
-      try {
-        bootstrapCode = await buildRayactBootstrap(bundleOptions);
-        bootstrapError = null;
-        revision++;
-        return bootstrapCode;
-      } catch (error) {
-        bootstrapError = error instanceof Error ? error : new Error(String(error));
-        throw bootstrapError;
-      } finally {
-        bootstrapInFlight = null;
-      }
-    })();
-    return bootstrapInFlight;
-  };
-
-  await rebuildBootstrap();
 
   const server = http.createServer();
   const moduleHmrWss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
@@ -180,12 +174,59 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     });
   });
 
-  let vite: ViteDevServer | null = null;
+  const contexts = new Map<DevPlatform, PlatformContext>();
 
-  vite = await createRayactViteDevServer(bundleOptions, server);
+  function createPlatformContext(platform: DevPlatform): PlatformContext {
+    const context: PlatformContext = {
+      platform,
+      bundleOptions: {
+        root: options.root,
+        entry: options.entry,
+        platform,
+        mode: 'development',
+        minify: options.minify,
+        bytecode: false
+      },
+      bootstrapCode: null,
+      bootstrapError: null,
+      bootstrapInFlight: null,
+      revision: 1,
+      assets: [],
+      vite: null,
+      middleware: null
+    };
+    contexts.set(platform, context);
+    return context;
+  }
 
-  const broadcastModuleUpdates = (file: string, event: 'change' | 'add' | 'unlink') => {
-    if (!vite) return;
+  function selectPlatform(requestUrl: URL, request: http.IncomingMessage): DevPlatform {
+    const query = requestUrl.searchParams.get('platform');
+    const header = Array.isArray(request.headers['x-rayact-platform'])
+      ? request.headers['x-rayact-platform'][0]
+      : request.headers['x-rayact-platform'];
+    return normalizePlatform(query ?? header, options.platform as DevPlatform);
+  }
+
+  const rebuildBootstrap = async (context: PlatformContext) => {
+    if (context.bootstrapInFlight) return context.bootstrapInFlight;
+    context.bootstrapInFlight = (async () => {
+      try {
+        context.bootstrapCode = await buildRayactBootstrap(context.bundleOptions);
+        context.bootstrapError = null;
+        context.revision++;
+        return context.bootstrapCode;
+      } catch (error) {
+        context.bootstrapError = error instanceof Error ? error : new Error(String(error));
+        throw context.bootstrapError;
+      } finally {
+        context.bootstrapInFlight = null;
+      }
+    })();
+    return context.bootstrapInFlight;
+  };
+
+  const broadcastModuleUpdates = (context: PlatformContext, file: string, event: 'change' | 'add' | 'unlink') => {
+    if (!context.vite) return;
     const root = options.root;
     const normalized = file.split(path.sep).join('/');
     const rel = path.relative(root, file).split(path.sep).join('/');
@@ -196,7 +237,7 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
       return;
     }
 
-    const mods = vite.moduleGraph.getModulesByFile(file);
+    const mods = context.vite.moduleGraph.getModulesByFile(file);
     const updates: Array<{ type: 'js-update'; path: string; acceptedPath: string; timestamp: number }> = [];
     const timestamp = Date.now();
 
@@ -214,11 +255,22 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     }
   };
 
-  vite.watcher.on('change', file => broadcastModuleUpdates(file, 'change'));
-  vite.watcher.on('add', file => broadcastModuleUpdates(file, 'add'));
-  vite.watcher.on('unlink', file => broadcastModuleUpdates(file, 'unlink'));
+  async function getContext(platform: DevPlatform): Promise<PlatformContext> {
+    const context = contexts.get(platform) ?? createPlatformContext(platform);
+    if (!context.vite) {
+      context.vite = await createRayactViteDevServer(context.bundleOptions, server);
+      context.middleware = createRayactModuleMiddleware(() => context.vite);
+      context.vite.watcher.on('change', file => broadcastModuleUpdates(context, file, 'change'));
+      context.vite.watcher.on('add', file => broadcastModuleUpdates(context, file, 'add'));
+      context.vite.watcher.on('unlink', file => broadcastModuleUpdates(context, file, 'unlink'));
+    }
+    if (!context.bootstrapCode && !context.bootstrapError) {
+      await rebuildBootstrap(context);
+    }
+    return context;
+  }
 
-  const rayactModuleMiddleware = createRayactModuleMiddleware(() => vite);
+  await getContext(options.platform as DevPlatform);
 
   server.on('request', (request, response) => {
     void handleRequest(request, response);
@@ -226,34 +278,37 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
 
   async function handleRequest(request: http.IncomingMessage, response: http.ServerResponse): Promise<void> {
     const requestUrl = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
+    const platform = selectPlatform(requestUrl, request);
+    const context = await getContext(platform);
     const baseUrl = `http://${publicHost(options.host)}:${options.port}`;
     const wsBase = baseUrl.replace(/^http/, 'ws');
+    const platformSuffix = platformQuery(platform);
 
     if (requestUrl.pathname === '/rayact/status') {
-      sendJson(response, bootstrapError ? 500 : 200, {
-        ok: !bootstrapError,
+      sendJson(response, context.bootstrapError ? 500 : 200, {
+        ok: !context.bootstrapError,
         rayactAppKey: options.rayactAppKey,
         entry: options.entry,
-        platform: options.platform,
-        revision,
+        platform,
+        revision: context.revision,
         hmrMode: 'module',
         bundleFormat: 'js',
         compiler: RAYACT_REACT_COMPILER,
         binaryCommands: RAYACT_BINARY_COMMANDS,
-        error: bootstrapError?.message
+        error: context.bootstrapError?.message
       });
       return;
     }
 
     if (requestUrl.pathname === '/rayact/manifest.json') {
-      const entryModuleUrl = `${baseUrl}${ENTRY_MODULE_PATH}`;
-      const bootstrapUrl = `${baseUrl}/rayact/bootstrap.js`;
+      const entryModuleUrl = `${baseUrl}${ENTRY_MODULE_PATH}?${platformSuffix}`;
+      const bootstrapUrl = `${baseUrl}/rayact/bootstrap.js?${platformSuffix}`;
       sendJson(response, 200, {
         rayactAppKey: options.rayactAppKey,
         entry: options.entry,
-        platform: options.platform,
+        platform,
         mode: 'development',
-        revision,
+        revision: context.revision,
         hmrMode: 'module',
         bundleFormat: 'js',
         compiler: RAYACT_REACT_COMPILER,
@@ -266,7 +321,7 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
         inspectorUrl: `${wsBase}/rayact/inspector`,
         websocketUrl: `${wsBase}/rayact/debugger`,
         cdpPort: options.cdpPort,
-        assets: assetRegistry.map(asset => ({
+        assets: context.assets.map(asset => ({
           id: asset.id,
           name: asset.name,
           type: asset.type,
@@ -274,7 +329,7 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
           size: asset.size,
           outputName: asset.outputName,
           kind: asset.kind,
-          url: `${baseUrl}/rayact/assets/${encodeURIComponent(asset.id)}/${encodeURIComponent(asset.name)}`
+          url: `${baseUrl}/rayact/assets/${encodeURIComponent(asset.id)}/${encodeURIComponent(asset.name)}?${platformSuffix}`
         })),
         nativeModules,
         capabilities: ['hmr', 'cdp', 'react-devtools', 'inspector', 'module-hmr']
@@ -284,7 +339,7 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
 
     if (requestUrl.pathname === '/rayact/bootstrap.js' || requestUrl.pathname === '/rayact/bundle') {
       try {
-        const code = bootstrapCode ?? await rebuildBootstrap();
+        const code = context.bootstrapCode ?? await rebuildBootstrap(context);
         sendText(response, 200, code, 'application/javascript; charset=utf-8');
       } catch (error) {
         const message = error instanceof Error ? error.stack ?? error.message : String(error);
@@ -315,17 +370,17 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     }
 
     if (requestUrl.pathname === '/rayact/entry.js') {
-      if (!vite) {
+      if (!context.vite) {
         sendText(response, 503, 'Vite dev server not ready');
         return;
       }
       try {
-        const result = await vite.transformRequest(RAYACT_ENTRY_ID, { ssr: true });
+        const result = await context.vite.transformRequest(RAYACT_ENTRY_ID, { ssr: true });
         if (!result?.code) {
           sendText(response, 404, 'Entry module not found');
           return;
         }
-        sendText(response, 200, wrapRayactModule('/rayact/entry.js', result.code, RAYACT_ENTRY_ID), 'application/javascript; charset=utf-8');
+        sendText(response, 200, wrapRayactModule(`/rayact/entry.js?${platformSuffix}`, result.code, RAYACT_ENTRY_ID), 'application/javascript; charset=utf-8');
       } catch (error) {
         sendText(response, 500, error instanceof Error ? error.message : String(error));
       }
@@ -334,7 +389,7 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
 
     if (requestUrl.pathname.startsWith('/rayact/m/') || requestUrl.pathname === '/rayact/resolve') {
       await new Promise<void>((resolve, reject) => {
-        rayactModuleMiddleware(request, response, err => {
+        context.middleware?.(request, response, err => {
           if (err) reject(err);
           else resolve();
         });
@@ -346,8 +401,8 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
       return;
     }
 
-    if (vite) {
-      vite.middlewares(request, response, () => {
+    if (context.vite) {
+      context.vite.middlewares(request, response, () => {
         sendJson(response, 404, { error: 'Not found' });
       });
       return;
@@ -362,7 +417,7 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
   debuggerWss.on('connection', socket => {
     socket.send(JSON.stringify({
       type: 'server:hello',
-      payload: { entry: options.entry, platform: options.platform, channel: 'debugger' }
+      payload: { entry: options.entry, platform: 'multi', defaultPlatform: options.platform, channel: 'debugger' }
     }));
     socket.on('message', data => {
       try {
@@ -445,14 +500,16 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     broadcastDebugger,
     broadcastInspector,
     async reload() {
-      await rebuildBootstrap();
+      await Promise.all([...contexts.values()].map(context => rebuildBootstrap(context)));
       broadcastModuleHmr({ type: 'full-reload' });
     },
     async close() {
       mdns.stop();
       debuggerWss.close();
       inspectorWss.close();
-      if (vite) await vite.close();
+      await Promise.all([...contexts.values()].map(async context => {
+        if (context.vite) await context.vite.close();
+      }));
       await new Promise<void>(resolve => server.close(() => resolve()));
     }
   };

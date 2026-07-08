@@ -34,22 +34,6 @@
     "vite": "^7.2.6"
   },
   "overrides": {
-    "@rayact/cli": "file:../../release1/rayact-cli-0.0.1.tgz",
-    "@rayact/core": "file:../../release1/rayact-core-0.0.1.tgz",
-    "@rayact/crypto": "file:../../release1/rayact-crypto-0.0.1.tgz",
-    "@rayact/dev-client": "file:../../release1/rayact-dev-client-0.0.1.tgz",
-    "@rayact/dev-server": "file:../../release1/rayact-dev-server-0.0.1.tgz",
-    "@rayact/mmkv": "file:../../release1/rayact-mmkv-0.0.1.tgz",
-    "@rayact/navigation": "file:../../release1/rayact-navigation-0.0.1.tgz",
-    "@rayact/prebuild": "file:../../release1/rayact-prebuild-0.0.1.tgz",
-    "@rayact/quickjs": "file:../../release1/rayact-quickjs-0.0.1.tgz",
-    "@rayact/react": "file:../../release1/rayact-react-0.0.1.tgz",
-    "@rayact/renderer": "file:../../release1/rayact-renderer-0.0.1.tgz",
-    "@rayact/runtime": "file:../../release1/rayact-runtime-0.0.1.tgz",
-    "@rayact/secure-store": "file:../../release1/rayact-secure-store-0.0.1.tgz",
-    "@rayact/shared": "file:../../release1/rayact-shared-0.0.1.tgz",
-    "@rayact/types": "file:../../release1/rayact-types-0.0.1.tgz",
-    "@rayact/worklets": "file:../../release1/rayact-worklets-0.0.1.tgz",
     "create-rayact-app": "file:../../release1/create-rayact-app-0.0.1.tgz"
   }
 }

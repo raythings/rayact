@@ -1,1 +1,1 @@
-export * from '@rayact/prebuild';
+export * from './dist/prebuild/index.js';

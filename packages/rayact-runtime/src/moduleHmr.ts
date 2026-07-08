@@ -50,6 +50,38 @@ function getQueryParam(search: string, key: string): string | null {
   return null;
 }
 
+function currentPlatform(globalObject: GlobalHmr): string | null {
+  const injected = globalObject.__rayactPlatform;
+  if (injected && typeof injected.target === 'string' && injected.target) return injected.target;
+  if (injected && typeof injected.os === 'string' && injected.os) return injected.os;
+  if (typeof globalObject.navigator?.userAgent === 'string') {
+    const ua = globalObject.navigator.userAgent;
+    if (/Android/i.test(ua)) return 'android';
+    if (/iPhone|iPad|iPod/i.test(ua)) return 'ios';
+    return 'web';
+  }
+  return null;
+}
+
+function withPlatformParam(url: string, platform: string | null): string {
+  if (!platform) return url;
+  const parsed = parseUrlParts(url);
+  if (getQueryParam(parsed.search, 'platform')) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}platform=${encodeURIComponent(platform)}`;
+}
+
+function withoutPlatformParam(url: string): string {
+  const { pathname, search } = parseUrlParts(url);
+  if (!search) return pathname;
+  const params = search
+    .slice(1)
+    .split('&')
+    .filter(Boolean)
+    .filter((pair) => decodeURIComponent((pair.split('=')[0] ?? '')) !== 'platform');
+  return params.length ? `${pathname}?${params.join('&')}` : pathname;
+}
+
 const VENDOR_MODULE_KEYS: Record<string, string> = {
   react: 'react',
   'react/jsx-runtime': 'jsxRuntime',
@@ -62,7 +94,7 @@ function normalizeVendorSpecifier(specifier: string): string | null {
 }
 
 function getVendorNamespace(globalObject: GlobalHmr, specifier: string): unknown | null {
-  const bare = normalizeVendorSpecifier(specifier);
+  const bare = normalizeVendorSpecifier(specifier) ?? vendorSpecifierFromResolvedPath(specifier);
   if (!bare) return null;
   const vendorKey = VENDOR_MODULE_KEYS[bare]!;
   const mod = globalObject.__RAYACT_VENDOR__?.[vendorKey];
@@ -79,6 +111,14 @@ function getVendorNamespace(globalObject: GlobalHmr, specifier: string): unknown
   };
 }
 
+function vendorSpecifierFromResolvedPath(specifier: string): string | null {
+  const path = parseUrlParts(specifier).pathname;
+  if (/(^|\/)node_modules\/react\/index\.js$/.test(path)) return 'react';
+  if (/(^|\/)node_modules\/react\/jsx-runtime\.js$/.test(path)) return 'react/jsx-runtime';
+  if (/(^|\/)node_modules\/react\/jsx-dev-runtime\.js$/.test(path)) return 'react/jsx-dev-runtime';
+  return null;
+}
+
 type GlobalHmr = RayactGlobal & {
   __rayactModuleRegistry?: Map<string, ModuleFactory>;
   __rayactModuleLoading?: Map<string, Promise<unknown>>;
@@ -90,6 +130,8 @@ type GlobalHmr = RayactGlobal & {
   __RAYACT_HMR_ACTIVE__?: boolean;
   __RAYACT_VENDOR__?: Record<string, Record<string, unknown>>;
   __REACT_REFRESH__?: { performReactRefresh: () => void };
+  __rayactPlatform?: { os?: string; target?: string; version?: string };
+  navigator?: { userAgent?: string };
 };
 
 export class ModuleHmrRuntime {
@@ -121,9 +163,17 @@ export class ModuleHmrRuntime {
     }
 
     this.globalObject.__rayactRegisterModule = (url, factory) => {
-      this.globalObject.__rayactModuleRegistry!.set(normalizeModuleUrl(url), () =>
-        normalizeModuleExport(factory())
-      );
+      const normalized = normalizeModuleUrl(url);
+      const stripped = withoutPlatformParam(normalized);
+      const aliases = new Set([normalized, stripped]);
+      if (stripped.startsWith('/rayact/m/')) {
+        aliases.add(stripped.slice('/rayact/m'.length));
+      }
+      for (const alias of aliases) {
+        this.globalObject.__rayactModuleRegistry!.set(alias, () =>
+          normalizeModuleExport(factory())
+        );
+      }
     };
 
     this.globalObject.__rayactRequire = (specifier, fromUrl) => {
@@ -167,7 +217,10 @@ export class ModuleHmrRuntime {
     if (g.__RAYACT_DEV_MANIFEST__) {
       return g.__RAYACT_DEV_MANIFEST__;
     }
-    const text = await this.devFetchText(`${this.serverUrl}/rayact/manifest.json`);
+    const text = await this.devFetchText(withPlatformParam(
+      `${this.serverUrl}/rayact/manifest.json`,
+      currentPlatform(this.globalObject)
+    ));
     return JSON.parse(text) as DevManifestModule;
   }
 
@@ -185,7 +238,10 @@ export class ModuleHmrRuntime {
       throw new Error(`Circular or async module dependency while loading ${key}`);
     }
 
-    const fetchUrl = toRayactModuleUrl(moduleUrl, this.serverUrl);
+    const fetchUrl = withPlatformParam(
+      toRayactModuleUrl(moduleUrl, this.serverUrl),
+      currentPlatform(this.globalObject)
+    );
     const parsed = parseUrlParts(fetchUrl);
     if (parsed.pathname === '/rayact/resolve') {
       const spec = getQueryParam(parsed.search, 'spec') ?? '';
@@ -215,7 +271,10 @@ export class ModuleHmrRuntime {
     if (pending) return pending;
 
     const task = (async () => {
-      const fetchUrl = toRayactModuleUrl(moduleUrl, this.serverUrl);
+      const fetchUrl = withPlatformParam(
+        toRayactModuleUrl(moduleUrl, this.serverUrl),
+        currentPlatform(this.globalObject)
+      );
       const parsed = parseUrlParts(fetchUrl);
       if (parsed.pathname === '/rayact/resolve') {
         const spec = getQueryParam(parsed.search, 'spec') ?? '';
@@ -461,6 +520,10 @@ export function resolveModuleUrl(specifier: string, fromUrl: string, serverUrl: 
 export function toRayactModuleUrl(moduleUrl: string, serverUrl: string): string {
   const absolute = moduleUrl.startsWith('http') ? moduleUrl : `${serverUrl}${moduleUrl.startsWith('/') ? '' : '/'}${moduleUrl}`;
   const parsed = parseUrlParts(absolute);
+  const vendor = vendorSpecifierFromResolvedPath(parsed.pathname);
+  if (vendor) {
+    return `${serverUrl.replace(/\/+$/, '')}/rayact/resolve?spec=${encodeURIComponent(vendor)}`;
+  }
   if (parsed.pathname === '/rayact/entry.js' || parsed.pathname === '/rayact/resolve') {
     return absolute;
   }

@@ -1467,6 +1467,7 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
             showDevErrorOverlay(ctx, "Failed to fetch dev bootstrap from " + devServer);
             return false;
         }
+        injectMaterialIcons(ctx);
         JSValue result = JS_Eval(ctx, bootstrap.c_str(), bootstrap.size(),
                                  "rayact_dev_bootstrap.js", JS_EVAL_TYPE_GLOBAL);
         if (JS_IsException(result)) {
@@ -1535,6 +1536,7 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
             showDevErrorOverlay(ctx, "Failed to fetch dev bootstrap:\n" + error);
             return false;
         }
+        injectMaterialIcons(ctx);
         JSValue result = JS_Eval(ctx, bootstrap.c_str(), bootstrap.size(), "rayact_dev_bootstrap.js", JS_EVAL_TYPE_GLOBAL);
         if (JS_IsException(result)) {
             JSValue exception = JS_GetException(ctx);
@@ -1564,6 +1566,7 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
             showDevErrorOverlay(ctx, "Failed to fetch dev bundle:\n" + error);
             return false;
         }
+        injectMaterialIcons(ctx);
         JSValue result = JS_Eval(ctx, bundle.c_str(), bundle.size(), "rayact_dev_bundle.js", JS_EVAL_TYPE_GLOBAL);
         if (JS_IsException(result)) {
             JSValue exception = JS_GetException(ctx);

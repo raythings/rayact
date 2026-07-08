@@ -77,10 +77,23 @@
       "types": "./worklets.d.ts",
       "default": "./worklets.js"
     },
+    "./core": {
+      "types": "./core.d.ts",
+      "default": "./core.js"
+    },
+    "./quickjs": {
+      "types": "./quickjs.d.ts",
+      "default": "./quickjs.js"
+    },
+    "./renderer": {
+      "types": "./renderer.d.ts",
+      "default": "./renderer.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "bin",
+    "dist",
     "*.js",
     "*.d.ts",
     "README.md",
@@ -88,10 +101,14 @@
   ],
   "scripts": {
     "dev": "npm run rayact -- dev --host 0.0.0.0 --port 8081 --entry test-projects/release-consumer-smoke/src/App.tsx",
+    "desktop": "npm run rayact -- dev --desktop --host 0.0.0.0 --port 8081 --entry test-projects/release-consumer-smoke/src/App.tsx",
+    "android": "npm run rayact -- dev --android --host 0.0.0.0 --port 8081 --entry test-projects/release-consumer-smoke/src/App.tsx",
+    "ios": "npm run rayact -- dev --ios --host 0.0.0.0 --port 8081 --entry test-projects/release-consumer-smoke/src/App.tsx",
+    "web": "npm run rayact -- dev --web --host 0.0.0.0 --port 8081 --entry test-projects/release-consumer-smoke/src/App.tsx",
     "rayact": "node packages/rayact-cli/dist/cli.js",
     "dev:android": "cd apps/android && ./gradlew --warning-mode all",
     "dev:web": "cd apps/web && npm run dev",
-    "build": "npm run build:shared && npm run build:runtime && npm run build:react && npm run build:dev-client && npm run build:dev-server && npm run build:prebuild && npm run build:cli && npm run build:core && npm run build:quickjs && npm run build:renderer",
+    "build": "npm run build:shared && npm run build:runtime && npm run build:react && npm run build:navigation && npm run build:crypto && npm run build:mmkv && npm run build:secure-store && npm run build:worklets && npm run build:dev-client && npm run build:dev-server && npm run build:prebuild && npm run build:cli && npm run build:create-app && npm run build:core && npm run build:quickjs && npm run build:renderer && npm run stage:root",
     "build:dev-client": "cd packages/rayact-dev-client && npm run build",
     "verify": "npm run rayact -- verify",
     "verify:android": "npm run rayact -- verify --android",
@@ -102,7 +119,7 @@
     "release:replace": "node scripts/replace-github-release.mjs",
     "sync:split-repos": "node scripts/sync-split-repos.mjs",
     "publish:split-repos": "node scripts/publish-split-repos.mjs",
-    "test:packages": "npm test -w @rayact/prebuild -w @rayact/dev-server -w @rayact/cli",
+    "test:packages": "cd packages/rayact-prebuild && npm test && cd ../rayact-dev-server && npm test && cd ../rayact-cli && npm test",
     "test:native": "npm run test:desktop-smoke",
     "test:desktop-smoke": "cd test-projects/desktop-smoke && npm run test:desktop",
     "build:core": "cd packages/rayact-core && npm run build",
@@ -115,6 +132,12 @@
     "build:quickjs": "cd packages/rayact-quickjs && npm run build",
     "build:renderer": "cd packages/rayact-renderer && npm run build",
     "build:shared": "cd packages/rayact-shared && npm run build",
+    "build:navigation": "cd packages/rayact-navigation && npm run build",
+    "build:crypto": "cd packages/rayact-crypto && npm run build",
+    "build:mmkv": "cd packages/rayact-mmkv && npm run build",
+    "build:secure-store": "cd packages/rayact-secure-store && npm run build",
+    "build:worklets": "cd packages/rayact-worklets && npm run build",
+    "stage:root": "node scripts/stage-root-package.mjs",
     "clean": "concurrently \"npm:clean:*\"",
     "clean:core": "cd packages/rayact-core && npm run clean",
     "clean:runtime": "cd packages/rayact-runtime && npm run clean",
@@ -148,24 +171,22 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@rayact/cli": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-cli-0.0.1.tgz",
-    "@rayact/crypto": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-crypto-0.0.1.tgz",
-    "@rayact/dev-client": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-client-0.0.1.tgz",
-    "@rayact/dev-server": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-server-0.0.1.tgz",
-    "@rayact/mmkv": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-mmkv-0.0.1.tgz",
-    "@rayact/navigation": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-navigation-0.0.1.tgz",
-    "@rayact/prebuild": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-prebuild-0.0.1.tgz",
-    "@rayact/react": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-react-0.0.1.tgz",
-    "@rayact/runtime": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-runtime-0.0.1.tgz",
-    "@rayact/secure-store": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-secure-store-0.0.1.tgz",
-    "@rayact/shared": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-shared-0.0.1.tgz",
-    "@rayact/types": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-types-0.0.1.tgz",
-    "@rayact/worklets": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-worklets-0.0.1.tgz",
+    "@callstack/react-theme-provider": "^3.0.9",
+    "@react-navigation/core": "*",
+    "@react-navigation/routers": "*",
     "@types/react": "^19.2.16",
     "@types/react-reconciler": "^0.31.0",
+    "@vitejs/plugin-react": "^5.1.1",
+    "bonjour-service": "^1.3.0",
+    "chokidar": "^4.0.3",
+    "ink": "^7.0.5",
+    "qrcode-terminal": "^0.12.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-reconciler": "^0.31.0"
+    "react-reconciler": "^0.31.0",
+    "react-refresh": "^0.18.0",
+    "vite": "^7.2.6",
+    "ws": "^8.18.3"
   },
   "optionalDependencies": {
     "@rayact/prebuilt-darwin-arm64": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-prebuilt-darwin-arm64-0.0.1.tgz",

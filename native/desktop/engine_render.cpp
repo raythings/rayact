@@ -490,7 +490,7 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
 #if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
     SetMouseScale(1.0f / dp, 1.0f / dp); // M3 components call GetMousePosition() in dp space
 #else
-    SetMouseScale(1.0f, 1.0f); // Desktop mouse positions are already logical.
+    SetMouseScale(1.0f, 1.0f); // Desktop/web mouse positions are already logical.
 #endif
     raym3::v2::Render(g_root, bounds, /*layoutAlreadyComputed=*/!forceLayout);
     drawInspectorHighlight();

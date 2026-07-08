@@ -19,8 +19,6 @@ compile_commands.json
 *.jsc
 *.qjsbc
 *.rayactpack
-apps/desktop/bundle.js
-
 # Packaged tarballs (build outputs — produced by npm pack / CI)
 *.tgz
 

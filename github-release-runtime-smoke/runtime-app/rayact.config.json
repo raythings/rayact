@@ -1,11 +1,9 @@
 {
-  "$schema": "./node_modules/@rayact/dev-server/schema/rayact.config.schema.json",
   "rayactAppKey": "runtime-app",
   "devServer": {
     "host": "0.0.0.0",
     "port": 8081,
     "cdpPort": 9229
   },
-  "entry": "src/App.tsx",
-  "platform": "web"
+  "entry": "src/App.tsx"
 }

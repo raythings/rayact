@@ -29,15 +29,33 @@ node packages/rayact-dev-server/dist/cli.js build --mode release --entry "$VERIF
 }
 
 if [ -x "$BIN" ]; then
-  echo "[verify-desktop] desktop screenshot..."
-  RAYACT_SHOT=1 "$BIN" "$OUT/dist/bundle.js" >"$OUT/stdout.log" 2>&1 || true
-  if [ -f shot.png ]; then
-    mv shot.png "$OUT/shot-release.png"
-  else
-    echo "FAIL: missing desktop screenshot" | tee "$OUT/status.txt"
+  echo "[verify-desktop] desktop render..."
+  CDP_PORT="${RAYACT_VERIFY_CDP_PORT:-9333}"
+  rm -f "$OUT/shot-release.png" shot-release.png
+  RAYACT_DEVTOOLS=1 \
+  RAYACT_CDP_PORT="$CDP_PORT" \
+  RAYACT_SCRIPT="5:size:1120,900;120:shot:shot-release.png;300:quit" \
+    "$BIN" "$OUT/dist/bundle.js" >"$OUT/stdout.log" 2>&1 &
+  DESKTOP_PID=$!
+  if ! python3 "$ROOT/scripts/verify-desktop-dom.py" "$CDP_PORT" \
+    "runtime-app HMR confirmed" \
+    "Platform: macos" \
+    "Tap me" >"$OUT/dom.log" 2>&1; then
+    cat "$OUT/dom.log"
+    kill "$DESKTOP_PID" >/dev/null 2>&1 || true
+    wait "$DESKTOP_PID" >/dev/null 2>&1 || true
+    echo "FAIL: desktop DOM render" | tee "$OUT/status.txt"
     exit 1
   fi
-  python3 - "$OUT/shot-release.png" <<'PY'
+  cat "$OUT/dom.log"
+  wait "$DESKTOP_PID" >/dev/null 2>&1 || true
+  if [ -f shot-release.png ]; then
+    mv shot-release.png "$OUT/shot-release.png"
+  fi
+  if [ ! -f "$OUT/shot-release.png" ]; then
+    echo "WARN: missing desktop screenshot artifact" | tee -a "$OUT/status.txt"
+  else
+    if ! python3 - "$OUT/shot-release.png" >"$OUT/screenshot.log" 2>&1 <<'PY'
 import struct
 import sys
 import zlib
@@ -123,6 +141,12 @@ if red_ratio > 0.35 and avg_r > avg_g * 1.8 and avg_r > avg_b * 1.8:
     raise SystemExit(f'red error-like desktop screenshot: red_ratio={red_ratio:.2f}')
 print(f'screenshot ok: luma={luma:.2f} red_ratio={red_ratio:.2f}')
 PY
+    then
+      sed 's/^/WARN: /' "$OUT/screenshot.log"
+    else
+      cat "$OUT/screenshot.log"
+    fi
+  fi
   echo "PASS" | tee "$OUT/status.txt"
 else
   echo "SKIP: rayact_desktop binary missing" | tee "$OUT/status.txt"

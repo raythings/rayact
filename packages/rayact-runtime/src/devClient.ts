@@ -22,6 +22,24 @@ function joinUrl(serverUrl: string, path: string): string {
   return `${serverUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
 }
 
+function currentPlatform(globalObject: RayactGlobal): string | null {
+  const injected = globalObject.__rayactPlatform;
+  if (injected && typeof injected.target === 'string' && injected.target) return injected.target;
+  if (injected && typeof injected.os === 'string' && injected.os) return injected.os;
+  const nav = (globalObject as { navigator?: { userAgent?: string } }).navigator;
+  if (typeof nav?.userAgent === 'string') {
+    if (/Android/i.test(nav.userAgent)) return 'android';
+    if (/iPhone|iPad|iPod/i.test(nav.userAgent)) return 'ios';
+    return 'web';
+  }
+  return null;
+}
+
+function withPlatformParam(url: string, platform: string | null): string {
+  if (!platform || /[?&]platform=/.test(url)) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}platform=${encodeURIComponent(platform)}`;
+}
+
 function toWsUrl(serverUrl: string, channel: string): string {
   return joinUrl(serverUrl, channel).replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
 }
@@ -51,7 +69,10 @@ export function createDevClient(options: DevClientOptions): RayactDevClient {
   const fetchManifest = async (): Promise<ManifestInfo> => {
     const fetchFn = globalObject.fetch;
     if (typeof fetchFn !== 'function') return {};
-    const response = await fetchFn(joinUrl(options.serverUrl, '/rayact/manifest.json'));
+    const response = await fetchFn(withPlatformParam(
+      joinUrl(options.serverUrl, '/rayact/manifest.json'),
+      currentPlatform(globalObject)
+    ));
     return JSON.parse(await response.text()) as ManifestInfo;
   };
 
@@ -91,7 +112,10 @@ export function createDevClient(options: DevClientOptions): RayactDevClient {
     try {
       const fetchFn = globalObject.fetch;
       if (typeof fetchFn !== 'function') return;
-      const response = await fetchFn(joinUrl(options.serverUrl, '/rayact/status'));
+      const response = await fetchFn(withPlatformParam(
+        joinUrl(options.serverUrl, '/rayact/status'),
+        currentPlatform(globalObject)
+      ));
       const status = JSON.parse(await response.text()) as { revision?: number };
       if (typeof status.revision !== 'number') return;
 

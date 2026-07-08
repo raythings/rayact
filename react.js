@@ -1,1 +1,1 @@
-export * from '@rayact/react';
+export * from './dist/react/index.js';

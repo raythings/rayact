@@ -16,14 +16,10 @@
     "test:desktop": "bash test-desktop.sh"
   },
   "dependencies": {
-    "@rayact/react": "file:../../packages/rayact-react",
-    "@rayact/runtime": "file:../../packages/rayact-runtime",
-    "@rayact/shared": "file:../../packages/rayact-shared",
+    "rayact": "file:../..",
     "react": "^19.0.0"
   },
   "devDependencies": {
-    "@rayact/cli": "file:../../packages/rayact-cli",
-    "@rayact/dev-server": "file:../../packages/rayact-dev-server",
     "@types/react": "^19.0.0",
     "@vitejs/plugin-react": "^5.1.1",
     "react-refresh": "^0.18.0",
