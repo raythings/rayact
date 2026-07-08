@@ -19,8 +19,8 @@ if ! adb devices | awk 'NR>1 && $2=="device"{found=1} END{exit !found}'; then
 fi
 
 echo "[verify-android] building dev-server + release bundle..."
-npm run build:dev-server >/dev/null 2>&1 || npm run build:dev-server
-node packages/rayact-dev-server/dist/cli.js build --mode release --entry "$VERIFY_APP_ENTRY" --out /tmp/rayact_verify_bundle 2>"$OUT/build.log"
+npm run build >/dev/null 2>&1 || npm run build
+node dist/cli/cli.js build --mode release --entry "$VERIFY_APP_ENTRY" --out /tmp/rayact_verify_bundle 2>"$OUT/build.log"
 
 mkdir -p apps/android/app/src/main/assets
 cp /tmp/rayact_verify_bundle/bundle.qjsbc apps/android/app/src/main/assets/app.qjsbc

@@ -5,12 +5,12 @@ Scaffold a new app, run it in development, then build a release.
 ## Create an app
 
 ```sh
-npx github:raythings/rayact#v0.0.1 init my-app
+npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-0.0.1.tgz init my-app
 cd my-app
 npm install
 ```
 
-The generated project has a `rayact.config.json` (see the [config reference](/reference/config)), a `src/App.tsx` entry, and the `@rayact/*` dependencies for your chosen template.
+The generated project has a `rayact.config.json` (see the [config reference](/reference/config)), a `src/App.tsx` entry, and only the public `rayact` and `react` dependencies.
 
 ## Develop
 

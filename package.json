@@ -104,7 +104,7 @@
     "serve:release": "node scripts/serve-release-assets.mjs",
     "pack:release": "node scripts/pack-release-assets.mjs",
     "release:replace": "node scripts/replace-github-release.mjs",
-    "test": "node --test test/",
+    "test": "node --test test/**/*.test.mjs",
     "test:packages": "npm test",
     "test:native": "npm run test:desktop-smoke",
     "test:desktop-smoke": "cd test-projects/desktop-smoke && npm run test:desktop",

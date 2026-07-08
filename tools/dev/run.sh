@@ -15,7 +15,7 @@ fi
 
 if [[ "$EXT" == "jsx" || "$EXT" == "tsx" || "$EXT" == "ts" ]]; then
   OUT_DIR="/tmp/rayact_run"
-  node packages/rayact-dev-server/dist/cli.js build --mode release --entry "$FILE" --out "$OUT_DIR"
+  node dist/cli/cli.js build --mode release --entry "$FILE" --out "$OUT_DIR"
   exec "$BINARY" "$OUT_DIR/bundle.js"
 else
   exec "$BINARY" "$FILE"

@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildRayactBundle } from '../dist/bundler.js';
+import { buildRayactBundle } from '../../dist/dev-server/bundler.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(here, '../../..');
+const repoRoot = path.resolve(here, '../..');
 const entry = 'test-projects/release-consumer-smoke/src/App.tsx';
 
 test('release bundles disable React Compiler transforms', async () => {

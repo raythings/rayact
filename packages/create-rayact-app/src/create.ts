@@ -73,10 +73,11 @@ function depBlock(options: CreateOptions): {
     return { dependencies, devDependencies };
   }
 
-  const gh = (repo: string) => `github:raythings/${repo}#v${RAYACT_VERSION}`;
+  const releaseAsset = (name: string) =>
+    `https://github.com/raythings/rayact/releases/download/v${RAYACT_VERSION}/${name}-${RAYACT_VERSION}.tgz`;
   return {
     dependencies: {
-      rayact: gh('rayact'),
+      rayact: releaseAsset('rayact'),
       react: '^19.0.0'
     },
     devDependencies

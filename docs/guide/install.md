@@ -32,7 +32,7 @@ GitHub refs and let the prebuilt resolver fetch native hosts from GitHub
 releases:
 
 ```sh
-npx github:raythings/rayact#v0.0.1 init my-app
+npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-0.0.1.tgz init my-app
 ```
 
 The release also attaches an `npm pack` tarball for every publishable package, so

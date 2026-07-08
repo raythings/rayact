@@ -1,4 +1,4 @@
-import { startRayactDevServer } from '../packages/rayact-dev-server/dist/server.js';
+import { startRayactDevServer } from '../dist/dev-server/server.js';
 
 const server = await startRayactDevServer({
   root: './apps/dev-app',

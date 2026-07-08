@@ -19,7 +19,7 @@ if [[ ! -f "$FILE" ]]; then
 fi
 
 echo "[1/4] Bundling $FILE ..."
-node packages/rayact-dev-server/dist/cli.js build --mode release \
+node dist/cli/cli.js build --mode release \
   --entry "$FILE" --out "$BUNDLE_DIR" | tail -3
 
 echo "[2/4] Copying bundle -> $ASSETS_DIR/app.js"

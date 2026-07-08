@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCli } from '../dist/parse.js';
+import { parseCli } from '../../dist/cli/parse.js';
 
 test('run --desktop dispatches to run with desktop platform', () => {
   const f = parseCli(['run', '--desktop']);

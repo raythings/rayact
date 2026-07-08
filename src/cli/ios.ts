@@ -36,7 +36,11 @@ export function pickSimulator(): { udid: string; name: string; booted: boolean }
  * Install an .app bundle on a simulator (booting it first when necessary) and
  * launch the given bundle id. Returns false when no simulator is usable.
  */
-export function installOnSimulator(appPath: string, bundleId: string): boolean {
+export function installOnSimulator(
+  appPath: string,
+  bundleId: string,
+  devServerUrl?: string
+): boolean {
   const sim = pickSimulator();
   if (!sim) {
     console.error('No iOS simulator available (xcrun simctl found none).');
@@ -52,6 +56,8 @@ export function installOnSimulator(appPath: string, bundleId: string): boolean {
     stdio: 'inherit'
   });
   if (install.status !== 0) return false;
-  spawnSync('xcrun', ['simctl', 'launch', sim.udid, bundleId], { stdio: 'inherit' });
+  const launchArgs = ['simctl', 'launch', sim.udid, bundleId];
+  if (devServerUrl) launchArgs.push('-RAYACT_DEV_SERVER', devServerUrl);
+  spawnSync('xcrun', launchArgs, { stdio: 'inherit' });
   return true;
 }

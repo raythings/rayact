@@ -38,6 +38,7 @@ export async function runDevApp(flags: CliFlags): Promise<void> {
   const config = loadRayactConfig();
   const platform = pickPlatform(flags);
   const artifact = await ensureDevApp(platform);
+  const devServerUrl = process.env.RAYACT_DEV_SERVER;
 
   if (platform === 'android') {
     if (!adbDeviceAttached()) {
@@ -53,10 +54,14 @@ export async function runDevApp(flags: CliFlags): Promise<void> {
     // Reverse the dev-server + CDP ports so the phone reaches 127.0.0.1 over USB.
     const port = config.devServer?.port ?? 8081;
     await setupAdbReverse(`http://127.0.0.1:${port}`, config.devServer?.cdpPort ?? 9229);
-    adbLaunch('com.rayact.app', '.DevLauncherActivity');
+    adbLaunch(
+      'com.rayact.app',
+      '.DevLauncherActivity',
+      devServerUrl ? { RAYACT_DEV_SERVER: devServerUrl } : {}
+    );
     console.log('\nDev app installed and launched.');
   } else if (platform === 'ios-simulator') {
-    if (!installOnSimulator(artifact, 'com.rayact.app')) process.exit(1);
+    if (!installOnSimulator(artifact, 'com.rayact.app', devServerUrl)) process.exit(1);
     console.log('\nDev app installed and launched on the simulator.');
   } else {
     console.log(`\nUnsigned device IPA downloaded to:\n  ${artifact}`);

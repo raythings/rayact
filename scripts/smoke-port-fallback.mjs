@@ -4,8 +4,8 @@
  */
 import http from 'node:http';
 import assert from 'node:assert/strict';
-import { listenWithFallback } from '../packages/rayact-dev-server/dist/listen.js';
-import { listenWithFallback as prebuildListen } from '../packages/rayact-prebuild/dist/listen.js';
+import { listenWithFallback } from '../dist/dev-server/listen.js';
+import { listenWithFallback as prebuildListen } from '../dist/prebuild/listen.js';
 
 async function holdPort(host, port) {
   const server = http.createServer();

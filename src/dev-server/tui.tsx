@@ -11,6 +11,7 @@ import { startRayactDevServer } from './server.js';
 import { loadRayactConfig } from './config.js';
 import { setupAdbReverse } from './adb.js';
 import { startWebDevBridge, type WebDevBridge } from './webDev.js';
+import { resolveDesktopBin as resolveDesktopPrebuilt } from '../prebuild/prebuiltHost.js';
 import type { RayactBuildMode } from './bundler.js';
 import type { RayactDevServer } from './types.js';
 
@@ -115,13 +116,16 @@ function openUrl(url: string): void {
   child.unref();
 }
 
-function launchRayactCommand(args: string[]): ChildProcess {
+function launchRayactCommand(
+  args: string[],
+  envOverrides: Record<string, string> = {}
+): ChildProcess {
   const script = process.argv[1];
   return spawn(process.execPath, [script, ...args], {
     cwd: process.cwd(),
     stdio: 'ignore',
     detached: true,
-    env: process.env
+    env: { ...process.env, ...envOverrides }
   });
 }
 
@@ -213,7 +217,12 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
     if (!server) { setStatus('Server is not ready yet'); return; }
     if (desktop && desktop.exitCode === null) { setStatus('Desktop app is already running'); return; }
 
-    const bin = path.resolve(process.cwd(), args.desktopBin);
+    const resolved = resolveDesktopPrebuilt(process.cwd(), args.desktopBin || undefined);
+    if (!resolved) {
+      setStatus('Desktop host not found. Run `rayact prebuild` and try again.');
+      return;
+    }
+    const bin = resolved.bin;
     const child = spawn(bin, ['--dev-server', server.localUrl], {
       cwd: process.cwd(),
       stdio: 'ignore',
@@ -236,7 +245,10 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
   const launchAndroid = useCallback(() => {
     if (!server) { setStatus('Server is not ready yet'); return; }
     void setupAdbReverse(server.localUrl, loadRayactConfig().devServer?.cdpPort ?? 9229);
-    const child = launchRayactCommand(['dev-app', '--android']);
+    const child = launchRayactCommand(
+      ['dev-app', '--android'],
+      { RAYACT_DEV_SERVER: server.localUrl }
+    );
     child.unref();
     setStatus(`Installing/launching Android dev app at ${formatTime()}`);
     child.on('error', error => setStatus(`Failed to launch Android dev app: ${error.message}`));
@@ -244,7 +256,10 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
 
   const launchIos = useCallback(() => {
     if (!server) { setStatus('Server is not ready yet'); return; }
-    const child = launchRayactCommand(['dev-app', '--ios-simulator']);
+    const child = launchRayactCommand(
+      ['dev-app', '--ios-simulator'],
+      { RAYACT_DEV_SERVER: server.localUrl }
+    );
     child.unref();
     setStatus(`Installing/launching iOS simulator dev app at ${formatTime()}`);
     child.on('error', error => setStatus(`Failed to launch iOS dev app: ${error.message}`));
@@ -316,7 +331,7 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
         <Text>URL: <Text color="green">{server?.url ?? 'starting...'}</Text></Text>
         <Text>Local: <Text color="green">{server?.localUrl ?? 'starting...'}</Text></Text>
         <Text>Entry: <Text color="yellow">{server?.entry ?? args.entry}</Text></Text>
-        <Text>Platform: {server?.platform ?? args.platform}   Clients: {clientCount}</Text>
+        <Text>Default target: {server?.platform ?? args.platform} (clients pick their own via ?platform=)   Clients: {clientCount}</Text>
         {webOpenUrl ? (
           <Text>Web: <Text color="green">{webOpenUrl}</Text></Text>
         ) : null}
