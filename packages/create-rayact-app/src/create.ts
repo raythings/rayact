@@ -15,6 +15,22 @@ export interface CreateOptions {
   template: 'default' | 'blank';
   monorepo: boolean;
   monorepoRoot?: string;
+  /**
+   * Path to a local rayact checkout/package. Emits file: dependencies for
+   * `rayact` and the host-matching @rayact/prebuilt-* package so a project
+   * can be built entirely from local artifacts (no registry, no GitHub).
+   */
+  localRayactPath?: string;
+}
+
+/** The @rayact/prebuilt-* package folder for the machine we're running on. */
+function hostPrebuiltFolder(): string | null {
+  if (process.platform === 'darwin') {
+    if (process.arch === 'arm64') return 'prebuilt-darwin-arm64';
+    if (process.arch === 'x64') return 'prebuilt-darwin-x64';
+  }
+  if (process.platform === 'linux' && process.arch === 'x64') return 'prebuilt-linux-x64';
+  return null;
 }
 
 function templatesDir(): string {
@@ -30,41 +46,40 @@ function templatesDir(): string {
   throw new Error('create-rayact-app templates not found');
 }
 
-function depBlock(
-  monorepo: boolean,
-  monorepoRoot: string | undefined,
-  targetDir: string
-): {
+function depBlock(options: CreateOptions): {
   dependencies: Record<string, string>;
   devDependencies: Record<string, string>;
 } {
-  if (monorepo && monorepoRoot) {
-    const rel = path.relative(targetDir, monorepoRoot).replace(/\\/g, '/');
-    return {
-      dependencies: {
-        rayact: `file:${rel}`,
-        react: '^19.0.0'
-      },
-      devDependencies: {
-        '@types/node': '^25.0.0',
-        '@types/react': '^19.0.0',
-        typescript: '^5.8.3',
-        vite: '^7.2.6'
-      }
+  const devDependencies = {
+    '@types/node': '^25.0.0',
+    '@types/react': '^19.0.0',
+    typescript: '^5.8.3',
+    vite: '^7.2.6'
+  };
+
+  const localRoot = options.localRayactPath
+    ?? (options.monorepo && options.monorepoRoot ? options.monorepoRoot : undefined);
+  if (localRoot) {
+    const abs = path.resolve(localRoot);
+    const rel = path.relative(options.targetDir, abs).replace(/\\/g, '/');
+    const dependencies: Record<string, string> = {
+      rayact: `file:${rel}`,
+      react: '^19.0.0'
     };
+    const prebuilt = hostPrebuiltFolder();
+    if (prebuilt && fs.existsSync(path.join(abs, 'packages', prebuilt))) {
+      dependencies[`@rayact/${prebuilt}`] = `file:${rel}/packages/${prebuilt}`;
+    }
+    return { dependencies, devDependencies };
   }
+
   const gh = (repo: string) => `github:raythings/${repo}#v${RAYACT_VERSION}`;
   return {
     dependencies: {
       rayact: gh('rayact'),
       react: '^19.0.0'
     },
-    devDependencies: {
-      '@types/node': '^25.0.0',
-      '@types/react': '^19.0.0',
-      typescript: '^5.8.3',
-      vite: '^7.2.6'
-    }
+    devDependencies
   };
 }
 
@@ -85,7 +100,16 @@ function copyTemplateFile(src: string, dest: string, vars: Record<string, string
 export function detectMonorepoRoot(fromDir: string): string | null {
   let dir = path.resolve(fromDir);
   for (let i = 0; i < 6; i++) {
-    if (fs.existsSync(path.join(dir, 'packages', 'rayact-react'))) return dir;
+    // The collapsed rayact repo: root package named "rayact" with src/react.
+    const pkgPath = path.join(dir, 'package.json');
+    if (fs.existsSync(pkgPath) && fs.existsSync(path.join(dir, 'src', 'react'))) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { name?: string };
+        if (pkg.name === 'rayact') return dir;
+      } catch {
+        // Unreadable package.json — keep walking up.
+      }
+    }
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -108,7 +132,7 @@ export function createRayactApp(options: CreateOptions): void {
   }
 
   const appKey = options.projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  const deps = depBlock(options.monorepo, options.monorepoRoot, options.targetDir);
+  const deps = depBlock(options);
   const vars: Record<string, string> = {
     PROJECT_NAME: options.projectName,
     APP_KEY: appKey

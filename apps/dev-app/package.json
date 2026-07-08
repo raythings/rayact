@@ -30,7 +30,7 @@
     "url": "https://github.com/raythings/rayact-dev-app/issues"
   },
   "dependencies": {
-    "rayact": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-0.0.1.tgz",
+    "rayact": "file:../..",
     "react": "^19.0.0"
   },
   "devDependencies": {
