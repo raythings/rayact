@@ -218,7 +218,7 @@ enum DevClientBridge {
 
     private static func appInfoJson() -> String {
         let info: [String: Any] = [
-            "bundleId": Bundle.main.bundleIdentifier ?? "com.rayact.ios",
+            "bundleId": Bundle.main.bundleIdentifier ?? "com.rayact.app",
             "nativeAppVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0",
             "rayactVersion": "0.1.0",
         ]

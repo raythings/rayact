@@ -9,8 +9,8 @@ mkdir -p "$OUT"
 cd "$ROOT"
 
 echo "[verify-ios] building dev-server + release bundle..."
-npm run build:dev-server >/dev/null 2>&1 || npm run build:dev-server
-node packages/rayact-dev-server/dist/cli.js build --mode release --entry "$VERIFY_APP_ENTRY" --out /tmp/rayact_verify_bundle 2>"$OUT/build.log"
+npm run build >/dev/null 2>&1 || npm run build
+node dist/cli/cli.js build --mode release --entry "$VERIFY_APP_ENTRY" --out /tmp/rayact_verify_bundle 2>"$OUT/build.log"
 mkdir -p apps/android/app/src/main/assets
 cp /tmp/rayact_verify_bundle/bundle.qjsbc apps/android/app/src/main/assets/app.qjsbc
 cp /tmp/rayact_verify_bundle/bundle.js apps/android/app/src/main/assets/app.js
@@ -49,10 +49,10 @@ if [ -n "${BOOTED_UDID:-}" ]; then
     | xargs -0 ls -td 2>/dev/null | head -1)"
   if [ -n "$APP" ] && [ -d "$APP" ]; then
     echo "[verify-ios] install + screenshot on booted simulator..."
-    xcrun simctl terminate "$BOOTED_UDID" com.rayact.ios 2>/dev/null || true
-    xcrun simctl spawn "$BOOTED_UDID" defaults delete com.rayact.ios RAYACT_DEV_SERVER 2>/dev/null || true
+    xcrun simctl terminate "$BOOTED_UDID" com.rayact.app 2>/dev/null || true
+    xcrun simctl spawn "$BOOTED_UDID" defaults delete com.rayact.app RAYACT_DEV_SERVER 2>/dev/null || true
     xcrun simctl install "$BOOTED_UDID" "$APP" 2>"$OUT/install.log"
-    xcrun simctl launch "$BOOTED_UDID" com.rayact.ios 2>"$OUT/launch.log" || true
+    xcrun simctl launch "$BOOTED_UDID" com.rayact.app 2>"$OUT/launch.log" || true
     sleep 4
     xcrun simctl io "$BOOTED_UDID" screenshot "$OUT/shot-launch.png" 2>"$OUT/screenshot.log" || true
   fi

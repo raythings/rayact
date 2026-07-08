@@ -921,6 +921,10 @@ static void injectMaterialIconsRaw(JSContext* ctx) {
         if (tryEvalBytecode(path)) return;
         snprintf(path, sizeof(path), "%s/resources/fonts/material_icons.js", assets);
         if (tryEvalSource(path)) return;
+        snprintf(path, sizeof(path), "%s/node_modules/rayact/dist/shared/material_icons.js", assets);
+        if (tryEvalSource(path)) return;
+        snprintf(path, sizeof(path), "%s/node_modules/rayact/shared-material-icons.js", assets);
+        if (tryEvalSource(path)) return;
         snprintf(path, sizeof(path), "%s/node_modules/@rayact/runtime/dist/shared/material_icons.js", assets);
         if (tryEvalSource(path)) return;
         snprintf(path, sizeof(path), "%s/node_modules/@rayact/shared/dist/material_icons.js", assets);
@@ -937,6 +941,10 @@ static void injectMaterialIconsRaw(JSContext* ctx) {
             if (tryEvalBytecode(sharedJsc.c_str())) return true;
             const std::filesystem::path nodeModules = dir / "node_modules/@rayact/shared/dist/material_icons.js";
             if (tryEvalSource(nodeModules.c_str())) return true;
+            const std::filesystem::path rayactNodeModules = dir / "node_modules/rayact/dist/shared/material_icons.js";
+            if (tryEvalSource(rayactNodeModules.c_str())) return true;
+            const std::filesystem::path rayactRootExport = dir / "node_modules/rayact/shared-material-icons.js";
+            if (tryEvalSource(rayactRootExport.c_str())) return true;
             const std::filesystem::path fontsJs = dir / "resources/fonts/material_icons.js";
             if (tryEvalSource(fontsJs.c_str())) return true;
             const std::filesystem::path fontsJsc = dir / "resources/fonts/material_icons.jsc";
@@ -1441,6 +1449,26 @@ static void showDevErrorOverlay(JSContext* ctx, const std::string& message) {
     JS_FreeValue(ctx, result);
 }
 
+// Dev-server requests identify their platform so the per-platform dev server
+// contexts serve the right bundle (see selectPlatform in dev-server/server.ts).
+static const char* rayactDevPlatform() {
+#ifdef __ANDROID__
+    return "android";
+#elif defined(RAYACT_IOS)
+    return "ios";
+#elif defined(RAYACT_WEB)
+    return "web";
+#else
+    return "desktop";
+#endif
+}
+
+static std::string withDevPlatformQuery(const std::string& url) {
+    if (url.find("platform=") != std::string::npos) return url;
+    const char sep = url.find('?') != std::string::npos ? '&' : '?';
+    return url + sep + "platform=" + rayactDevPlatform();
+}
+
 static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
 #if defined(RAYACT_WEB)
     // Web (?dev=<origin>): no libcurl here — fetch the module-HMR bootstrap via
@@ -1462,7 +1490,7 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
         JS_FreeValue(ctx, fetchSetup);
     }
     {
-        std::string bootstrap = rayact::webDevFetch(devServer + "/rayact/bootstrap.js");
+        std::string bootstrap = rayact::webDevFetch(withDevPlatformQuery(devServer + "/rayact/bootstrap.js"));
         if (bootstrap.empty()) {
             showDevErrorOverlay(ctx, "Failed to fetch dev bootstrap from " + devServer);
             return false;
@@ -1494,7 +1522,7 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
 
     std::string manifest;
     std::string error;
-    if (!httpGet(devServer + "/rayact/manifest.json", manifest, error)) {
+    if (!httpGet(withDevPlatformQuery(devServer + "/rayact/manifest.json"), manifest, error)) {
         showDevErrorOverlay(ctx, "Failed to fetch dev manifest:\n" + error);
         return false;
     }
@@ -1532,7 +1560,7 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
         }
         JS_FreeValue(ctx, fetchSetup);
         std::string bootstrap;
-        if (!httpGet(devServer + bootstrapPath, bootstrap, error)) {
+        if (!httpGet(withDevPlatformQuery(devServer + bootstrapPath), bootstrap, error)) {
             showDevErrorOverlay(ctx, "Failed to fetch dev bootstrap:\n" + error);
             return false;
         }
@@ -1553,7 +1581,7 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
         printf("Successfully loaded Rayact dev bootstrap (%zu bytes)\n", bootstrap.size());
     } else if (bundleFormat == "qjsbc") {
         std::vector<uint8_t> bytes;
-        if (!httpGetBytes(devServer + "/rayact/bundle.qjsbc", bytes, error)) {
+        if (!httpGetBytes(withDevPlatformQuery(devServer + "/rayact/bundle.qjsbc"), bytes, error)) {
             showDevErrorOverlay(ctx, "Failed to fetch dev bytecode:\n" + error);
             return false;
         }
@@ -1562,7 +1590,7 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
     } else {
         std::string bundlePath = "/rayact/bundle";
         std::string bundle;
-        if (!httpGet(devServer + bundlePath, bundle, error)) {
+        if (!httpGet(withDevPlatformQuery(devServer + bundlePath), bundle, error)) {
             showDevErrorOverlay(ctx, "Failed to fetch dev bundle:\n" + error);
             return false;
         }
@@ -1641,7 +1669,7 @@ static void pollDevServer(JSContext* ctx) {
 
     std::string status;
     std::string error;
-    if (!httpGet(g_devServerUrl + "/rayact/status", status, error)) {
+    if (!httpGet(withDevPlatformQuery(g_devServerUrl + "/rayact/status"), status, error)) {
         fprintf(stderr, "Rayact dev poll failed: %s\n", error.c_str());
         return;
     }
@@ -1652,7 +1680,7 @@ static void pollDevServer(JSContext* ctx) {
     printf("Rayact dev revision changed: %d -> %d\n", g_devRevision, revision);
 
     std::string bundle;
-    if (!httpGet(g_devServerUrl + "/rayact/bundle", bundle, error)) {
+    if (!httpGet(withDevPlatformQuery(g_devServerUrl + "/rayact/bundle"), bundle, error)) {
         showDevErrorOverlay(ctx, "Failed to fetch dev bundle:\n" + error);
         return;
     }

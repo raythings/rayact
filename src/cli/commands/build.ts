@@ -524,7 +524,7 @@ async function buildIosApp(
     // config wins; else the scaffolded project.yml's PRODUCT_BUNDLE_IDENTIFIER
     // (rayact prebuild patches it to the app's package name); else the engine default.
     const ymlBundleId = ymlText.match(/PRODUCT_BUNDLE_IDENTIFIER:\s*(\S+)/)?.[1];
-    const bundleId = config.ios?.bundleId ?? ymlBundleId ?? 'com.rayact.ios';
+    const bundleId = config.ios?.bundleId ?? ymlBundleId ?? 'com.rayact.app';
     spawnSync('xcrun', ['simctl', 'launch', deviceId, bundleId], { stdio: 'inherit' });
   }
 }
@@ -590,7 +590,12 @@ async function packageDesktopApp(
 
   // Icon/emoji fonts: the host loads resources/fonts/* relative to CWD.
   const binRoot = path.resolve(path.dirname(bin), '../..');
-  for (const fontsDir of [path.join(cwd, 'resources/fonts'), path.join(binRoot, 'resources/fonts')]) {
+  const prebuiltRoot = path.resolve(path.dirname(bin), '..');
+  for (const fontsDir of [
+    path.join(cwd, 'resources/fonts'),
+    path.join(prebuiltRoot, 'resources/fonts'),
+    path.join(binRoot, 'resources/fonts')
+  ]) {
     if (!existsSync(fontsDir)) continue;
     for (const name of await fs.readdir(fontsDir)) {
       await copyInto(path.join(fontsDir, name), path.join(outDir, 'resources/fonts', name));
@@ -601,8 +606,12 @@ async function packageDesktopApp(
   // Material icon metadata: ship the generated lookup table too so the desktop
   // host can resolve `Icon name="..."` even when launched from a packaged app.
   const iconMapCandidates = [
+    path.join(cwd, 'node_modules/rayact/dist/shared/material_icons.js'),
+    path.join(cwd, 'node_modules/rayact/shared-material-icons.js'),
     path.join(cwd, 'packages/rayact-shared/dist/material_icons.js'),
     path.join(cwd, 'packages/rayact-shared/dist/material_icons.jsc'),
+    path.join(prebuiltRoot, 'resources/fonts/material_icons.js'),
+    path.join(prebuiltRoot, 'resources/fonts/material_icons.jsc'),
     path.join(binRoot, 'packages/rayact-shared/dist/material_icons.js'),
     path.join(binRoot, 'packages/rayact-shared/dist/material_icons.jsc'),
   ];

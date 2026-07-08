@@ -185,7 +185,7 @@ targets:
       base:
         <<: *engineSettings
         INFOPLIST_FILE: Info.plist
-        PRODUCT_BUNDLE_IDENTIFIER: com.rayact.ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.rayact.app
         PRODUCT_NAME: Rayact
         OTHER_LDFLAGS: "$(inherited) -framework Metal -framework QuartzCore -framework UIKit -framework CoreFoundation -framework Security"
     preBuildScripts:

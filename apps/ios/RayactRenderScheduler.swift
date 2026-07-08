@@ -152,5 +152,5 @@ final class RayactRenderScheduler {
 }
 
 extension RayactRenderScheduler {
-    static let perfLog = OSLog(subsystem: "com.rayact.ios", category: "RayactPerf")
+    static let perfLog = OSLog(subsystem: "com.rayact.app", category: "RayactPerf")
 }
