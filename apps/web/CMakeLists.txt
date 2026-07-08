@@ -247,7 +247,10 @@ endif()
 # (cwd is "/" on web). Without it, icon names don't resolve and render as placeholder
 # glyphs ("material_icons.js not found").
 option(RAYACT_WEB_EMBED_ICONS "Embed Material icon and emoji font resources" ON)
-set(_rayact_icons "${OUTER}/rayact/packages/rayact-shared/dist/material_icons.js")
+set(_rayact_icons "${OUTER}/rayact/dist/shared/material_icons.js")
+if(NOT EXISTS "${_rayact_icons}")
+    set(_rayact_icons "${OUTER}/rayact/src/shared/material_icons.js")
+endif()
 set(_rayact_iconfont "${OUTER}/rayact/resources/fonts/MaterialSymbolsRounded.ttf")
 set(_rayact_iconfont_filled "${OUTER}/rayact/resources/fonts/MaterialSymbolsRounded-Filled.ttf")
 set(_rayact_emoji_font "${OUTER}/rayact/resources/fonts/NotoColorEmoji.ttf")

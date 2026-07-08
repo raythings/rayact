@@ -163,7 +163,7 @@ export async function runPrebuild(options: PrebuildOptions): Promise<{
     copyDirRecursive(templateIos, iosDir);
     const bundleId = options.ios?.bundleId ?? packageName;
     replaceInFile(path.join(iosDir, 'project.yml'), {
-      'com.rayact.ios': bundleId,
+      'com.rayact.app': bundleId,
       'RayactIOS': appName.replace(/\s+/g, '')
     });
     // Installed package first, then cache, then download from the release —

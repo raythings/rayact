@@ -56,7 +56,7 @@ export async function runDevApp(flags: CliFlags): Promise<void> {
     adbLaunch('com.rayact.app', '.DevLauncherActivity');
     console.log('\nDev app installed and launched.');
   } else if (platform === 'ios-simulator') {
-    if (!installOnSimulator(artifact, 'com.rayact.ios')) process.exit(1);
+    if (!installOnSimulator(artifact, 'com.rayact.app')) process.exit(1);
     console.log('\nDev app installed and launched on the simulator.');
   } else {
     console.log(`\nUnsigned device IPA downloaded to:\n  ${artifact}`);
