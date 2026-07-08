@@ -98,14 +98,75 @@ void mainLoop(JSContext* ctx) {
         }
     }
 
+    struct ScriptState {
+        int frame = 0;
+        int tapUpFrame = -1;
+        float tapX = 0.0f;
+        float tapY = 0.0f;
+    };
+    static ScriptState scriptState;
+    auto runScriptedInput = [&](bool& quit) {
+        const char* script = std::getenv("RAYACT_SCRIPT");
+        if (!script) return;
+        ++scriptState.frame;
+        if (scriptState.tapUpFrame == scriptState.frame) {
+            rayact::engineQueueTouch(1, 0, scriptState.tapX, scriptState.tapY);
+        }
+        std::string s(script);
+        size_t pos = 0;
+        while (pos < s.size()) {
+            size_t end = s.find(';', pos);
+            std::string cmd = s.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
+            pos = end == std::string::npos ? s.size() : end + 1;
+            int at = 0; char op[32] = {0}; char arg[128] = {0};
+            if (sscanf(cmd.c_str(), "%d:%31[a-z]:%127s", &at, op, arg) < 2) continue;
+            if (at != scriptState.frame) continue;
+            if (strcmp(op, "size") == 0) {
+                int w = 0, h = 0;
+                if (sscanf(arg, "%d,%d", &w, &h) == 2) SetWindowSize(w, h);
+            } else if (strcmp(op, "scrollbottom") == 0 && g_root) {
+                std::function<void(const raym3::v2::NodePtr&)> sc = [&](const raym3::v2::NodePtr& n){
+                    if (!n) return;
+                    if (n->scrollContentHeight > n->layout.height) n->scrollOffsetY = n->scrollContentHeight;
+                    for (auto& c : n->children) sc(c);
+                };
+                sc(g_root);
+            } else if (strcmp(op, "tap") == 0) {
+                if (sscanf(arg, "%f,%f", &scriptState.tapX, &scriptState.tapY) == 2) {
+                    rayact::engineQueueTouch(0, 0, scriptState.tapX, scriptState.tapY);
+                    scriptState.tapUpFrame = scriptState.frame + 6;
+                }
+            } else if (strcmp(op, "down") == 0) {
+                if (sscanf(arg, "%f,%f", &scriptState.tapX, &scriptState.tapY) == 2) {
+                    rayact::engineQueueTouch(0, 0, scriptState.tapX, scriptState.tapY);
+                    scriptState.tapUpFrame = -1;
+                }
+            } else if (strcmp(op, "up") == 0) {
+                if (sscanf(arg, "%f,%f", &scriptState.tapX, &scriptState.tapY) == 2) {
+                    rayact::engineQueueTouch(1, 0, scriptState.tapX, scriptState.tapY);
+                    scriptState.tapUpFrame = -1;
+                }
+            } else if (strcmp(op, "shot") == 0) {
+                TakeScreenshot(arg);
+            } else if (strcmp(op, "quit") == 0) {
+                quit = true;
+            }
+        }
+    };
+
     // raym3::Initialize() + initSystemAppearance() were already done by
     // rayact::engineFinishLoad() before this loop starts.
     while (!WindowShouldClose()) {
+        bool scriptedQuit = false;
+        runScriptedInput(scriptedQuit);
+
         if (!rayact::engineThreadedModeEnabled())
             rayact::enginePumpJS();
         if (IsWindowResized())
             publishWindowDimensions(ctx, GetRenderWidth(), GetRenderHeight());
         rayact::engineRenderFrame(GetRenderWidth(), GetRenderHeight());
+        if (!rayact::engineThreadedModeEnabled())
+            rayact::enginePumpJS();
 
         // Input debug harness: capture down/up/after-500ms screenshots.
         rayact::inputDebugTakeScreenshots();
@@ -126,61 +187,7 @@ void mainLoop(JSContext* ctx) {
             if (sf == 122) break;
         }
 
-        // Scripted input harness (RAYACT_SCRIPT="frame:cmd[:args];...").
-        // Commands: size:w,h | scrollbottom | tap:x,y | down:x,y | up:x,y |
-        // shot:name | quit.
-        // Pair with RAYACT_SYNTH_INPUT=1 so taps route through the queued-touch
-        // source instead of the real mouse.
-        if (const char* script = std::getenv("RAYACT_SCRIPT")) {
-            static int frame = 0; ++frame;
-            static bool tapDownPending = false;
-            static int tapUpFrame = -1;
-            static float tapX = 0, tapY = 0;
-            if (tapUpFrame == frame) rayact::engineQueueTouch(1, 0, tapX, tapY);
-            std::string s(script);
-            size_t pos = 0;
-            bool quit = false;
-            while (pos < s.size()) {
-                size_t end = s.find(';', pos);
-                std::string cmd = s.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
-                pos = end == std::string::npos ? s.size() : end + 1;
-                int at = 0; char op[32] = {0}; char arg[128] = {0};
-                if (sscanf(cmd.c_str(), "%d:%31[a-z]:%127s", &at, op, arg) < 2) continue;
-                if (at != frame) continue;
-                if (strcmp(op, "size") == 0) {
-                    int w = 0, h = 0;
-                    if (sscanf(arg, "%d,%d", &w, &h) == 2) SetWindowSize(w, h);
-                } else if (strcmp(op, "scrollbottom") == 0 && g_root) {
-                    std::function<void(const raym3::v2::NodePtr&)> sc = [&](const raym3::v2::NodePtr& n){
-                        if (!n) return;
-                        if (n->scrollContentHeight > n->layout.height) n->scrollOffsetY = n->scrollContentHeight;
-                        for (auto& c : n->children) sc(c);
-                    };
-                    sc(g_root);
-                } else if (strcmp(op, "tap") == 0) {
-                    if (sscanf(arg, "%f,%f", &tapX, &tapY) == 2) {
-                        rayact::engineQueueTouch(0, 0, tapX, tapY);
-                        tapUpFrame = frame + 6;
-                        (void)tapDownPending;
-                    }
-                } else if (strcmp(op, "down") == 0) {
-                    if (sscanf(arg, "%f,%f", &tapX, &tapY) == 2) {
-                        rayact::engineQueueTouch(0, 0, tapX, tapY);
-                        tapUpFrame = -1;
-                    }
-                } else if (strcmp(op, "up") == 0) {
-                    if (sscanf(arg, "%f,%f", &tapX, &tapY) == 2) {
-                        rayact::engineQueueTouch(1, 0, tapX, tapY);
-                        tapUpFrame = -1;
-                    }
-                } else if (strcmp(op, "shot") == 0) {
-                    TakeScreenshot(arg);
-                } else if (strcmp(op, "quit") == 0) {
-                    quit = true;
-                }
-            }
-            if (quit) break;
-        }
+        if (scriptedQuit) break;
     }
 
     g_shapes.clear();

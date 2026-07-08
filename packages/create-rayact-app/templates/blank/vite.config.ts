@@ -11,7 +11,6 @@ export default defineConfig(
     {
       root,
       entry: 'src/App.tsx',
-      platform: 'desktop',
       mode: release ? 'release' : 'development',
       outDir: 'dist',
       minify: release,

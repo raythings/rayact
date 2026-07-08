@@ -37,6 +37,17 @@ function packDir(dir, name) {
 
 function packWebHost(dir, name) {
   if (!fs.existsSync(dir)) return false;
+  const cachePath = path.join(ROOT, 'build-web/CMakeCache.txt');
+  if (fs.existsSync(cachePath)) {
+    const cache = fs.readFileSync(cachePath, 'utf8');
+    const embeddedApp = cache.match(/^RAYACT_WEB_EMBED_APP:FILEPATH=(.+)$/m)?.[1]?.trim();
+    if (embeddedApp) {
+      throw new Error(
+        `build-web is configured with RAYACT_WEB_EMBED_APP=${embeddedApp}. ` +
+        'Reconfigure the release web host without an embedded app before packing.'
+      );
+    }
+  }
   const stage = path.join(OUT, '.rayact-web-host-stage');
   fs.rmSync(stage, { recursive: true, force: true });
   fs.mkdirSync(path.join(stage, 'host'), { recursive: true });
