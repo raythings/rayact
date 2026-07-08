@@ -708,8 +708,9 @@ extern "C" {
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     g_jvm = vm;
-    // Wire OS emoji rasterizer immediately — uses g_jvm which is now set.
-    raym3::v2::EmojiFont::Instance().SetRasterizer(AndroidRasterizeEmoji);
+    // Prefer the bundled CBDT emoji font on Android. Some devices' Paint-based
+    // fallback path rasterizes missing-glyph boxes for otherwise standard emoji,
+    // while the bundled font is already shipped with the runtime assets.
     installAndroidTextInputHostHooksOnce();
     return JNI_VERSION_1_6;
 }
