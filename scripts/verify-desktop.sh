@@ -37,7 +37,7 @@ if [ -x "$BIN" ]; then
   rm -f "$OUT/shot-release.png" shot-release.png
   RAYACT_DEVTOOLS=1 \
   RAYACT_CDP_PORT="$CDP_PORT" \
-  RAYACT_SCRIPT="5:size:1120,900;120:shot:shot-release.png;300:quit" \
+  RAYACT_SCRIPT="120:shot:shot-release.png;300:quit" \
     "$BIN" "$OUT/dist/bundle.js" >"$OUT/stdout.log" 2>&1 &
   DESKTOP_PID=$!
   if ! python3 "$ROOT/scripts/verify-desktop-dom.py" "$CDP_PORT" \

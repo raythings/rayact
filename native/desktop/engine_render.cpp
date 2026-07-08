@@ -211,10 +211,13 @@ float getRenderScaleDpi() {
 static bool rayactShouldApplyDpiDrawScale() {
 #if defined(RAYACT_ANDROID) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
     return true;
+#elif defined(__APPLE__)
+    // The macOS raylib backend reports a logical window and a HiDPI
+    // framebuffer, but rlgl draws in framebuffer coordinates. Layout and
+    // pointer input stay in logical points, so scale drawing exactly once.
+    return true;
 #else
-    // Desktop raylib already maps logical window coordinates onto the HiDPI
-    // framebuffer on macOS. Applying Rayact's dp matrix on top of that doubles
-    // visual size and leaves mouse hit testing in a different coordinate space.
+    // Other desktop backends currently draw in logical window coordinates.
     return false;
 #endif
 }
