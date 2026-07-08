@@ -88,7 +88,9 @@ class DevLauncherActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        activeSession()?.acquireGraphics()
+        if (activeSession()?.acquireGraphics() == true) {
+            activeHost()?.recreateSurfacesAfterGraphicsResume()
+        }
     }
 
     override fun onResume() {
@@ -118,7 +120,10 @@ class DevLauncherActivity : AppCompatActivity() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        activeHost()?.syncSurfacesToCurrentLayout()
+        activeHost()?.post {
+            activeHost()?.syncSurfacesToCurrentLayout()
+            activeSession()?.host?.renderScheduler?.requestFrame()
+        }
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {

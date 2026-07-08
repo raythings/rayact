@@ -861,6 +861,27 @@ static bool contextHasIconsMap(JSContext* ctx) {
     return has;
 }
 
+static void registerBuiltInMaterialIconFonts(const char* assets) {
+    if (!assets || !*assets) return;
+    std::unordered_map<std::string, std::string> variants;
+    const std::filesystem::path root(assets);
+    const std::filesystem::path outlined = root / "resources/fonts/MaterialSymbolsRounded.ttf";
+    const std::filesystem::path filled = root / "resources/fonts/MaterialSymbolsRounded-Filled.ttf";
+    const std::filesystem::path regular = root / "resources/fonts/MaterialIcons-Regular.ttf";
+    if (std::filesystem::exists(outlined)) {
+        variants["outlined"] = outlined.string();
+    }
+    if (std::filesystem::exists(filled)) {
+        variants["filled"] = filled.string();
+    }
+    if (variants.empty() && std::filesystem::exists(regular)) {
+        variants["regular"] = regular.string();
+    }
+    if (!variants.empty()) {
+        raym3::v2::LoadIconSetFromPaths("material", variants);
+    }
+}
+
 // Inject material_icons into each JS context that does not already have Icons.
 // Prefers .jsc bytecode (faster load, no parse) if present alongside the .js.
 static void injectMaterialIconsRaw(JSContext* ctx) {
@@ -1009,7 +1030,10 @@ static void injectMaterialIcons(JSContext* ctx) {
     // only used as a fallback for platforms where it IS the app dir (Android).
     std::string releaseBase = rayact::rayactAssetBaseDir();
     const char* assets = !releaseBase.empty() ? releaseBase.c_str() : rayact::appAssetsPath();
-    if (assets && *assets) raym3::v2::SetIconFontSearchPrefix(assets);
+    if (assets && *assets) {
+        raym3::v2::SetIconFontSearchPrefix(assets);
+        registerBuiltInMaterialIconFonts(assets);
+    }
     injectMaterialIconsRaw(ctx);
     registerMaterialIconNamesIntoRaym3(ctx);
 }
@@ -1852,6 +1876,7 @@ bool engineLoadSource(const std::string& source, const std::string& name) {
 bool engineLoadConfig(const char* assetsPath) {
     rayact::loadAppConfig(g_ctx, assetsPath);
     raym3::v2::SetIconFontSearchPrefix(assetsPath);
+    registerBuiltInMaterialIconFonts(assetsPath);
     return true;
 }
 
