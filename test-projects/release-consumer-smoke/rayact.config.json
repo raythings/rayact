@@ -1,11 +1,10 @@
 {
-  "$schema": "./node_modules/@rayact/dev-server/schema/rayact.config.schema.json",
+  "$schema": "./node_modules/rayact/dist/schema/rayact.config.schema.json",
   "rayactAppKey": "release-consumer-smoke",
   "devServer": {
     "host": "0.0.0.0",
     "port": 8081,
     "cdpPort": 9229
   },
-  "entry": "src/App.tsx",
-  "platform": "desktop"
+  "entry": "src/App.tsx"
 }

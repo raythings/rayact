@@ -1,1 +1,1 @@
-export * from '@rayact/dev-server';
+export * from './dist/dev-server/index.js';

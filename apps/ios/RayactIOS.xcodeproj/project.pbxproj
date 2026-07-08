@@ -1312,7 +1312,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\nSOURCE=\"${SRCROOT}/../../apps/android/app/src/main/assets/runtime\"\nDEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/runtime\"\nrm -rf \"${DEST}\"\nmkdir -p \"${DEST}\"\nditto \"${SOURCE}\" \"${DEST}\"\nAPPJS=\"${SRCROOT}/../../apps/android/app/src/main/assets/app.js\"\nif [ -f \"${APPJS}\" ]; then\n  cp \"${APPJS}\" \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/app.js\"\nfi\n";
+			shellScript = "set -eu\nSOURCE=\"${SRCROOT}/../../apps/android/app/src/main/assets/runtime\"\nDEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/runtime\"\nrm -rf \"${DEST}\"\nmkdir -p \"${DEST}\"\nditto \"${SOURCE}\" \"${DEST}\"\nAPPJS=\"${SRCROOT}/../../apps/android/app/src/main/assets/app.js\"\nif [ -f \"${APPJS}\" ]; then\n  cp \"${APPJS}\" \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/app.js\"\nfi\nAPPQJSBC=\"${SRCROOT}/../../apps/android/app/src/main/assets/app.qjsbc\"\nif [ -f \"${APPQJSBC}\" ]; then\n  cp \"${APPQJSBC}\" \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/app.qjsbc\"\nfi\n";
 		};
 		9113182C25A990D6ECED6DF2 /* Generate iOS Metal overlay */ = {
 			isa = PBXShellScriptBuildPhase;

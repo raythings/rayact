@@ -1,1 +1,1 @@
-export * from '@rayact/runtime';
+export * from './dist/runtime/index.js';

@@ -1,1 +1,1 @@
-export * from '@rayact/shared';
+export * from './dist/shared/index.js';

@@ -1,1 +1,1 @@
-export * from '@rayact/navigation/stack';
+export * from './dist/navigation/stack.js';

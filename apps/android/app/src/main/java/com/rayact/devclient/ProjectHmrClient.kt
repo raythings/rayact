@@ -36,7 +36,7 @@ object ProjectHmrClient {
         Thread {
             if (!running.get() || gen != generation.get()) return@Thread
             val manifest = runCatching {
-                JSONObject(DevServerLoader.httpGetText("$normalized/rayact/manifest.json"))
+                JSONObject(DevServerLoader.httpGetText("$normalized/rayact/manifest.json?platform=android"))
             }.getOrElse {
                 Log.w(TAG, "hmr manifest fetch failed: ${it.message}")
                 return@Thread
@@ -101,7 +101,7 @@ object ProjectHmrClient {
     }
 
     private fun applyModuleUpdate(base: String, engineSession: RayactEngineSession, path: String, timestamp: Long) {
-        val query = if (timestamp > 0L) "?t=$timestamp" else ""
+        val query = if (timestamp > 0L) "?t=$timestamp&platform=android" else "?platform=android"
         val moduleUrl = "$base/rayact/m$path$query"
         try {
             val source = DevServerLoader.httpGetText(moduleUrl)

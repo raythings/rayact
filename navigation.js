@@ -1,1 +1,1 @@
-export * from '@rayact/navigation';
+export * from './dist/navigation/index.js';

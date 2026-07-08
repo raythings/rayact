@@ -6,8 +6,8 @@
  * builds render the launcher too.
  */
 import React from 'react';
-import { render } from '@rayact/react';
-import { DevLauncherProvider, DevLauncherUI, DevMenu } from '@rayact/dev-client';
+import { render } from 'rayact/react';
+import { DevLauncherProvider, DevLauncherUI, DevMenu } from 'rayact/dev-client';
 
 function App() {
   return (

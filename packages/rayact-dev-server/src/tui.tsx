@@ -104,6 +104,27 @@ function setupLogModeStdin(): void {
   process.stdin.on('keypress', onLogModeKey);
 }
 
+function openUrl(url: string): void {
+  const command = process.platform === 'darwin'
+    ? 'open'
+    : process.platform === 'win32'
+      ? 'cmd'
+      : 'xdg-open';
+  const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+  const child = spawn(command, args, { stdio: 'ignore', detached: true });
+  child.unref();
+}
+
+function launchRayactCommand(args: string[]): ChildProcess {
+  const script = process.argv[1];
+  return spawn(process.execPath, [script, ...args], {
+    cwd: process.cwd(),
+    stdio: 'ignore',
+    detached: true,
+    env: process.env
+  });
+}
+
 function cleanupLogModeStdin(): void {
   process.stdin.off('keypress', onLogModeKey);
 }
@@ -212,6 +233,45 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
     });
   }, [args.desktopBin, desktop, server]);
 
+  const launchAndroid = useCallback(() => {
+    if (!server) { setStatus('Server is not ready yet'); return; }
+    void setupAdbReverse(server.localUrl, loadRayactConfig().devServer?.cdpPort ?? 9229);
+    const child = launchRayactCommand(['dev-app', '--android']);
+    child.unref();
+    setStatus(`Installing/launching Android dev app at ${formatTime()}`);
+    child.on('error', error => setStatus(`Failed to launch Android dev app: ${error.message}`));
+  }, [server]);
+
+  const launchIos = useCallback(() => {
+    if (!server) { setStatus('Server is not ready yet'); return; }
+    const child = launchRayactCommand(['dev-app', '--ios-simulator']);
+    child.unref();
+    setStatus(`Installing/launching iOS simulator dev app at ${formatTime()}`);
+    child.on('error', error => setStatus(`Failed to launch iOS dev app: ${error.message}`));
+  }, [server]);
+
+  const launchWeb = useCallback(() => {
+    if (!server) { setStatus('Server is not ready yet'); return; }
+    void (async () => {
+      try {
+        if (!activeWebBridge) {
+          const bridge = await startWebDevBridge(server.localUrl, {
+            port: args.webPort,
+            strictPort: args.strictWebPort
+          });
+          activeWebBridge = bridge;
+          setWebOpenUrl(bridge.openUrl);
+        }
+        if (activeWebBridge) {
+          openUrl(activeWebBridge.openUrl);
+          setStatus(`Web host opened at ${formatTime()}`);
+        }
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      }
+    })();
+  }, [args.strictWebPort, args.webPort, server]);
+
   const reload = useCallback(() => {
     if (!server) { setStatus('Server is not ready yet'); return; }
     void server.reload()
@@ -238,6 +298,9 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
   useInput((input, key) => {
     if (input === 'c' || input === 'C') onEnterLogMode();
     else if (input === 'd') launchDesktop();
+    else if (input === 'a') launchAndroid();
+    else if (input === 'i') launchIos();
+    else if (input === 'w') launchWeb();
     else if (input === 'r') reload();
     else if (input === 'm') toggleMinify();
     else if (input === 'b') toggleBytecode();
@@ -266,6 +329,9 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
         <Text>
           <Text color="cyan">c</Text> log{'   '}
           <Text color="cyan">d</Text> desktop{'   '}
+          <Text color="cyan">a</Text> android{'   '}
+          <Text color="cyan">i</Text> ios{'   '}
+          <Text color="cyan">w</Text> web{'   '}
           <Text color="cyan">r</Text> reload{'   '}
           <Text color="cyan">m</Text> minify{'   '}
           <Text color="cyan">b</Text> bytecode{'   '}

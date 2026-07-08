@@ -278,30 +278,30 @@ export const RAYACT_BOOTSTRAP_ID = 'virtual:rayact-bootstrap';
 const ENTRY_ID = RAYACT_ENTRY_ID;
 const DEV_CLIENT_ENTRY_ID = 'virtual:rayact-dev-client-entry';
 
-const RAYACT_PKG_ALIASES: { find: RegExp; pkg: string; src: string }[] = [
-  { find: /^rayact\/react$/, pkg: '@rayact/react', src: 'src/index.ts' },
-  { find: /^rayact\/runtime$/, pkg: '@rayact/runtime', src: 'src/index.ts' },
-  { find: /^rayact\/shared$/, pkg: '@rayact/shared', src: 'src/index.ts' },
-  { find: /^rayact\/shared\/material-icons$/, pkg: '@rayact/shared', src: 'src/material_icons.js' },
-  { find: /^rayact\/navigation$/, pkg: '@rayact/navigation', src: 'src/index.tsx' },
-  { find: /^rayact\/navigation\/native$/, pkg: '@rayact/navigation', src: 'src/native.tsx' },
-  { find: /^rayact\/navigation\/stack$/, pkg: '@rayact/navigation', src: 'src/stack.tsx' },
-  { find: /^rayact\/navigation\/bottom-tabs$/, pkg: '@rayact/navigation', src: 'src/bottom-tabs.tsx' },
-  { find: /^rayact\/crypto$/, pkg: '@rayact/crypto', src: 'src/index.ts' },
-  { find: /^rayact\/dev-client$/, pkg: '@rayact/dev-client', src: 'src/index.ts' },
-  { find: /^@rayact\/react$/, pkg: '@rayact/react', src: 'src/index.ts' },
-  { find: /^@rayact\/runtime$/, pkg: '@rayact/runtime', src: 'src/index.ts' },
-  { find: /^@rayact\/shared$/, pkg: '@rayact/shared', src: 'src/index.ts' },
-  { find: /^@rayact\/shared\/material-icons$/, pkg: '@rayact/shared', src: 'src/material_icons.js' },
-  { find: /^@rayact\/navigation$/, pkg: '@rayact/navigation', src: 'src/index.tsx' },
-  { find: /^@rayact\/navigation\/native$/, pkg: '@rayact/navigation', src: 'src/native.tsx' },
-  { find: /^@rayact\/navigation\/stack$/, pkg: '@rayact/navigation', src: 'src/stack.tsx' },
-  { find: /^@rayact\/navigation\/bottom-tabs$/, pkg: '@rayact/navigation', src: 'src/bottom-tabs.tsx' },
-  { find: /^@rayact\/crypto$/, pkg: '@rayact/crypto', src: 'src/index.ts' },
-  { find: /^@rayact\/dev-client$/, pkg: '@rayact/dev-client', src: 'src/index.ts' }
+const RAYACT_PKG_ALIASES: { find: RegExp; pkg: string; src: string; fallbackSpec: string }[] = [
+  { find: /^rayact\/react$/, pkg: '@rayact/react', src: 'src/index.ts', fallbackSpec: 'rayact/react' },
+  { find: /^rayact\/runtime$/, pkg: '@rayact/runtime', src: 'src/index.ts', fallbackSpec: 'rayact/runtime' },
+  { find: /^rayact\/shared$/, pkg: '@rayact/shared', src: 'src/index.ts', fallbackSpec: 'rayact/shared' },
+  { find: /^rayact\/shared\/material-icons$/, pkg: '@rayact/shared', src: 'src/material_icons.js', fallbackSpec: 'rayact/shared/material-icons' },
+  { find: /^rayact\/navigation$/, pkg: '@rayact/navigation', src: 'src/index.tsx', fallbackSpec: 'rayact/navigation' },
+  { find: /^rayact\/navigation\/native$/, pkg: '@rayact/navigation', src: 'src/native.tsx', fallbackSpec: 'rayact/navigation/native' },
+  { find: /^rayact\/navigation\/stack$/, pkg: '@rayact/navigation', src: 'src/stack.tsx', fallbackSpec: 'rayact/navigation/stack' },
+  { find: /^rayact\/navigation\/bottom-tabs$/, pkg: '@rayact/navigation', src: 'src/bottom-tabs.tsx', fallbackSpec: 'rayact/navigation/bottom-tabs' },
+  { find: /^rayact\/crypto$/, pkg: '@rayact/crypto', src: 'src/index.ts', fallbackSpec: 'rayact/crypto' },
+  { find: /^rayact\/dev-client$/, pkg: '@rayact/dev-client', src: 'src/index.ts', fallbackSpec: 'rayact/dev-client' },
+  { find: /^@rayact\/react$/, pkg: '@rayact/react', src: 'src/index.ts', fallbackSpec: 'rayact/react' },
+  { find: /^@rayact\/runtime$/, pkg: '@rayact/runtime', src: 'src/index.ts', fallbackSpec: 'rayact/runtime' },
+  { find: /^@rayact\/shared$/, pkg: '@rayact/shared', src: 'src/index.ts', fallbackSpec: 'rayact/shared' },
+  { find: /^@rayact\/shared\/material-icons$/, pkg: '@rayact/shared', src: 'src/material_icons.js', fallbackSpec: 'rayact/shared/material-icons' },
+  { find: /^@rayact\/navigation$/, pkg: '@rayact/navigation', src: 'src/index.tsx', fallbackSpec: 'rayact/navigation' },
+  { find: /^@rayact\/navigation\/native$/, pkg: '@rayact/navigation', src: 'src/native.tsx', fallbackSpec: 'rayact/navigation/native' },
+  { find: /^@rayact\/navigation\/stack$/, pkg: '@rayact/navigation', src: 'src/stack.tsx', fallbackSpec: 'rayact/navigation/stack' },
+  { find: /^@rayact\/navigation\/bottom-tabs$/, pkg: '@rayact/navigation', src: 'src/bottom-tabs.tsx', fallbackSpec: 'rayact/navigation/bottom-tabs' },
+  { find: /^@rayact\/crypto$/, pkg: '@rayact/crypto', src: 'src/index.ts', fallbackSpec: 'rayact/crypto' },
+  { find: /^@rayact\/dev-client$/, pkg: '@rayact/dev-client', src: 'src/index.ts', fallbackSpec: 'rayact/dev-client' }
 ];
 
-function resolveRayactPackage(root: string, pkg: string, srcRel: string): string {
+function resolveRayactPackage(root: string, pkg: string, srcRel: string, fallbackSpec: string): string {
   const folder = pkg.replace('@rayact/', 'rayact-');
   const monorepoSrc = path.resolve(root, 'packages', folder, srcRel);
   if (fs.existsSync(monorepoSrc)) return normalizePath(monorepoSrc);
@@ -314,18 +314,23 @@ function resolveRayactPackage(root: string, pkg: string, srcRel: string): string
     if (fs.existsSync(srcPath)) return normalizePath(srcPath);
     return normalizePath(req.resolve(pkg));
   } catch {
+    try {
+      return normalizePath(req.resolve(fallbackSpec));
+    } catch {
+      // Continue to the parent-monorepo fallback below.
+    }
     const parentMono = path.resolve(projectRoot, '..', '..', 'packages', folder, srcRel);
     if (fs.existsSync(parentMono)) return normalizePath(parentMono);
-    throw new Error(`Cannot resolve ${pkg} from ${projectRoot}`);
+    throw new Error(`Cannot resolve ${fallbackSpec} from ${projectRoot}`);
   }
 }
 
 function rayactResolveAliases(root: string): { find: RegExp; replacement: string }[] {
   return [
     ...reactResolveAliases(root),
-    ...RAYACT_PKG_ALIASES.flatMap(({ find, pkg, src }) => {
+    ...RAYACT_PKG_ALIASES.flatMap(({ find, pkg, src, fallbackSpec }) => {
       try {
-        return [{ find, replacement: resolveRayactPackage(root, pkg, src) }];
+        return [{ find, replacement: resolveRayactPackage(root, pkg, src, fallbackSpec) }];
       } catch {
         return [];
       }
@@ -458,6 +463,9 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
     },
     load(id) {
       if (id.startsWith('\0rayact-css:')) {
+        if (options.platform === 'web') {
+          return 'export default {};';
+        }
         const encoded = id.slice('\0rayact-css:'.length, -'.js'.length);
         const cssFile = decodeURIComponent(encoded);
         const nativePath = toNativeCssPath(cssFile, root);
@@ -510,6 +518,7 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
           `import React from 'react';`,
           `import * as jsxRuntime from 'react/jsx-runtime';`,
           `import * as jsxDevRuntime from 'react/jsx-dev-runtime';`,
+          `globalThis.__rayactPlatform = { os: ${JSON.stringify(options.platform)}, target: ${JSON.stringify(options.platform)}, ...(globalThis.__rayactPlatform || {}) };`,
           `const __vendor = (globalThis.__RAYACT_VENDOR__ = globalThis.__RAYACT_VENDOR__ || {});`,
           `__vendor.react = React.default || React;`,
           `__vendor.jsxRuntime = jsxRuntime.default || jsxRuntime;`,
@@ -593,6 +602,12 @@ export function createRayactViteConfig(options: BundleOptions, input = ENTRY_ID)
   const compiler = compilerForMode(mode);
   const minify = shouldMinify(options);
   const registry = new AssetRegistry(root);
+  const devBanner = isDev
+    ? [
+        `globalThis.__rayactPlatform = { os: ${JSON.stringify(options.platform)}, target: ${JSON.stringify(options.platform)}, ...(globalThis.__rayactPlatform || {}) };`,
+        REFRESH_BANNER
+      ].join('\n')
+    : undefined;
 
   return {
     root,
@@ -642,7 +657,7 @@ export function createRayactViteConfig(options: BundleOptions, input = ENTRY_ID)
           inlineDynamicImports: true,
           extend: true,
           entryFileNames: mode === 'dev-client' ? 'dev-client.js' : 'bundle.js',
-          banner: isDev ? REFRESH_BANNER : undefined,
+          banner: devBanner,
           footer: isDev ? REFRESH_FOOTER : undefined
         }
       }

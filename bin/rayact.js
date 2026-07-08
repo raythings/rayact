@@ -1,2 +1,2 @@
 #!/usr/bin/env node
-import '@rayact/cli/dist/cli.js';
+import '../dist/cli/cli.js';

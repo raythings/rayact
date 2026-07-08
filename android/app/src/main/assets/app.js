@@ -696,7 +696,7 @@
           case "image":
             return registerAnimatedHostNode(asHostNode(requireFunction(native.createImage, "createImage")(resolveImageSource(props.source ?? props.src, native), style), type), style);
           case "icon":
-            return registerAnimatedHostNode(asHostNode(requireFunction(native.createIcon, "createIcon")(String(props.name ?? props.icon ?? ""), typeof props.size === "number" ? props.size : void 0, typeof props.color === "number" || typeof props.color === "string" ? props.color : void 0, style, typeof props.variant === "string" ? props.variant : void 0, typeof props.filled === "boolean" ? props.filled : void 0), type), style);
+            return registerAnimatedHostNode(asHostNode(requireFunction(native.createIcon, "createIcon")(String(props.name ?? props.icon ?? ""), typeof props.size === "number" ? props.size : void 0, typeof props.color === "number" || typeof props.color === "string" ? props.color : void 0, style, typeof props.variant === "string" ? props.variant : void 0, typeof props.filled === "boolean" ? props.filled : void 0, typeof props.set === "string" ? props.set : void 0), type), style);
           case "textInput":
             return registerAnimatedHostNode(asHostNode(requireFunction(native.createTextInput, "createTextInput")(String(props.value ?? props.defaultValue ?? ""), {
               ...style,
@@ -753,7 +753,7 @@
           });
         }
         if (node.type === "icon" && typeof native.setIconProps === "function") {
-          native.setIconProps(node.id, typeof props.size === "number" ? props.size : void 0, typeof props.color === "number" || typeof props.color === "string" ? props.color : void 0, typeof props.variant === "string" ? props.variant : void 0, typeof props.name === "string" ? props.name : typeof props.icon === "string" ? props.icon : void 0, typeof props.filled === "boolean" ? props.filled : void 0);
+          native.setIconProps(node.id, typeof props.size === "number" ? props.size : void 0, typeof props.color === "number" || typeof props.color === "string" ? props.color : void 0, typeof props.variant === "string" ? props.variant : void 0, typeof props.name === "string" ? props.name : typeof props.icon === "string" ? props.icon : void 0, typeof props.filled === "boolean" ? props.filled : void 0, typeof props.set === "string" ? props.set : void 0);
         }
         if (node.type === "text" && ("text" in props || "children" in props)) {
           requireFunction(native.setText, "setText")(node.id, String(props.text ?? props.children ?? ""));
@@ -871,6 +871,21 @@ ${stack}` : message;
   function joinUrl(serverUrl2, path) {
     return `${serverUrl2.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
   }
+  function currentPlatform(globalObject) {
+    const injected = globalObject.__rayactPlatform;
+    if (injected && typeof injected.os === "string" && injected.os) return injected.os;
+    const nav = globalObject.navigator;
+    if (typeof nav?.userAgent === "string") {
+      if (/Android/i.test(nav.userAgent)) return "android";
+      if (/iPhone|iPad|iPod/i.test(nav.userAgent)) return "ios";
+      return "web";
+    }
+    return null;
+  }
+  function withPlatformParam(url, platform) {
+    if (!platform || /[?&]platform=/.test(url)) return url;
+    return `${url}${url.includes("?") ? "&" : "?"}platform=${encodeURIComponent(platform)}`;
+  }
   function toWsUrl(serverUrl2, channel) {
     return joinUrl(serverUrl2, channel).replace(/^https:/, "wss:").replace(/^http:/, "ws:");
   }
@@ -904,7 +919,7 @@ ${stack}` : message;
     const fetchManifest = async () => {
       const fetchFn = globalObject.fetch;
       if (typeof fetchFn !== "function") return {};
-      const response = await fetchFn(joinUrl(options.serverUrl, "/rayact/manifest.json"));
+      const response = await fetchFn(withPlatformParam(joinUrl(options.serverUrl, "/rayact/manifest.json"), currentPlatform(globalObject)));
       return JSON.parse(await response.text());
     };
     const loadBundle = async () => {
@@ -941,7 +956,7 @@ ${stack}` : message;
       try {
         const fetchFn = globalObject.fetch;
         if (typeof fetchFn !== "function") return;
-        const response = await fetchFn(joinUrl(options.serverUrl, "/rayact/status"));
+        const response = await fetchFn(withPlatformParam(joinUrl(options.serverUrl, "/rayact/status"), currentPlatform(globalObject)));
         const status = JSON.parse(await response.text());
         if (typeof status.revision !== "number") return;
         if (lastRevision === null) {
@@ -1078,6 +1093,56 @@ ${stack}` : message;
       };
     }
   }
+  var Platform = /* @__PURE__ */ ((Platform2) => {
+    Platform2["WINDOWS"] = "windows";
+    Platform2["LINUX"] = "linux";
+    Platform2["MACOS"] = "macos";
+    Platform2["IOS"] = "ios";
+    Platform2["ANDROID"] = "android";
+    Platform2["WEB"] = "web";
+    return Platform2;
+  })(Platform || {});
+  function detectPlatform() {
+    const injected = globalThis.__rayactPlatform;
+    if (injected && typeof injected.os === "string") {
+      switch (injected.os.toLowerCase()) {
+        case "android":
+          return "android";
+        case "ios":
+          return "ios";
+        case "macos":
+          return "macos";
+        case "windows":
+          return "windows";
+        case "linux":
+          return "linux";
+        case "web":
+          return "web";
+      }
+    }
+    if (typeof window !== "undefined") {
+      if (/Android/i.test(navigator.userAgent)) return "android";
+      if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return "ios";
+      if (/iPad/i.test(navigator.userAgent)) return "ios";
+      if (/Windows/i.test(navigator.userAgent)) return "windows";
+      if (/Macintosh|Mac OS X/i.test(navigator.userAgent)) return "macos";
+      if (/Linux/i.test(navigator.userAgent)) return "linux";
+      if (typeof navigator !== "undefined" && navigator.vendor === "Google Inc." && navigator.platform === "Win32") {
+        return "windows";
+      }
+    }
+    return "web";
+  }
+  ((Platform2) => {
+    Platform2.OS = detectPlatform();
+    Platform2.Version = globalThis.__rayactPlatform?.version ?? "";
+    function select(specifics) {
+      if (Platform2.OS in specifics) return specifics[Platform2.OS];
+      if (Platform2.OS !== "web" && "native" in specifics) return specifics.native;
+      return specifics.default;
+    }
+    Platform2.select = select;
+  })(Platform || (Platform = {}));
   function getGlobal(options) {
     return options?.global ?? globalThis;
   }
@@ -15596,7 +15661,7 @@ ${stack}` : message;
       isDark: t.isDark ?? true
     };
   }
-  var define_RAYACT_BUNDLED_MODULES_default = [{ name: "kv", lib: "", jsPackage: "@rayact/runtime" }, { name: "mmkv", lib: "rayact_mmkv", jsPackage: "@rayact/mmkv" }, { name: "secure-store", lib: "rayact_secure_store", jsPackage: "@rayact/secure-store" }];
+  var define_RAYACT_BUNDLED_MODULES_default = [{ name: "kv", lib: "", jsPackage: "rayact/runtime" }, { name: "mmkv", lib: "rayact_mmkv", jsPackage: "rayact/mmkv" }, { name: "secure-store", lib: "rayact_secure_store", jsPackage: "rayact/secure-store" }];
   var define_RAYACT_OFFICIAL_APP_default = { displayName: "Rayact Dev App", packageLabel: "Rayact Dev App", source: "official", androidPackageId: "com.rayact.devapp", creditTitle: "The official Rayact development client", links: [{ id: "github", icon: "github", set: "fab", label: "GitHub", url: "https://github.com/raythings/rayact" }, { id: "email", icon: "envelope", set: "fa", label: "ramnadroj@gmail.com", url: "mailto:ramnadroj@gmail.com" }] };
   function getOfficialApp() {
     try {

@@ -1,1 +1,1 @@
-export * from '@rayact/cli';
+export * from './dist/cli/index.js';

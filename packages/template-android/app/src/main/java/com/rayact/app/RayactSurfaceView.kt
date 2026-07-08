@@ -1,6 +1,7 @@
 package com.rayact.app
 
 import android.content.Context
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.text.InputType
 import android.text.Selection
@@ -180,6 +181,7 @@ class RayactSurfaceView @JvmOverloads constructor(
             this,
             CursorAnchorInfo.Builder()
                 .setSelectionRange(start, end)
+                .setMatrix(Matrix())
                 .setInsertionMarkerLocation(cursorX, 0f, cursorX, cursorHeight, CursorAnchorInfo.FLAG_HAS_VISIBLE_REGION)
                 .build()
         )

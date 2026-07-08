@@ -83,13 +83,20 @@ else
 fi
 
 log "=== release1 asset inventory ==="
-for asset in rayact-dev-app.apk rayact-dev-app-simulator.zip rayact-prebuilt-darwin-arm64-0.0.1.tgz rayact-web-0.0.1.tar.gz; do
+for asset in rayact-0.0.1.tgz create-rayact-app-0.0.1.tgz rayact-dev-app.apk rayact-dev-app-simulator.zip rayact-prebuilt-darwin-arm64-0.0.1.tgz rayact-web-0.0.1.tar.gz; do
   if curl -sf "http://127.0.0.1:9191/v0.0.1/$asset" -o /dev/null; then
     pass "release asset $asset"
   else
     fail "release asset missing: $asset"
   fi
 done
+
+log "=== platform-neutral configs ==="
+if rg -n '"platform"' rayact.config.json packages/create-rayact-app/templates test-projects/release-consumer-smoke/rayact.config.json >/dev/null; then
+  fail "generated/project configs still contain platform"
+else
+  pass "no generated config platform"
+fi
 
 export RAYACT_PREBUILT_BASE_URL="http://127.0.0.1:9191/v0.0.1"
 export RAYACT_WEB_HOST_DIR="$ROOT/build-web/bin"

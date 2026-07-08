@@ -37,7 +37,7 @@ test('schema file exists and is valid JSON', () => {
 test('loadRayactConfig returns defaults when no config present', () => {
   withTempConfig(undefined, (dir) => {
     const cfg = loadRayactConfig(dir);
-    assert.equal(cfg.platform, 'desktop');
+    assert.equal(cfg.platform, undefined);
     assert.equal(cfg.devServer.port, 8081);
     assert.equal(cfg.rayactAppKey, 'rayact-app');
   });
@@ -68,7 +68,11 @@ test('resolveTransformFlag honors explicit override and CLI override', () => {
 });
 
 test('validateRayactConfig: clean config has no issues', () => {
-  assert.deepEqual(validateRayactConfig({ platform: 'desktop', transform: { bytecode: { release: false } } }), []);
+  assert.deepEqual(validateRayactConfig({ transform: { bytecode: { release: false } } }), []);
+});
+
+test('validateRayactConfig: legacy platform is temporarily accepted', () => {
+  assert.deepEqual(validateRayactConfig({ platform: 'desktop' }), []);
 });
 
 test('validateRayactConfig flags unknown top-level key', () => {

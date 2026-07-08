@@ -2,9 +2,9 @@
  * server into the prebuilt host — exercises mmkv (sync) + secure-store (async)
  * with no native rebuild, logging results (visible via `adb logcat | grep JS:`). */
 import React, { useEffect, useState } from 'react';
-import { render, View, Text } from '@rayact/react';
-import { MMKV } from '@rayact/mmkv';
-import { getItemAsync, setItemAsync } from '@rayact/secure-store';
+import { render, View, Text } from 'rayact/react';
+import { MMKV } from 'rayact/mmkv';
+import { getItemAsync, setItemAsync } from 'rayact/secure-store';
 
 function App() {
   const [mmkvLine, setMmkvLine] = useState('mmkv: …');

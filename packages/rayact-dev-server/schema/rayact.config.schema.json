@@ -18,7 +18,7 @@
     "platform": {
       "type": "string",
       "enum": ["desktop", "android", "ios", "web"],
-      "description": "Default build/run target."
+      "description": "Deprecated. Use command flags such as --desktop, --android, --ios, or --web."
     },
     "devServer": {
       "type": "object",

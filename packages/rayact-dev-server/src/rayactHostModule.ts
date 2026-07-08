@@ -1,6 +1,64 @@
 import type { Connect, ViteDevServer } from 'vite';
 import path from 'node:path';
 
+function normalizePath(filePath: string): string {
+  return filePath.split(path.sep).join('/');
+}
+
+function toNativeCssPath(filePath: string, root: string): string {
+  const relative = normalizePath(path.relative(root, filePath));
+  return relative.startsWith('..') ? normalizePath(filePath) : `./${relative}`;
+}
+
+async function transformRayactModule(
+  vite: ViteDevServer,
+  modulePath: string,
+  query: string
+): Promise<{ code: string } | null> {
+  const viteId = toViteTransformId(modulePath);
+  if (viteId.includes('\0')) {
+    if (viteId.startsWith('\0rayact-css:') && viteId.endsWith('.js')) {
+      const parsed = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
+      if (parsed.get('platform') === 'web') {
+        return { code: 'exports.default = {};' };
+      }
+      const encoded = viteId.slice('\0rayact-css:'.length, -'.js'.length);
+      const cssFile = decodeURIComponent(encoded);
+      const nativePath = toNativeCssPath(cssFile, vite.config.root);
+      return {
+        code: [
+          `var cssClasses = globalThis.importCSS ? globalThis.importCSS(${JSON.stringify(nativePath)}) : {};`,
+          'exports.default = cssClasses;'
+        ].join('\n')
+      };
+    }
+    if (viteId === '\0virtual:rayact-refresh-runtime') {
+      return {
+        code: [
+          `const __refresh = __require("react-refresh/runtime", __moduleUrl);`,
+          `const RefreshRuntime = __refresh.default || __refresh;`,
+          `if (!globalThis.__REACT_REFRESH__) {`,
+          `  RefreshRuntime.injectIntoGlobalHook(globalThis);`,
+          `  globalThis.__REACT_REFRESH__ = RefreshRuntime;`,
+          `}`,
+          `globalThis.$RefreshSig$ = function() {`,
+          `  var rt = globalThis.__REACT_REFRESH__ || RefreshRuntime;`,
+          `  return rt ? rt.createSignatureFunctionForTransform() : function(type) { return type; };`,
+          `};`
+        ].join('\n')
+      };
+    }
+    const container = vite.pluginContainer as any;
+    const loaded = await container.load(viteId, { ssr: true });
+    const loadedCode = typeof loaded === 'string' ? loaded : loaded?.code;
+    if (!loadedCode) return null;
+    const transformed = await container.transform(loadedCode, viteId, { ssr: true });
+    const code = typeof transformed === 'string' ? transformed : transformed?.code ?? loadedCode;
+    return { code };
+  }
+  return vite.transformRequest(`${viteId}${query}`, { ssr: true });
+}
+
 function toViteTransformId(modulePath: string): string {
   const path = modulePath.split('?')[0] ?? modulePath;
   if (path.startsWith('/@id/__x00__')) {
@@ -146,7 +204,7 @@ export function createRayactModuleMiddleware(
         const id = typeof resolved === 'string' ? resolved : resolved?.id;
         if (!id) {
           res.statusCode = 404;
-          res.end('unresolved');
+          res.end(`Cannot resolve ${spec}${from ? ` from ${from}` : ''}`);
           return;
         }
         const result = await vite.transformRequest(id, { ssr: true });
@@ -172,8 +230,7 @@ export function createRayactModuleMiddleware(
     const query = url.includes('?') ? url.slice(url.indexOf('?')) : '';
 
     try {
-      const viteId = toViteTransformId(modulePath);
-      const result = await vite.transformRequest(`${viteId}${query}`, { ssr: true });
+      const result = await transformRayactModule(vite, modulePath, query);
       if (!result?.code) {
         res.statusCode = 404;
         res.end('Module not found');
@@ -184,7 +241,7 @@ export function createRayactModuleMiddleware(
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cache-Control', 'no-store');
       res.statusCode = 200;
-      const registryKey = `/rayact/m${modulePath}`;
+      const registryKey = `/rayact/m${modulePath}${query}`;
       res.end(wrapRayactModule(registryKey, result.code, modulePath));
     } catch (error) {
       res.statusCode = 500;

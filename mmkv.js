@@ -1,1 +1,1 @@
-export * from '@rayact/mmkv';
+export * from './dist/mmkv/index.js';

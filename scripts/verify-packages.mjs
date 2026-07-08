@@ -12,6 +12,7 @@ const pkgDirs = [
   ROOT,
   ...fs
   .readdirSync(path.join(ROOT, 'packages'))
+  .filter((d) => d === 'create-rayact-app' || d.startsWith('prebuilt-'))
   .map((d) => path.join(ROOT, 'packages', d))
   .filter((d) => fs.existsSync(path.join(d, 'package.json')))
 ];

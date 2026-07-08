@@ -7,7 +7,6 @@
     "cdpPort": 9229
   },
   "entry": "test-projects/release-consumer-smoke/src/App.tsx",
-  "platform": "desktop",
   "android": {
     "package": "com.rayact.app"
   }

@@ -1,6 +1,7 @@
 import Foundation
 
 enum DevServerLoader {
+    private static let platformQuery = "platform=ios"
     struct BundlePayload {
         let baseUrl: String
         let bundleFormat: String
@@ -72,7 +73,7 @@ enum DevServerLoader {
     }
 
     static func probeManifest(baseUrl: String, timeoutMs: Int = 2500) -> Bool {
-        let url = URL(string: "\(normalizeBase(baseUrl))/rayact/manifest.json")!
+        let url = URL(string: "\(normalizeBase(baseUrl))/rayact/manifest.json?\(platformQuery)")!
         var request = URLRequest(url: url, timeoutInterval: TimeInterval(timeoutMs) / 1000)
         request.httpMethod = "GET"
         let sem = DispatchSemaphore(value: 0)
@@ -88,7 +89,7 @@ enum DevServerLoader {
     }
 
     static func fetchManifest(baseUrl: String) throws -> [String: Any] {
-        let text = try httpGetText("\(normalizeBase(baseUrl))/rayact/manifest.json")
+        let text = try httpGetText("\(normalizeBase(baseUrl))/rayact/manifest.json?\(platformQuery)")
         guard let data = text.data(using: .utf8),
               let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw URLError(.cannotParseResponse)

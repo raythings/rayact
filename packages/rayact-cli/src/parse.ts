@@ -114,12 +114,12 @@ export function parseCli(argv: string[]): CliFlags {
     else if (arg === '--no-minify') flags.minify = false;
     else if (arg === '--bytecode') flags.bytecode = true;
     else if (arg === '--no-bytecode') flags.bytecode = false;
-    else if (arg === '--android') flags.android = true;
-    else if (arg === '--ios') flags.ios = true;
+    else if (arg === '--android') { flags.android = true; flags.platform = 'android'; }
+    else if (arg === '--ios') { flags.ios = true; flags.platform = 'ios'; }
     else if (arg === '--ios-simulator') flags.iosSimulator = true;
     else if (arg === '--ios-device') flags.iosDevice = true;
     else if (arg === '--web') flags.platform = 'web';
-    else if (arg === '--desktop') flags.desktopApp = true;
+    else if (arg === '--desktop') { flags.desktopApp = true; flags.platform = 'desktop'; }
     else if (arg === '--dev-client') flags.devClient = true;
     else if (arg === '--production') flags.production = true;
     else if (arg === '--strict-port') flags.strictPort = true;

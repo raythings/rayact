@@ -258,7 +258,7 @@ void AndroidEngineInstance::callHostUpdateImeState(
     if (cls) {
         jmethodID m = env->GetMethodID(
             cls, "updateImeState",
-            "(IIIILjava/lang/String;)V");
+            "(IIIIILjava/lang/String;)V");
         if (m) {
             jstring jText = text ? env->NewStringUTF(text) : nullptr;
             env->CallVoidMethod(hostCallbacksGlobal, m, (jint)nodeId,

@@ -105,7 +105,7 @@ enum ProjectHmrClient {
     }
 
     private static func applyModuleUpdate(base: String, engineSession: RayactEngineSession, path: String, timestamp: Int64) {
-        let query = timestamp > 0 ? "?t=\(timestamp)" : ""
+        let query = timestamp > 0 ? "?t=\(timestamp)&platform=ios" : "?platform=ios"
         let moduleUrl = "\(base)/rayact/m\(path)\(query)"
         do {
             let source = try DevServerLoader.httpGetText(moduleUrl)

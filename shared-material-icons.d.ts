@@ -1,1 +1,1 @@
-export * from '@rayact/shared/material-icons';
+export * from './dist/shared/material_icons.js';

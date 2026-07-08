@@ -239,7 +239,7 @@ export interface RayactGlobal {
   __RAYACT_RELEASE_ASSET_BASE__?: string;
   __RAYACT_ASSETS__?: Record<string, RayactAssetMetadata>;
   __rayactRawSpawnWorker?: (path: string | RayactAsset | Record<string, unknown>, initialData?: unknown) => number;
-  __rayactPlatform?: { os: string; version?: string };
+  __rayactPlatform?: { os: string; target?: string; version?: string };
   __rayactGetColorScheme?: () => Record<string, number | boolean> & { isDark: boolean };
   __rayactSetColorScheme?: (mode: 'dark' | 'light', seed?: number) => void;
   onColorSchemeChange?: (isDark: boolean) => void;

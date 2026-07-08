@@ -1,7 +1,7 @@
-// Habit Tracker — raym3 M3 + @rayact/navigation demo
+// Habit Tracker — raym3 M3 + rayact/navigation demo
 // Screens: Today (habits list), Stats, Settings, AddHabit (stack push)
 
-import '@rayact/shared/material-icons';
+import 'rayact/shared/material-icons';
 
 import React, { useState } from 'react';
 import {
@@ -11,11 +11,11 @@ import {
   IconButton, ProgressIndicator, SegmentedButton,
   useTheme, useSafeAreaInsets, render, setColorSchemePreference, useColorSchemePreference,
   BackHandler,
-} from '@rayact/react';
+} from 'rayact/react';
 import {
   NavigationContainer, createStackNavigator,
   useNavigation, useIsFocused,
-} from '@rayact/navigation';
+} from 'rayact/navigation';
 import { MaterialGallery } from './material-gallery';
 import { GalleryModeContext, useGalleryMode } from './galleryMode';
 

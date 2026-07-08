@@ -13,6 +13,7 @@ import android.os.Looper
 
 object DevServerLoader {
     private const val TAG = "DevServerLoader"
+    private const val PLATFORM_QUERY = "platform=android"
     private val executor = Executors.newSingleThreadExecutor()
 
     data class BundlePayload(
@@ -91,7 +92,7 @@ object DevServerLoader {
     }
 
     fun probeManifest(baseUrl: String, timeoutMs: Int = 2500): Boolean {
-        val url = "${normalizeBase(baseUrl)}/rayact/manifest.json"
+        val url = "${normalizeBase(baseUrl)}/rayact/manifest.json?$PLATFORM_QUERY"
         return try {
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = timeoutMs
@@ -112,7 +113,7 @@ object DevServerLoader {
     }
 
     fun fetchManifest(baseUrl: String): JSONObject {
-        return JSONObject(httpGetText("${normalizeBase(baseUrl)}/rayact/manifest.json"))
+        return JSONObject(httpGetText("${normalizeBase(baseUrl)}/rayact/manifest.json?$PLATFORM_QUERY"))
     }
 
     fun fetchBootstrap(baseUrl: String): BundlePayload {
