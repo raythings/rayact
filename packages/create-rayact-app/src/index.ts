@@ -8,6 +8,7 @@ function parseArgs(argv: string[]) {
   let template: 'default' | 'blank' = 'default';
   let install = true;
   let monorepo = false;
+  let local: string | undefined = process.env.RAYACT_LOCAL || undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -23,6 +24,9 @@ function parseArgs(argv: string[]) {
       install = false;
     } else if (arg === '--monorepo') {
       monorepo = true;
+    } else if (arg === '--local' && next) {
+      local = next;
+      i++;
     } else if (arg === '--help' || arg === '-h') {
       console.log(`
 Usage: create-rayact-app <project-name> [options]
@@ -31,6 +35,8 @@ Options:
   --template <name>   default | blank (default: default)
   --no-install        Skip npm install
   --monorepo          Use local file: dependencies when run inside the Rayact monorepo
+  --local <path>      Use file: dependencies on a local rayact checkout (also links
+                      the host @rayact/prebuilt-* from its packages/; env: RAYACT_LOCAL)
   -h, --help          Show help
 
 Examples:
@@ -44,10 +50,10 @@ Examples:
     }
   }
 
-  return { projectName, template, install, monorepo };
+  return { projectName, template, install, monorepo, local };
 }
 
-const { projectName, template, install, monorepo } = parseArgs(process.argv.slice(2));
+const { projectName, template, install, monorepo, local } = parseArgs(process.argv.slice(2));
 
 if (!projectName) {
   console.error('Please specify a project name:');
@@ -64,7 +70,8 @@ try {
     targetDir,
     template,
     monorepo: Boolean(monorepoRoot),
-    monorepoRoot: monorepoRoot ?? undefined
+    monorepoRoot: monorepoRoot ?? undefined,
+    localRayactPath: local
   });
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
