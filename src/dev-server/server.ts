@@ -56,6 +56,29 @@ interface PlatformContext {
   middleware: ReturnType<typeof createRayactModuleMiddleware> | null;
 }
 
+export function canonicalHmrPath(url: string | undefined, fallback: string): string {
+  const candidate = url?.startsWith('/') ? url : fallback;
+  const pathOnly = candidate.split(/[?#]/, 1)[0] || fallback;
+  return pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
+}
+
+export function claimHmrBroadcast(
+  claims: Map<string, number>,
+  key: string,
+  timestamp: number,
+  windowMs = 50
+): boolean {
+  const previous = claims.get(key);
+  if (previous !== undefined && timestamp - previous < windowMs) return false;
+  claims.set(key, timestamp);
+  if (claims.size > 1024) {
+    for (const [claim, claimedAt] of claims) {
+      if (timestamp - claimedAt >= windowMs) claims.delete(claim);
+    }
+  }
+  return true;
+}
+
 function sendJson(response: http.ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
@@ -175,6 +198,7 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
   });
 
   const contexts = new Map<DevPlatform, PlatformContext>();
+  const hmrBroadcastClaims = new Map<string, number>();
 
   function createPlatformContext(platform: DevPlatform): PlatformContext {
     const context: PlatformContext = {
@@ -233,25 +257,36 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     if (rel.startsWith('..')) return;
 
     if (event === 'unlink' || normalized.endsWith('rayact.config.json') || normalized.includes('/native/')) {
-      broadcastModuleHmr({ type: 'full-reload' });
+      const timestamp = Date.now();
+      if (claimHmrBroadcast(hmrBroadcastClaims, `reload:${event}:${rel}`, timestamp)) {
+        broadcastModuleHmr({ type: 'full-reload' });
+      }
       return;
     }
 
     const mods = context.vite.moduleGraph.getModulesByFile(file);
-    const updates: Array<{ type: 'js-update'; path: string; acceptedPath: string; timestamp: number }> = [];
+    const updates = new Map<
+      string,
+      { type: 'js-update'; path: string; acceptedPath: string; timestamp: number }
+    >();
     const timestamp = Date.now();
 
     if (mods?.size) {
       for (const mod of mods) {
-        const hmrPath = mod.url?.startsWith('/') ? mod.url : `/${rel}`;
-        updates.push({ type: 'js-update', path: hmrPath, acceptedPath: hmrPath, timestamp });
+        const hmrPath = canonicalHmrPath(mod.url, rel);
+        if (claimHmrBroadcast(hmrBroadcastClaims, `${event}:${hmrPath}`, timestamp)) {
+          updates.set(hmrPath, { type: 'js-update', path: hmrPath, acceptedPath: hmrPath, timestamp });
+        }
       }
     } else if (/\.(?:[cm]?[jt]sx?)$/.test(file)) {
-      updates.push({ type: 'js-update', path: `/${rel}`, acceptedPath: `/${rel}`, timestamp });
+      const hmrPath = canonicalHmrPath(undefined, rel);
+      if (claimHmrBroadcast(hmrBroadcastClaims, `${event}:${hmrPath}`, timestamp)) {
+        updates.set(hmrPath, { type: 'js-update', path: hmrPath, acceptedPath: hmrPath, timestamp });
+      }
     }
 
-    if (updates.length) {
-      broadcastModuleHmr({ type: 'update', updates } as DebugMessage);
+    if (updates.size) {
+      broadcastModuleHmr({ type: 'update', updates: [...updates.values()] } as DebugMessage);
     }
   };
 

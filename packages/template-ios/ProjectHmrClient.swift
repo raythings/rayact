@@ -105,14 +105,16 @@ enum ProjectHmrClient {
     }
 
     private static func applyModuleUpdate(base: String, engineSession: RayactEngineSession, path: String, timestamp: Int64) {
+        let canonicalPath = path.split(whereSeparator: { $0 == "?" || $0 == "#" }).first.map(String.init) ?? ""
+        guard !canonicalPath.isEmpty else { return }
         let query = timestamp > 0 ? "?t=\(timestamp)" : ""
-        let moduleUrl = "\(base)/rayact/m\(path)\(query)"
+        let moduleUrl = "\(base)/rayact/m\(canonicalPath)\(query)"
         do {
             let source = try DevServerLoader.httpGetText(moduleUrl)
-            let ok = engineSession.applyModuleUpdate(path: path, source: source)
-            print("[ProjectHmrClient] module update path=\(path) ok=\(ok) bytes=\(source.count)")
+            let ok = engineSession.applyModuleUpdate(path: canonicalPath, source: source)
+            print("[ProjectHmrClient] module update path=\(canonicalPath) ok=\(ok) bytes=\(source.count)")
         } catch {
-            print("[ProjectHmrClient] module update failed path=\(path): \(error)")
+            print("[ProjectHmrClient] module update failed path=\(canonicalPath): \(error)")
         }
     }
 }

@@ -11,6 +11,7 @@ export default defineConfig(
     {
       root,
       entry: 'src/App.tsx',
+      platform: process.env.RAYACT_PLATFORM ?? 'desktop',
       mode: release ? 'release' : 'development',
       outDir: 'dist',
       minify: release,

@@ -125,35 +125,32 @@ export async function runPrebuild(options: PrebuildOptions): Promise<{
     throw new Error('Missing @rayact/template-android package.');
   }
 
-  if (fs.existsSync(androidDir)) {
-    if (!options.force && fs.existsSync(path.join(androidDir, 'gradlew'))) {
-      console.warn(`Updating prebuilt jniLibs in existing Android project: ${androidDir}`);
-      await copyAndroidPrebuilts(projectRoot, androidDir, plugins);
-      writeNativeModulesManifest(projectRoot, nativeModules);
-      return { androidDir, iosDir: null, nativeModules };
-    }
-    fs.rmSync(androidDir, { recursive: true, force: true });
-  }
-  copyDirRecursive(templateAndroid, androidDir);
-
   const packageName = options.android?.packageName ?? 'com.rayact.app';
   const appName = options.android?.appName ?? 'Rayact';
   const devClient = options.devClient !== false;
 
-  replaceInFile(path.join(androidDir, 'app/build.gradle'), {
-    "applicationId 'com.rayact.app'": `applicationId '${packageName}'`
-  });
-  if (!devClient) {
+  if (fs.existsSync(androidDir) && !options.force && fs.existsSync(path.join(androidDir, 'gradlew'))) {
+    console.warn(`Updating prebuilt jniLibs in existing Android project: ${androidDir}`);
+    await copyAndroidPrebuilts(projectRoot, androidDir, plugins);
+  } else {
+    if (fs.existsSync(androidDir)) {
+      fs.rmSync(androidDir, { recursive: true, force: true });
+    }
+    copyDirRecursive(templateAndroid, androidDir);
     replaceInFile(path.join(androidDir, 'app/build.gradle'), {
-      'buildConfigField "boolean", "RAYACT_DEV_CLIENT", "true"':
-        'buildConfigField "boolean", "RAYACT_DEV_CLIENT", "false"'
+      "applicationId 'com.rayact.app'": `applicationId '${packageName}'`
     });
+    if (!devClient) {
+      replaceInFile(path.join(androidDir, 'app/build.gradle'), {
+        'buildConfigField "boolean", "RAYACT_DEV_CLIENT", "true"':
+          'buildConfigField "boolean", "RAYACT_DEV_CLIENT", "false"'
+      });
+    }
+    replaceInFile(path.join(androidDir, 'app/src/main/AndroidManifest.xml'), {
+      'android:label="Rayact"': `android:label="${appName}"`
+    });
+    await copyAndroidPrebuilts(projectRoot, androidDir, plugins);
   }
-  replaceInFile(path.join(androidDir, 'app/src/main/AndroidManifest.xml'), {
-    'android:label="Rayact"': `android:label="${appName}"`
-  });
-
-  await copyAndroidPrebuilts(projectRoot, androidDir, plugins);
 
   const templateIos = resolveTemplateIosDir(projectRoot);
   if (templateIos) {

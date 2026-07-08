@@ -47,6 +47,12 @@ test('--release sets release mode + debug off', () => {
   assert.equal(f.debug, false);
 });
 
+test('prebuild --force enables native project replacement', () => {
+  const f = parseCli(['prebuild', '--force']);
+  assert.equal(f.command, 'prebuild');
+  assert.equal(f.force, true);
+});
+
 test('no args => help command', () => {
   assert.equal(parseCli([]).command, 'help');
 });
