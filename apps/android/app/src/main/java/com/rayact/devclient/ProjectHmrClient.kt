@@ -101,14 +101,16 @@ object ProjectHmrClient {
     }
 
     private fun applyModuleUpdate(base: String, engineSession: RayactEngineSession, path: String, timestamp: Long) {
+        val canonicalPath = path.substringBefore('?').substringBefore('#')
+        if (canonicalPath.isBlank()) return
         val query = if (timestamp > 0L) "?t=$timestamp&platform=android" else "?platform=android"
-        val moduleUrl = "$base/rayact/m$path$query"
+        val moduleUrl = "$base/rayact/m$canonicalPath$query"
         try {
             val source = DevServerLoader.httpGetText(moduleUrl)
-            val ok = engineSession.applyModuleUpdate(path, source)
-            Log.i(TAG, "module update path=$path ok=$ok bytes=${source.length}")
+            val ok = engineSession.applyModuleUpdate(canonicalPath, source)
+            Log.i(TAG, "module update path=$canonicalPath ok=$ok bytes=${source.length}")
         } catch (e: Exception) {
-            Log.e(TAG, "module update failed path=$path", e)
+            Log.e(TAG, "module update failed path=$canonicalPath", e)
         }
     }
 }

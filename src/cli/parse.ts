@@ -125,6 +125,7 @@ export function parseCli(argv: string[]): CliFlags {
     else if (arg === '--desktop') { flags.desktopApp = true; flags.platform = 'desktop'; }
     else if (arg === '--dev-client') flags.devClient = true;
     else if (arg === '--production') flags.production = true;
+    else if (arg === '--force') flags.force = true;
     else if (arg === '--strict-port') flags.strictPort = true;
     else if (arg === '--strict-web-port') flags.strictWebPort = true;
     else if (arg === '--dev') flags.dev = true;

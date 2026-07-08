@@ -394,12 +394,14 @@ export class ModuleHmrRuntime {
       if (!updates?.length) return;
       for (const update of updates) {
         if (update.type !== 'js-update' || !update.path) continue;
-        const moduleUrl = `${this.serverUrl}${update.path}${update.timestamp ? `?t=${update.timestamp}` : ''}`;
+        const path = update.path.split(/[?#]/, 1)[0];
+        if (!path) continue;
+        const moduleUrl = `${this.serverUrl}${path}${update.timestamp ? `?t=${update.timestamp}` : ''}`;
         try {
           const source = await this.devFetchText(toRayactModuleUrl(moduleUrl, this.serverUrl));
-          this.applyModuleUpdate(update.path, source);
+          this.applyModuleUpdate(path, source);
         } catch (error) {
-          this.globalObject.console?.error?.('[rayact:hmr] module update failed', update.path, error);
+          this.globalObject.console?.error?.('[rayact:hmr] module update failed', path, error);
         }
       }
       return;
