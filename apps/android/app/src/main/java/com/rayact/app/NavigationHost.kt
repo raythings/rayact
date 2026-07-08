@@ -69,6 +69,16 @@ class NavigationHost @JvmOverloads constructor(
         }
     }
 
+    fun recreateSurfacesAfterGraphicsResume() {
+        requestLayout()
+        post {
+            rootSurfaceView?.recreateNativeSurfaceAfterGraphicsResume()
+            for (fragment in fragmentsBySurfaceId.values) {
+                fragment.rayactSurfaceView()?.recreateNativeSurfaceAfterGraphicsResume()
+            }
+        }
+    }
+
     fun pushScreen(): RayactScreenFragment {
         val frag = RayactScreenFragment(session)
         val fm = fragmentManager()

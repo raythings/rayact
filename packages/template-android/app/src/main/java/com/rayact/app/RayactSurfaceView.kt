@@ -48,6 +48,7 @@ class RayactSurfaceView @JvmOverloads constructor(
     /** Native surfaceId == engine screenId, or 0 if not yet created. */
     var surfaceId: Int = 0
         private set
+    private var renderSurfaceRetained = false
     /**
      * Optional one-shot listener invoked when the native surfaceId is ready
      * (i.e. surfaceCreated has fired and the engine has allocated a screen).
@@ -482,6 +483,10 @@ class RayactSurfaceView @JvmOverloads constructor(
 
     override fun surfaceCreated(holder: SurfaceHolder) {
         updateSafeAreaInsets()
+        if (surfaceId > 0) {
+            session.destroySurface(surfaceId)
+            surfaceId = 0
+        }
         val density = resources.displayMetrics.density
         val sid = session.createSurface(holder.surface, density)
         if (sid <= 0) {
@@ -492,7 +497,10 @@ class RayactSurfaceView @JvmOverloads constructor(
         surfaceReadyListener?.invoke(sid)
         surfaceReadyListener = null
         session.host.registerImeView(this)
-        session.host.renderScheduler.retainSurface()
+        if (!renderSurfaceRetained) {
+            session.host.renderScheduler.retainSurface()
+            renderSurfaceRetained = true
+        }
         session.host.renderScheduler.requestFrame()
     }
 
@@ -513,6 +521,20 @@ class RayactSurfaceView @JvmOverloads constructor(
         }
     }
 
+    fun recreateNativeSurfaceAfterGraphicsResume() {
+        val surface = holder.surface
+        if (!surface.isValid) return
+        if (surfaceId > 0) {
+            session.destroySurface(surfaceId)
+            surfaceId = 0
+        }
+        renderSurfaceRetained = false
+        surfaceCreated(holder)
+        post {
+            if (width > 0 && height > 0) reportSurfaceResize(width, height)
+        }
+    }
+
     private fun reportSurfaceResize(width: Int, height: Int) {
         if (surfaceId <= 0 || width <= 0 || height <= 0) return
         updateSafeAreaInsets()
@@ -525,7 +547,10 @@ class RayactSurfaceView @JvmOverloads constructor(
             session.host.unregisterImeView(this)
             session.destroySurface(surfaceId)
             surfaceId = 0
-            session.host.renderScheduler.releaseSurface()
+            if (renderSurfaceRetained) {
+                session.host.renderScheduler.releaseSurface()
+                renderSurfaceRetained = false
+            }
         }
     }
 
