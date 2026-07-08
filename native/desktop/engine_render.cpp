@@ -208,6 +208,17 @@ float getRenderScaleDpi() {
     return raym3::v2::Density::GetLayoutDensity();
 }
 
+static bool rayactShouldApplyDpiDrawScale() {
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
+    return true;
+#else
+    // Desktop raylib already maps logical window coordinates onto the HiDPI
+    // framebuffer on macOS. Applying Rayact's dp matrix on top of that doubles
+    // visual size and leaves mouse hit testing in a different coordinate space.
+    return false;
+#endif
+}
+
 namespace rayact {
 // rlgl matrix stack (C linkage) — used for the Android dp content scale.
 extern "C" { void rlPushMatrix(void); void rlPopMatrix(void); void rlScalef(float, float, float); void rlSetLineWidth(float); }
@@ -398,15 +409,15 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     }
     // raym3 v2 retained-mode path — render the current surface's tree.
     // Layout is in dp (so a 200dp box is the same physical size on a 1x and
-    // 4x device); render is in px. Push dp-scale on the matrix stack so the
-    // children draw at the right physical size.
+    // 4x device). Desktop raylib already maps logical coords to the HiDPI
+    // framebuffer, while mobile/web hosts still need Rayact's explicit matrix.
+    float dp = getRenderScaleDpi();
     const float logicalW = raym3::v2::Density::PxToDp((float)width);
     const float logicalH = raym3::v2::Density::PxToDp((float)height);
     Rectangle bounds = {0.0f, 0.0f, logicalW, logicalH};
     const bool forceLayout =
         engineConsumeSurfaceRelayout(screenId) ||
         engineSurfaceBoundsChanged(screenId, width, height);
-    float dp = getRenderScaleDpi();
     applyAnimatedStylesToNodes();
     raym3::v2::TickScrollMomentum(g_root);
     raym3::v2::TickTransitions(g_root);
@@ -486,7 +497,9 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     }
 
     rlPushMatrix();
-    rlScalef(dp, dp, 1.0f);
+    if (rayactShouldApplyDpiDrawScale()) {
+        rlScalef(dp, dp, 1.0f);
+    }
 #if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
     SetMouseScale(1.0f / dp, 1.0f / dp); // M3 components call GetMousePosition() in dp space
 #else
