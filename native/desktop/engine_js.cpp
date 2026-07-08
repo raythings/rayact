@@ -219,6 +219,8 @@ static JSValue JS_getCurrentContext(JSContext* ctx, JSValue this_val,
 // Register native functions
 #ifndef RAYACT_NO_NET
 static bool httpGet(const std::string& url, std::string& body, std::string& error);
+static bool httpGetWithTimeout(const std::string& url, std::string& body, std::string& error,
+                               long timeoutMs, long connectTimeoutMs);
 #endif
 #if !defined(RAYACT_NO_NET) || defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
 static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst* argv);
@@ -1218,7 +1220,8 @@ static size_t writeHttpBody(char* ptr, size_t size, size_t nmemb, void* userdata
     return size * nmemb;
 }
 
-static bool httpGet(const std::string& url, std::string& body, std::string& error) {
+static bool httpGetWithTimeout(const std::string& url, std::string& body, std::string& error,
+                               long timeoutMs, long connectTimeoutMs) {
     CURL* curl = curl_easy_init();
     if (!curl) {
         error = "curl_easy_init failed";
@@ -1229,7 +1232,8 @@ static bool httpGet(const std::string& url, std::string& body, std::string& erro
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeHttpBody);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeoutMs);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, connectTimeoutMs);
 
     CURLcode result = curl_easy_perform(curl);
     long status = 0;
@@ -1248,6 +1252,10 @@ static bool httpGet(const std::string& url, std::string& body, std::string& erro
     }
 
     return true;
+}
+
+static bool httpGet(const std::string& url, std::string& body, std::string& error) {
+    return httpGetWithTimeout(url, body, error, 30000L, 5000L);
 }
 
 static bool httpGetBytes(const std::string& url, std::vector<uint8_t>& body, std::string& error) {
@@ -1669,7 +1677,8 @@ static void pollDevServer(JSContext* ctx) {
 
     std::string status;
     std::string error;
-    if (!httpGet(withDevPlatformQuery(g_devServerUrl + "/rayact/status"), status, error)) {
+    if (!httpGetWithTimeout(withDevPlatformQuery(g_devServerUrl + "/rayact/status"),
+                            status, error, 750L, 250L)) {
         fprintf(stderr, "Rayact dev poll failed: %s\n", error.c_str());
         return;
     }
