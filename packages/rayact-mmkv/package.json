@@ -1,17 +1,7 @@
 {
   "name": "@rayact/mmkv",
   "version": "0.0.1",
-  "description": "MMKV-style fast key/value storage backed by the librayact_mmkv native plugin",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
-  "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "clean": "rm -rf dist"
-  },
-  "devDependencies": {
-    "typescript": "^5.8.3"
-  },
+  "description": "Native plugin artifacts for rayact/mmkv (librayact_mmkv). JS API ships in the rayact package as rayact/mmkv.",
   "keywords": [
     "mmkv",
     "storage",
@@ -20,7 +10,6 @@
   ],
   "license": "MIT",
   "files": [
-    "src",
     "rayact.plugin.json",
     "android",
     "darwin-arm64"

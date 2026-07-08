@@ -77,18 +77,6 @@
       "types": "./worklets.d.ts",
       "default": "./worklets.js"
     },
-    "./core": {
-      "types": "./core.d.ts",
-      "default": "./core.js"
-    },
-    "./quickjs": {
-      "types": "./quickjs.d.ts",
-      "default": "./quickjs.js"
-    },
-    "./renderer": {
-      "types": "./renderer.d.ts",
-      "default": "./renderer.js"
-    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -105,11 +93,10 @@
     "android": "npm run rayact -- dev --android --host 0.0.0.0 --port 8081 --entry test-projects/release-consumer-smoke/src/App.tsx",
     "ios": "npm run rayact -- dev --ios --host 0.0.0.0 --port 8081 --entry test-projects/release-consumer-smoke/src/App.tsx",
     "web": "npm run rayact -- dev --web --host 0.0.0.0 --port 8081 --entry test-projects/release-consumer-smoke/src/App.tsx",
-    "rayact": "node packages/rayact-cli/dist/cli.js",
+    "rayact": "node dist/cli/cli.js",
     "dev:android": "cd apps/android && ./gradlew --warning-mode all",
     "dev:web": "cd apps/web && npm run dev",
-    "build": "npm run build:shared && npm run build:runtime && npm run build:react && npm run build:navigation && npm run build:crypto && npm run build:mmkv && npm run build:secure-store && npm run build:worklets && npm run build:dev-client && npm run build:dev-server && npm run build:prebuild && npm run build:cli && npm run build:create-app && npm run build:core && npm run build:quickjs && npm run build:renderer && npm run stage:root",
-    "build:dev-client": "cd packages/rayact-dev-client && npm run build",
+    "build": "tsc -p tsconfig.app.json && tsc -p tsconfig.node.json && npm run build:create-app && npm run stage:root",
     "verify": "npm run rayact -- verify",
     "verify:android": "npm run rayact -- verify --android",
     "verify:web": "bash scripts/verify-web.sh",
@@ -117,45 +104,40 @@
     "serve:release": "node scripts/serve-release-assets.mjs",
     "pack:release": "node scripts/pack-release-assets.mjs",
     "release:replace": "node scripts/replace-github-release.mjs",
-    "sync:split-repos": "node scripts/sync-split-repos.mjs",
-    "publish:split-repos": "node scripts/publish-split-repos.mjs",
-    "test:packages": "cd packages/rayact-prebuild && npm test && cd ../rayact-dev-server && npm test && cd ../rayact-cli && npm test",
+    "test": "node --test test/",
+    "test:packages": "npm test",
     "test:native": "npm run test:desktop-smoke",
     "test:desktop-smoke": "cd test-projects/desktop-smoke && npm run test:desktop",
-    "build:core": "cd packages/rayact-core && npm run build",
-    "build:runtime": "cd packages/rayact-runtime && npm run build",
-    "build:react": "cd packages/rayact-react && npm run build",
-    "build:dev-server": "cd packages/rayact-dev-server && npm run build",
-    "build:prebuild": "cd packages/rayact-prebuild && npm run build",
-    "build:cli": "cd packages/rayact-cli && npm run build",
     "build:create-app": "cd packages/create-rayact-app && npm run build",
-    "build:quickjs": "cd packages/rayact-quickjs && npm run build",
-    "build:renderer": "cd packages/rayact-renderer && npm run build",
-    "build:shared": "cd packages/rayact-shared && npm run build",
-    "build:navigation": "cd packages/rayact-navigation && npm run build",
-    "build:crypto": "cd packages/rayact-crypto && npm run build",
-    "build:mmkv": "cd packages/rayact-mmkv && npm run build",
-    "build:secure-store": "cd packages/rayact-secure-store && npm run build",
-    "build:worklets": "cd packages/rayact-worklets && npm run build",
-    "stage:root": "node scripts/stage-root-package.mjs",
-    "clean": "concurrently \"npm:clean:*\"",
-    "clean:core": "cd packages/rayact-core && npm run clean",
-    "clean:runtime": "cd packages/rayact-runtime && npm run clean",
-    "clean:react": "cd packages/rayact-react && npm run clean",
-    "clean:dev-server": "cd packages/rayact-dev-server && npm run clean",
-    "clean:quickjs": "cd packages/rayact-quickjs && npm run clean",
-    "clean:renderer": "cd packages/rayact-renderer && npm run clean",
-    "clean:shared": "cd packages/rayact-shared && npm run clean"
+    "stage:root": "node scripts/stage-assets.mjs",
+    "clean": "rm -rf dist"
   },
   "workspaces": [
-    "packages/*",
+    "packages/prebuilt-*",
+    "packages/template-android",
+    "packages/template-ios",
+    "packages/create-rayact-app",
+    "packages/rayact-mmkv",
+    "packages/rayact-secure-store",
     "apps/*"
   ],
   "devDependencies": {
+    "@types/react": "^19.2.16",
+    "@types/react-reconciler": "^0.31.0",
     "babel-plugin-react-compiler": "^1.0.0",
-    "concurrently": "^8.2.2",
     "esbuild": "^0.28.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "typescript": "^5.8.3"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react-dom": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=18.0.0"
@@ -174,23 +156,19 @@
     "@callstack/react-theme-provider": "^3.0.9",
     "@react-navigation/core": "*",
     "@react-navigation/routers": "*",
-    "@types/react": "^19.2.16",
-    "@types/react-reconciler": "^0.31.0",
     "@vitejs/plugin-react": "^5.1.1",
     "bonjour-service": "^1.3.0",
     "chokidar": "^4.0.3",
     "ink": "^7.0.5",
     "qrcode-terminal": "^0.12.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
     "react-reconciler": "^0.31.0",
     "react-refresh": "^0.18.0",
     "vite": "^7.2.6",
     "ws": "^8.18.3"
   },
   "optionalDependencies": {
-    "@rayact/prebuilt-darwin-arm64": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-prebuilt-darwin-arm64-0.0.1.tgz",
-    "@rayact/prebuilt-darwin-x64": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-prebuilt-darwin-x64-0.0.1.tgz",
-    "@rayact/prebuilt-linux-x64": "https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-prebuilt-linux-x64-0.0.1.tgz"
+    "@rayact/prebuilt-darwin-arm64": "file:packages/prebuilt-darwin-arm64",
+    "@rayact/prebuilt-darwin-x64": "file:packages/prebuilt-darwin-x64",
+    "@rayact/prebuilt-linux-x64": "file:packages/prebuilt-linux-x64"
   }
 }
