@@ -70,6 +70,7 @@ static void publishWindowDimensions(JSContext* ctx, int widthPx, int heightPx) {
 // reflows live instead of stretching the last frame. PollInputEvents is
 // suppressed inside the hook (see rcore_desktop_glfw.c).
 extern "C" void SetWindowLiveResizeHook(void (*hook)(int width, int height));
+#if defined(__APPLE__)
 static JSContext* g_liveResizeCtx = nullptr;
 static void liveResizeRender(int, int) {
     if (!rayact::engineThreadedModeEnabled())
@@ -77,12 +78,15 @@ static void liveResizeRender(int, int) {
     publishWindowDimensions(g_liveResizeCtx, GetRenderWidth(), GetRenderHeight());
     rayact::engineRenderFrame(GetRenderWidth(), GetRenderHeight());
 }
+#endif
 
 // Desktop render loop: thin driver over the engine API.
 void mainLoop(JSContext* ctx) {
     printf("Starting main loop\n");
+#if defined(__APPLE__)
     g_liveResizeCtx = ctx;
     SetWindowLiveResizeHook(liveResizeRender);
+#endif
 
     if (!IsWindowReady()) {
         // Module-HMR dev bootstrap imports the project entry asynchronously; the

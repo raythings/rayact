@@ -2,6 +2,7 @@
 #include "cdp_handler.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 

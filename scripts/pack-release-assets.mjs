@@ -78,10 +78,23 @@ const add = (ok, name) => { if (ok) assets.push(name); };
   }
 }
 
+function hasValidNativePayload(pkg) {
+  if (pkg === 'prebuilt-darwin-x64') {
+    const binary = path.join(ROOT, 'packages', pkg, 'bin', 'rayact_desktop');
+    if (!fs.existsSync(binary)) return false;
+    const result = spawnSync('file', [binary], { encoding: 'utf8' });
+    return result.status === 0 && /x86_64/.test(result.stdout);
+  }
+  if (pkg === 'prebuilt-linux-x64') {
+    return fs.existsSync(path.join(ROOT, 'packages', pkg, 'bin', 'rayact_desktop'));
+  }
+  return true;
+}
+
 const releasePackageDirs = fs.readdirSync(path.join(ROOT, 'packages'))
   .filter((pkg) =>
-    pkg === 'create-rayact-app' ||
-    pkg.startsWith('prebuilt-')
+    (pkg === 'create-rayact-app' || pkg.startsWith('prebuilt-')) &&
+    hasValidNativePayload(pkg)
   );
 
 for (const pkg of releasePackageDirs) {

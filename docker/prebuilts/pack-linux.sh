@@ -6,7 +6,7 @@ if [[ ! -f "$RAYACT_ROOT/CMakeLists.txt" ]]; then
   RAYACT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 fi
 
-ENGINE_VERSION="${ENGINE_VERSION:-0.1.0}"
+ENGINE_VERSION="${ENGINE_VERSION:-$(node -p "require('$RAYACT_ROOT/package.json').version" 2>/dev/null || echo 0.0.0)}"
 ABI_VERSION="${ABI_VERSION:-1}"
 BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
@@ -23,8 +23,8 @@ write_manifest() {
 EOF
 }
 
-DESKTOP_BIN="$RAYACT_ROOT/build/bin/rayact_desktop"
-MODULES_DIR="$RAYACT_ROOT/build/modules"
+DESKTOP_BIN="$RAYACT_ROOT/build-linux/bin/rayact_desktop"
+MODULES_DIR="$RAYACT_ROOT/build-linux/modules"
 LINUX_PKG="$RAYACT_ROOT/packages/prebuilt-linux-x64"
 
 mkdir -p "$LINUX_PKG/bin" "$LINUX_PKG/modules"

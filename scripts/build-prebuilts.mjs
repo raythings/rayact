@@ -98,6 +98,7 @@ function buildDocker(target) {
     'run', '--rm', ...platformArgs,
     '-v', `${SUPER}:/workspace`,
     '-e', `RAYACT_ROOT=/workspace/rayact`,
+    '-e', `ENGINE_VERSION=${process.env.ENGINE_VERSION || JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version}`,
     tag
   ]);
 }
