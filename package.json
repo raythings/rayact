@@ -165,10 +165,5 @@
     "react-refresh": "^0.18.0",
     "vite": "^7.2.6",
     "ws": "^8.18.3"
-  },
-  "optionalDependencies": {
-    "@rayact/prebuilt-darwin-arm64": "file:packages/prebuilt-darwin-arm64",
-    "@rayact/prebuilt-darwin-x64": "file:packages/prebuilt-darwin-x64",
-    "@rayact/prebuilt-linux-x64": "file:packages/prebuilt-linux-x64"
   }
 }
