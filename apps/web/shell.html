@@ -79,6 +79,7 @@
       var activeNode = -1;
       var activeEl = null;
       var composing = false;
+      var globalImeValue = '';
       var canvas = document.getElementById('canvas');
       var lastPointerEventTime = 0;
       var mouseFallbackDown = false;
@@ -112,6 +113,23 @@
         Module._rayactWebPointer(action, 0, point.x, point.y);
       }
 
+      function sendKey(type, event, text) {
+        if (!runtimeReady || typeof Module._rayactWebKey !== 'function') return;
+        var keyPtr = stringToNewUTF8(event && event.key || '');
+        var codePtr = stringToNewUTF8(event && event.code || '');
+        var textPtr = stringToNewUTF8(text || '');
+        try {
+          Module._rayactWebKey(
+            type, keyPtr, codePtr, textPtr,
+            event && event.repeat ? 1 : 0, event && event.ctrlKey ? 1 : 0,
+            event && event.altKey ? 1 : 0, event && event.shiftKey ? 1 : 0,
+            event && event.metaKey ? 1 : 0
+          );
+        } finally {
+          _free(keyPtr); _free(codePtr); _free(textPtr);
+        }
+      }
+
       if (canvas) {
         canvas.style.touchAction = 'none';
         canvas.addEventListener('pointerdown', function(event) {
@@ -138,6 +156,20 @@
           lastPointerEventTime = Date.now();
           sendPointer(1, event);
           event.preventDefault();
+        });
+        canvas.addEventListener('keydown', function(event) {
+          if (activeNode !== -1) return;
+          sendKey(0, event, '');
+          if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.length === 1) {
+            sendKey(2, event, event.key);
+          }
+          if (['Tab', 'Backspace', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) {
+            event.preventDefault();
+          }
+        });
+        canvas.addEventListener('keyup', function(event) {
+          if (activeNode !== -1) return;
+          sendKey(1, event, '');
         });
         canvas.addEventListener('mousedown', function(event) {
           if (Date.now() - lastPointerEventTime < 500) return;
@@ -186,8 +218,21 @@
       }
 
       function sendState(textChanged) {
-        if (!runtimeReady || !activeEl || activeNode < 0 || typeof Module._rayactWebImeUpdate !== 'function') return;
+        if (!runtimeReady || !activeEl || activeNode === -1) return;
         var value = activeEl.value || '';
+        if (activeNode === -2) {
+          if (composing || !textChanged) return;
+          var prefix = 0;
+          while (prefix < globalImeValue.length && prefix < value.length &&
+                 globalImeValue[prefix] === value[prefix]) prefix++;
+          for (var deleted = prefix; deleted < globalImeValue.length; deleted++) {
+            sendKey(0, { key: 'Backspace', code: 'Backspace' }, '');
+          }
+          if (value.length > prefix) sendKey(2, null, value.slice(prefix));
+          globalImeValue = value;
+          return;
+        }
+        if (typeof Module._rayactWebImeUpdate !== 'function') return;
         var ptr = stringToNewUTF8(value);
         try {
           Module._rayactWebImeUpdate(
@@ -222,7 +267,8 @@
           if (event.key === 'Enter' && el.tagName !== 'TEXTAREA') {
             event.preventDefault();
             sendState(true);
-            if (runtimeReady && typeof Module._rayactWebImeSubmit === 'function') Module._rayactWebImeSubmit();
+            if (activeNode === -2) sendKey(0, event, '');
+            else if (runtimeReady && typeof Module._rayactWebImeSubmit === 'function') Module._rayactWebImeSubmit();
           }
         });
       }
@@ -235,6 +281,7 @@
       Module.rayactTextInput = {
         show: function(nodeId, value, inputType, autocorrect, secure, imeAction) {
           activeNode = nodeId;
+          if (nodeId === -2) globalImeValue = value || '';
           var multiline = inputType === 'multiline';
           activeEl = document.getElementById(multiline ? 'rayact-ime-textarea' : 'rayact-ime-input');
           var inputMode = inputType === 'email' ? 'email'
@@ -251,6 +298,7 @@
         hide: function() {
           if (activeEl) activeEl.blur();
           activeNode = -1;
+          globalImeValue = '';
           activeEl = null;
           composing = false;
           var canvas = document.getElementById('canvas');

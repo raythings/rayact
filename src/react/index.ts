@@ -32,7 +32,15 @@ export type {
   TabBarProps,
   TabsProps,
   TextInputProps,
-  TextProps
+  TextProps,
+  TextStyle,
+  ViewProps,
+  ViewStyle,
+  SliderProps,
+  DatePickerProps,
+  TimePickerProps,
+  PopoverProps,
+  ListRenderItem
 } from './types';
 
 export { ExternalView, NativeTextInput } from './components';
@@ -114,6 +122,17 @@ export { useSpring } from './anim/useSpring';
 export { SharedValue, useSharedValue, withTiming, withSpring } from './anim/SharedValue';
 export { BackHandler, useBackHandler } from './BackHandler';
 export type { BackHandlerSubscription } from './BackHandler';
+export { Keyboard, useKeyboardEvents } from './Keyboard';
+export type {
+  KeyboardCaptureOptions,
+  KeyboardEventListener,
+  KeyboardEventType,
+  KeyboardKeyEvent,
+  KeyboardSubscription,
+  KeyboardTextInputEvent,
+  RayactKeyboardEvent,
+  UseKeyboardEventsOptions,
+} from './Keyboard';
 
 interface StoredRoot {
   container: RayactContainer;

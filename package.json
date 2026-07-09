@@ -1,6 +1,6 @@
 {
   "name": "rayact",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Cross-platform React renderer with raylib backend",
   "type": "module",
   "main": "./index.js",

@@ -1,6 +1,6 @@
 {
   "name": "@rayact/mmkv",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Native plugin artifacts for rayact/mmkv (librayact_mmkv). JS API ships in the rayact package as rayact/mmkv.",
   "keywords": [
     "mmkv",

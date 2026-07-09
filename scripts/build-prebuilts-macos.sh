@@ -10,7 +10,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-ENGINE_VERSION="${ENGINE_VERSION:-0.0.1}"
+ENGINE_VERSION="${ENGINE_VERSION:-$(node -p "require('./package.json').version")}"
 ABI_VERSION="${ABI_VERSION:-1}"
 BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 DESKTOP_BIN="$ROOT/build/bin/rayact_desktop"
@@ -49,13 +49,11 @@ EOF
 
 if [[ "$DO_DARWIN" -eq 1 ]]; then
   echo "==> Building macOS desktop prebuilts..."
-  if [[ ! -f "$DESKTOP_BIN" ]]; then
-    cmake -B build -S . -DENABLE_DESKTOP=ON -DCMAKE_BUILD_TYPE=Release
-    cmake --build build --parallel
-    cmake -B build/plugins -S native/plugins \
-      -DCMAKE_LIBRARY_OUTPUT_DIRECTORY="$MODULES_DIR" -DCMAKE_BUILD_TYPE=Release
-    cmake --build build/plugins --parallel
-  fi
+  cmake -B build -S . -DENABLE_DESKTOP=ON -DCMAKE_BUILD_TYPE=Release
+  cmake --build build --parallel
+  cmake -B build/plugins -S native/plugins \
+    -DCMAKE_LIBRARY_OUTPUT_DIRECTORY="$MODULES_DIR" -DCMAKE_BUILD_TYPE=Release
+  cmake --build build/plugins --parallel
 
   for arch in arm64 x64; do
     pkg="$ROOT/packages/prebuilt-darwin-$arch"

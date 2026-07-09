@@ -133,6 +133,47 @@ class DevLauncherActivity : AppCompatActivity() {
         return super.onKeyUp(keyCode, event)
     }
 
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode != KeyEvent.KEYCODE_BACK) {
+            val session = activeSession()
+            if (session != null) {
+                val key = when (event.keyCode) {
+                    KeyEvent.KEYCODE_ESCAPE -> "Escape"
+                    KeyEvent.KEYCODE_TAB -> "Tab"
+                    KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> "Enter"
+                    KeyEvent.KEYCODE_DEL -> "Backspace"
+                    KeyEvent.KEYCODE_FORWARD_DEL -> "Delete"
+                    KeyEvent.KEYCODE_DPAD_UP -> "ArrowUp"
+                    KeyEvent.KEYCODE_DPAD_DOWN -> "ArrowDown"
+                    KeyEvent.KEYCODE_DPAD_LEFT -> "ArrowLeft"
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> "ArrowRight"
+                    KeyEvent.KEYCODE_MOVE_HOME -> "Home"
+                    KeyEvent.KEYCODE_MOVE_END -> "End"
+                    KeyEvent.KEYCODE_PAGE_UP -> "PageUp"
+                    KeyEvent.KEYCODE_PAGE_DOWN -> "PageDown"
+                    KeyEvent.KEYCODE_SPACE -> " "
+                    else -> {
+                        val unicode = event.unicodeChar
+                        if (unicode > 0) String(Character.toChars(unicode)) else KeyEvent.keyCodeToString(event.keyCode)
+                    }
+                }
+                val type = if (event.action == KeyEvent.ACTION_UP) 1 else 0
+                session.nativeKeyEvent(
+                    type, key, KeyEvent.keyCodeToString(event.keyCode), "",
+                    event.repeatCount > 0, event.isCtrlPressed, event.isAltPressed,
+                    event.isShiftPressed, event.isMetaPressed
+                )
+                if (event.action == KeyEvent.ACTION_DOWN && !event.isCtrlPressed &&
+                    !event.isAltPressed && !event.isMetaPressed && event.unicodeChar > 0) {
+                    val text = String(Character.toChars(event.unicodeChar))
+                    session.nativeKeyEvent(2, "", "", text, false, false, false, event.isShiftPressed, false)
+                }
+                activeSession()?.host?.renderScheduler?.requestFrame()
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     private fun showLauncher() {
         projectLoadGeneration++
         val hadProject = activePane == ActivePane.PROJECT

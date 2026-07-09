@@ -1,6 +1,6 @@
 {
   "name": "@rayact/template-ios",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Thin iOS XcodeGen shell for Rayact apps — links prebuilt RayactEngine.xcframework",
   "files": [
     "*.swift",

@@ -626,6 +626,12 @@ void registerJSStdlib(JSContext* ctx) {
 
     // globalThis self-reference
     JS_SetPropertyStr(ctx, global, "globalThis", JS_DupValue(ctx, global));
+    JS_SetPropertyStr(ctx, global, "window", JS_DupValue(ctx, global));
+    JSValue navigator = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, navigator, "userAgent", JS_NewString(ctx, "rayact-quickjs"));
+    JS_SetPropertyStr(ctx, navigator, "platform", JS_NewString(ctx, ""));
+    JS_SetPropertyStr(ctx, navigator, "language", JS_NewString(ctx, "en"));
+    JS_SetPropertyStr(ctx, global, "navigator", navigator);
 
     JS_FreeValue(ctx, global);
 }

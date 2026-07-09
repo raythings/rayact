@@ -275,7 +275,7 @@ set(_rayact_dbg "")
 if(RAYACT_WEB_DEBUG)
     set(_rayact_dbg " --profiling-funcs -sASSERTIONS=2 -sSTACK_OVERFLOW_CHECK=2")
 endif()
-set(_rayact_exports " -sEXPORTED_FUNCTIONS=['_main','_rayactWebStart','_rayactWebFinishBoot','_rayactWebPointer','_rayactWebImeUpdate','_rayactWebImeSubmit','_malloc','_free']")
+set(_rayact_exports " -sEXPORTED_FUNCTIONS=['_main','_rayactWebStart','_rayactWebFinishBoot','_rayactWebPointer','_rayactWebKey','_rayactWebImeUpdate','_rayactWebImeSubmit','_malloc','_free']")
 # The rlwg backend propagates a 16 MB stack, which is enough for simple demos but
 # the full smoke app (React navigation + large Material tree) can exhaust it while
 # QuickJS evaluates and mounts the bundle. Keep this above the web QuickJS guard in

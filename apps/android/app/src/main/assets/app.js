@@ -440,7 +440,7 @@
   }
   var reactExports = requireReact();
   const React = /* @__PURE__ */ getDefaultExportFromCjs(reactExports);
-  globalThis.importCSS("./css/53ee219a-avoid-keyboard.css");
+  globalThis.importCSS("./css/c305bbf1-avoid-keyboard.css");
   function getGlobal$1() {
     return globalThis;
   }
@@ -493,7 +493,8 @@
     return value;
   }
   function installAssetAwareSpawnWorker(globalObject = getGlobal$1()) {
-    if (globalObject.__rayactRawSpawnWorker || typeof globalObject.spawnWorker !== "function") return;
+    if (globalObject.__rayactRawSpawnWorker || typeof globalObject.spawnWorker !== "function")
+      return;
     const rawSpawnWorker = globalObject.spawnWorker.bind(globalObject);
     globalObject.__rayactRawSpawnWorker = rawSpawnWorker;
     globalObject.spawnWorker = (worker, initialData) => {
@@ -528,18 +529,18 @@
         sharedFloatArray$1[dirtyIndex] = 1;
       }
       if (typeof globalObj2.__rayactSetAnimatedStyle === "function") {
-        globalObj2.__rayactSetAnimatedStyle(nodeId, {
-          [property]: value
-        });
+        globalObj2.__rayactSetAnimatedStyle(nodeId, { [property]: value });
       }
     }
   }
   function animatedStyleSnapshot$1(style) {
     const animated = {};
     for (const key of Object.keys(OFFSETS$2)) {
-      if (key === "dirty") continue;
+      if (key === "dirty")
+        continue;
       const value = style[key];
-      if (typeof value === "number") animated[key] = value;
+      if (typeof value === "number")
+        animated[key] = value;
     }
     return animated;
   }
@@ -555,10 +556,12 @@
     if (Array.isArray(style)) {
       return Object.assign({}, ...style.map((s) => flattenStyleValue(s, isCreate, nodeId)));
     }
-    if (!style || typeof style !== "object") return {};
+    if (!style || typeof style !== "object")
+      return {};
     const result = {};
     for (const [key, value] of Object.entries(style)) {
-      if (value == null) continue;
+      if (value == null)
+        continue;
       if (isSharedValue(value)) {
         if (isCreate) {
           result[key] = value.value;
@@ -576,19 +579,23 @@
     return result;
   }
   function parseAngle(value) {
-    if (typeof value === "number") return value;
+    if (typeof value === "number")
+      return value;
     if (typeof value === "string") {
       const n = parseFloat(value);
-      if (Number.isNaN(n)) return void 0;
+      if (Number.isNaN(n))
+        return void 0;
       return value.trim().endsWith("rad") ? n * 180 / Math.PI : n;
     }
     return void 0;
   }
   function flattenTransform(style, isCreate, nodeId) {
     const t = style.transform;
-    if (!Array.isArray(t)) return;
+    if (!Array.isArray(t))
+      return;
     for (const entry of t) {
-      if (!entry || typeof entry !== "object") continue;
+      if (!entry || typeof entry !== "object")
+        continue;
       for (const [key, raw] of Object.entries(entry)) {
         switch (key) {
           case "translateX":
@@ -613,7 +620,8 @@
             if (isSharedValue(raw)) {
               if (isCreate) {
                 const deg = parseAngle(raw.value);
-                if (deg !== void 0) style[keyName] = deg;
+                if (deg !== void 0)
+                  style[keyName] = deg;
               }
             } else {
               const deg = parseAngle(raw);
@@ -650,10 +658,7 @@
     if (typeof id !== "number") {
       throw new Error(`Failed to create native ${type} node`);
     }
-    return {
-      id,
-      type
-    };
+    return { id, type };
   }
   function resolveImageSource(value, native) {
     if (isRayactAsset(value)) {
@@ -661,7 +666,53 @@
     }
     return String(value ?? "");
   }
-  const materialHostTypes = /* @__PURE__ */ new Set(["appBar", "badge", "banner", "bottomAppBar", "bottomSheet", "dataTable", "dockedToolbar", "floatingToolbar", "buttonGroup", "card", "carousel", "checkbox", "chip", "datePicker", "dialog", "divider", "extendedFab", "fab", "fabMenu", "iconButton", "list", "loadingIndicator", "menu", "menuItem", "navigationBar", "navigationBarItem", "navigationDrawer", "navigationRail", "progressIndicator", "radioButton", "rangeSlider", "search", "searchBar", "segmentedButton", "sideSheet", "slider", "snackbar", "splitButton", "switch", "tabs", "textField", "timePicker", "toolbar", "tooltip", "popover"]);
+  const materialHostTypes = /* @__PURE__ */ new Set([
+    "appBar",
+    "badge",
+    "banner",
+    "bottomAppBar",
+    "bottomSheet",
+    "dataTable",
+    "dockedToolbar",
+    "floatingToolbar",
+    "buttonGroup",
+    "card",
+    "carousel",
+    "checkbox",
+    "chip",
+    "datePicker",
+    "dialog",
+    "divider",
+    "extendedFab",
+    "fab",
+    "fabMenu",
+    "iconButton",
+    "list",
+    "loadingIndicator",
+    "menu",
+    "menuItem",
+    "navigationBar",
+    "navigationBarItem",
+    "navigationDrawer",
+    "navigationRail",
+    "progressIndicator",
+    "radioButton",
+    "rangeSlider",
+    "search",
+    "searchBar",
+    "segmentedButton",
+    "sideSheet",
+    "slider",
+    "snackbar",
+    "splitButton",
+    "switch",
+    "tabs",
+    "textField",
+    "timePicker",
+    "toolbar",
+    "tooltip",
+    "popover"
+  ]);
   function materialProps(type, props, style) {
     const childLabel = typeof props.children === "string" || typeof props.children === "number" ? props.children : void 0;
     return {
@@ -679,10 +730,7 @@
         switch (type) {
           case "root":
           case "view": {
-            const viewArg = props.appBarTitle ? {
-              ...style,
-              appBarTitle: true
-            } : style;
+            const viewArg = props.appBarTitle ? { ...style, appBarTitle: true } : style;
             return registerAnimatedHostNode(asHostNode(requireFunction(native.createView, "createView")(viewArg), type), style);
           }
           case "text": {
@@ -698,40 +746,19 @@
           case "icon":
             return registerAnimatedHostNode(asHostNode(requireFunction(native.createIcon, "createIcon")(String(props.name ?? props.icon ?? ""), typeof props.size === "number" ? props.size : void 0, typeof props.color === "number" || typeof props.color === "string" ? props.color : void 0, style, typeof props.variant === "string" ? props.variant : void 0, typeof props.filled === "boolean" ? props.filled : void 0, typeof props.set === "string" ? props.set : void 0), type), style);
           case "textInput":
-            return registerAnimatedHostNode(asHostNode(requireFunction(native.createTextInput, "createTextInput")(String(props.value ?? props.defaultValue ?? ""), {
-              ...style,
-              ...props
-            }), type), style);
+            return registerAnimatedHostNode(asHostNode(requireFunction(native.createTextInput, "createTextInput")(String(props.value ?? props.defaultValue ?? ""), { ...style, ...props }), type), style);
           case "scrollView":
-            return registerAnimatedHostNode(asHostNode(requireFunction(native.createScrollView, "createScrollView")({
-              ...style,
-              ...props
-            }), type), style);
+            return registerAnimatedHostNode(asHostNode(requireFunction(native.createScrollView, "createScrollView")({ ...style, ...props }), type), style);
           case "externalView":
-            return registerAnimatedHostNode(asHostNode(requireFunction(native.createExternalView, "createExternalView")(String(props.kind ?? "stub"), {
-              ...style,
-              ...props
-            }), type), style);
+            return registerAnimatedHostNode(asHostNode(requireFunction(native.createExternalView, "createExternalView")(String(props.kind ?? "stub"), { ...style, ...props }), type), style);
           case "modal":
-            return registerAnimatedHostNode(asHostNode(requireFunction(native.createModal, "createModal")({
-              ...style,
-              ...props
-            }), type), style);
+            return registerAnimatedHostNode(asHostNode(requireFunction(native.createModal, "createModal")({ ...style, ...props }), type), style);
           case "safeArea":
-            return registerAnimatedHostNode(asHostNode((native.createSafeArea ?? native.createView ?? requireFunction(native.createView, "createView"))({
-              ...style,
-              ...props
-            }), type), style);
+            return registerAnimatedHostNode(asHostNode((native.createSafeArea ?? native.createView ?? requireFunction(native.createView, "createView"))({ ...style, ...props }), type), style);
           case "statusBar":
-            return registerAnimatedHostNode(asHostNode((native.createStatusBar ?? native.createView ?? requireFunction(native.createView, "createView"))({
-              ...style,
-              ...props
-            }), type), style);
+            return registerAnimatedHostNode(asHostNode((native.createStatusBar ?? native.createView ?? requireFunction(native.createView, "createView"))({ ...style, ...props }), type), style);
           case "activityIndicator":
-            return registerAnimatedHostNode(asHostNode(requireFunction(native.createActivityIndicator, "createActivityIndicator")({
-              ...style,
-              ...props
-            }), type), style);
+            return registerAnimatedHostNode(asHostNode(requireFunction(native.createActivityIndicator, "createActivityIndicator")({ ...style, ...props }), type), style);
           default:
             if (materialHostTypes.has(type)) {
               return registerAnimatedHostNode(asHostNode(requireFunction(native.createMaterialComponent, "createMaterialComponent")(type, materialProps(type, props, style)), type), style);
@@ -748,9 +775,7 @@
           requireFunction(native.setStyle, "setStyle")(node.id, style);
         }
         if (node.type === "externalView" && typeof native.setExternalViewProps === "function") {
-          native.setExternalViewProps(node.id, {
-            ...props
-          });
+          native.setExternalViewProps(node.id, { ...props });
         }
         if (node.type === "icon" && typeof native.setIconProps === "function") {
           native.setIconProps(node.id, typeof props.size === "number" ? props.size : void 0, typeof props.color === "number" || typeof props.color === "string" ? props.color : void 0, typeof props.variant === "string" ? props.variant : void 0, typeof props.name === "string" ? props.name : typeof props.icon === "string" ? props.icon : void 0, typeof props.filled === "boolean" ? props.filled : void 0, typeof props.set === "string" ? props.set : void 0);
@@ -821,7 +846,8 @@
         }
       },
       async reload(source) {
-        if (!source) return;
+        if (!source)
+          return;
         if (typeof native.eval !== "function") {
           throw new Error("Rayact reload requires global eval()");
         }
@@ -842,21 +868,11 @@ ${stack}` : message;
           });
           const title = bridge2.createNode("text", {
             text: "Rayact runtime error",
-            style: {
-              text: {
-                color: 4294967295,
-                fontSize: 24
-              }
-            }
+            style: { text: { color: 4294967295, fontSize: 24 } }
           });
           const body = bridge2.createNode("text", {
             text: detail,
-            style: {
-              text: {
-                color: 4290032895,
-                fontSize: 14
-              }
-            }
+            style: { text: { color: 4290032895, fontSize: 14 } }
           });
           bridge2.appendChild(root, title);
           bridge2.appendChild(root, body);
@@ -873,18 +889,23 @@ ${stack}` : message;
   }
   function currentPlatform(globalObject) {
     const injected = globalObject.__rayactPlatform;
-    if (injected && typeof injected.target === "string" && injected.target) return injected.target;
-    if (injected && typeof injected.os === "string" && injected.os) return injected.os;
+    if (injected && typeof injected.target === "string" && injected.target)
+      return injected.target;
+    if (injected && typeof injected.os === "string" && injected.os)
+      return injected.os;
     const nav = globalObject.navigator;
     if (typeof nav?.userAgent === "string") {
-      if (/Android/i.test(nav.userAgent)) return "android";
-      if (/iPhone|iPad|iPod/i.test(nav.userAgent)) return "ios";
+      if (/Android/i.test(nav.userAgent))
+        return "android";
+      if (/iPhone|iPad|iPod/i.test(nav.userAgent))
+        return "ios";
       return "web";
     }
     return null;
   }
   function withPlatformParam(url, platform) {
-    if (!platform || /[?&]platform=/.test(url)) return url;
+    if (!platform || /[?&]platform=/.test(url))
+      return url;
     return `${url}${url.includes("?") ? "&" : "?"}platform=${encodeURIComponent(platform)}`;
   }
   function toWsUrl(serverUrl2, channel) {
@@ -892,14 +913,9 @@ ${stack}` : message;
   }
   function serializeError(error) {
     if (error instanceof Error) {
-      return {
-        message: error.message,
-        stack: error.stack
-      };
+      return { message: error.message, stack: error.stack };
     }
-    return {
-      message: String(error)
-    };
+    return { message: String(error) };
   }
   function createDevClient(options) {
     const globalObject = options.global ?? globalThis;
@@ -911,15 +927,14 @@ ${stack}` : message;
     let lastRevision = null;
     let manifest = {};
     const send = (type, payload) => {
-      if (!debuggerSocket || debuggerSocket.readyState !== 1) return;
-      debuggerSocket.send(JSON.stringify({
-        type,
-        payload
-      }));
+      if (!debuggerSocket || debuggerSocket.readyState !== 1)
+        return;
+      debuggerSocket.send(JSON.stringify({ type, payload }));
     };
     const fetchManifest = async () => {
       const fetchFn = globalObject.fetch;
-      if (typeof fetchFn !== "function") return {};
+      if (typeof fetchFn !== "function")
+        return {};
       const response = await fetchFn(withPlatformParam(joinUrl(options.serverUrl, "/rayact/manifest.json"), currentPlatform(globalObject)));
       return JSON.parse(await response.text());
     };
@@ -956,17 +971,20 @@ ${stack}` : message;
     const pollStatus = async () => {
       try {
         const fetchFn = globalObject.fetch;
-        if (typeof fetchFn !== "function") return;
+        if (typeof fetchFn !== "function")
+          return;
         const response = await fetchFn(withPlatformParam(joinUrl(options.serverUrl, "/rayact/status"), currentPlatform(globalObject)));
         const status = JSON.parse(await response.text());
-        if (typeof status.revision !== "number") return;
+        if (typeof status.revision !== "number")
+          return;
         if (lastRevision === null) {
           lastRevision = status.revision;
           return;
         }
         if (status.revision !== lastRevision) {
           globalObject.console?.info?.(`[rayact] revision ${status.revision} detected (poll fallback)`);
-          if (await loadBundle()) lastRevision = status.revision;
+          if (await loadBundle())
+            lastRevision = status.revision;
         }
       } catch (error) {
         globalObject.console?.warn?.("[rayact] revision poll failed", error);
@@ -977,7 +995,8 @@ ${stack}` : message;
         globalObject.console?.info?.(`[rayact] ${message.type} received`);
         const revision = typeof message.payload?.revision === "number" ? message.payload.revision : null;
         void loadBundle().then((ok) => {
-          if (ok && revision !== null) lastRevision = revision;
+          if (ok && revision !== null)
+            lastRevision = revision;
         });
       } else if (message.type === "build:error") {
         const payload = message.payload;
@@ -986,8 +1005,10 @@ ${stack}` : message;
     };
     const connectHmr = () => {
       const WebSocketCtor = globalObject.WebSocket;
-      if (typeof WebSocketCtor !== "function") return;
-      if (hmrSocket) return;
+      if (typeof WebSocketCtor !== "function")
+        return;
+      if (hmrSocket)
+        return;
       const hmrUrl = manifest.hmrUrl ?? toWsUrl(options.serverUrl, "/rayact/hmr");
       globalObject.console?.info?.(`[rayact] connecting hmr: ${hmrUrl}`);
       hmrSocket = new WebSocketCtor(hmrUrl);
@@ -1011,16 +1032,16 @@ ${stack}` : message;
     };
     const connectDebugger = () => {
       const WebSocketCtor = globalObject.WebSocket;
-      if (typeof WebSocketCtor !== "function") return;
-      if (debuggerSocket) return;
+      if (typeof WebSocketCtor !== "function")
+        return;
+      if (debuggerSocket)
+        return;
       const debuggerUrl = toWsUrl(options.serverUrl, "/rayact/debugger");
       globalObject.console?.info?.(`[rayact] connecting debugger: ${debuggerUrl}`);
       debuggerSocket = new WebSocketCtor(debuggerUrl);
       debuggerSocket.onopen = () => {
         globalObject.console?.info?.("[rayact] debugger connected");
-        send("client:ready", {
-          serverUrl: options.serverUrl
-        });
+        send("client:ready", { serverUrl: options.serverUrl });
       };
       debuggerSocket.onclose = () => {
         globalObject.console?.warn?.("[rayact] debugger disconnected");
@@ -1066,19 +1087,17 @@ ${stack}` : message;
         hmrSocket = null;
       }
     };
-    return {
-      connect,
-      disconnect,
-      send
-    };
+    return { connect, disconnect, send };
   }
   function installConsoleForwarding(client, globalObject = globalThis) {
     const consoleObject = globalObject.console;
-    if (!consoleObject || globalObject.__rayactConsoleForwarding) return;
+    if (!consoleObject || globalObject.__rayactConsoleForwarding)
+      return;
     globalObject.__rayactConsoleForwarding = true;
     for (const level of ["log", "info", "warn", "error", "debug"]) {
       const original = consoleObject[level]?.bind(consoleObject);
-      if (!original) continue;
+      if (!original)
+        continue;
       consoleObject[level] = (...args) => {
         original(...args);
         client.send("console", {
@@ -1094,52 +1113,92 @@ ${stack}` : message;
       };
     }
   }
-  var Platform = /* @__PURE__ */ ((Platform2) => {
+  var PointerEventType;
+  (function(PointerEventType2) {
+    PointerEventType2["DOWN"] = "pointerdown";
+    PointerEventType2["UP"] = "pointerup";
+    PointerEventType2["MOVE"] = "pointermove";
+    PointerEventType2["ENTER"] = "pointerenter";
+    PointerEventType2["LEAVE"] = "pointerleave";
+    PointerEventType2["OUT"] = "pointerout";
+  })(PointerEventType || (PointerEventType = {}));
+  var TouchEventType;
+  (function(TouchEventType2) {
+    TouchEventType2["START"] = "touchstart";
+    TouchEventType2["MOVE"] = "touchmove";
+    TouchEventType2["END"] = "touchend";
+    TouchEventType2["CANCEL"] = "touchcancel";
+  })(TouchEventType || (TouchEventType = {}));
+  var KeyboardEventType;
+  (function(KeyboardEventType2) {
+    KeyboardEventType2["DOWN"] = "keydown";
+    KeyboardEventType2["UP"] = "keyup";
+    KeyboardEventType2["PRESS"] = "keypress";
+  })(KeyboardEventType || (KeyboardEventType = {}));
+  var WindowEventType;
+  (function(WindowEventType2) {
+    WindowEventType2["RESIZE"] = "resize";
+    WindowEventType2["FOCUS"] = "focus";
+    WindowEventType2["BLUR"] = "blur";
+    WindowEventType2["CLOSE"] = "close";
+    WindowEventType2["MINIMIZE"] = "minimize";
+    WindowEventType2["MAXIMIZE"] = "maximize";
+    WindowEventType2["FULLSCREEN"] = "fullscreenchange";
+  })(WindowEventType || (WindowEventType = {}));
+  var Platform;
+  (function(Platform2) {
     Platform2["WINDOWS"] = "windows";
     Platform2["LINUX"] = "linux";
     Platform2["MACOS"] = "macos";
     Platform2["IOS"] = "ios";
     Platform2["ANDROID"] = "android";
     Platform2["WEB"] = "web";
-    return Platform2;
-  })(Platform || {});
+  })(Platform || (Platform = {}));
   function detectPlatform() {
     const injected = globalThis.__rayactPlatform;
     if (injected && typeof injected.os === "string") {
       switch (injected.os.toLowerCase()) {
         case "android":
-          return "android";
+          return Platform.ANDROID;
         case "ios":
-          return "ios";
+          return Platform.IOS;
         case "macos":
-          return "macos";
+          return Platform.MACOS;
         case "windows":
-          return "windows";
+          return Platform.WINDOWS;
         case "linux":
-          return "linux";
+          return Platform.LINUX;
         case "web":
-          return "web";
+          return Platform.WEB;
       }
     }
     if (typeof window !== "undefined") {
-      if (/Android/i.test(navigator.userAgent)) return "android";
-      if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return "ios";
-      if (/iPad/i.test(navigator.userAgent)) return "ios";
-      if (/Windows/i.test(navigator.userAgent)) return "windows";
-      if (/Macintosh|Mac OS X/i.test(navigator.userAgent)) return "macos";
-      if (/Linux/i.test(navigator.userAgent)) return "linux";
+      if (/Android/i.test(navigator.userAgent))
+        return Platform.ANDROID;
+      if (/iPhone|iPad|iPod/i.test(navigator.userAgent))
+        return Platform.IOS;
+      if (/iPad/i.test(navigator.userAgent))
+        return Platform.IOS;
+      if (/Windows/i.test(navigator.userAgent))
+        return Platform.WINDOWS;
+      if (/Macintosh|Mac OS X/i.test(navigator.userAgent))
+        return Platform.MACOS;
+      if (/Linux/i.test(navigator.userAgent))
+        return Platform.LINUX;
       if (typeof navigator !== "undefined" && navigator.vendor === "Google Inc." && navigator.platform === "Win32") {
-        return "windows";
+        return Platform.WINDOWS;
       }
     }
-    return "web";
+    return Platform.WEB;
   }
-  ((Platform2) => {
+  (function(Platform2) {
     Platform2.OS = detectPlatform();
     Platform2.Version = globalThis.__rayactPlatform?.version ?? "";
     function select(specifics) {
-      if (Platform2.OS in specifics) return specifics[Platform2.OS];
-      if (Platform2.OS !== "web" && "native" in specifics) return specifics.native;
+      if (Platform2.OS in specifics)
+        return specifics[Platform2.OS];
+      if (Platform2.OS !== Platform2.WEB && "native" in specifics)
+        return specifics.native;
       return specifics.default;
     }
     Platform2.select = select;
@@ -1153,11 +1212,7 @@ ${stack}` : message;
     const serverUrl2 = typeof globalObject.__RAYACT_DEV_SERVER__ === "string" ? globalObject.__RAYACT_DEV_SERVER__ : void 0;
     const isNativeHost = typeof globalObject.createView === "function";
     const shouldCreateDevClient = typeof serverUrl2 === "string" && (options.devClient === true || options.devClient !== false && !isNativeHost);
-    const devClient = typeof options.devClient === "object" ? options.devClient : shouldCreateDevClient ? createDevClient({
-      serverUrl: serverUrl2,
-      bridge: bridge2,
-      global: globalObject
-    }) : void 0;
+    const devClient = typeof options.devClient === "object" ? options.devClient : shouldCreateDevClient ? createDevClient({ serverUrl: serverUrl2, bridge: bridge2, global: globalObject }) : void 0;
     if (devClient) {
       globalObject.console?.info?.(`[rayact] dev client enabled: ${serverUrl2}`);
       installConsoleForwarding(devClient, globalObject);
@@ -1171,19 +1226,14 @@ ${stack}` : message;
         const message = error instanceof Error ? error.message : String(error);
         const stack = error instanceof Error ? error.stack : void 0;
         bridge2.showError?.(message, stack);
-        devClient?.send("client:error", {
-          message,
-          stack
-        });
+        devClient?.send("client:error", { message, stack });
       }
     };
   }
   function getDefaultRuntime() {
     const globalObject = globalThis;
     if (!globalObject.__rayactRuntime) {
-      globalObject.__rayactRuntime = createRuntime({
-        global: globalObject
-      });
+      globalObject.__rayactRuntime = createRuntime({ global: globalObject });
     }
     return globalObject.__rayactRuntime;
   }
@@ -9208,22 +9258,20 @@ ${stack}` : message;
     return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
   }
   function perfLog(event, data) {
-    if (!enabled()) return;
-    const payload = data ? {
-      ...data,
-      ts: now()
-    } : {
-      ts: now()
-    };
+    if (!enabled())
+      return;
+    const payload = data ? { ...data, ts: now() } : { ts: now() };
     console.log(`[rayact:perf] ${event}`, payload);
   }
   function perfMarkCommitStart() {
-    if (!enabled()) return;
+    if (!enabled())
+      return;
     commitStart = now();
     perfLog("commit.start");
   }
   function perfMarkCommitEnd() {
-    if (!enabled()) return;
+    if (!enabled())
+      return;
     perfLog("commit.end", {
       durationMs: commitStart > 0 ? now() - commitStart : 0,
       "created.nodes": counters.created,
@@ -9248,20 +9296,16 @@ ${stack}` : message;
     counters.disposed++;
   }
   function perfLogBatch(durationMs, count) {
-    if (!enabled()) return;
+    if (!enabled())
+      return;
     counters.mutationCount += count;
-    perfLog("native.batch.durationMs", {
-      durationMs,
-      count
-    });
+    perfLog("native.batch.durationMs", { durationMs, count });
   }
   function perfIncBinaryCreateFallback(type, reason) {
-    if (!enabled()) return;
+    if (!enabled())
+      return;
     counters.binaryCreateFallbacks++;
-    perfLog("binary.create.fallback", {
-      type,
-      reason
-    });
+    perfLog("binary.create.fallback", { type, reason });
   }
   function fastPathEnabled() {
     return globalThis.__RAYACT_USE_FAST_PATH === true;
@@ -9277,7 +9321,8 @@ ${stack}` : message;
     const animated = {};
     for (const key of Object.keys(OFFSETS$1)) {
       const value = style[key];
-      if (typeof value === "number") animated[key] = value;
+      if (typeof value === "number")
+        animated[key] = value;
     }
     return animated;
   }
@@ -9302,7 +9347,8 @@ ${stack}` : message;
     }
   }
   function flushMutations() {
-    if (!nativeFastPath.batch || mutationQueue.length === 0) return;
+    if (!nativeFastPath.batch || mutationQueue.length === 0)
+      return;
     const host = globalThis;
     const ops = mutationQueue.splice(0, mutationQueue.length);
     const start = typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -9312,21 +9358,21 @@ ${stack}` : message;
   }
   function createNodeFast(type, props) {
     const host = globalThis;
-    if (!nativeFastPath.createNode) return null;
+    if (!nativeFastPath.createNode)
+      return null;
     const id = host.__rayactCreateNodeFast(type, props);
-    if (typeof id !== "number") return null;
+    if (typeof id !== "number")
+      return null;
     const animated = animatedStyleSnapshot(flattenStyleForAnimated(props.style, true));
     if (Object.keys(animated).length > 0 && typeof host.__rayactRegisterAnimatedNode === "function") {
       host.__rayactRegisterAnimatedNode(id, animated);
     }
-    return {
-      id,
-      type
-    };
+    return { id, type };
   }
   function updateNodeFast(nodeId, type, oldProps, newProps) {
     const host = globalThis;
-    if (!nativeFastPath.updateNode) return false;
+    if (!nativeFastPath.updateNode)
+      return false;
     try {
       return host.__rayactUpdateNodeFast(nodeId, type, oldProps, newProps) === true;
     } catch {
@@ -9334,14 +9380,17 @@ ${stack}` : message;
     }
   }
   function flattenStyleForAnimated(style, isCreate) {
-    if (!style) return {};
+    if (!style)
+      return {};
     if (Array.isArray(style)) {
       return Object.assign({}, ...style.map((s) => flattenStyleForAnimated(s, isCreate)));
     }
-    if (typeof style !== "object") return {};
+    if (typeof style !== "object")
+      return {};
     const result = {};
     for (const [key, value] of Object.entries(style)) {
-      if (value == null) continue;
+      if (value == null)
+        continue;
       if (typeof value === "object" && value !== null && "value" in value && isCreate) {
         result[key] = value.value;
       } else if (OFFSETS$1[key] !== void 0 && typeof value === "number") {
@@ -9368,7 +9417,7 @@ ${stack}` : message;
     CREATE: 10,
     //      nodeId, typeId, styleN, [styleEntry...]
     CREATE_PARAM: 11,
-    //   nodeId, styleN, [styleEntry...]
+    // nodeId, typeId, stringId, flags, size, color, variantId, styleN, [styleEntry...]
     NEW_STRING: 13,
     //  stringId, byteLen, <utf8, padded to 4>
     SET_TEXT: 14
@@ -9439,61 +9488,25 @@ ${stack}` : message;
     pointerEvents: 67
   };
   const ENUM_VALUES = {
-    flexDirection: {
-      row: 0,
-      column: 1,
-      "row-reverse": 2,
-      "column-reverse": 3
-    },
-    justifyContent: {
-      "flex-start": 0,
-      "flex-end": 1,
-      center: 2,
-      "space-between": 3,
-      "space-around": 4,
-      "space-evenly": 5
-    },
-    alignItems: {
-      "flex-start": 0,
-      "flex-end": 1,
-      center: 2,
-      stretch: 3,
-      baseline: 4
-    },
-    alignSelf: {
-      "flex-start": 0,
-      "flex-end": 1,
-      center: 2,
-      stretch: 3
-    },
-    display: {
-      flex: 0,
-      none: 1,
-      contents: 2
-    },
-    position: {
-      absolute: 0,
-      relative: 1,
-      fixed: 2
-    },
-    overflow: {
-      hidden: 0,
-      scroll: 1,
-      visible: 2
-    },
-    pointerEvents: {
-      none: 0,
-      auto: 1
-    }
+    flexDirection: { row: 0, column: 1, "row-reverse": 2, "column-reverse": 3 },
+    justifyContent: { "flex-start": 0, "flex-end": 1, center: 2, "space-between": 3, "space-around": 4, "space-evenly": 5 },
+    alignItems: { "flex-start": 0, "flex-end": 1, center: 2, stretch: 3, baseline: 4 },
+    alignSelf: { "flex-start": 0, "flex-end": 1, center: 2, stretch: 3 },
+    display: { flex: 0, none: 1, contents: 2 },
+    position: { absolute: 0, relative: 1, fixed: 2 },
+    overflow: { hidden: 0, scroll: 1, visible: 2 },
+    pointerEvents: { none: 0, auto: 1 }
   };
   let view = null;
   let capacity = 0;
   let cursor = 0;
   function init() {
-    if (view) return true;
+    if (view)
+      return true;
     const g = globalThis;
     const buf = g.__rayactCommandBuffer;
-    if (!buf || typeof g.__rayactFlushCommands !== "function") return false;
+    if (!buf || typeof g.__rayactFlushCommands !== "function")
+      return false;
     view = new DataView(buf);
     capacity = buf.byteLength;
     return true;
@@ -9509,7 +9522,8 @@ ${stack}` : message;
   const stringIds = /* @__PURE__ */ new Map();
   let nextStringId = 1;
   function ensureSpace(bytes) {
-    if (cursor + bytes > capacity) flushCommands();
+    if (cursor + bytes > capacity)
+      flushCommands();
   }
   function w32(v) {
     view.setInt32(cursor, v | 0, true);
@@ -9554,35 +9568,45 @@ ${stack}` : message;
   }
   const SK_MAP = SK;
   function styleEntrySize(key, value) {
-    if (value == null) return 0;
+    if (value == null)
+      return 0;
     const id = SK_MAP[key];
-    if (id === void 0) return -1;
+    if (id === void 0)
+      return -1;
     if (id < 60) {
-      if (typeof value !== "number") return -1;
+      if (typeof value !== "number")
+        return -1;
       return id < 50 ? 12 : 8;
     }
     const m = ENUM_VALUES[key];
-    if (!m || typeof value !== "string" || m[value] === void 0) return -1;
+    if (!m || typeof value !== "string" || m[value] === void 0)
+      return -1;
     return 8;
   }
   function styleEncSize(style) {
-    if (style == null) return 4;
-    if (typeof style !== "object" || Array.isArray(style)) return -1;
+    if (style == null)
+      return 4;
+    if (typeof style !== "object" || Array.isArray(style))
+      return -1;
     let bytes = 4;
     for (const k in style) {
       const v = style[k];
-      if (v == null) continue;
+      if (v == null)
+        continue;
       if (k === "text") {
-        if (typeof v !== "object" || Array.isArray(v)) return -1;
+        if (typeof v !== "object" || Array.isArray(v))
+          return -1;
         for (const textKey in v) {
           const nestedSize = styleEntrySize(textKey, v[textKey]);
-          if (nestedSize < 0) return -1;
+          if (nestedSize < 0)
+            return -1;
           bytes += nestedSize;
         }
         continue;
       }
       const entrySize = styleEntrySize(k, v);
-      if (entrySize < 0) return -1;
+      if (entrySize < 0)
+        return -1;
       bytes += entrySize;
     }
     return bytes;
@@ -9596,13 +9620,18 @@ ${stack}` : message;
     cursor += 4;
     let n = 0;
     const writeEntry = (k, v) => {
-      if (v == null) return;
+      if (v == null)
+        return;
       const id = SK_MAP[k];
-      if (id === void 0) return;
+      if (id === void 0)
+        return;
       w32(id);
-      if (id < 50) wF64(v);
-      else if (id < 60) wU32(v);
-      else w32(ENUM_VALUES[k][v]);
+      if (id < 50)
+        wF64(v);
+      else if (id < 60)
+        wU32(v);
+      else
+        w32(ENUM_VALUES[k][v]);
       n++;
     };
     for (const k in style) {
@@ -9685,7 +9714,8 @@ ${stack}` : message;
   }
   function internString(s) {
     const existing = stringIds.get(s);
-    if (existing !== void 0) return existing;
+    if (existing !== void 0)
+      return existing;
     const id = nextStringId++;
     stringIds.set(s, id);
     const len = utf8ByteLen(s);
@@ -9705,7 +9735,8 @@ ${stack}` : message;
     w32(stringId);
   }
   function flushCommands() {
-    if (!view || cursor === 0) return;
+    if (!view || cursor === 0)
+      return;
     const g = globalThis;
     const len = cursor;
     cursor = 0;
@@ -9714,14 +9745,7 @@ ${stack}` : message;
     const end = typeof performance !== "undefined" ? performance.now() : Date.now();
     perfLogBatch(end - start, len >> 2);
   }
-  const prof = {
-    create: 0,
-    append: 0,
-    remove: 0,
-    insert: 0,
-    update: 0,
-    calls: 0
-  };
+  const prof = { create: 0, append: 0, remove: 0, insert: 0, update: 0, calls: 0 };
   const profNow = () => typeof performance !== "undefined" ? performance.now() : Date.now();
   function profEnter() {
     return globalThis.__RAYACT_PROF ? profNow() : -1;
@@ -9733,7 +9757,8 @@ ${stack}` : message;
     }
   }
   function profFlush() {
-    if (!globalThis.__RAYACT_PROF) return;
+    if (!globalThis.__RAYACT_PROF)
+      return;
     console.log(`[prof] create=${prof.create.toFixed(1)} append=${prof.append.toFixed(1)} remove=${prof.remove.toFixed(1)} insert=${prof.insert.toFixed(1)} update=${prof.update.toFixed(1)} calls=${prof.calls}`);
     prof.create = prof.append = prof.remove = prof.insert = prof.update = 0;
     prof.calls = 0;
@@ -9763,16 +9788,77 @@ ${stack}` : message;
   const eventPropSet = new Set(eventProps);
   function hasEventHandler(props) {
     for (const prop of eventProps) {
-      if (typeof props[prop] === "function") return true;
+      if (typeof props[prop] === "function")
+        return true;
     }
     return false;
   }
-  const hostNodeTypes = /* @__PURE__ */ new Set(["root", "view", "text", "button", "image", "icon", "textInput", "scrollView", "modal", "externalView", "safeArea", "statusBar", "activityIndicator", "appBar", "badge", "banner", "bottomAppBar", "bottomSheet", "dataTable", "dockedToolbar", "floatingToolbar", "buttonGroup", "card", "carousel", "checkbox", "chip", "datePicker", "dialog", "divider", "extendedFab", "fab", "fabMenu", "iconButton", "list", "loadingIndicator", "menu", "menuItem", "navigationBar", "navigationBarItem", "navigationDrawer", "navigationRail", "progressIndicator", "radioButton", "rangeSlider", "search", "searchBar", "segmentedButton", "sideSheet", "slider", "snackbar", "splitButton", "switch", "tabs", "textField", "timePicker", "toolbar", "tooltip", "popover"]);
+  const hostNodeTypes = /* @__PURE__ */ new Set([
+    "root",
+    "view",
+    "text",
+    "button",
+    "image",
+    "icon",
+    "textInput",
+    "scrollView",
+    "modal",
+    "externalView",
+    "safeArea",
+    "statusBar",
+    "activityIndicator",
+    "appBar",
+    "badge",
+    "banner",
+    "bottomAppBar",
+    "bottomSheet",
+    "dataTable",
+    "dockedToolbar",
+    "floatingToolbar",
+    "buttonGroup",
+    "card",
+    "carousel",
+    "checkbox",
+    "chip",
+    "datePicker",
+    "dialog",
+    "divider",
+    "extendedFab",
+    "fab",
+    "fabMenu",
+    "iconButton",
+    "list",
+    "loadingIndicator",
+    "menu",
+    "menuItem",
+    "navigationBar",
+    "navigationBarItem",
+    "navigationDrawer",
+    "navigationRail",
+    "progressIndicator",
+    "radioButton",
+    "rangeSlider",
+    "search",
+    "searchBar",
+    "segmentedButton",
+    "sideSheet",
+    "slider",
+    "snackbar",
+    "splitButton",
+    "switch",
+    "tabs",
+    "textField",
+    "timePicker",
+    "toolbar",
+    "tooltip",
+    "popover"
+  ]);
   const normalizeCache = /* @__PURE__ */ new Map();
   function normalizeType(type) {
     const key = String(type);
     const cached = normalizeCache.get(key);
-    if (cached !== void 0) return cached;
+    if (cached !== void 0)
+      return cached;
     const raw = key.replace(/^rayact-/, "");
     const normalized = raw.toLowerCase().replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
     if (!hostNodeTypes.has(normalized)) {
@@ -9784,10 +9870,17 @@ ${stack}` : message;
   function isText(instance) {
     return instance.kind === "text";
   }
-  const sharedBinaryCreateProps = /* @__PURE__ */ new Set(["style", "children", "key", "ref", ...eventProps]);
+  const sharedBinaryCreateProps = /* @__PURE__ */ new Set([
+    "style",
+    "children",
+    "key",
+    "ref",
+    ...eventProps
+  ]);
   function hasOnlyProps(props, allowed) {
     for (const key in props) {
-      if (!allowed.has(key)) return false;
+      if (!allowed.has(key))
+        return false;
     }
     return true;
   }
@@ -9797,8 +9890,10 @@ ${stack}` : message;
   const iconBinaryProps = /* @__PURE__ */ new Set([...sharedBinaryCreateProps, "name", "icon", "size", "color", "variant", "filled"]);
   const textInputBinaryProps = /* @__PURE__ */ new Set([...sharedBinaryCreateProps, "value", "defaultValue"]);
   function primitiveString(value) {
-    if (typeof value === "string") return value;
-    if (typeof value === "number") return String(value);
+    if (typeof value === "string")
+      return value;
+    if (typeof value === "number")
+      return String(value);
     return void 0;
   }
   function labelFromProps(props) {
@@ -9839,31 +9934,28 @@ ${stack}` : message;
     return parent.kind === "container" ? parent.bridge : getDefaultRuntime().bridge;
   }
   function textFromChildren(instance) {
-    if (instance.type !== "text" && instance.type !== "button") return void 0;
+    if (instance.type !== "text" && instance.type !== "button")
+      return void 0;
     let text = "";
     for (const child of instance.children) {
-      if (isText(child)) text += child.text;
+      if (isText(child))
+        text += child.text;
     }
     return text || void 0;
   }
   function syncTextContent(instance) {
     const text = textFromChildren(instance);
-    if (text === void 0) return;
+    if (text === void 0)
+      return;
     if (binaryEnabled() && (instance.type === "text" || instance.type === "button")) {
       emitSetText(instance.node.id, internString(text));
       return;
     }
     if (nativeFastPath.batch && (instance.type === "text" || instance.type === "button")) {
-      enqueueMutation({
-        op: "setText",
-        nodeId: instance.node.id,
-        text
-      });
+      enqueueMutation({ op: "setText", nodeId: instance.node.id, text });
       return;
     }
-    getDefaultRuntime().bridge.updateNode(instance.node, {
-      children: text
-    });
+    getDefaultRuntime().bridge.updateNode(instance.node, { children: text });
   }
   function attachEvents(instance, props) {
     const bridge2 = getDefaultRuntime().bridge;
@@ -9884,22 +9976,38 @@ ${stack}` : message;
     }
   }
   function eventNameForProp(prop) {
-    if (prop === "onClick") return "click";
-    if (prop === "onChangeText") return "changeText";
-    if (prop === "onValueChange") return "changeValue";
-    if (prop === "onScroll") return "scroll";
-    if (prop === "onRequestClose") return "requestClose";
-    if (prop === "onFocus") return "focus";
-    if (prop === "onBlur") return "blur";
-    if (prop === "onSubmitEditing") return "submitEditing";
-    if (prop === "onEndEditing") return "endEditing";
-    if (prop === "onSelectionChange") return "selectionChange";
-    if (prop === "onKeyPress") return "keyPress";
-    if (prop === "onContentSizeChange") return "contentSizeChange";
-    if (prop === "onDragStart") return "dragStart";
-    if (prop === "onDragMove") return "dragMove";
-    if (prop === "onDragEnd") return "dragEnd";
-    if (prop === "onLayout") return "layout";
+    if (prop === "onClick")
+      return "click";
+    if (prop === "onChangeText")
+      return "changeText";
+    if (prop === "onValueChange")
+      return "changeValue";
+    if (prop === "onScroll")
+      return "scroll";
+    if (prop === "onRequestClose")
+      return "requestClose";
+    if (prop === "onFocus")
+      return "focus";
+    if (prop === "onBlur")
+      return "blur";
+    if (prop === "onSubmitEditing")
+      return "submitEditing";
+    if (prop === "onEndEditing")
+      return "endEditing";
+    if (prop === "onSelectionChange")
+      return "selectionChange";
+    if (prop === "onKeyPress")
+      return "keyPress";
+    if (prop === "onContentSizeChange")
+      return "contentSizeChange";
+    if (prop === "onDragStart")
+      return "dragStart";
+    if (prop === "onDragMove")
+      return "dragMove";
+    if (prop === "onDragEnd")
+      return "dragEnd";
+    if (prop === "onLayout")
+      return "layout";
     return "press";
   }
   function appendChild(parent, child) {
@@ -9908,7 +10016,8 @@ ${stack}` : message;
       child.parent = parent;
       parent.children.push(child);
       if (isText(child)) {
-        if (parent.kind === "instance") syncTextContent(parent);
+        if (parent.kind === "instance")
+          syncTextContent(parent);
         return;
       }
       const parentNode = parent.kind === "container" ? parent.rootNode : parent.node;
@@ -9917,11 +10026,7 @@ ${stack}` : message;
         return;
       }
       if (nativeFastPath.batch) {
-        enqueueMutation({
-          op: "appendChild",
-          parentId: parentNode.id,
-          childId: child.node.id
-        });
+        enqueueMutation({ op: "appendChild", parentId: parentNode.id, childId: child.node.id });
         return;
       }
       getBridge(parent).appendChild(parentNode, child.node);
@@ -9931,7 +10036,8 @@ ${stack}` : message;
   }
   function disposeSubtreeNative(instance) {
     for (const grandchild of instance.children) {
-      if (isText(grandchild)) continue;
+      if (isText(grandchild))
+        continue;
       disposeSubtreeNative(grandchild);
     }
     if (binaryEnabled()) {
@@ -9940,10 +10046,7 @@ ${stack}` : message;
       return;
     }
     if (nativeFastPath.batch) {
-      enqueueMutation({
-        op: "disposeNode",
-        nodeId: instance.node.id
-      });
+      enqueueMutation({ op: "disposeNode", nodeId: instance.node.id });
       perfIncDisposed();
       return;
     }
@@ -9957,21 +10060,19 @@ ${stack}` : message;
     const __p = profEnter();
     try {
       const index = parent.children.indexOf(child);
-      if (index !== -1) parent.children.splice(index, 1);
+      if (index !== -1)
+        parent.children.splice(index, 1);
       child.parent = void 0;
       if (isText(child)) {
-        if (parent.kind === "instance") syncTextContent(parent);
+        if (parent.kind === "instance")
+          syncTextContent(parent);
         return;
       }
       const parentNode = parent.kind === "container" ? parent.rootNode : parent.node;
       if (binaryEnabled()) {
         emitRemove(parentNode.id, child.node.id);
       } else if (nativeFastPath.batch) {
-        enqueueMutation({
-          op: "removeChild",
-          parentId: parentNode.id,
-          childId: child.node.id
-        });
+        enqueueMutation({ op: "removeChild", parentId: parentNode.id, childId: child.node.id });
       } else {
         getBridge(parent).removeChild(parentNode, child.node);
       }
@@ -9984,7 +10085,8 @@ ${stack}` : message;
     const __p = profEnter();
     try {
       const existingIndex = parent.children.indexOf(child);
-      if (existingIndex !== -1) parent.children.splice(existingIndex, 1);
+      if (existingIndex !== -1)
+        parent.children.splice(existingIndex, 1);
       const beforeIndex = parent.children.indexOf(beforeChild);
       if (beforeIndex === -1) {
         appendChild(parent, child);
@@ -9993,7 +10095,8 @@ ${stack}` : message;
       child.parent = parent;
       parent.children.splice(beforeIndex, 0, child);
       if (isText(child) || isText(beforeChild)) {
-        if (parent.kind === "instance") syncTextContent(parent);
+        if (parent.kind === "instance")
+          syncTextContent(parent);
         return;
       }
       const parentNode = parent.kind === "container" ? parent.rootNode : parent.node;
@@ -10016,15 +10119,22 @@ ${stack}` : message;
     }
   }
   function styleValueEqual(a, b) {
-    if (Object.is(a, b)) return true;
-    if (a == null || b == null) return a == null && b == null;
-    if (typeof a !== typeof b) return false;
-    if (typeof a !== "object") return false;
+    if (Object.is(a, b))
+      return true;
+    if (a == null || b == null)
+      return a == null && b == null;
+    if (typeof a !== typeof b)
+      return false;
+    if (typeof a !== "object")
+      return false;
     if (Array.isArray(a) || Array.isArray(b)) {
-      if (!Array.isArray(a) || !Array.isArray(b)) return false;
-      if (a.length !== b.length) return false;
+      if (!Array.isArray(a) || !Array.isArray(b))
+        return false;
+      if (a.length !== b.length)
+        return false;
       for (let i = 0; i < a.length; i++) {
-        if (!styleValueEqual(a[i], b[i])) return false;
+        if (!styleValueEqual(a[i], b[i]))
+          return false;
       }
       return true;
     }
@@ -10033,13 +10143,16 @@ ${stack}` : message;
     let aCount = 0;
     for (const key in aObj) {
       const av = aObj[key];
-      if (av === void 0) continue;
+      if (av === void 0)
+        continue;
       aCount++;
-      if (!styleValueEqual(av, bObj[key])) return false;
+      if (!styleValueEqual(av, bObj[key]))
+        return false;
     }
     let bCount = 0;
     for (const key in bObj) {
-      if (bObj[key] !== void 0) bCount++;
+      if (bObj[key] !== void 0)
+        bCount++;
     }
     return aCount === bCount;
   }
@@ -10047,8 +10160,10 @@ ${stack}` : message;
     const payload = {};
     let changed = false;
     for (const key in newProps) {
-      if (key === "children") continue;
-      if (eventPropSet.has(key)) continue;
+      if (key === "children")
+        continue;
+      if (eventPropSet.has(key))
+        continue;
       if (key === "style") {
         if (!styleValueEqual(oldProps.style, newProps.style)) {
           payload.style = newProps.style;
@@ -10062,7 +10177,8 @@ ${stack}` : message;
       }
     }
     for (const key in oldProps) {
-      if (key === "children" || key === "style" || eventPropSet.has(key)) continue;
+      if (key === "children" || key === "style" || eventPropSet.has(key))
+        continue;
       if (!(key in newProps)) {
         payload[key] = void 0;
         changed = true;
@@ -10075,7 +10191,8 @@ ${stack}` : message;
     return changed || oldProps.children !== newProps.children ? payload : null;
   }
   function scanAndBindSharedValues(nodeId, style) {
-    if (!style) return;
+    if (!style)
+      return;
     if (Array.isArray(style)) {
       for (const item of style) {
         scanAndBindSharedValues(nodeId, item);
@@ -10101,7 +10218,8 @@ ${stack}` : message;
     }
   }
   function tryCreateBinaryNode(normalizedType, props) {
-    if (!binaryEnabled()) return null;
+    if (!binaryEnabled())
+      return null;
     if (hasEventHandler(props)) {
       perfIncBinaryCreateFallback(normalizedType, "event-handler");
       return null;
@@ -10126,10 +10244,7 @@ ${stack}` : message;
           return null;
         }
         emitCreate(id, typeId, props.style, styleBytes);
-        return {
-          id,
-          type: normalizedType
-        };
+        return { id, type: normalizedType };
       }
       case "button": {
         if (!hasOnlyProps(props, buttonBinaryProps)) {
@@ -10137,10 +10252,7 @@ ${stack}` : message;
           return null;
         }
         emitCreateParam(id, typeId, internString(labelFromProps(props)), props.style, {}, styleBytes);
-        return {
-          id,
-          type: normalizedType
-        };
+        return { id, type: normalizedType };
       }
       case "image": {
         if (!hasOnlyProps(props, imageBinaryProps)) {
@@ -10153,10 +10265,7 @@ ${stack}` : message;
           return null;
         }
         emitCreateParam(id, typeId, internString(source), props.style, {}, styleBytes);
-        return {
-          id,
-          type: normalizedType
-        };
+        return { id, type: normalizedType };
       }
       case "icon": {
         if (!hasOnlyProps(props, iconBinaryProps)) {
@@ -10188,18 +10297,11 @@ ${stack}` : message;
         }
         if (typeof props.filled === "boolean") {
           flags |= CREATE_PARAM_HAS_FILLED;
-          if (props.filled) flags |= CREATE_PARAM_FILLED;
+          if (props.filled)
+            flags |= CREATE_PARAM_FILLED;
         }
-        emitCreateParam(id, typeId, internString(name), props.style, {
-          flags,
-          size,
-          color,
-          variantId
-        }, styleBytes);
-        return {
-          id,
-          type: normalizedType
-        };
+        emitCreateParam(id, typeId, internString(name), props.style, { flags, size, color, variantId }, styleBytes);
+        return { id, type: normalizedType };
       }
       case "scrollView":
       case "safeArea":
@@ -10209,10 +10311,7 @@ ${stack}` : message;
           return null;
         }
         emitCreate(id, typeId, props.style, styleBytes);
-        return {
-          id,
-          type: normalizedType
-        };
+        return { id, type: normalizedType };
       }
       case "textInput": {
         if (!hasOnlyProps(props, textInputBinaryProps)) {
@@ -10221,10 +10320,7 @@ ${stack}` : message;
         }
         const value = primitiveString(props.value) ?? primitiveString(props.defaultValue) ?? "";
         emitCreateParam(id, typeId, internString(value), props.style, {}, styleBytes);
-        return {
-          id,
-          type: normalizedType
-        };
+        return { id, type: normalizedType };
       }
       default:
         perfIncBinaryCreateFallback(normalizedType, "unhandled-type");
@@ -10235,31 +10331,19 @@ ${stack}` : message;
     const runtime = getDefaultRuntime();
     if (binaryEnabled()) {
       const id = allocNodeId();
-      emitCreate(id, TYPE.VIEW, {
-        flexGrow: 1
-      });
+      emitCreate(id, TYPE.VIEW, { flexGrow: 1 });
       emitSetRoot(id);
       return {
         kind: "container",
-        rootNode: {
-          id,
-          type: "root"
-        },
+        rootNode: { id, type: "root" },
         bridge: runtime.bridge,
         runtime,
         children: []
       };
     }
-    const rootNode = runtime.bridge.createNode("root", {
-      style: {
-        flexGrow: 1
-      }
-    });
+    const rootNode = runtime.bridge.createNode("root", { style: { flexGrow: 1 } });
     if (nativeFastPath.batch) {
-      enqueueMutation({
-        op: "setRoot",
-        nodeId: rootNode.id
-      });
+      enqueueMutation({ op: "setRoot", nodeId: rootNode.id });
     } else {
       runtime.bridge.setRoot(rootNode);
     }
@@ -10340,10 +10424,7 @@ ${stack}` : message;
       }
     },
     createTextInstance(text) {
-      return {
-        kind: "text",
-        text
-      };
+      return { kind: "text", text };
     },
     appendInitialChild(parent, child) {
       appendChild(parent, child);
@@ -10351,9 +10432,7 @@ ${stack}` : message;
     finalizeInitialChildren: () => false,
     resetTextContent: (instance) => {
       if (instance.type === "text" || instance.type === "button") {
-        getDefaultRuntime().bridge.updateNode(instance.node, {
-          children: ""
-        });
+        getDefaultRuntime().bridge.updateNode(instance.node, { children: "" });
       }
     },
     appendChild,
@@ -10395,28 +10474,16 @@ ${stack}` : message;
     },
     hideInstance: (instance) => {
       if (nativeFastPath.batch) {
-        enqueueMutation({
-          op: "setStyle",
-          nodeId: instance.node.id,
-          style: {
-            display: "none"
-          }
-        });
+        enqueueMutation({ op: "setStyle", nodeId: instance.node.id, style: { display: "none" } });
         return;
       }
-      getDefaultRuntime().bridge.updateNode(instance.node, {
-        display: "none"
-      });
+      getDefaultRuntime().bridge.updateNode(instance.node, { display: "none" });
     },
     hideTextInstance: () => {
     },
     unhideInstance: (instance, props) => {
       if (nativeFastPath.batch && props.style) {
-        enqueueMutation({
-          op: "setStyle",
-          nodeId: instance.node.id,
-          style: props.style
-        });
+        enqueueMutation({ op: "setStyle", nodeId: instance.node.id, style: props.style });
         return;
       }
       getDefaultRuntime().bridge.updateNode(instance.node, props);
@@ -10496,36 +10563,45 @@ ${stack}` : message;
     return jsxRuntime.exports;
   }
   var jsxRuntimeExports = requireJsxRuntime();
-  var compilerRuntime = { exports: {} };
-  var reactCompilerRuntime_production = {};
-  var hasRequiredReactCompilerRuntime_production;
-  function requireReactCompilerRuntime_production() {
-    if (hasRequiredReactCompilerRuntime_production) return reactCompilerRuntime_production;
-    hasRequiredReactCompilerRuntime_production = 1;
-    var ReactSharedInternals = requireReact().__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-    reactCompilerRuntime_production.c = function(size) {
-      return ReactSharedInternals.H.useMemoCache(size);
-    };
-    return reactCompilerRuntime_production;
-  }
-  var hasRequiredCompilerRuntime;
-  function requireCompilerRuntime() {
-    if (hasRequiredCompilerRuntime) return compilerRuntime.exports;
-    hasRequiredCompilerRuntime = 1;
-    {
-      compilerRuntime.exports = requireReactCompilerRuntime_production();
-    }
-    return compilerRuntime.exports;
-  }
-  var compilerRuntimeExports = requireCompilerRuntime();
-  const COLOR_ROLES = ["primary", "onPrimary", "primaryContainer", "onPrimaryContainer", "secondary", "onSecondary", "secondaryContainer", "onSecondaryContainer", "tertiary", "onTertiary", "tertiaryContainer", "onTertiaryContainer", "error", "onError", "errorContainer", "onErrorContainer", "surface", "onSurface", "surfaceVariant", "onSurfaceVariant", "surfaceContainerLowest", "surfaceContainerLow", "surfaceContainer", "surfaceContainerHigh", "surfaceContainerHighest", "outline", "outlineVariant", "shadow", "scrim", "inverseSurface", "inverseOnSurface", "inversePrimary"];
+  const COLOR_ROLES = [
+    "primary",
+    "onPrimary",
+    "primaryContainer",
+    "onPrimaryContainer",
+    "secondary",
+    "onSecondary",
+    "secondaryContainer",
+    "onSecondaryContainer",
+    "tertiary",
+    "onTertiary",
+    "tertiaryContainer",
+    "onTertiaryContainer",
+    "error",
+    "onError",
+    "errorContainer",
+    "onErrorContainer",
+    "surface",
+    "onSurface",
+    "surfaceVariant",
+    "onSurfaceVariant",
+    "surfaceContainerLowest",
+    "surfaceContainerLow",
+    "surfaceContainer",
+    "surfaceContainerHigh",
+    "surfaceContainerHighest",
+    "outline",
+    "outlineVariant",
+    "shadow",
+    "scrim",
+    "inverseSurface",
+    "inverseOnSurface",
+    "inversePrimary"
+  ];
   function pack(r, g, b, a = 255) {
     return (r << 24 | g << 16 | b << 8 | a) >>> 0;
   }
   function buildTheme(dark, colors) {
-    const theme = {
-      dark
-    };
+    const theme = { dark };
     for (const role of COLOR_ROLES) {
       const c = colors[role];
       theme[role] = c ? pack(c[0], c[1], c[2], c[3] ?? 255) : 4278190335;
@@ -10601,9 +10677,7 @@ ${stack}` : message;
     inversePrimary: [103, 80, 164]
   });
   function themeFromNativeScheme(scheme) {
-    const theme = {
-      dark: scheme.isDark
-    };
+    const theme = { dark: scheme.isDark };
     for (const role of COLOR_ROLES) {
       const value = scheme[role];
       theme[role] = typeof value === "number" ? value : darkTheme[role];
@@ -10637,10 +10711,7 @@ ${stack}` : message;
     return (clamp(fr + (tr - fr) * t) << 24 | clamp(fg + (tg - fg) * t) << 16 | clamp(fb + (tb - fb) * t) << 8 | clamp(fa + (ta - fa) * t)) >>> 0;
   }
   function lerpTheme(from, to, t) {
-    const result = {
-      ...to,
-      dark: t >= 0.5 ? to.dark : from.dark
-    };
+    const result = { ...to, dark: t >= 0.5 ? to.dark : from.dark };
     for (const role of COLOR_ROLES) {
       const a = from[role];
       const b = to[role];
@@ -10653,13 +10724,8 @@ ${stack}` : message;
     return result;
   }
   const ThemeContext = React.createContext(darkTheme);
-  function ThemeProvider({
-    theme,
-    children
-  }) {
-    return React.createElement(ThemeContext.Provider, {
-      value: theme
-    }, children);
+  function ThemeProvider({ theme, children }) {
+    return React.createElement(ThemeContext.Provider, { value: theme }, children);
   }
   function useTheme() {
     return React.useContext(ThemeContext);
@@ -10671,14 +10737,16 @@ ${stack}` : message;
     if (typeof g.__rayactGetColorScheme === "function") {
       try {
         const scheme = g.__rayactGetColorScheme();
-        if (typeof scheme?.isDark === "boolean") return scheme.isDark;
+        if (typeof scheme?.isDark === "boolean")
+          return scheme.isDark;
       } catch {
       }
     }
     return true;
   }
   function emit() {
-    for (const listener of listeners$1) listener();
+    for (const listener of listeners$1)
+      listener();
   }
   function subscribe(listener) {
     listeners$1.add(listener);
@@ -10692,7 +10760,8 @@ ${stack}` : message;
   }
   let storeInitialized = false;
   function initColorSchemeStore() {
-    if (storeInitialized) return;
+    if (storeInitialized)
+      return;
     storeInitialized = true;
     isDark = readInitialIsDark();
     const g = globalThis;
@@ -10709,12 +10778,7 @@ ${stack}` : message;
   }
   const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   function useAnimatedValue(target, options = {}) {
-    const {
-      duration = 300,
-      easing = easeInOutCubic,
-      onSettled,
-      from
-    } = options;
+    const { duration = 300, easing = easeInOutCubic, onSettled, from } = options;
     const initial = from ?? target;
     const [value, setValue] = React.useState(initial);
     const valueRef = React.useRef(initial);
@@ -10732,7 +10796,8 @@ ${stack}` : message;
       startRef.current = null;
       settledRef.current = false;
       const step = (timestamp) => {
-        if (startRef.current === null) startRef.current = timestamp;
+        if (startRef.current === null)
+          startRef.current = timestamp;
         const elapsed = timestamp - startRef.current;
         const t = duration <= 0 ? 1 : Math.min(1, elapsed / duration);
         const next = fromRef.current + (target - fromRef.current) * easing(t);
@@ -10743,128 +10808,46 @@ ${stack}` : message;
         } else if (!settledRef.current) {
           settledRef.current = true;
           const cb = onSettledRef.current;
-          if (cb) queueMicrotask(() => cb(next));
+          if (cb)
+            queueMicrotask(() => cb(next));
         }
       };
       frameRef.current = requestAnimationFrame(step);
       return () => {
-        if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+        if (frameRef.current !== null)
+          cancelAnimationFrame(frameRef.current);
       };
     }, [target, duration, easing]);
     return value;
   }
-  function RayactThemeProvider(t0) {
-    const $ = compilerRuntimeExports.c(18);
-    const {
-      children
-    } = t0;
+  function RayactThemeProvider({ children }) {
     const isDark2 = useColorScheme();
-    let t1;
-    if ($[0] !== isDark2) {
-      t1 = getNativeTheme(isDark2);
-      $[0] = isDark2;
-      $[1] = t1;
-    } else {
-      t1 = $[1];
-    }
-    const targetTheme = t1;
+    const targetTheme = reactExports.useMemo(() => getNativeTheme(isDark2), [isDark2]);
     const stableThemeRef = reactExports.useRef(targetTheme);
     const [blend, setBlend] = reactExports.useState(null);
-    const t2 = blend ? 350 : 0;
-    let t3;
-    if ($[2] !== t2) {
-      t3 = {
-        duration: t2
-      };
-      $[2] = t2;
-      $[3] = t3;
-    } else {
-      t3 = $[3];
-    }
-    const progress = useAnimatedValue(blend ? 1 : 0, t3);
-    let t4;
-    let t5;
-    if ($[4] !== targetTheme) {
-      t4 = () => {
-        if (stableThemeRef.current.dark === targetTheme.dark) {
-          stableThemeRef.current = targetTheme;
-          return;
-        }
-        setBlend({
-          from: stableThemeRef.current,
-          to: targetTheme
-        });
-      };
-      t5 = [targetTheme];
-      $[4] = targetTheme;
-      $[5] = t4;
-      $[6] = t5;
-    } else {
-      t4 = $[5];
-      t5 = $[6];
-    }
-    reactExports.useEffect(t4, t5);
-    let t6;
-    let t7;
-    if ($[7] !== blend || $[8] !== progress) {
-      t6 = () => {
-        if (!blend || progress < 1) {
-          return;
-        }
-        stableThemeRef.current = blend.to;
-        setBlend(null);
-      };
-      t7 = [blend, progress];
-      $[7] = blend;
-      $[8] = progress;
-      $[9] = t6;
-      $[10] = t7;
-    } else {
-      t6 = $[9];
-      t7 = $[10];
-    }
-    reactExports.useEffect(t6, t7);
-    let t8;
-    bb0: {
-      if (!blend) {
-        t8 = targetTheme;
-        break bb0;
+    const progress = useAnimatedValue(blend ? 1 : 0, { duration: blend ? 350 : 0 });
+    reactExports.useEffect(() => {
+      if (stableThemeRef.current.dark === targetTheme.dark) {
+        stableThemeRef.current = targetTheme;
+        return;
       }
-      let t92;
-      if ($[11] !== blend.from || $[12] !== blend.to || $[13] !== progress) {
-        t92 = lerpTheme(blend.from, blend.to, progress);
-        $[11] = blend.from;
-        $[12] = blend.to;
-        $[13] = progress;
-        $[14] = t92;
-      } else {
-        t92 = $[14];
-      }
-      t8 = t92;
-    }
-    const displayTheme = t8;
-    let t9;
-    if ($[15] !== children || $[16] !== displayTheme) {
-      t9 = /* @__PURE__ */ jsxRuntimeExports.jsx(ThemeProvider, { theme: displayTheme, children });
-      $[15] = children;
-      $[16] = displayTheme;
-      $[17] = t9;
-    } else {
-      t9 = $[17];
-    }
-    return t9;
+      setBlend({ from: stableThemeRef.current, to: targetTheme });
+    }, [targetTheme]);
+    reactExports.useEffect(() => {
+      if (!blend || progress < 1)
+        return;
+      stableThemeRef.current = blend.to;
+      setBlend(null);
+    }, [blend, progress]);
+    const displayTheme = reactExports.useMemo(() => {
+      if (!blend)
+        return targetTheme;
+      return lerpTheme(blend.from, blend.to, progress);
+    }, [blend, targetTheme, progress]);
+    return jsxRuntimeExports.jsx(ThemeProvider, { theme: displayTheme, children });
   }
-  const defaultKeyboard = {
-    visible: false,
-    height: 0,
-    duration: 250
-  };
-  const defaultSafeArea = {
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0
-  };
+  const defaultKeyboard = { visible: false, height: 0, duration: 250 };
+  const defaultSafeArea = { top: 0, right: 0, bottom: 0, left: 0 };
   let cachedKeyboard = defaultKeyboard;
   let cachedSafeArea = defaultSafeArea;
   const insetsListeners = /* @__PURE__ */ new Set();
@@ -10872,7 +10855,8 @@ ${stack}` : message;
   function readKeyboardRaw() {
     const globalObj2 = globalThis;
     const snapshot = globalObj2.__rayactKeyboardInsets;
-    if (!snapshot) return defaultKeyboard;
+    if (!snapshot)
+      return defaultKeyboard;
     return {
       visible: !!snapshot.visible,
       height: typeof snapshot.height === "number" ? snapshot.height : 0,
@@ -10882,7 +10866,8 @@ ${stack}` : message;
   function readSafeAreaRaw() {
     const globalObj2 = globalThis;
     const snapshot = globalObj2.__rayactSafeAreaInsets;
-    if (!snapshot) return defaultSafeArea;
+    if (!snapshot)
+      return defaultSafeArea;
     return {
       top: typeof snapshot.top === "number" ? snapshot.top : 0,
       right: typeof snapshot.right === "number" ? snapshot.right : 0,
@@ -10898,13 +10883,15 @@ ${stack}` : message;
   }
   function getKeyboardSnapshot() {
     const next = readKeyboardRaw();
-    if (sameKeyboard(next, cachedKeyboard)) return cachedKeyboard;
+    if (sameKeyboard(next, cachedKeyboard))
+      return cachedKeyboard;
     cachedKeyboard = next;
     return cachedKeyboard;
   }
   function getSafeAreaSnapshot() {
     const next = readSafeAreaRaw();
-    if (sameSafeArea(next, cachedSafeArea)) return cachedSafeArea;
+    if (sameSafeArea(next, cachedSafeArea))
+      return cachedSafeArea;
     cachedSafeArea = next;
     return cachedSafeArea;
   }
@@ -10912,13 +10899,15 @@ ${stack}` : message;
     return defaultSafeArea;
   }
   function ensureInsetsListener() {
-    if (listenerInstalled) return;
+    if (listenerInstalled)
+      return;
     listenerInstalled = true;
     const globalObj2 = globalThis;
     globalObj2.__rayactOnKeyboardInsetsChange = () => {
       getKeyboardSnapshot();
       getSafeAreaSnapshot();
-      for (const listener of insetsListeners) listener();
+      for (const listener of insetsListeners)
+        listener();
     };
   }
   function subscribeInsets(listener) {
@@ -10930,22 +10919,15 @@ ${stack}` : message;
     return reactExports.useSyncExternalStore(subscribeInsets, getSafeAreaSnapshot, getServerSafeAreaSnapshot);
   }
   function asStyleObject(style) {
-    if (!style) return {};
+    if (!style)
+      return {};
     if (Array.isArray(style)) {
-      return style.reduce((acc, item) => ({
-        ...acc,
-        ...asStyleObject(item)
-      }), {});
+      return style.reduce((acc, item) => ({ ...acc, ...asStyleObject(item) }), {});
     }
-    return {
-      ...style
-    };
+    return { ...style };
   }
   const View = React.forwardRef((props, ref) => {
-    return React.createElement("rayact-view", {
-      ...props,
-      ref
-    });
+    return React.createElement("rayact-view", { ...props, ref });
   });
   function Text(props) {
     return React.createElement("rayact-text", props);
@@ -10957,8 +10939,10 @@ ${stack}` : message;
     return React.createElement("rayact-icon", props);
   }
   function inputTypeFromKeyboardType(keyboardType, multiline, secure) {
-    if (secure) return "password";
-    if (multiline) return "multiline";
+    if (secure)
+      return "password";
+    if (multiline)
+      return "multiline";
     switch (keyboardType) {
       case "email-address":
         return "email";
@@ -11015,115 +10999,26 @@ ${stack}` : message;
   }
   const NAVIGATION_BAR_HEIGHT = 80;
   function NavigationBar(props) {
-    const $ = compilerRuntimeExports.c(28);
-    let extendBottomPaddingToNavigationBar;
-    let ignoreSafeAreaView;
-    let rest;
-    let style;
-    if ($[0] !== props) {
-      ({
-        extendBottomPaddingToNavigationBar,
-        ignoreSafeAreaView,
-        style,
-        ...rest
-      } = props);
-      $[0] = props;
-      $[1] = extendBottomPaddingToNavigationBar;
-      $[2] = ignoreSafeAreaView;
-      $[3] = rest;
-      $[4] = style;
-    } else {
-      extendBottomPaddingToNavigationBar = $[1];
-      ignoreSafeAreaView = $[2];
-      rest = $[3];
-      style = $[4];
-    }
+    const { extendBottomPaddingToNavigationBar, ignoreSafeAreaView, style, ...rest } = props;
     const extend = ignoreSafeAreaView || extendBottomPaddingToNavigationBar;
     const insets = useSafeAreaInsets();
     const theme = useTheme();
     if (!extend) {
-      let t02;
-      if ($[5] !== rest || $[6] !== style) {
-        t02 = React.createElement("rayact-navigation-bar", {
-          ...rest,
-          style
-        });
-        $[5] = rest;
-        $[6] = style;
-        $[7] = t02;
-      } else {
-        t02 = $[7];
-      }
-      return t02;
+      return React.createElement("rayact-navigation-bar", { ...rest, style });
     }
     const bottomInset = Math.max(0, insets.bottom);
     const leftInset = Math.max(0, insets.left);
     const rightInset = Math.max(0, insets.right);
-    let t0;
-    if ($[8] !== style || $[9] !== theme) {
-      t0 = asStyleObject(style).backgroundColor ?? theme.surfaceContainer;
-      $[8] = style;
-      $[9] = theme;
-      $[10] = t0;
-    } else {
-      t0 = $[10];
-    }
-    const backgroundColor = t0;
-    const t1 = NAVIGATION_BAR_HEIGHT + bottomInset;
-    const t2 = NAVIGATION_BAR_HEIGHT + bottomInset;
-    let t3;
-    if ($[11] !== backgroundColor || $[12] !== bottomInset || $[13] !== leftInset || $[14] !== rightInset || $[15] !== t1 || $[16] !== t2) {
-      t3 = {
-        height: t1,
-        minHeight: t2,
-        paddingBottom: bottomInset,
-        paddingLeft: leftInset,
-        paddingRight: rightInset,
-        backgroundColor
-      };
-      $[11] = backgroundColor;
-      $[12] = bottomInset;
-      $[13] = leftInset;
-      $[14] = rightInset;
-      $[15] = t1;
-      $[16] = t2;
-      $[17] = t3;
-    } else {
-      t3 = $[17];
-    }
-    const barStyle = t3;
-    let t4;
-    if ($[18] !== barStyle || $[19] !== rest || $[20] !== style) {
-      let t5;
-      if ($[22] !== barStyle || $[23] !== style) {
-        t5 = [style, barStyle];
-        $[22] = barStyle;
-        $[23] = style;
-        $[24] = t5;
-      } else {
-        t5 = $[24];
-      }
-      let t6;
-      if ($[25] !== rest || $[26] !== t5) {
-        t6 = {
-          ...rest,
-          style: t5
-        };
-        $[25] = rest;
-        $[26] = t5;
-        $[27] = t6;
-      } else {
-        t6 = $[27];
-      }
-      t4 = React.createElement("rayact-navigation-bar", t6);
-      $[18] = barStyle;
-      $[19] = rest;
-      $[20] = style;
-      $[21] = t4;
-    } else {
-      t4 = $[21];
-    }
-    return t4;
+    const backgroundColor = asStyleObject(style).backgroundColor ?? theme.surfaceContainer;
+    const barStyle = {
+      height: NAVIGATION_BAR_HEIGHT + bottomInset,
+      minHeight: NAVIGATION_BAR_HEIGHT + bottomInset,
+      paddingBottom: bottomInset,
+      paddingLeft: leftInset,
+      paddingRight: rightInset,
+      backgroundColor
+    };
+    return React.createElement("rayact-navigation-bar", { ...rest, style: [style, barStyle] });
   }
   const NavigationBarItem = createMaterialComponent("rayact-navigation-bar-item");
   const globalObj = globalThis;
@@ -11138,11 +11033,7 @@ ${stack}` : message;
   };
   let sharedFloatArray = null;
   function withTiming(target, duration = 300) {
-    return {
-      type: "timing",
-      target,
-      duration
-    };
+    return { type: "timing", target, duration };
   }
   class SharedValue {
     constructor(initialValue) {
@@ -11170,9 +11061,7 @@ ${stack}` : message;
           sharedFloatArray[this.dirtyIndex] = 1;
         }
         if (typeof globalObj.__rayactRegisterAnimatedNode === "function") {
-          globalObj.__rayactRegisterAnimatedNode(nodeId, {
-            [property]: this.initialValue
-          });
+          globalObj.__rayactRegisterAnimatedNode(nodeId, { [property]: this.initialValue });
         }
       }
     }
@@ -11199,16 +11088,12 @@ ${stack}` : message;
           sharedFloatArray[this.dirtyIndex] = 1;
         }
         if (this.nodeId !== null && this.propertyOffset !== -1 && typeof globalObj.__rayactSetAnimatedStyle === "function") {
-          globalObj.__rayactSetAnimatedStyle(this.nodeId, {
-            [this.propertyName()]: newValue
-          });
+          globalObj.__rayactSetAnimatedStyle(this.nodeId, { [this.propertyName()]: newValue });
         }
       } else {
         if (this.index !== -1) {
           if (this.nodeId !== null && this.propertyOffset !== -1 && typeof globalObj.__rayactStartStyleAnimation === "function") {
-            globalObj.__rayactStartStyleAnimation(this.nodeId, {
-              [this.propertyName()]: newValue.target
-            }, newValue);
+            globalObj.__rayactStartStyleAnimation(this.nodeId, { [this.propertyName()]: newValue.target }, newValue);
           } else {
             this.runFallbackAnimation(newValue);
           }
@@ -11278,7 +11163,8 @@ ${stack}` : message;
     const navigationBack = globalThis.__rayactHandleNavigationBackPress;
     if (typeof navigationBack === "function") {
       try {
-        if (navigationBack()) return true;
+        if (navigationBack())
+          return true;
       } catch (err) {
         const msg = err && err.message;
         console.warn("[BackHandler] navigation listener threw:", msg ?? err);
@@ -11286,7 +11172,8 @@ ${stack}` : message;
     }
     for (const l of listeners) {
       try {
-        if (l()) return true;
+        if (l())
+          return true;
       } catch (err) {
         const msg = err && err.message;
         console.warn("[BackHandler] listener threw:", msg ?? err);
@@ -11297,8 +11184,10 @@ ${stack}` : message;
   globalThis.__rayactDrainBackPress = drainBackPresses;
   function disposeExistingDevRoot() {
     const globalObject = globalThis;
-    if (!globalObject.__rayactReactRoot) return;
-    if (globalThis.__RAYACT_HMR_ACTIVE__) return;
+    if (!globalObject.__rayactReactRoot)
+      return;
+    if (globalThis.__RAYACT_HMR_ACTIVE__)
+      return;
     try {
       globalObject.__rayactReactRoot.publicRoot.unmount();
     } catch (error) {
@@ -11329,8 +11218,10 @@ ${stack}` : message;
             container.bridge.disposeNode(container.rootNode);
           });
         };
-        if (flush) flush(doUnmount);
-        else doUnmount();
+        if (flush)
+          flush(doUnmount);
+        else
+          doUnmount();
       }
     };
     return publicRoot;
@@ -15624,7 +15515,8 @@ ${stack}` : message;
     isDark: true
   };
   function resolveTheme(theme) {
-    if (theme == null) return FALLBACK_THEME;
+    if (theme == null)
+      return FALLBACK_THEME;
     return {
       surface: theme.surface ?? FALLBACK_THEME.surface,
       surfaceContainer: theme.surfaceContainer ?? FALLBACK_THEME.surfaceContainer,
@@ -15688,10 +15580,7 @@ ${stack}` : message;
   function withTimeoutMs(ms) {
     const c = new AbortController();
     const id = setTimeout(() => c.abort(), ms);
-    return {
-      signal: c.signal,
-      cancel: () => clearTimeout(id)
-    };
+    return { signal: c.signal, cancel: () => clearTimeout(id) };
   }
   function trimDevUrlInput(input) {
     let s = input.trim().replace(/^\uFEFF/, "");
@@ -15707,13 +15596,15 @@ ${stack}` : message;
             s = o.url;
           } else {
             const ws = o.transports?.find((t) => t.type === "websocket");
-            if (ws?.ips?.[0]) s = `${ws.ips[0]}:${ws.port}`;
+            if (ws?.ips?.[0])
+              s = `${ws.ips[0]}:${ws.port}`;
           }
         }
       } catch {
       }
     }
-    if (!/^https?:\/\//i.test(s)) s = `http://${s}`;
+    if (!/^https?:\/\//i.test(s))
+      s = `http://${s}`;
     return s;
   }
   function expandDevUrlCandidates(input) {
@@ -15724,12 +15615,15 @@ ${stack}` : message;
         if (Array.isArray(parsed)) {
           const out = [];
           for (const item of parsed) {
-            if (typeof item !== "string" || !item.trim()) continue;
+            if (typeof item !== "string" || !item.trim())
+              continue;
             let u = item.trim().replace(/\/+$/, "");
-            if (!/^https?:\/\//i.test(u)) u = `http://${u}`;
+            if (!/^https?:\/\//i.test(u))
+              u = `http://${u}`;
             out.push(u);
           }
-          if (out.length > 0) return [...new Set(out)];
+          if (out.length > 0)
+            return [...new Set(out)];
         }
       } catch {
       }
@@ -15746,13 +15640,15 @@ ${stack}` : message;
       let settled = false;
       for (const url of candidates) {
         void probeDevServerReachability(url).then((r) => {
-          if (settled) return;
+          if (settled)
+            return;
           if (r.kind === "reachable_rayact") {
             settled = true;
             resolve(url);
             return;
           }
-          if (--pending === 0) resolve(null);
+          if (--pending === 0)
+            resolve(null);
         });
       }
     });
@@ -15770,34 +15666,22 @@ ${stack}` : message;
   }
   function validateDevServerUrl(input) {
     const parsed = persistedDevServerUrl(input);
-    if (!parsed.trim()) return {
-      ok: false,
-      error: "Enter a server URL"
-    };
+    if (!parsed.trim())
+      return { ok: false, error: "Enter a server URL" };
     const m = DEV_SERVER_HTTP_URL_RE.exec(parsed);
-    if (!m) return {
-      ok: false,
-      error: "Invalid URL"
-    };
+    if (!m)
+      return { ok: false, error: "Invalid URL" };
     const host = m[1];
-    if (!host || host.length === 0) return {
-      ok: false,
-      error: "Missing host"
-    };
+    if (!host || host.length === 0)
+      return { ok: false, error: "Missing host" };
     const portStr = m[2];
     if (portStr !== void 0 && portStr !== "") {
       const p = Number(portStr);
       if (!Number.isFinite(p) || p !== Math.trunc(p) || p < 1 || p > 65535) {
-        return {
-          ok: false,
-          error: "Invalid port"
-        };
+        return { ok: false, error: "Invalid port" };
       }
     }
-    return {
-      ok: true,
-      parsed
-    };
+    return { ok: true, parsed };
   }
   function manifestUrlForBase(base) {
     return `${base.replace(/\/+$/, "")}/rayact/manifest.json`;
@@ -15805,44 +15689,33 @@ ${stack}` : message;
   async function probeDevServerReachability(baseUrl) {
     const probeBase = devServerProbeBase(baseUrl);
     const meta = manifestUrlForBase(probeBase);
-    const {
-      signal,
-      cancel
-    } = withTimeoutMs(META_TIMEOUT_MS);
+    const { signal, cancel } = withTimeoutMs(META_TIMEOUT_MS);
     try {
       const res = await fetch(meta, {
         method: "GET",
         signal
       });
-      if (res.ok) return {
-        kind: "reachable_rayact"
-      };
-      if (res.status === 404) return {
-        kind: "reachable_no_manifest"
-      };
-      return {
-        kind: "unreachable"
-      };
+      if (res.ok)
+        return { kind: "reachable_rayact" };
+      if (res.status === 404)
+        return { kind: "reachable_no_manifest" };
+      return { kind: "unreachable" };
     } catch {
-      return {
-        kind: "unreachable"
-      };
+      return { kind: "unreachable" };
     } finally {
       cancel();
     }
   }
   async function probeRecentMetaMatch(baseUrl, expectedAppKey) {
     const meta = manifestUrlForBase(devServerProbeBase(baseUrl));
-    const {
-      signal,
-      cancel
-    } = withTimeoutMs(META_TIMEOUT_MS);
+    const { signal, cancel } = withTimeoutMs(META_TIMEOUT_MS);
     try {
       const res = await fetch(meta, {
         method: "GET",
         signal
       });
-      if (!res.ok) return res.status === 404 ? "stale" : "offline";
+      if (!res.ok)
+        return res.status === 404 ? "stale" : "offline";
       let json;
       try {
         json = JSON.parse(await res.text());
@@ -15852,8 +15725,10 @@ ${stack}` : message;
       const liveKey = typeof json.rayactAppKey === "string" && json.rayactAppKey.trim() ? json.rayactAppKey.trim() : void 0;
       const expected = expectedAppKey?.trim();
       if (expected) {
-        if (liveKey && liveKey !== expected) return "mismatch";
-        if (!liveKey) return "stale";
+        if (liveKey && liveKey !== expected)
+          return "mismatch";
+        if (!liveKey)
+          return "stale";
       }
       return "matched";
     } catch {
@@ -15864,57 +15739,39 @@ ${stack}` : message;
   }
   async function checkManifestCompatibility(baseUrl) {
     const meta = manifestUrlForBase(devServerProbeBase(baseUrl));
-    const {
-      signal,
-      cancel
-    } = withTimeoutMs(META_TIMEOUT_MS);
+    const { signal, cancel } = withTimeoutMs(META_TIMEOUT_MS);
     try {
-      const res = await fetch(meta, {
-        method: "GET",
-        signal
-      });
-      if (!res.ok) return {
-        compatible: true,
-        modules: []
-      };
+      const res = await fetch(meta, { method: "GET", signal });
+      if (!res.ok)
+        return { compatible: true, modules: [] };
       const json = await res.json();
       const nativeModules = json.nativeModules;
       const missing = [];
       const compiler = typeof json.compiler === "string" ? json.compiler : void 0;
       if (compiler && compiler !== HOST_REACT_COMPILER) {
-        missing.push({
-          name: `compiler:${compiler}`,
-          jsPackage: HOST_REACT_COMPILER
-        });
+        missing.push({ name: `compiler:${compiler}`, jsPackage: HOST_REACT_COMPILER });
       }
       const binaryCommands = json.binaryCommands;
       if (binaryCommands === true && !HOST_BINARY_COMMANDS) ;
       if (!Array.isArray(nativeModules) || nativeModules.length === 0) {
-        return {
-          compatible: missing.length === 0,
-          modules: missing
-        };
+        return { compatible: missing.length === 0, modules: missing };
       }
       const bundled = new Set(getBundledModuleNames());
       for (const item of nativeModules) {
-        if (!item || typeof item !== "object") continue;
+        if (!item || typeof item !== "object")
+          continue;
         const o = item;
         const name = o.name != null ? String(o.name) : "";
-        if (!name || bundled.has(name)) continue;
+        if (!name || bundled.has(name))
+          continue;
         missing.push({
           name,
           jsPackage: o.jsPackage != null ? String(o.jsPackage) : void 0
         });
       }
-      return {
-        compatible: missing.length === 0,
-        modules: missing
-      };
+      return { compatible: missing.length === 0, modules: missing };
     } catch {
-      return {
-        compatible: true,
-        modules: []
-      };
+      return { compatible: true, modules: [] };
     } finally {
       cancel();
     }
@@ -15935,9 +15792,7 @@ ${stack}` : message;
     return call("getRecentEntries");
   }
   function removeRecentUrl(url) {
-    return call("removeRecentUrl", {
-      url
-    });
+    return call("removeRecentUrl", { url });
   }
   function getDiscoveredServers() {
     return call("getDiscoveredServers");
@@ -15952,9 +15807,7 @@ ${stack}` : message;
     return call("reloadWithProjectBundle");
   }
   function openProjectDirect(url) {
-    return call("openProjectDirect", {
-      url
-    });
+    return call("openProjectDirect", { url });
   }
   function getAppInfo() {
     return call("getAppInfo").then((raw) => {
@@ -15970,14 +15823,17 @@ ${stack}` : message;
   const INVALID_SERVER_URL_MESSAGE = "Invalid server URL";
   const DevLauncherContext = reactExports.createContext(null);
   function normalizeDiscovered(raw) {
-    if (!Array.isArray(raw)) return [];
+    if (!Array.isArray(raw))
+      return [];
     const out = [];
     const seen = /* @__PURE__ */ new Set();
     for (const item of raw) {
-      if (!item || typeof item !== "object") continue;
+      if (!item || typeof item !== "object")
+        continue;
       const o = item;
       const url = o.url != null ? String(o.url) : "";
-      if (!url || seen.has(url)) continue;
+      if (!url || seen.has(url))
+        continue;
       seen.add(url);
       out.push({
         url,
@@ -15988,9 +15844,7 @@ ${stack}` : message;
     }
     return out;
   }
-  function DevLauncherProvider({
-    children
-  }) {
+  function DevLauncherProvider({ children }) {
     const [url, setUrlState] = reactExports.useState("");
     const [theme] = reactExports.useState(FALLBACK_THEME);
     const [recentEntries, setRecentEntries] = reactExports.useState([]);
@@ -16013,7 +15867,8 @@ ${stack}` : message;
       void getRecentEntries().then(setRecentEntries).catch(() => {
       });
       void getDevServerUrl().then((saved) => {
-        if (saved) setUrlState(saved);
+        if (saved)
+          setUrlState(saved);
       }).catch(() => {
       });
     }, []);
@@ -16045,29 +15900,28 @@ ${stack}` : message;
         };
       }
       if (!networkProbesAvailable()) {
-        setRecentReachability(Object.fromEntries(entries.map((e_0) => {
-          const v = validateDevServerUrl(e_0.url);
-          return [e_0.url, v.ok ? "matched" : "offline"];
+        setRecentReachability(Object.fromEntries(entries.map((e) => {
+          const v = validateDevServerUrl(e.url);
+          return [e.url, v.ok ? "matched" : "offline"];
         })));
         return () => {
         };
       }
       if (initial) {
-        setRecentReachability(Object.fromEntries(entries.map((e_1) => [e_1.url, "checking"])));
+        setRecentReachability(Object.fromEntries(entries.map((e) => [e.url, "checking"])));
       }
       let cancelled = false;
       void (async () => {
-        const results = await Promise.all(entries.map(async (e_2) => {
-          const v_0 = validateDevServerUrl(e_2.url);
-          if (!v_0.ok) return [e_2.url, "offline"];
-          const st = await probeRecentMetaMatch(devServerProbeBase(e_2.url), e_2.appKey);
-          return [e_2.url, st];
+        const results = await Promise.all(entries.map(async (e) => {
+          const v = validateDevServerUrl(e.url);
+          if (!v.ok)
+            return [e.url, "offline"];
+          const st = await probeRecentMetaMatch(devServerProbeBase(e.url), e.appKey);
+          return [e.url, st];
         }));
-        if (cancelled) return;
-        setRecentReachability((prev) => ({
-          ...prev,
-          ...Object.fromEntries(results)
-        }));
+        if (cancelled)
+          return;
+        setRecentReachability((prev) => ({ ...prev, ...Object.fromEntries(results) }));
       })();
       return () => {
         cancelled = true;
@@ -16084,13 +15938,11 @@ ${stack}` : message;
       };
     }, [recentListKey, probeAllRecents]);
     const parseUrl = reactExports.useCallback((input) => persistedDevServerUrl(input), []);
-    const removeRecentItem = reactExports.useCallback((u_0) => {
-      void removeRecentUrl(u_0).then(() => {
-        setRecentReachability((prev_0) => {
-          const next = {
-            ...prev_0
-          };
-          delete next[u_0];
+    const removeRecentItem = reactExports.useCallback((u) => {
+      void removeRecentUrl(u).then(() => {
+        setRecentReachability((prev) => {
+          const next = { ...prev };
+          delete next[u];
           return next;
         });
         refreshRecent();
@@ -16115,12 +15967,9 @@ ${stack}` : message;
         }
       })();
     }, [refreshRecent]);
-    const showIncompatibleModalForUrl = reactExports.useCallback((parsed_0) => {
+    const showIncompatibleModalForUrl = reactExports.useCallback((parsed) => {
       void (async () => {
-        const {
-          compatible,
-          modules
-        } = await checkManifestCompatibility(parsed_0);
+        const { compatible, modules } = await checkManifestCompatibility(parsed);
         if (!compatible && modules.length > 0) {
           setIncompatibleModules(modules);
           setIncompatibleModalVisible(true);
@@ -16149,13 +15998,13 @@ ${stack}` : message;
           connectToUrl(devServerProbeBase(best));
           return;
         }
-        const validated_0 = validateDevServerUrl(candidates[0] ?? rawUrl);
-        if (!validated_0.ok) {
+        const validated = validateDevServerUrl(candidates[0] ?? rawUrl);
+        if (!validated.ok) {
           setConnectError(INVALID_SERVER_URL_MESSAGE);
           return;
         }
-        const parsed_1 = devServerProbeBase(validated_0.parsed);
-        connectToUrl(parsed_1);
+        const parsed = devServerProbeBase(validated.parsed);
+        connectToUrl(parsed);
       })();
     }, [connectToUrl]);
     const value = reactExports.useMemo(() => ({
@@ -16176,7 +16025,7 @@ ${stack}` : message;
       connectToUrl,
       openProject,
       showIncompatibleModalForUrl,
-      onSelectRecent: (u_1) => setUrlState(u_1),
+      onSelectRecent: (u) => setUrlState(u),
       onScanQR: () => {
         void scanQR();
       },
@@ -16188,203 +16037,68 @@ ${stack}` : message;
       setDevMenuOpen,
       inspectorOpen,
       setInspectorOpen
-    }), [url, setUrl, theme, recentEntries, recentReachability, discoveredServers, incompatibleModalVisible, incompatibleModules, connectError, connecting, refreshRecent, removeRecentItem, connectToUrl, openProject, showIncompatibleModalForUrl, parseUrl, devMenuOpen, inspectorOpen]);
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(DevLauncherContext.Provider, { value, children });
+    }), [
+      url,
+      setUrl,
+      theme,
+      recentEntries,
+      recentReachability,
+      discoveredServers,
+      incompatibleModalVisible,
+      incompatibleModules,
+      connectError,
+      connecting,
+      refreshRecent,
+      removeRecentItem,
+      connectToUrl,
+      openProject,
+      showIncompatibleModalForUrl,
+      parseUrl,
+      devMenuOpen,
+      inspectorOpen
+    ]);
+    return jsxRuntimeExports.jsx(DevLauncherContext.Provider, { value, children });
   }
   function useDevLauncher() {
     const ctx = reactExports.useContext(DevLauncherContext);
-    if (!ctx) {
+    if (!ctx)
       throw new Error("useDevLauncher must be used within DevLauncherProvider");
-    }
     return ctx;
   }
   function ServerListRow(props) {
-    const $ = compilerRuntimeExports.c(29);
-    const {
-      dotColor,
-      title,
-      subtitle,
-      theme,
-      embedded: t0,
-      disableTap: t1,
-      onPress
-    } = props;
-    const embedded = t0 === void 0 ? false : t0;
-    const disableTap = t1 === void 0 ? false : t1;
-    let t2;
-    if ($[0] !== theme) {
-      t2 = themeColors(theme);
-      $[0] = theme;
-      $[1] = t2;
-    } else {
-      t2 = $[1];
-    }
-    const colors = t2;
-    let t3;
-    if ($[2] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t3 = {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-        width: "100%",
-        minWidth: 0
-      };
-      $[2] = t3;
-    } else {
-      t3 = $[2];
-    }
-    let t4;
-    if ($[3] !== dotColor) {
-      t4 = /* @__PURE__ */ jsxRuntimeExports.jsx(View, { style: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: dotColor,
-        flexShrink: 0
-      } });
-      $[3] = dotColor;
-      $[4] = t4;
-    } else {
-      t4 = $[4];
-    }
-    let t5;
-    if ($[5] !== colors.onSurfaceVariant) {
-      t5 = /* @__PURE__ */ jsxRuntimeExports.jsx(View, { style: {
-        width: 36,
-        height: 36,
-        borderRadius: 8,
-        backgroundColor: colors.onSurfaceVariant,
-        opacity: 0.35,
-        flexShrink: 0
-      } });
-      $[5] = colors.onSurfaceVariant;
-      $[6] = t5;
-    } else {
-      t5 = $[6];
-    }
-    let t6;
-    if ($[7] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t6 = {
-        flexGrow: 1,
-        flexShrink: 1,
-        minWidth: 0,
-        gap: 2
-      };
-      $[7] = t6;
-    } else {
-      t6 = $[7];
-    }
-    let t7;
-    if ($[8] !== colors.onSurface) {
-      t7 = {
-        text: {
-          color: colors.onSurface,
-          fontSize: 15,
-          fontWeight: 500
-        }
-      };
-      $[8] = colors.onSurface;
-      $[9] = t7;
-    } else {
-      t7 = $[9];
-    }
-    let t8;
-    if ($[10] !== t7 || $[11] !== title) {
-      t8 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: t7, children: title });
-      $[10] = t7;
-      $[11] = title;
-      $[12] = t8;
-    } else {
-      t8 = $[12];
-    }
-    let t9;
-    if ($[13] !== colors.onSurfaceVariant || $[14] !== subtitle) {
-      t9 = subtitle ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: colors.onSurfaceVariant,
-          fontSize: 13
-        }
-      }, children: subtitle }) : null;
-      $[13] = colors.onSurfaceVariant;
-      $[14] = subtitle;
-      $[15] = t9;
-    } else {
-      t9 = $[15];
-    }
-    let t10;
-    if ($[16] !== t8 || $[17] !== t9) {
-      t10 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t6, children: [
-        t8,
-        t9
-      ] });
-      $[16] = t8;
-      $[17] = t9;
-      $[18] = t10;
-    } else {
-      t10 = $[18];
-    }
-    let t11;
-    if ($[19] !== t10 || $[20] !== t4 || $[21] !== t5) {
-      t11 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t3, children: [
-        t4,
-        t5,
-        t10
-      ] });
-      $[19] = t10;
-      $[20] = t4;
-      $[21] = t5;
-      $[22] = t11;
-    } else {
-      t11 = $[22];
-    }
-    const row = t11;
-    if (embedded) {
+    const { dotColor, title, subtitle, theme, embedded = false, disableTap = false, onPress } = props;
+    const colors = themeColors(theme);
+    const row = jsxRuntimeExports.jsxs(View, { style: { flexDirection: "row", alignItems: "center", gap: 12, width: "100%", minWidth: 0 }, children: [jsxRuntimeExports.jsx(View, { style: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: dotColor,
+      flexShrink: 0
+    } }), jsxRuntimeExports.jsx(View, { style: {
+      width: 36,
+      height: 36,
+      borderRadius: 8,
+      backgroundColor: colors.onSurfaceVariant,
+      opacity: 0.35,
+      flexShrink: 0
+    } }), jsxRuntimeExports.jsxs(View, { style: { flexGrow: 1, flexShrink: 1, minWidth: 0, gap: 2 }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 15, fontWeight: 500 } }, children: title }), subtitle ? jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 13 } }, children: subtitle }) : null] })] });
+    if (embedded)
       return row;
-    }
-    let t12;
-    if ($[23] !== colors.surfaceContainer) {
-      t12 = {
-        width: "100%",
-        padding: 14,
-        borderRadius: 12,
-        backgroundColor: colors.surfaceContainer
-      };
-      $[23] = colors.surfaceContainer;
-      $[24] = t12;
-    } else {
-      t12 = $[24];
-    }
-    const t13 = disableTap ? void 0 : onPress;
-    let t14;
-    if ($[25] !== row || $[26] !== t12 || $[27] !== t13) {
-      t14 = /* @__PURE__ */ jsxRuntimeExports.jsx(View, { style: t12, capturesInput: true, onPress: t13, children: row });
-      $[25] = row;
-      $[26] = t12;
-      $[27] = t13;
-      $[28] = t14;
-    } else {
-      t14 = $[28];
-    }
-    return t14;
+    return jsxRuntimeExports.jsx(View, { style: {
+      width: "100%",
+      padding: 14,
+      borderRadius: 12,
+      backgroundColor: colors.surfaceContainer
+    }, capturesInput: true, onPress: disableTap ? void 0 : onPress, children: row });
   }
   const DELETE_REVEAL = 72;
   function RecentSwipeRow(props) {
-    const {
-      title,
-      subtitle,
-      dotColor,
-      theme,
-      onConnect,
-      onRemove
-    } = props;
+    const { title, subtitle, dotColor, theme, onConnect, onRemove } = props;
     const colors = themeColors(theme);
     const translateX = useSharedValue(0);
     const [open, setOpen] = reactExports.useState(false);
     const offsetRef = reactExports.useRef(0);
-    const dragStart = reactExports.useRef({
-      x: 0,
-      y: 0
-    });
+    const dragStart = reactExports.useRef({ x: 0, y: 0 });
     const startOffset = reactExports.useRef(0);
     const dragging = reactExports.useRef(false);
     const snapEnd = reactExports.useCallback(() => {
@@ -16396,19 +16110,19 @@ ${stack}` : message;
     }, [translateX]);
     const onDragStart = reactExports.useCallback((e) => {
       dragging.current = true;
-      dragStart.current = {
-        x: e.x,
-        y: e.y
-      };
+      dragStart.current = { x: e.x, y: e.y };
       startOffset.current = offsetRef.current;
     }, []);
-    const onDragMove = reactExports.useCallback((e_0) => {
-      if (!dragging.current) return;
-      let next_0 = startOffset.current + e_0.x;
-      if (next_0 > 0) next_0 = 0;
-      if (next_0 < -DELETE_REVEAL) next_0 = -DELETE_REVEAL;
-      offsetRef.current = next_0;
-      translateX.value = next_0;
+    const onDragMove = reactExports.useCallback((e) => {
+      if (!dragging.current)
+        return;
+      let next = startOffset.current + e.x;
+      if (next > 0)
+        next = 0;
+      if (next < -DELETE_REVEAL)
+        next = -DELETE_REVEAL;
+      offsetRef.current = next;
+      translateX.value = next;
     }, [translateX]);
     const onForegroundPress = reactExports.useCallback(() => {
       if (offsetRef.current < -12) {
@@ -16425,49 +16139,34 @@ ${stack}` : message;
       setOpen(false);
       onRemove();
     }, [onRemove, translateX]);
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: {
-      position: "relative",
-      overflow: "hidden",
+    return jsxRuntimeExports.jsxs(View, { style: { position: "relative", overflow: "hidden", borderRadius: 12, width: "100%" }, children: [jsxRuntimeExports.jsx(View, { style: {
+      transform: [{ translateX }],
+      backgroundColor: colors.surfaceContainer,
       borderRadius: 12,
-      width: "100%"
-    }, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(View, { style: {
-        transform: [{
-          translateX
-        }],
-        backgroundColor: colors.surfaceContainer,
-        borderRadius: 12,
-        padding: 14,
-        width: "100%",
-        minWidth: 0,
-        zIndex: 1
-      }, capturesInput: true, onDragStart, onDragMove, onDragEnd: snapEnd, onPress: onForegroundPress, children: /* @__PURE__ */ jsxRuntimeExports.jsx(ServerListRow, { embedded: true, dotColor, title, subtitle, theme, disableTap: true, onPress: () => {
-      } }) }),
-      open ? /* @__PURE__ */ jsxRuntimeExports.jsx(View, { style: {
-        position: "absolute",
-        right: 0,
-        top: 0,
-        bottom: 0,
-        width: DELETE_REVEAL,
-        overflow: "hidden",
-        backgroundColor: colors.error,
-        alignItems: "center",
-        justifyContent: "center",
-        borderTopRightRadius: 12,
-        borderBottomRightRadius: 12,
-        zIndex: 2
-      }, capturesInput: true, onPress: onDeletePress, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: 4294967295,
-          fontSize: 13,
-          fontWeight: 600
-        }
-      }, children: "Delete" }) }) : null
-    ] });
+      padding: 14,
+      width: "100%",
+      minWidth: 0,
+      zIndex: 1
+    }, capturesInput: true, onDragStart, onDragMove, onDragEnd: snapEnd, onPress: onForegroundPress, children: jsxRuntimeExports.jsx(ServerListRow, { embedded: true, dotColor, title, subtitle, theme, disableTap: true, onPress: () => {
+    } }) }), open ? jsxRuntimeExports.jsx(View, { style: {
+      position: "absolute",
+      right: 0,
+      top: 0,
+      bottom: 0,
+      width: DELETE_REVEAL,
+      overflow: "hidden",
+      backgroundColor: colors.error,
+      alignItems: "center",
+      justifyContent: "center",
+      borderTopRightRadius: 12,
+      borderBottomRightRadius: 12,
+      zIndex: 2
+    }, capturesInput: true, onPress: onDeletePress, children: jsxRuntimeExports.jsx(Text, { style: { text: { color: 4294967295, fontSize: 13, fontWeight: 600 } }, children: "Delete" }) }) : null] });
   }
   function serverIdentityKey(entry) {
     const key = entry.appKey?.trim();
-    if (key) return `key:${key}`;
+    if (key)
+      return `key:${key}`;
     return `url:${entry.url.replace(/\/+$/, "")}`;
   }
   const MAX_RENDERED_ROWS = 24;
@@ -16485,67 +16184,30 @@ ${stack}` : message;
     }
   }
   function CombinedServerList(props) {
-    const $ = compilerRuntimeExports.c(37);
-    const {
-      theme,
-      parseUrl,
-      discoveredServers,
-      recentEntries,
-      recentReachability,
-      openProject,
-      setUrl,
-      showIncompatibleModalForUrl,
-      removeRecentItem
-    } = props;
-    let t0;
-    if ($[0] !== theme) {
-      t0 = themeColors(theme);
-      $[0] = theme;
-      $[1] = t0;
-    } else {
-      t0 = $[1];
-    }
-    const colors = t0;
+    const { theme, parseUrl, discoveredServers, recentEntries, recentReachability, openProject, setUrl, showIncompatibleModalForUrl, removeRecentItem } = props;
+    const colors = themeColors(theme);
     const online = colors.online;
     const offline = colors.offline;
     const mismatch = colors.mismatch;
     const checking = colors.checking;
-    let m;
-    if ($[2] !== parseUrl || $[3] !== recentEntries) {
-      m = /* @__PURE__ */ new Map();
+    const recentByKey = reactExports.useMemo(() => {
+      const m = /* @__PURE__ */ new Map();
       for (const e of recentEntries) {
         const parsed = parseUrl(e.url);
-        m.set(serverIdentityKey({
-          url: parsed,
-          appKey: e.appKey
-        }), e);
-        m.set(serverIdentityKey({
-          url: parsed
-        }), e);
+        m.set(serverIdentityKey({ url: parsed, appKey: e.appKey }), e);
+        m.set(serverIdentityKey({ url: parsed }), e);
       }
-      $[2] = parseUrl;
-      $[3] = recentEntries;
-      $[4] = m;
-    } else {
-      m = $[4];
-    }
-    const recentByKey = m;
-    let out;
-    if ($[5] !== checking || $[6] !== discoveredServers || $[7] !== mismatch || $[8] !== offline || $[9] !== online || $[10] !== parseUrl || $[11] !== recentByKey || $[12] !== recentEntries || $[13] !== recentReachability) {
-      out = [];
+      return m;
+    }, [recentEntries, parseUrl]);
+    const merged = reactExports.useMemo(() => {
+      const out = [];
       const seen = /* @__PURE__ */ new Set();
       for (const s of discoveredServers) {
-        const parsed_0 = parseUrl(s.url);
-        const key = serverIdentityKey({
-          url: parsed_0,
-          appKey: s.appKey
-        });
-        const urlKey = serverIdentityKey({
-          url: parsed_0
-        });
-        if (seen.has(key) || seen.has(urlKey)) {
+        const parsed = parseUrl(s.url);
+        const key = serverIdentityKey({ url: parsed, appKey: s.appKey });
+        const urlKey = serverIdentityKey({ url: parsed });
+        if (seen.has(key) || seen.has(urlKey))
           continue;
-        }
         seen.add(key);
         seen.add(urlKey);
         const saved = recentByKey.get(key) ?? recentByKey.get(urlKey);
@@ -16562,160 +16224,42 @@ ${stack}` : message;
           savedUrl: saved?.url
         });
       }
-      for (const e_0 of recentEntries) {
-        const parsed_1 = parseUrl(e_0.url);
-        const key_0 = serverIdentityKey({
-          url: parsed_1,
-          appKey: e_0.appKey
-        });
-        const urlKey_0 = serverIdentityKey({
-          url: parsed_1
-        });
-        if (seen.has(key_0) || seen.has(urlKey_0)) {
+      for (const e of recentEntries) {
+        const parsed = parseUrl(e.url);
+        const key = serverIdentityKey({ url: parsed, appKey: e.appKey });
+        const urlKey = serverIdentityKey({ url: parsed });
+        if (seen.has(key) || seen.has(urlKey))
           continue;
-        }
-        seen.add(key_0);
-        seen.add(urlKey_0);
-        const st = recentReachability[e_0.url];
+        seen.add(key);
+        seen.add(urlKey);
+        const st = recentReachability[e.url];
         out.push({
-          key: key_0,
-          url: e_0.url,
-          title: e_0.label?.trim() ? e_0.label : e_0.url,
-          subtitle: e_0.label?.trim() ? e_0.url : void 0,
+          key,
+          url: e.url,
+          title: e.label?.trim() ? e.label : e.url,
+          subtitle: e.label?.trim() ? e.url : void 0,
           compatible: st !== "mismatch",
-          dotColor: dotColorForReachability(st, {
-            online,
-            offline,
-            mismatch,
-            checking
-          }),
+          dotColor: dotColorForReachability(st, { online, offline, mismatch, checking }),
           saved: true,
-          savedUrl: e_0.url
+          savedUrl: e.url
         });
       }
-      $[5] = checking;
-      $[6] = discoveredServers;
-      $[7] = mismatch;
-      $[8] = offline;
-      $[9] = online;
-      $[10] = parseUrl;
-      $[11] = recentByKey;
-      $[12] = recentEntries;
-      $[13] = recentReachability;
-      $[14] = out;
-    } else {
-      out = $[14];
-    }
-    const merged = out;
-    let t1;
-    if ($[15] !== openProject || $[16] !== parseUrl || $[17] !== setUrl || $[18] !== showIncompatibleModalForUrl) {
-      t1 = (rawUrl, compatible_0) => {
-        const parsed_2 = parseUrl(rawUrl);
-        if (!compatible_0) {
-          showIncompatibleModalForUrl(parsed_2);
-          return;
-        }
-        setUrl(parsed_2);
-        openProject(rawUrl);
-      };
-      $[15] = openProject;
-      $[16] = parseUrl;
-      $[17] = setUrl;
-      $[18] = showIncompatibleModalForUrl;
-      $[19] = t1;
-    } else {
-      t1 = $[19];
-    }
-    const handleSelect = t1;
+      return out;
+    }, [discoveredServers, recentEntries, recentByKey, recentReachability, parseUrl, online, offline, mismatch, checking]);
+    const handleSelect = reactExports.useCallback((rawUrl, compatible) => {
+      const parsed = parseUrl(rawUrl);
+      if (!compatible) {
+        showIncompatibleModalForUrl(parsed);
+        return;
+      }
+      setUrl(parsed);
+      openProject(rawUrl);
+    }, [parseUrl, setUrl, openProject, showIncompatibleModalForUrl]);
     if (merged.length === 0) {
-      let t22;
-      if ($[20] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-        t22 = {
-          gap: 8,
-          paddingTop: 8,
-          paddingBottom: 24
-        };
-        $[20] = t22;
-      } else {
-        t22 = $[20];
-      }
-      let t32;
-      if ($[21] !== colors.onSurfaceVariant) {
-        t32 = /* @__PURE__ */ jsxRuntimeExports.jsx(View, { style: t22, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-          text: {
-            color: colors.onSurfaceVariant,
-            fontSize: 13
-          }
-        }, children: "Scanning for servers on your network…" }) });
-        $[21] = colors.onSurfaceVariant;
-        $[22] = t32;
-      } else {
-        t32 = $[22];
-      }
-      return t32;
+      return jsxRuntimeExports.jsx(View, { style: { gap: 8, paddingTop: 8, paddingBottom: 24 }, children: jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 13 } }, children: "Scanning for servers on your network…" }) });
     }
-    let t2;
-    if ($[23] !== merged) {
-      t2 = merged.length > MAX_RENDERED_ROWS ? merged.slice(0, MAX_RENDERED_ROWS) : merged;
-      $[23] = merged;
-      $[24] = t2;
-    } else {
-      t2 = $[24];
-    }
-    const visibleMerged = t2;
-    let t3;
-    if ($[25] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t3 = {
-        gap: 10,
-        paddingTop: 4,
-        paddingBottom: 24
-      };
-      $[25] = t3;
-    } else {
-      t3 = $[25];
-    }
-    let t4;
-    if ($[26] !== handleSelect || $[27] !== removeRecentItem || $[28] !== theme || $[29] !== visibleMerged) {
-      t4 = visibleMerged.map((m_0) => m_0.saved ? /* @__PURE__ */ jsxRuntimeExports.jsx(RecentSwipeRow, { title: m_0.title, subtitle: m_0.subtitle, dotColor: m_0.dotColor, theme, onConnect: () => handleSelect(m_0.url, m_0.compatible), onRemove: () => removeRecentItem(m_0.savedUrl ?? m_0.url) }, m_0.key) : /* @__PURE__ */ jsxRuntimeExports.jsx(ServerListRow, { dotColor: m_0.dotColor, title: m_0.title, subtitle: m_0.subtitle ?? m_0.url, theme, onPress: () => handleSelect(m_0.url, m_0.compatible) }, m_0.key));
-      $[26] = handleSelect;
-      $[27] = removeRecentItem;
-      $[28] = theme;
-      $[29] = visibleMerged;
-      $[30] = t4;
-    } else {
-      t4 = $[30];
-    }
-    let t5;
-    if ($[31] !== colors || $[32] !== merged.length) {
-      t5 = merged.length > MAX_RENDERED_ROWS ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { style: {
-        text: {
-          color: colors.onSurfaceVariant,
-          fontSize: 12
-        }
-      }, children: [
-        "Showing first ",
-        MAX_RENDERED_ROWS,
-        " servers. Type a URL to connect to another server."
-      ] }) : null;
-      $[31] = colors;
-      $[32] = merged.length;
-      $[33] = t5;
-    } else {
-      t5 = $[33];
-    }
-    let t6;
-    if ($[34] !== t4 || $[35] !== t5) {
-      t6 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t3, children: [
-        t4,
-        t5
-      ] });
-      $[34] = t4;
-      $[35] = t5;
-      $[36] = t6;
-    } else {
-      t6 = $[36];
-    }
-    return t6;
+    const visibleMerged = merged.length > MAX_RENDERED_ROWS ? merged.slice(0, MAX_RENDERED_ROWS) : merged;
+    return jsxRuntimeExports.jsxs(View, { style: { gap: 10, paddingTop: 4, paddingBottom: 24 }, children: [visibleMerged.map((m) => m.saved ? jsxRuntimeExports.jsx(RecentSwipeRow, { title: m.title, subtitle: m.subtitle, dotColor: m.dotColor, theme, onConnect: () => handleSelect(m.url, m.compatible), onRemove: () => removeRecentItem(m.savedUrl ?? m.url) }, m.key) : jsxRuntimeExports.jsx(ServerListRow, { dotColor: m.dotColor, title: m.title, subtitle: m.subtitle ?? m.url, theme, onPress: () => handleSelect(m.url, m.compatible) }, m.key)), merged.length > MAX_RENDERED_ROWS ? jsxRuntimeExports.jsxs(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 12 } }, children: ["Showing first ", MAX_RENDERED_ROWS, " servers. Type a URL to connect to another server."] }) : null] });
   }
   const PAGE_PADDING = 24;
   const SECTION_GAP = 28;
@@ -16771,1313 +16315,89 @@ ${stack}` : message;
     gap: 12
   };
   const DEV_CLIENT_VERSION = "0.1.0";
-  const TABS = [{
-    id: "connect",
-    label: "Connect",
-    icon: "link"
-  }, {
-    id: "about",
-    label: "About",
-    icon: "info"
-  }];
+  const TABS = [
+    { id: "connect", label: "Connect", icon: "link" },
+    { id: "about", label: "About", icon: "info" }
+  ];
   function IncompatibleModal() {
-    const $ = compilerRuntimeExports.c(38);
     const launcher = useDevLauncher();
-    let t0;
-    if ($[0] !== launcher.theme) {
-      t0 = themeColors(launcher.theme);
-      $[0] = launcher.theme;
-      $[1] = t0;
-    } else {
-      t0 = $[1];
-    }
-    const colors = t0;
-    if (!launcher.incompatibleModalVisible) {
+    const colors = themeColors(launcher.theme);
+    if (!launcher.incompatibleModalVisible)
       return null;
-    }
-    let t1;
-    if ($[2] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t1 = {
-        ...modalOverlayStyle,
-        backgroundColor: 2566914048
-      };
-      $[2] = t1;
-    } else {
-      t1 = $[2];
-    }
-    let t2;
-    if ($[3] !== launcher) {
-      t2 = () => launcher.setIncompatibleModalVisible(false);
-      $[3] = launcher;
-      $[4] = t2;
-    } else {
-      t2 = $[4];
-    }
-    let t3;
-    if ($[5] !== colors.surfaceContainer) {
-      t3 = {
-        ...modalStyle,
-        backgroundColor: colors.surfaceContainer
-      };
-      $[5] = colors.surfaceContainer;
-      $[6] = t3;
-    } else {
-      t3 = $[6];
-    }
-    let t4;
-    if ($[7] !== colors.onSurface) {
-      t4 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: colors.onSurface,
-          fontSize: 18,
-          fontWeight: 600
-        }
-      }, children: "Incompatible server" });
-      $[7] = colors.onSurface;
-      $[8] = t4;
-    } else {
-      t4 = $[8];
-    }
-    let t5;
-    if ($[9] !== colors.onSurface) {
-      t5 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: colors.onSurface,
-          fontSize: 14
-        }
-      }, children: "This app is missing native modules required by the project:" });
-      $[9] = colors.onSurface;
-      $[10] = t5;
-    } else {
-      t5 = $[10];
-    }
-    let t6;
-    if ($[11] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t6 = {
-        gap: 6
-      };
-      $[11] = t6;
-    } else {
-      t6 = $[11];
-    }
-    let t7;
-    if ($[12] !== colors.onSurface || $[13] !== launcher.incompatibleModules) {
-      let t82;
-      if ($[15] !== colors.onSurface) {
-        t82 = (m) => /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-          text: {
-            color: colors.onSurface,
-            fontSize: 14
-          }
-        }, children: m.jsPackage ? `${m.name} (${m.jsPackage})` : m.name }, m.name);
-        $[15] = colors.onSurface;
-        $[16] = t82;
-      } else {
-        t82 = $[16];
-      }
-      t7 = launcher.incompatibleModules.map(t82);
-      $[12] = colors.onSurface;
-      $[13] = launcher.incompatibleModules;
-      $[14] = t7;
-    } else {
-      t7 = $[14];
-    }
-    let t8;
-    if ($[17] !== t7) {
-      t8 = /* @__PURE__ */ jsxRuntimeExports.jsx(View, { style: t6, children: t7 });
-      $[17] = t7;
-      $[18] = t8;
-    } else {
-      t8 = $[18];
-    }
-    let t9;
-    if ($[19] !== colors.primary) {
-      t9 = {
-        ...primaryButtonStyle,
-        backgroundColor: colors.primary,
-        marginTop: 8
-      };
-      $[19] = colors.primary;
-      $[20] = t9;
-    } else {
-      t9 = $[20];
-    }
-    let t10;
-    if ($[21] !== launcher) {
-      t10 = () => launcher.setIncompatibleModalVisible(false);
-      $[21] = launcher;
-      $[22] = t10;
-    } else {
-      t10 = $[22];
-    }
-    let t11;
-    if ($[23] !== colors.onPrimary) {
-      t11 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: colors.onPrimary,
-          fontSize: 15,
-          fontWeight: 600
-        }
-      }, children: "OK" });
-      $[23] = colors.onPrimary;
-      $[24] = t11;
-    } else {
-      t11 = $[24];
-    }
-    let t12;
-    if ($[25] !== t10 || $[26] !== t11 || $[27] !== t9) {
-      t12 = /* @__PURE__ */ jsxRuntimeExports.jsx(View, { style: t9, onPress: t10, children: t11 });
-      $[25] = t10;
-      $[26] = t11;
-      $[27] = t9;
-      $[28] = t12;
-    } else {
-      t12 = $[28];
-    }
-    let t13;
-    if ($[29] !== t12 || $[30] !== t3 || $[31] !== t4 || $[32] !== t5 || $[33] !== t8) {
-      t13 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t3, onPress: _temp$2, children: [
-        t4,
-        t5,
-        t8,
-        t12
-      ] });
-      $[29] = t12;
-      $[30] = t3;
-      $[31] = t4;
-      $[32] = t5;
-      $[33] = t8;
-      $[34] = t13;
-    } else {
-      t13 = $[34];
-    }
-    let t14;
-    if ($[35] !== t13 || $[36] !== t2) {
-      t14 = /* @__PURE__ */ jsxRuntimeExports.jsx(View, { style: t1, onPress: t2, children: t13 });
-      $[35] = t13;
-      $[36] = t2;
-      $[37] = t14;
-    } else {
-      t14 = $[37];
-    }
-    return t14;
-  }
-  function _temp$2() {
+    return jsxRuntimeExports.jsx(View, { style: { ...modalOverlayStyle, backgroundColor: 2566914048 }, onPress: () => launcher.setIncompatibleModalVisible(false), children: jsxRuntimeExports.jsxs(View, { style: { ...modalStyle, backgroundColor: colors.surfaceContainer }, onPress: () => {
+    }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 18, fontWeight: 600 } }, children: "Incompatible server" }), jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 14 } }, children: "This app is missing native modules required by the project:" }), jsxRuntimeExports.jsx(View, { style: { gap: 6 }, children: launcher.incompatibleModules.map((m) => jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 14 } }, children: m.jsPackage ? `${m.name} (${m.jsPackage})` : m.name }, m.name)) }), jsxRuntimeExports.jsx(View, { style: { ...primaryButtonStyle, backgroundColor: colors.primary, marginTop: 8 }, onPress: () => launcher.setIncompatibleModalVisible(false), children: jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onPrimary, fontSize: 15, fontWeight: 600 } }, children: "OK" }) })] }) });
   }
   function ConnectPage() {
-    const $ = compilerRuntimeExports.c(81);
     const launcher = useDevLauncher();
-    let t0;
-    if ($[0] !== launcher.theme) {
-      t0 = themeColors(launcher.theme);
-      $[0] = launcher.theme;
-      $[1] = t0;
-    } else {
-      t0 = $[1];
-    }
-    const colors = t0;
+    const colors = themeColors(launcher.theme);
     const [input, setInput] = reactExports.useState(launcher.url);
-    let t1;
-    let t2;
-    if ($[2] !== launcher.url) {
-      t1 = () => {
-        setInput(launcher.url);
-      };
-      t2 = [launcher.url];
-      $[2] = launcher.url;
-      $[3] = t1;
-      $[4] = t2;
-    } else {
-      t1 = $[3];
-      t2 = $[4];
-    }
-    reactExports.useEffect(t1, t2);
-    let t3;
-    if ($[5] !== colors.surface) {
-      t3 = {
-        ...pageStyle,
-        backgroundColor: colors.surface,
-        flexGrow: 1,
-        gap: 0
-      };
-      $[5] = colors.surface;
-      $[6] = t3;
-    } else {
-      t3 = $[6];
-    }
-    let t4;
-    if ($[7] !== colors.onSurface) {
-      t4 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: colors.onSurface,
-          fontSize: 20,
-          fontWeight: 600
-        }
-      }, children: "Connect to dev server" });
-      $[7] = colors.onSurface;
-      $[8] = t4;
-    } else {
-      t4 = $[8];
-    }
-    let t5;
-    if ($[9] !== colors.onSurfaceVariant) {
-      t5 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: colors.onSurfaceVariant,
-          fontSize: 14
-        },
-        marginTop: 4
-      }, children: "Start a local dev server with `npx rayact dev`, then enter its URL below or pick it from the list." });
-      $[9] = colors.onSurfaceVariant;
-      $[10] = t5;
-    } else {
-      t5 = $[10];
-    }
-    let t6;
-    if ($[11] !== launcher) {
-      t6 = (v) => {
-        setInput(v);
-        launcher.setUrl(v);
-      };
-      $[11] = launcher;
-      $[12] = t6;
-    } else {
-      t6 = $[12];
-    }
-    let t7;
-    if ($[13] !== colors.onSurface || $[14] !== colors.surfaceContainer) {
-      t7 = {
-        ...inputStyle,
-        marginTop: 8,
-        backgroundColor: colors.surfaceContainer,
-        color: colors.onSurface
-      };
-      $[13] = colors.onSurface;
-      $[14] = colors.surfaceContainer;
-      $[15] = t7;
-    } else {
-      t7 = $[15];
-    }
-    let t8;
-    if ($[16] !== input || $[17] !== t6 || $[18] !== t7) {
-      t8 = /* @__PURE__ */ jsxRuntimeExports.jsx(TextInput, { value: input, onChangeText: t6, placeholder: "192.168.1.50:8081", style: t7 });
-      $[16] = input;
-      $[17] = t6;
-      $[18] = t7;
-      $[19] = t8;
-    } else {
-      t8 = $[19];
-    }
-    let t9;
-    if ($[20] !== colors.error || $[21] !== launcher.connectError) {
-      t9 = launcher.connectError ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: colors.error,
-          fontSize: 14
-        }
-      }, children: launcher.connectError }) : null;
-      $[20] = colors.error;
-      $[21] = launcher.connectError;
-      $[22] = t9;
-    } else {
-      t9 = $[22];
-    }
-    let t10;
-    if ($[23] !== colors.onSurfaceVariant || $[24] !== launcher.connecting) {
-      t10 = launcher.connecting ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: colors.onSurfaceVariant,
-          fontSize: 12
-        }
-      }, children: "Connecting…" }) : null;
-      $[23] = colors.onSurfaceVariant;
-      $[24] = launcher.connecting;
-      $[25] = t10;
-    } else {
-      t10 = $[25];
-    }
-    let t11;
-    if ($[26] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t11 = {
-        gap: 12,
-        marginTop: 8
-      };
-      $[26] = t11;
-    } else {
-      t11 = $[26];
-    }
-    let t12;
-    if ($[27] !== input || $[28] !== launcher) {
-      t12 = () => launcher.openProject(input);
-      $[27] = input;
-      $[28] = launcher;
-      $[29] = t12;
-    } else {
-      t12 = $[29];
-    }
-    let t13;
-    if ($[30] !== colors.primary) {
-      t13 = {
-        ...primaryButtonStyle,
-        backgroundColor: colors.primary
-      };
-      $[30] = colors.primary;
-      $[31] = t13;
-    } else {
-      t13 = $[31];
-    }
-    let t14;
-    if ($[32] !== t12 || $[33] !== t13) {
-      t14 = /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { label: "Connect", onPress: t12, style: t13 });
-      $[32] = t12;
-      $[33] = t13;
-      $[34] = t14;
-    } else {
-      t14 = $[34];
-    }
-    let t15;
-    if ($[35] !== colors.onSurfaceVariant) {
-      t15 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: colors.onSurfaceVariant,
-          fontSize: 13,
-          textAlign: "center"
-        }
-      }, children: "or" });
-      $[35] = colors.onSurfaceVariant;
-      $[36] = t15;
-    } else {
-      t15 = $[36];
-    }
-    let t16;
-    if ($[37] !== colors.surfaceContainer) {
-      t16 = {
-        ...secondaryButtonStyle,
-        backgroundColor: colors.surfaceContainer
-      };
-      $[37] = colors.surfaceContainer;
-      $[38] = t16;
-    } else {
-      t16 = $[38];
-    }
-    let t17;
-    if ($[39] !== colors.onSurface) {
-      t17 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: colors.onSurface,
-          fontSize: 15,
-          fontWeight: 600
-        }
-      }, children: "Scan QR code" });
-      $[39] = colors.onSurface;
-      $[40] = t17;
-    } else {
-      t17 = $[40];
-    }
-    let t18;
-    if ($[41] !== launcher.onScanQR || $[42] !== t16 || $[43] !== t17) {
-      t18 = /* @__PURE__ */ jsxRuntimeExports.jsx(View, { onPress: launcher.onScanQR, style: t16, children: t17 });
-      $[41] = launcher.onScanQR;
-      $[42] = t16;
-      $[43] = t17;
-      $[44] = t18;
-    } else {
-      t18 = $[44];
-    }
-    let t19;
-    if ($[45] !== t14 || $[46] !== t15 || $[47] !== t18) {
-      t19 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t11, children: [
-        t14,
-        t15,
-        t18
-      ] });
-      $[45] = t14;
-      $[46] = t15;
-      $[47] = t18;
-      $[48] = t19;
-    } else {
-      t19 = $[48];
-    }
-    let t20;
-    if ($[49] !== t10 || $[50] !== t19 || $[51] !== t4 || $[52] !== t5 || $[53] !== t8 || $[54] !== t9) {
-      t20 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: sectionStyle, children: [
-        t4,
-        t5,
-        t8,
-        t9,
-        t10,
-        t19
-      ] });
-      $[49] = t10;
-      $[50] = t19;
-      $[51] = t4;
-      $[52] = t5;
-      $[53] = t8;
-      $[54] = t9;
-      $[55] = t20;
-    } else {
-      t20 = $[55];
-    }
-    let t21;
-    if ($[56] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t21 = {
-        ...sectionStyle,
-        marginTop: 28,
-        gap: 4
-      };
-      $[56] = t21;
-    } else {
-      t21 = $[56];
-    }
-    let t22;
-    if ($[57] !== colors.onSurface) {
-      t22 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: colors.onSurface,
-          fontSize: 16,
-          fontWeight: 600
-        }
-      }, children: "Servers" });
-      $[57] = colors.onSurface;
-      $[58] = t22;
-    } else {
-      t22 = $[58];
-    }
-    let t23;
-    if ($[59] !== colors.onSurfaceVariant) {
-      t23 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: colors.onSurfaceVariant,
-          fontSize: 13
-        }
-      }, children: "Discovered on your network and saved servers. Swipe left on a saved row to delete it." });
-      $[59] = colors.onSurfaceVariant;
-      $[60] = t23;
-    } else {
-      t23 = $[60];
-    }
-    let t24;
-    if ($[61] !== t22 || $[62] !== t23) {
-      t24 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t21, children: [
-        t22,
-        t23
-      ] });
-      $[61] = t22;
-      $[62] = t23;
-      $[63] = t24;
-    } else {
-      t24 = $[63];
-    }
-    let t25;
-    if ($[64] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t25 = {
-        flexGrow: 1,
-        flexShrink: 1,
-        minHeight: 0,
-        width: "100%"
-      };
-      $[64] = t25;
-    } else {
-      t25 = $[64];
-    }
-    let t26;
-    if ($[65] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t26 = {
-        paddingBottom: 16,
-        width: "100%"
-      };
-      $[65] = t26;
-    } else {
-      t26 = $[65];
-    }
-    let t27;
-    if ($[66] !== launcher.discoveredServers || $[67] !== launcher.openProject || $[68] !== launcher.parseUrl || $[69] !== launcher.recentEntries || $[70] !== launcher.recentReachability || $[71] !== launcher.removeRecentItem || $[72] !== launcher.setUrl || $[73] !== launcher.showIncompatibleModalForUrl || $[74] !== launcher.theme) {
-      t27 = /* @__PURE__ */ jsxRuntimeExports.jsx(ScrollView, { style: t25, children: /* @__PURE__ */ jsxRuntimeExports.jsx(View, { style: t26, children: /* @__PURE__ */ jsxRuntimeExports.jsx(CombinedServerList, { theme: launcher.theme, parseUrl: launcher.parseUrl, discoveredServers: launcher.discoveredServers, recentEntries: launcher.recentEntries, recentReachability: launcher.recentReachability, openProject: launcher.openProject, setUrl: launcher.setUrl, showIncompatibleModalForUrl: launcher.showIncompatibleModalForUrl, removeRecentItem: launcher.removeRecentItem }) }) });
-      $[66] = launcher.discoveredServers;
-      $[67] = launcher.openProject;
-      $[68] = launcher.parseUrl;
-      $[69] = launcher.recentEntries;
-      $[70] = launcher.recentReachability;
-      $[71] = launcher.removeRecentItem;
-      $[72] = launcher.setUrl;
-      $[73] = launcher.showIncompatibleModalForUrl;
-      $[74] = launcher.theme;
-      $[75] = t27;
-    } else {
-      t27 = $[75];
-    }
-    let t28;
-    if ($[76] !== t20 || $[77] !== t24 || $[78] !== t27 || $[79] !== t3) {
-      t28 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t3, children: [
-        t20,
-        t24,
-        t27
-      ] });
-      $[76] = t20;
-      $[77] = t24;
-      $[78] = t27;
-      $[79] = t3;
-      $[80] = t28;
-    } else {
-      t28 = $[80];
-    }
-    return t28;
+    reactExports.useEffect(() => {
+      setInput(launcher.url);
+    }, [launcher.url]);
+    return jsxRuntimeExports.jsxs(View, { style: { ...pageStyle, backgroundColor: colors.surface, flexGrow: 1, gap: 0 }, children: [jsxRuntimeExports.jsxs(View, { style: sectionStyle, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 20, fontWeight: 600 } }, children: "Connect to dev server" }), jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 14 }, marginTop: 4 }, children: "Start a local dev server with `npx rayact dev`, then enter its URL below or pick it from the list." }), jsxRuntimeExports.jsx(TextInput, { value: input, onChangeText: (v) => {
+      setInput(v);
+      launcher.setUrl(v);
+    }, placeholder: "192.168.1.50:8081", style: {
+      ...inputStyle,
+      marginTop: 8,
+      backgroundColor: colors.surfaceContainer,
+      color: colors.onSurface
+    } }), launcher.connectError ? jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.error, fontSize: 14 } }, children: launcher.connectError }) : null, launcher.connecting ? jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 12 } }, children: "Connecting…" }) : null, jsxRuntimeExports.jsxs(View, { style: { gap: 12, marginTop: 8 }, children: [jsxRuntimeExports.jsx(Button, { label: "Connect", onPress: () => launcher.openProject(input), style: { ...primaryButtonStyle, backgroundColor: colors.primary } }), jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 13, textAlign: "center" } }, children: "or" }), jsxRuntimeExports.jsx(View, { onPress: launcher.onScanQR, style: { ...secondaryButtonStyle, backgroundColor: colors.surfaceContainer }, children: jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 15, fontWeight: 600 } }, children: "Scan QR code" }) })] })] }), jsxRuntimeExports.jsxs(View, { style: { ...sectionStyle, marginTop: 28, gap: 4 }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 16, fontWeight: 600 } }, children: "Servers" }), jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 13 } }, children: "Discovered on your network and saved servers. Swipe left on a saved row to delete it." })] }), jsxRuntimeExports.jsx(ScrollView, { style: { flexGrow: 1, flexShrink: 1, minHeight: 0, width: "100%" }, children: jsxRuntimeExports.jsx(View, { style: { paddingBottom: 16, width: "100%" }, children: jsxRuntimeExports.jsx(CombinedServerList, { theme: launcher.theme, parseUrl: launcher.parseUrl, discoveredServers: launcher.discoveredServers, recentEntries: launcher.recentEntries, recentReachability: launcher.recentReachability, openProject: launcher.openProject, setUrl: launcher.setUrl, showIncompatibleModalForUrl: launcher.showIncompatibleModalForUrl, removeRecentItem: launcher.removeRecentItem }) }) })] });
   }
   function AboutPage() {
-    const $ = compilerRuntimeExports.c(89);
     const launcher = useDevLauncher();
-    let t0;
-    if ($[0] !== launcher.theme) {
-      t0 = themeColors(launcher.theme);
-      $[0] = launcher.theme;
-      $[1] = t0;
-    } else {
-      t0 = $[1];
-    }
-    const colors = t0;
+    const colors = themeColors(launcher.theme);
     const [bundleId, setBundleId] = reactExports.useState("—");
     const [nativeVersion, setNativeVersion] = reactExports.useState("—");
     const [rayactVersion, setRayactVersion] = reactExports.useState("—");
-    let t1;
-    let t2;
-    if ($[2] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t1 = () => {
-        getAppInfo().then((info) => {
-          setBundleId(info.bundleId || "—");
-          setNativeVersion(info.nativeAppVersion || "—");
-          setRayactVersion(info.rayactVersion || "—");
-        }).catch(_temp2$1);
-      };
-      t2 = [];
-      $[2] = t1;
-      $[3] = t2;
-    } else {
-      t1 = $[2];
-      t2 = $[3];
-    }
-    reactExports.useEffect(t1, t2);
-    const cardBorder = colors.isDark ? 452984831 : 335544320;
-    let t3;
-    if ($[4] !== bundleId || $[5] !== cardBorder || $[6] !== colors.onSurface || $[7] !== colors.onSurfaceVariant || $[8] !== colors.surface || $[9] !== colors.surfaceContainer || $[10] !== nativeVersion || $[11] !== rayactVersion) {
-      const official = getOfficialApp();
-      const bundledModules = getBundledModules();
-      let t4;
-      if ($[13] !== colors.surface) {
-        t4 = {
-          ...pageStyle,
-          backgroundColor: colors.surface,
-          flexGrow: 1
-        };
-        $[13] = colors.surface;
-        $[14] = t4;
-      } else {
-        t4 = $[14];
-      }
-      let t5;
-      if ($[15] !== colors.onSurface) {
-        t5 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-          text: {
-            color: colors.onSurface,
-            fontSize: 18,
-            fontWeight: 600,
-            marginBottom: 16
-          }
-        }, children: "About" });
-        $[15] = colors.onSurface;
-        $[16] = t5;
-      } else {
-        t5 = $[16];
-      }
-      let t6;
-      if ($[17] !== cardBorder || $[18] !== colors.surfaceContainer) {
-        t6 = {
-          ...sectionStyle,
-          backgroundColor: colors.surfaceContainer,
-          borderRadius: 12,
-          padding: 16,
-          borderWidth: 1,
-          borderColor: cardBorder,
-          marginBottom: 16
-        };
-        $[17] = cardBorder;
-        $[18] = colors.surfaceContainer;
-        $[19] = t6;
-      } else {
-        t6 = $[19];
-      }
-      let t7;
-      if ($[20] !== colors.onSurfaceVariant) {
-        t7 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-          text: {
-            color: colors.onSurfaceVariant,
-            fontSize: 12,
-            fontWeight: 600,
-            letterSpacing: 0.4
-          }
-        }, children: "PACKAGE" });
-        $[20] = colors.onSurfaceVariant;
-        $[21] = t7;
-      } else {
-        t7 = $[21];
-      }
-      let t8;
-      if ($[22] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-        t8 = {
-          gap: 6,
-          marginTop: 12
-        };
-        $[22] = t8;
-      } else {
-        t8 = $[22];
-      }
-      let t9;
-      if ($[23] !== colors.onSurface) {
-        t9 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-          text: {
-            color: colors.onSurface,
-            fontSize: 14
-          }
-        }, children: "Dev client (npm)" });
-        $[23] = colors.onSurface;
-        $[24] = t9;
-      } else {
-        t9 = $[24];
-      }
-      let t10;
-      if ($[25] !== colors.onSurface) {
-        t10 = {
-          text: {
-            color: colors.onSurface,
-            fontSize: 15,
-            fontWeight: 500
-          }
-        };
-        $[25] = colors.onSurface;
-        $[26] = t10;
-      } else {
-        t10 = $[26];
-      }
-      const t11 = nativeVersion !== "—" ? nativeVersion : DEV_CLIENT_VERSION;
-      let t12;
-      if ($[27] !== t10 || $[28] !== t11) {
-        t12 = /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { style: t10, children: [
-          "Version ",
-          t11
-        ] });
-        $[27] = t10;
-        $[28] = t11;
-        $[29] = t12;
-      } else {
-        t12 = $[29];
-      }
-      let t13;
-      if ($[30] !== t12 || $[31] !== t9) {
-        t13 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t8, children: [
-          t9,
-          t12
-        ] });
-        $[30] = t12;
-        $[31] = t9;
-        $[32] = t13;
-      } else {
-        t13 = $[32];
-      }
-      let t14;
-      if ($[33] !== t13 || $[34] !== t6 || $[35] !== t7) {
-        t14 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t6, children: [
-          t7,
-          t13
-        ] });
-        $[33] = t13;
-        $[34] = t6;
-        $[35] = t7;
-        $[36] = t14;
-      } else {
-        t14 = $[36];
-      }
-      let t15;
-      if ($[37] !== cardBorder || $[38] !== colors.surfaceContainer) {
-        t15 = {
-          ...sectionStyle,
-          backgroundColor: colors.surfaceContainer,
-          borderRadius: 12,
-          padding: 16,
-          borderWidth: 1,
-          borderColor: cardBorder,
-          marginBottom: 16
-        };
-        $[37] = cardBorder;
-        $[38] = colors.surfaceContainer;
-        $[39] = t15;
-      } else {
-        t15 = $[39];
-      }
-      let t16;
-      if ($[40] !== colors.onSurfaceVariant) {
-        t16 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-          text: {
-            color: colors.onSurfaceVariant,
-            fontSize: 12,
-            fontWeight: 600,
-            letterSpacing: 0.4
-          }
-        }, children: "NATIVE APP" });
-        $[40] = colors.onSurfaceVariant;
-        $[41] = t16;
-      } else {
-        t16 = $[41];
-      }
-      let t17;
-      if ($[42] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-        t17 = {
-          gap: 6,
-          marginTop: 12
-        };
-        $[42] = t17;
-      } else {
-        t17 = $[42];
-      }
-      let t18;
-      if ($[43] !== colors.onSurface) {
-        t18 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-          text: {
-            color: colors.onSurface,
-            fontSize: 14
-          }
-        }, children: "Identifier" });
-        $[43] = colors.onSurface;
-        $[44] = t18;
-      } else {
-        t18 = $[44];
-      }
-      let t19;
-      if ($[45] !== colors.onSurface) {
-        t19 = {
-          text: {
-            color: colors.onSurface,
-            fontSize: 15,
-            fontWeight: 500
-          }
-        };
-        $[45] = colors.onSurface;
-        $[46] = t19;
-      } else {
-        t19 = $[46];
-      }
-      let t20;
-      if ($[47] !== bundleId || $[48] !== t19) {
-        t20 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: t19, children: bundleId });
-        $[47] = bundleId;
-        $[48] = t19;
-        $[49] = t20;
-      } else {
-        t20 = $[49];
-      }
-      let t21;
-      if ($[50] !== t18 || $[51] !== t20) {
-        t21 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t17, children: [
-          t18,
-          t20
-        ] });
-        $[50] = t18;
-        $[51] = t20;
-        $[52] = t21;
-      } else {
-        t21 = $[52];
-      }
-      let t22;
-      if ($[53] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-        t22 = {
-          gap: 6,
-          marginTop: 14
-        };
-        $[53] = t22;
-      } else {
-        t22 = $[53];
-      }
-      let t23;
-      if ($[54] !== colors.onSurface) {
-        t23 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-          text: {
-            color: colors.onSurface,
-            fontSize: 14
-          }
-        }, children: "Version" });
-        $[54] = colors.onSurface;
-        $[55] = t23;
-      } else {
-        t23 = $[55];
-      }
-      let t24;
-      if ($[56] !== colors.onSurfaceVariant) {
-        t24 = {
-          text: {
-            color: colors.onSurfaceVariant,
-            fontSize: 15,
-            fontWeight: 500
-          }
-        };
-        $[56] = colors.onSurfaceVariant;
-        $[57] = t24;
-      } else {
-        t24 = $[57];
-      }
-      let t25;
-      if ($[58] !== nativeVersion || $[59] !== t24) {
-        t25 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: t24, children: nativeVersion });
-        $[58] = nativeVersion;
-        $[59] = t24;
-        $[60] = t25;
-      } else {
-        t25 = $[60];
-      }
-      let t26;
-      if ($[61] !== t23 || $[62] !== t25) {
-        t26 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t22, children: [
-          t23,
-          t25
-        ] });
-        $[61] = t23;
-        $[62] = t25;
-        $[63] = t26;
-      } else {
-        t26 = $[63];
-      }
-      let t27;
-      if ($[64] !== t15 || $[65] !== t16 || $[66] !== t21 || $[67] !== t26) {
-        t27 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t15, children: [
-          t16,
-          t21,
-          t26
-        ] });
-        $[64] = t15;
-        $[65] = t16;
-        $[66] = t21;
-        $[67] = t26;
-        $[68] = t27;
-      } else {
-        t27 = $[68];
-      }
-      let t28;
-      if ($[69] !== cardBorder || $[70] !== colors.surfaceContainer) {
-        t28 = {
-          ...sectionStyle,
-          backgroundColor: colors.surfaceContainer,
-          borderRadius: 12,
-          padding: 16,
-          borderWidth: 1,
-          borderColor: cardBorder
-        };
-        $[69] = cardBorder;
-        $[70] = colors.surfaceContainer;
-        $[71] = t28;
-      } else {
-        t28 = $[71];
-      }
-      let t29;
-      if ($[72] !== colors.onSurfaceVariant) {
-        t29 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-          text: {
-            color: colors.onSurfaceVariant,
-            fontSize: 12,
-            fontWeight: 600,
-            letterSpacing: 0.4
-          }
-        }, children: "RAYACT" });
-        $[72] = colors.onSurfaceVariant;
-        $[73] = t29;
-      } else {
-        t29 = $[73];
-      }
-      let t30;
-      if ($[74] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-        t30 = {
-          gap: 6,
-          marginTop: 12
-        };
-        $[74] = t30;
-      } else {
-        t30 = $[74];
-      }
-      let t31;
-      if ($[75] !== colors.onSurface) {
-        t31 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-          text: {
-            color: colors.onSurface,
-            fontSize: 14
-          }
-        }, children: "Runtime" });
-        $[75] = colors.onSurface;
-        $[76] = t31;
-      } else {
-        t31 = $[76];
-      }
-      let t32;
-      if ($[77] !== colors.onSurfaceVariant) {
-        t32 = {
-          text: {
-            color: colors.onSurfaceVariant,
-            fontSize: 15,
-            fontWeight: 500
-          }
-        };
-        $[77] = colors.onSurfaceVariant;
-        $[78] = t32;
-      } else {
-        t32 = $[78];
-      }
-      let t33;
-      if ($[79] !== rayactVersion || $[80] !== t32) {
-        t33 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: t32, children: rayactVersion });
-        $[79] = rayactVersion;
-        $[80] = t32;
-        $[81] = t33;
-      } else {
-        t33 = $[81];
-      }
-      let t34;
-      if ($[82] !== t31 || $[83] !== t33) {
-        t34 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t30, children: [
-          t31,
-          t33
-        ] });
-        $[82] = t31;
-        $[83] = t33;
-        $[84] = t34;
-      } else {
-        t34 = $[84];
-      }
-      let t35;
-      if ($[85] !== t28 || $[86] !== t29 || $[87] !== t34) {
-        t35 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t28, children: [
-          t29,
-          t34
-        ] });
-        $[85] = t28;
-        $[86] = t29;
-        $[87] = t34;
-        $[88] = t35;
-      } else {
-        t35 = $[88];
-      }
-      t3 = /* @__PURE__ */ jsxRuntimeExports.jsxs(ScrollView, { style: t4, children: [
-        t5,
-        official.displayName ? /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: {
-          ...sectionStyle,
-          backgroundColor: colors.surfaceContainer,
-          borderRadius: 12,
-          padding: 16,
-          borderWidth: 1,
-          borderColor: cardBorder,
-          marginBottom: 16
-        }, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-            text: {
-              color: colors.onSurface,
-              fontSize: 17,
-              fontWeight: 600
-            }
-          }, children: official.displayName }),
-          official.creditTitle ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-            text: {
-              color: colors.onSurfaceVariant,
-              fontSize: 13,
-              marginTop: 4
-            }
-          }, children: official.creditTitle }) : null,
-          (official.links ?? []).map((link) => /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { style: {
-            text: {
-              color: colors.onSurfaceVariant,
-              fontSize: 13,
-              marginTop: 8
-            }
-          }, children: [
-            link.label,
-            ": ",
-            link.url
-          ] }, link.id))
-        ] }) : null,
-        t14,
-        t27,
-        t35,
-        bundledModules.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: {
-          ...sectionStyle,
-          backgroundColor: colors.surfaceContainer,
-          borderRadius: 12,
-          padding: 16,
-          borderWidth: 1,
-          borderColor: cardBorder,
-          marginTop: 16
-        }, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-            text: {
-              color: colors.onSurfaceVariant,
-              fontSize: 12,
-              fontWeight: 600,
-              letterSpacing: 0.4
-            }
-          }, children: "BUNDLED NATIVE MODULES" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(View, { style: {
-            gap: 6,
-            marginTop: 12
-          }, children: bundledModules.map((m) => /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-            text: {
-              color: colors.onSurface,
-              fontSize: 14
-            }
-          }, children: m.jsPackage ? `${m.name} · ${m.jsPackage}` : m.name }, m.name)) })
-        ] }) : null
-      ] });
-      $[4] = bundleId;
-      $[5] = cardBorder;
-      $[6] = colors.onSurface;
-      $[7] = colors.onSurfaceVariant;
-      $[8] = colors.surface;
-      $[9] = colors.surfaceContainer;
-      $[10] = nativeVersion;
-      $[11] = rayactVersion;
-      $[12] = t3;
-    } else {
-      t3 = $[12];
-    }
-    return t3;
-  }
-  function _temp2$1() {
-  }
-  function DevLauncherNavBar(t0) {
-    const $ = compilerRuntimeExports.c(9);
-    const {
-      tab,
-      onTabChange
-    } = t0;
-    const launcher = useDevLauncher();
-    let t1;
-    if ($[0] !== launcher.theme) {
-      t1 = themeColors(launcher.theme);
-      $[0] = launcher.theme;
-      $[1] = t1;
-    } else {
-      t1 = $[1];
-    }
-    const colors = t1;
-    let t2;
-    if ($[2] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t2 = {
-        flexShrink: 0
-      };
-      $[2] = t2;
-    } else {
-      t2 = $[2];
-    }
-    let t3;
-    if ($[3] !== colors || $[4] !== onTabChange || $[5] !== tab) {
-      t3 = TABS.map((item) => {
-        const selected = tab === item.id;
-        return /* @__PURE__ */ jsxRuntimeExports.jsx(NavigationBarItem, { label: item.label, selected, className: "dev-launcher-nav-item", onPress: () => onTabChange(item.id), children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { name: item.icon, size: 24, color: selected ? colors.primary : colors.onSurfaceVariant, filled: selected }) }, item.id);
+    reactExports.useEffect(() => {
+      void getAppInfo().then((info) => {
+        setBundleId(info.bundleId || "—");
+        setNativeVersion(info.nativeAppVersion || "—");
+        setRayactVersion(info.rayactVersion || "—");
+      }).catch(() => {
       });
-      $[3] = colors;
-      $[4] = onTabChange;
-      $[5] = tab;
-      $[6] = t3;
-    } else {
-      t3 = $[6];
-    }
-    let t4;
-    if ($[7] !== t3) {
-      t4 = /* @__PURE__ */ jsxRuntimeExports.jsx(NavigationBar, { ignoreSafeAreaView: true, style: t2, children: t3 });
-      $[7] = t3;
-      $[8] = t4;
-    } else {
-      t4 = $[8];
-    }
-    return t4;
+    }, []);
+    const cardBorder = colors.isDark ? 452984831 : 335544320;
+    const official = getOfficialApp();
+    const bundledModules = getBundledModules();
+    return jsxRuntimeExports.jsxs(ScrollView, { style: { ...pageStyle, backgroundColor: colors.surface, flexGrow: 1 }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 18, fontWeight: 600, marginBottom: 16 } }, children: "About" }), official.displayName ? jsxRuntimeExports.jsxs(View, { style: { ...sectionStyle, backgroundColor: colors.surfaceContainer, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: cardBorder, marginBottom: 16 }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 17, fontWeight: 600 } }, children: official.displayName }), official.creditTitle ? jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 13, marginTop: 4 } }, children: official.creditTitle }) : null, (official.links ?? []).map((link) => jsxRuntimeExports.jsxs(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 13, marginTop: 8 } }, children: [link.label, ": ", link.url] }, link.id))] }) : null, jsxRuntimeExports.jsxs(View, { style: { ...sectionStyle, backgroundColor: colors.surfaceContainer, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: cardBorder, marginBottom: 16 }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 12, fontWeight: 600, letterSpacing: 0.4 } }, children: "PACKAGE" }), jsxRuntimeExports.jsxs(View, { style: { gap: 6, marginTop: 12 }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 14 } }, children: "Dev client (npm)" }), jsxRuntimeExports.jsxs(Text, { style: { text: { color: colors.onSurface, fontSize: 15, fontWeight: 500 } }, children: ["Version ", nativeVersion !== "—" ? nativeVersion : DEV_CLIENT_VERSION] })] })] }), jsxRuntimeExports.jsxs(View, { style: { ...sectionStyle, backgroundColor: colors.surfaceContainer, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: cardBorder, marginBottom: 16 }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 12, fontWeight: 600, letterSpacing: 0.4 } }, children: "NATIVE APP" }), jsxRuntimeExports.jsxs(View, { style: { gap: 6, marginTop: 12 }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 14 } }, children: "Identifier" }), jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 15, fontWeight: 500 } }, children: bundleId })] }), jsxRuntimeExports.jsxs(View, { style: { gap: 6, marginTop: 14 }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 14 } }, children: "Version" }), jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 15, fontWeight: 500 } }, children: nativeVersion })] })] }), jsxRuntimeExports.jsxs(View, { style: { ...sectionStyle, backgroundColor: colors.surfaceContainer, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: cardBorder }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 12, fontWeight: 600, letterSpacing: 0.4 } }, children: "RAYACT" }), jsxRuntimeExports.jsxs(View, { style: { gap: 6, marginTop: 12 }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 14 } }, children: "Runtime" }), jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 15, fontWeight: 500 } }, children: rayactVersion })] })] }), bundledModules.length > 0 ? jsxRuntimeExports.jsxs(View, { style: { ...sectionStyle, backgroundColor: colors.surfaceContainer, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: cardBorder, marginTop: 16 }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurfaceVariant, fontSize: 12, fontWeight: 600, letterSpacing: 0.4 } }, children: "BUNDLED NATIVE MODULES" }), jsxRuntimeExports.jsx(View, { style: { gap: 6, marginTop: 12 }, children: bundledModules.map((m) => jsxRuntimeExports.jsx(Text, { style: { text: { color: colors.onSurface, fontSize: 14 } }, children: m.jsPackage ? `${m.name} · ${m.jsPackage}` : m.name }, m.name)) })] }) : null] });
+  }
+  function DevLauncherNavBar({ tab, onTabChange }) {
+    const launcher = useDevLauncher();
+    const colors = themeColors(launcher.theme);
+    return jsxRuntimeExports.jsx(NavigationBar, { ignoreSafeAreaView: true, style: { flexShrink: 0 }, children: TABS.map((item) => {
+      const selected = tab === item.id;
+      return jsxRuntimeExports.jsx(NavigationBarItem, { label: item.label, selected, className: "dev-launcher-nav-item", onPress: () => onTabChange(item.id), children: jsxRuntimeExports.jsx(Icon, { name: item.icon, size: 24, color: selected ? colors.primary : colors.onSurfaceVariant, filled: selected }) }, item.id);
+    }) });
   }
   function DevLauncherUI() {
-    const $ = compilerRuntimeExports.c(20);
     const launcher = useDevLauncher();
-    let t0;
-    if ($[0] !== launcher.theme) {
-      t0 = themeColors(launcher.theme);
-      $[0] = launcher.theme;
-      $[1] = t0;
-    } else {
-      t0 = $[1];
-    }
-    const colors = t0;
+    const colors = themeColors(launcher.theme);
     const insets = useSafeAreaInsets();
     const [tab, setTab] = reactExports.useState("connect");
-    let t1;
-    if ($[2] !== colors.surface) {
-      t1 = {
-        flexGrow: 1,
-        backgroundColor: colors.surface
-      };
-      $[2] = colors.surface;
-      $[3] = t1;
-    } else {
-      t1 = $[3];
-    }
-    let t2;
-    if ($[4] !== insets.left || $[5] !== insets.right || $[6] !== insets.top) {
-      t2 = {
-        flexGrow: 1,
-        flexShrink: 1,
-        minHeight: 0,
-        paddingTop: insets.top,
-        paddingLeft: insets.left,
-        paddingRight: insets.right
-      };
-      $[4] = insets.left;
-      $[5] = insets.right;
-      $[6] = insets.top;
-      $[7] = t2;
-    } else {
-      t2 = $[7];
-    }
-    let t3;
-    if ($[8] !== tab) {
-      t3 = tab === "connect" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectPage, {}) : /* @__PURE__ */ jsxRuntimeExports.jsx(AboutPage, {});
-      $[8] = tab;
-      $[9] = t3;
-    } else {
-      t3 = $[9];
-    }
-    let t4;
-    if ($[10] !== t2 || $[11] !== t3) {
-      t4 = /* @__PURE__ */ jsxRuntimeExports.jsx(View, { style: t2, children: t3 });
-      $[10] = t2;
-      $[11] = t3;
-      $[12] = t4;
-    } else {
-      t4 = $[12];
-    }
-    let t5;
-    if ($[13] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t5 = /* @__PURE__ */ jsxRuntimeExports.jsx(IncompatibleModal, {});
-      $[13] = t5;
-    } else {
-      t5 = $[13];
-    }
-    let t6;
-    if ($[14] !== tab) {
-      t6 = /* @__PURE__ */ jsxRuntimeExports.jsx(DevLauncherNavBar, { tab, onTabChange: setTab });
-      $[14] = tab;
-      $[15] = t6;
-    } else {
-      t6 = $[15];
-    }
-    let t7;
-    if ($[16] !== t1 || $[17] !== t4 || $[18] !== t6) {
-      t7 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t1, children: [
-        t4,
-        t5,
-        t6
-      ] });
-      $[16] = t1;
-      $[17] = t4;
-      $[18] = t6;
-      $[19] = t7;
-    } else {
-      t7 = $[19];
-    }
-    return t7;
+    return jsxRuntimeExports.jsxs(View, { style: { flexGrow: 1, backgroundColor: colors.surface }, children: [jsxRuntimeExports.jsx(View, { style: {
+      flexGrow: 1,
+      flexShrink: 1,
+      minHeight: 0,
+      paddingTop: insets.top,
+      paddingLeft: insets.left,
+      paddingRight: insets.right
+    }, children: tab === "connect" ? jsxRuntimeExports.jsx(ConnectPage, {}) : jsxRuntimeExports.jsx(AboutPage, {}) }), jsxRuntimeExports.jsx(IncompatibleModal, {}), jsxRuntimeExports.jsx(DevLauncherNavBar, { tab, onTabChange: setTab })] });
   }
   function DevMenu() {
-    const $ = compilerRuntimeExports.c(16);
     const launcher = useDevLauncher();
-    if (!launcher.devMenuOpen) {
+    if (!launcher.devMenuOpen)
       return null;
-    }
-    let t0;
-    if ($[0] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t0 = {
-        position: "absolute",
-        bottom: 24,
-        right: 24,
-        backgroundColor: 1022707506943,
-        padding: 16,
-        gap: 8,
-        minWidth: 200
-      };
-      $[0] = t0;
-    } else {
-      t0 = $[0];
-    }
-    let t1;
-    if ($[1] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t1 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: 4294967295,
-          fontSize: 16
-        }
-      }, children: "Dev Menu" });
-      $[1] = t1;
-    } else {
-      t1 = $[1];
-    }
-    let t2;
-    if ($[2] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t2 = {
-        text: {
-          color: 1098181030143,
-          fontSize: 11
-        }
-      };
-      $[2] = t2;
-    } else {
-      t2 = $[2];
-    }
-    const t3 = `Server: ${launcher.url}`;
-    let t4;
-    if ($[3] !== t3) {
-      t4 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: t2, children: t3 });
-      $[3] = t3;
-      $[4] = t4;
-    } else {
-      t4 = $[4];
-    }
-    let t5;
-    if ($[5] !== launcher.reload) {
-      t5 = /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { label: "Reload", onPress: launcher.reload });
-      $[5] = launcher.reload;
-      $[6] = t5;
-    } else {
-      t5 = $[6];
-    }
-    let t6;
-    if ($[7] !== launcher) {
-      t6 = /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { label: "Inspector", onPress: () => launcher.setInspectorOpen(!launcher.inspectorOpen) });
-      $[7] = launcher;
-      $[8] = t6;
-    } else {
-      t6 = $[8];
-    }
-    let t7;
-    if ($[9] !== launcher) {
-      t7 = /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { label: "Close", onPress: () => launcher.setDevMenuOpen(false) });
-      $[9] = launcher;
-      $[10] = t7;
-    } else {
-      t7 = $[10];
-    }
-    let t8;
-    if ($[11] !== t4 || $[12] !== t5 || $[13] !== t6 || $[14] !== t7) {
-      t8 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t0, children: [
-        t1,
-        t4,
-        t5,
-        t6,
-        t7
-      ] });
-      $[11] = t4;
-      $[12] = t5;
-      $[13] = t6;
-      $[14] = t7;
-      $[15] = t8;
-    } else {
-      t8 = $[15];
-    }
-    return t8;
+    return jsxRuntimeExports.jsxs(View, { style: {
+      position: "absolute",
+      bottom: 24,
+      right: 24,
+      backgroundColor: 1022707506943,
+      padding: 16,
+      gap: 8,
+      minWidth: 200
+    }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: 4294967295, fontSize: 16 } }, children: "Dev Menu" }), jsxRuntimeExports.jsx(Text, { style: { text: { color: 1098181030143, fontSize: 11 } }, children: `Server: ${launcher.url}` }), jsxRuntimeExports.jsx(Button, { label: "Reload", onPress: launcher.reload }), jsxRuntimeExports.jsx(Button, { label: "Inspector", onPress: () => launcher.setInspectorOpen(!launcher.inspectorOpen) }), jsxRuntimeExports.jsx(Button, { label: "Close", onPress: () => launcher.setDevMenuOpen(false) })] });
   }
   function parseTree(raw) {
     try {
@@ -18086,255 +16406,57 @@ ${stack}` : message;
       return [];
     }
   }
-  function TreeRow(t0) {
-    const $ = compilerRuntimeExports.c(20);
-    const {
-      node,
-      depth
-    } = t0;
+  function TreeRow({ node, depth }) {
     const [open, setOpen] = reactExports.useState(depth < 2);
     const label = node.name || node.text || node.type;
     const hasChildren = (node.children?.length ?? 0) > 0;
-    let t1;
-    if ($[0] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t1 = {
-        gap: 2
-      };
-      $[0] = t1;
-    } else {
-      t1 = $[0];
-    }
-    const t2 = depth * 12;
-    let t3;
-    if ($[1] !== t2) {
-      t3 = {
-        paddingLeft: t2,
-        paddingVertical: 4
-      };
-      $[1] = t2;
-      $[2] = t3;
-    } else {
-      t3 = $[2];
-    }
-    let t4;
-    if ($[3] !== hasChildren || $[4] !== node.id) {
-      t4 = () => {
-        if (hasChildren) {
-          setOpen(_temp$1);
-        }
-        if (typeof setInspectorHighlight === "function") {
-          setInspectorHighlight(node.id);
-        }
-      };
-      $[3] = hasChildren;
-      $[4] = node.id;
-      $[5] = t4;
-    } else {
-      t4 = $[5];
-    }
-    let t5;
-    if ($[6] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t5 = {
-        text: {
-          color: 1098989494527,
-          fontSize: 12
-        }
-      };
-      $[6] = t5;
-    } else {
-      t5 = $[6];
-    }
-    const t6 = `${hasChildren ? open ? "▼ " : "▶ " : "  "}${node.type} #${node.id} ${label}`;
-    let t7;
-    if ($[7] !== t6) {
-      t7 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: t5, children: t6 });
-      $[7] = t6;
-      $[8] = t7;
-    } else {
-      t7 = $[8];
-    }
-    let t8;
-    if ($[9] !== t3 || $[10] !== t4 || $[11] !== t7) {
-      t8 = /* @__PURE__ */ jsxRuntimeExports.jsx(View, { style: t3, onPress: t4, children: t7 });
-      $[9] = t3;
-      $[10] = t4;
-      $[11] = t7;
-      $[12] = t8;
-    } else {
-      t8 = $[12];
-    }
-    let t9;
-    if ($[13] !== depth || $[14] !== node.children || $[15] !== open) {
-      t9 = open && node.children?.map((child) => /* @__PURE__ */ jsxRuntimeExports.jsx(TreeRow, { node: child, depth: depth + 1 }, child.id));
-      $[13] = depth;
-      $[14] = node.children;
-      $[15] = open;
-      $[16] = t9;
-    } else {
-      t9 = $[16];
-    }
-    let t10;
-    if ($[17] !== t8 || $[18] !== t9) {
-      t10 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t1, children: [
-        t8,
-        t9
-      ] });
-      $[17] = t8;
-      $[18] = t9;
-      $[19] = t10;
-    } else {
-      t10 = $[19];
-    }
-    return t10;
-  }
-  function _temp$1(v) {
-    return !v;
+    return jsxRuntimeExports.jsxs(View, { style: { gap: 2 }, children: [jsxRuntimeExports.jsx(View, { style: { paddingLeft: depth * 12, paddingVertical: 4 }, onPress: () => {
+      if (hasChildren)
+        setOpen((v) => !v);
+      if (typeof setInspectorHighlight === "function")
+        setInspectorHighlight(node.id);
+    }, children: jsxRuntimeExports.jsx(Text, { style: { text: { color: 1098989494527, fontSize: 12 } }, children: `${hasChildren ? open ? "▼ " : "▶ " : "  "}${node.type} #${node.id} ${label}` }) }), open && node.children?.map((child) => jsxRuntimeExports.jsx(TreeRow, { node: child, depth: depth + 1 }, child.id))] });
   }
   function InspectorPanel() {
-    const $ = compilerRuntimeExports.c(17);
     const launcher = useDevLauncher();
-    let t0;
-    if ($[0] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t0 = [];
-      $[0] = t0;
-    } else {
-      t0 = $[0];
-    }
-    const [tree, setTree] = reactExports.useState(t0);
-    let t1;
-    let t2;
-    if ($[1] !== launcher.inspectorOpen) {
-      t1 = () => {
-        if (!launcher.inspectorOpen) {
-          return;
+    const [tree, setTree] = reactExports.useState([]);
+    reactExports.useEffect(() => {
+      if (!launcher.inspectorOpen)
+        return;
+      const tick = () => {
+        if (typeof getNodeTree === "function") {
+          setTree(parseTree(getNodeTree()));
         }
-        const tick = () => {
-          if (typeof getNodeTree === "function") {
-            setTree(parseTree(getNodeTree()));
-          }
-        };
-        tick();
-        const timer = setInterval(tick, 500);
-        return () => clearInterval(timer);
       };
-      t2 = [launcher.inspectorOpen];
-      $[1] = launcher.inspectorOpen;
-      $[2] = t1;
-      $[3] = t2;
-    } else {
-      t1 = $[2];
-      t2 = $[3];
-    }
-    reactExports.useEffect(t1, t2);
-    if (!launcher.inspectorOpen) {
+      tick();
+      const timer = setInterval(tick, 500);
+      return () => clearInterval(timer);
+    }, [launcher.inspectorOpen]);
+    if (!launcher.inspectorOpen)
       return null;
-    }
-    let t3;
-    if ($[4] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t3 = {
-        position: "absolute",
-        top: 24,
-        left: 24,
-        bottom: 120,
-        width: 280,
-        backgroundColor: 1022640134911,
-        padding: 12,
-        gap: 8
-      };
-      $[4] = t3;
-    } else {
-      t3 = $[4];
-    }
-    let t4;
-    if ($[5] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t4 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: 4294967295,
-          fontSize: 14
-        }
-      }, children: "Element Inspector" });
-      $[5] = t4;
-    } else {
-      t4 = $[5];
-    }
-    let t5;
-    if ($[6] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t5 = {
-        flexGrow: 1
-      };
-      $[6] = t5;
-    } else {
-      t5 = $[6];
-    }
-    let t6;
-    if ($[7] !== tree) {
-      t6 = tree.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: 1097507309823,
-          fontSize: 12
-        }
-      }, children: "No nodes" }) : tree.map(_temp2);
-      $[7] = tree;
-      $[8] = t6;
-    } else {
-      t6 = $[8];
-    }
-    let t7;
-    if ($[9] !== t6) {
-      t7 = /* @__PURE__ */ jsxRuntimeExports.jsx(ScrollView, { style: t5, children: t6 });
-      $[9] = t6;
-      $[10] = t7;
-    } else {
-      t7 = $[10];
-    }
-    let t8;
-    if ($[11] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t8 = {
-        text: {
-          color: 1097377498367,
-          fontSize: 12
-        }
-      };
-      $[11] = t8;
-    } else {
-      t8 = $[11];
-    }
-    let t9;
-    if ($[12] !== launcher) {
-      t9 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: t8, onPress: () => launcher.setInspectorOpen(false), children: "Close" });
-      $[12] = launcher;
-      $[13] = t9;
-    } else {
-      t9 = $[13];
-    }
-    let t10;
-    if ($[14] !== t7 || $[15] !== t9) {
-      t10 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t3, children: [
-        t4,
-        t7,
-        t9
-      ] });
-      $[14] = t7;
-      $[15] = t9;
-      $[16] = t10;
-    } else {
-      t10 = $[16];
-    }
-    return t10;
-  }
-  function _temp2(node) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(TreeRow, { node, depth: 0 }, node.id);
+    return jsxRuntimeExports.jsxs(View, { style: {
+      position: "absolute",
+      top: 24,
+      left: 24,
+      bottom: 120,
+      width: 280,
+      backgroundColor: 1022640134911,
+      padding: 12,
+      gap: 8
+    }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: 4294967295, fontSize: 14 } }, children: "Element Inspector" }), jsxRuntimeExports.jsx(ScrollView, { style: { flexGrow: 1 }, children: tree.length === 0 ? jsxRuntimeExports.jsx(Text, { style: { text: { color: 1097507309823, fontSize: 12 } }, children: "No nodes" }) : tree.map((node) => jsxRuntimeExports.jsx(TreeRow, { node, depth: 0 }, node.id)) }), jsxRuntimeExports.jsx(Text, { style: { text: { color: 1097377498367, fontSize: 12 } }, onPress: () => launcher.setInspectorOpen(false), children: "Close" })] });
   }
   let logId = 0;
   const logBuffer = [];
   function installDevConsoleCapture() {
     const g = globalThis;
-    if (g.__rayactDevConsoleInstalled) return;
+    if (g.__rayactDevConsoleInstalled)
+      return;
     g.__rayactDevConsoleInstalled = true;
     const levels = ["log", "info", "warn", "error", "debug"];
     for (const level of levels) {
       const original = console[level]?.bind(console);
-      if (!original) continue;
+      if (!original)
+        continue;
       console[level] = (...args) => {
         original(...args);
         logBuffer.push({
@@ -18348,108 +16470,32 @@ ${stack}` : message;
             }
           }).join(" ")
         });
-        while (logBuffer.length > 200) logBuffer.shift();
+        while (logBuffer.length > 200)
+          logBuffer.shift();
       };
     }
   }
   function DevConsole() {
-    const $ = compilerRuntimeExports.c(11);
     const launcher = useDevLauncher();
-    let t0;
-    if ($[0] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t0 = [];
-      $[0] = t0;
-    } else {
-      t0 = $[0];
-    }
-    const [lines, setLines] = reactExports.useState(t0);
-    let t1;
-    let t2;
-    if ($[1] !== launcher.devMenuOpen) {
-      t1 = () => {
-        if (!launcher.devMenuOpen) {
-          return;
-        }
-        const timer = setInterval(() => setLines([...logBuffer]), 300);
-        return () => clearInterval(timer);
-      };
-      t2 = [launcher.devMenuOpen];
-      $[1] = launcher.devMenuOpen;
-      $[2] = t1;
-      $[3] = t2;
-    } else {
-      t1 = $[2];
-      t2 = $[3];
-    }
-    reactExports.useEffect(t1, t2);
-    if (!launcher.devMenuOpen) {
+    const [lines, setLines] = reactExports.useState([]);
+    reactExports.useEffect(() => {
+      if (!launcher.devMenuOpen)
+        return;
+      const timer = setInterval(() => setLines([...logBuffer]), 300);
+      return () => clearInterval(timer);
+    }, [launcher.devMenuOpen]);
+    if (!launcher.devMenuOpen)
       return null;
-    }
-    let t3;
-    if ($[4] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t3 = {
-        position: "absolute",
-        left: 24,
-        right: 24,
-        bottom: 100,
-        maxHeight: 160,
-        backgroundColor: 3422552064,
-        padding: 8,
-        gap: 4
-      };
-      $[4] = t3;
-    } else {
-      t3 = $[4];
-    }
-    let t4;
-    if ($[5] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t4 = /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-        text: {
-          color: 4294967295,
-          fontSize: 12
-        }
-      }, children: "Console" });
-      $[5] = t4;
-    } else {
-      t4 = $[5];
-    }
-    let t5;
-    if ($[6] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t5 = {
-        flexGrow: 1
-      };
-      $[6] = t5;
-    } else {
-      t5 = $[6];
-    }
-    let t6;
-    if ($[7] !== lines) {
-      t6 = lines.slice(-40).map(_temp);
-      $[7] = lines;
-      $[8] = t6;
-    } else {
-      t6 = $[8];
-    }
-    let t7;
-    if ($[9] !== t6) {
-      t7 = /* @__PURE__ */ jsxRuntimeExports.jsxs(View, { style: t3, children: [
-        t4,
-        /* @__PURE__ */ jsxRuntimeExports.jsx(ScrollView, { style: t5, children: t6 })
-      ] });
-      $[9] = t6;
-      $[10] = t7;
-    } else {
-      t7 = $[10];
-    }
-    return t7;
-  }
-  function _temp(line) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { style: {
-      text: {
-        color: line.level === "error" ? 1099501890559 : 1098989494527,
-        fontSize: 10
-      }
-    }, children: `[${line.level}] ${line.text}` }, line.id);
+    return jsxRuntimeExports.jsxs(View, { style: {
+      position: "absolute",
+      left: 24,
+      right: 24,
+      bottom: 100,
+      maxHeight: 160,
+      backgroundColor: 3422552064,
+      padding: 8,
+      gap: 4
+    }, children: [jsxRuntimeExports.jsx(Text, { style: { text: { color: 4294967295, fontSize: 12 } }, children: "Console" }), jsxRuntimeExports.jsx(ScrollView, { style: { flexGrow: 1 }, children: lines.slice(-40).map((line) => jsxRuntimeExports.jsx(Text, { style: { text: { color: line.level === "error" ? 1099501890559 : 1098989494527, fontSize: 10 } }, children: `[${line.level}] ${line.text}` }, line.id)) })] });
   }
   installDevConsoleCapture();
   const serverUrl = globalThis.__RAYACT_DEV_SERVER__;

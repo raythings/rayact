@@ -77,7 +77,7 @@ JSValue JS_loadFont(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_loadIcons(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_loadEmoji(JSContext*, JSValue, int, JSValueConst*);
 
-#if defined(__ANDROID__) || defined(RAYACT_IOS)
+#if defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
 void AndroidKeyboard_ShowForNode(int nodeId, const std::string &inputType,
                                  bool autocorrect, bool secure,
                                  const std::string &imeAction);
@@ -86,6 +86,8 @@ void AndroidKeyboard_UpdateSelection(int nodeId, int selectionStart, int selecti
                                      int composingStart, int composingEnd,
                                      const char *fullTextIfChanged);
 #endif
+
+bool rayactHasFocusedTextInput();
 
 void rayactSetTextInputContent(int nodeId, const char *text, int selectionStart = -1,
                                int selectionEnd = -1, int composingStart = -1,

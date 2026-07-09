@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Collect local v0.0.1 release assets and write release1/SHA256SUMS.
+ * Collect local release assets and write release1/SHA256SUMS.
  *
  * This script does not create tags, push, or upload. It packages artifacts that
  * have already been built by scripts/build-prebuilts.mjs and apps/web.
@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'release1');
-const VERSION = process.env.RAYACT_RELEASE_VERSION || '0.0.1';
+const VERSION = process.env.RAYACT_RELEASE_VERSION ||
+  JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });

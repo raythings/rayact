@@ -72,6 +72,11 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
     fun nativeTouch(action: Int, id: Int, x: Float, y: Float) =
         nativeTouch(nativeHandle, action, id, x, y)
 
+    fun nativeKeyEvent(
+        action: Int, key: String, code: String, text: String,
+        repeat: Boolean, ctrl: Boolean, alt: Boolean, shift: Boolean, meta: Boolean
+    ) = nativeKeyEvent(nativeHandle, action, key, code, text, repeat, ctrl, alt, shift, meta)
+
     fun nativeSetTextInputContent(
         nodeId: Int, text: String,
         selectionStart: Int, selectionEnd: Int,
@@ -129,6 +134,10 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
         @JvmStatic external fun nativeRenderFrame(handle: Long, frameTimeNanos: Long, deltaNanos: Long): Boolean
         @JvmStatic external fun nativeNextJSTimerDelayMs(handle: Long): Float
         @JvmStatic external fun nativeTouch(handle: Long, action: Int, id: Int, x: Float, y: Float)
+        @JvmStatic external fun nativeKeyEvent(
+            handle: Long, action: Int, key: String, code: String, text: String,
+            repeat: Boolean, ctrl: Boolean, alt: Boolean, shift: Boolean, meta: Boolean
+        )
         @JvmStatic external fun nativeOnBackPressed(handle: Long)
         @JvmStatic external fun nativeSetTextInputContent(
             handle: Long, nodeId: Int, text: String,

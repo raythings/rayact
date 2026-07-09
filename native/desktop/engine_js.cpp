@@ -68,6 +68,7 @@ extern "C" {
 #include <mutex>
 #include <sstream>
 #include <vector>
+#include <deque>
 #include <string>
 #include <filesystem>
 
@@ -97,6 +98,8 @@ static JSValue JS_printNavigationStatus(JSContext*, JSValue, int, JSValueConst*)
 static JSValue JS_resolveAssetUrl(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_resolveAssetPath(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_readAssetBytes(JSContext*, JSValue, int, JSValueConst*);
+static JSValue JS_keyboardCapture(JSContext*, JSValue, int, JSValueConst*);
+static JSValue JS_keyboardDismiss(JSContext*, JSValue, int, JSValueConst*);
 
 // Global variables
 #if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
@@ -140,6 +143,70 @@ QueuedTouch g_queuedTouch;
 // Prevents double-firing onPress when Android delivers duplicate UP events
 // (e.g. ACTION_UP followed by ACTION_POINTER_UP / ACTION_CANCEL for id 0).
 bool g_touchPressFired = false;
+
+struct QueuedKeyEvent {
+    int type = 0;
+    std::string key;
+    std::string code;
+    std::string text;
+    bool repeat = false;
+    bool ctrl = false;
+    bool alt = false;
+    bool shift = false;
+    bool meta = false;
+};
+static std::mutex g_keyEventMutex;
+static std::deque<QueuedKeyEvent> g_keyEvents;
+
+static void drainKeyEvents(JSContext* ctx) {
+    std::deque<QueuedKeyEvent> events;
+    {
+        std::lock_guard<std::mutex> lock(g_keyEventMutex);
+        events.swap(g_keyEvents);
+    }
+    if (events.empty()) return;
+    if (rayactHasFocusedTextInput()) return;
+
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue fn = JS_GetPropertyStr(ctx, global, "__rayactDrainKeyEvents");
+    if (!JS_IsFunction(ctx, fn)) {
+        JS_FreeValue(ctx, fn);
+        JS_FreeValue(ctx, global);
+        return;
+    }
+    JSValue batch = JS_NewArray(ctx);
+    uint32_t index = 0;
+    for (const auto& event : events) {
+        JSValue value = JS_NewObject(ctx);
+        const char* type = event.type == 2 ? "textInput" : (event.type == 1 ? "keyUp" : "keyDown");
+        JS_SetPropertyStr(ctx, value, "type", JS_NewString(ctx, type));
+        if (event.type == 2) {
+            JS_SetPropertyStr(ctx, value, "text", JS_NewStringLen(ctx, event.text.data(), event.text.size()));
+        } else {
+            JS_SetPropertyStr(ctx, value, "key", JS_NewString(ctx, event.key.c_str()));
+            if (!event.code.empty())
+                JS_SetPropertyStr(ctx, value, "code", JS_NewString(ctx, event.code.c_str()));
+            JS_SetPropertyStr(ctx, value, "repeat", JS_NewBool(ctx, event.repeat));
+            JS_SetPropertyStr(ctx, value, "ctrlKey", JS_NewBool(ctx, event.ctrl));
+            JS_SetPropertyStr(ctx, value, "altKey", JS_NewBool(ctx, event.alt));
+            JS_SetPropertyStr(ctx, value, "shiftKey", JS_NewBool(ctx, event.shift));
+            JS_SetPropertyStr(ctx, value, "metaKey", JS_NewBool(ctx, event.meta));
+        }
+        JS_SetPropertyUint32(ctx, batch, index++, value);
+    }
+    JSValue result = JS_Call(ctx, fn, global, 1, &batch);
+    if (JS_IsException(result)) {
+        JSValue exception = JS_GetException(ctx);
+        const char* message = JS_ToCString(ctx, exception);
+        fprintf(stderr, "__rayactDrainKeyEvents threw: %s\n", message ? message : "unknown");
+        if (message) JS_FreeCString(ctx, message);
+        JS_FreeValue(ctx, exception);
+    }
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, batch);
+    JS_FreeValue(ctx, fn);
+    JS_FreeValue(ctx, global);
+}
 
 // Initialize QuickJS runtime
 static JSRuntime* initRuntime() {
@@ -250,6 +317,11 @@ static void registerNativeFunctions(JSContext* ctx) {
                           JS_NewString(ctx, PlatformBridge::getPlatformVersion().c_str()));
         JS_SetPropertyStr(ctx, global, "__rayactPlatform", platform);
     }
+
+    JS_SetPropertyStr(ctx, global, "__rayactKeyboardCapture",
+                      JS_NewCFunction(ctx, JS_keyboardCapture, "__rayactKeyboardCapture", 1));
+    JS_SetPropertyStr(ctx, global, "__rayactKeyboardDismiss",
+                      JS_NewCFunction(ctx, JS_keyboardDismiss, "__rayactKeyboardDismiss", 0));
 
     // Window management functions
     if (g_windowManagementEnabled) {
@@ -636,6 +708,46 @@ static void registerNativeFunctions(JSContext* ctx) {
     rayact::workletRuntimeInit();
 
     JS_FreeValue(ctx, global);
+}
+
+static JSValue JS_keyboardCapture(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    std::string inputType = "text";
+    bool autocorrect = false;
+    std::string imeAction = "default";
+    if (argc > 0 && JS_IsObject(argv[0])) {
+        JSValue keyboardType = JS_GetPropertyStr(ctx, argv[0], "keyboardType");
+        if (JS_IsString(keyboardType)) {
+            const char* value = JS_ToCString(ctx, keyboardType);
+            if (value) {
+                inputType = value;
+                JS_FreeCString(ctx, value);
+            }
+        }
+        JS_FreeValue(ctx, keyboardType);
+        JSValue autoCorrect = JS_GetPropertyStr(ctx, argv[0], "autoCorrect");
+        if (JS_IsBool(autoCorrect)) autocorrect = JS_ToBool(ctx, autoCorrect) != 0;
+        JS_FreeValue(ctx, autoCorrect);
+        JSValue returnKeyType = JS_GetPropertyStr(ctx, argv[0], "returnKeyType");
+        if (JS_IsString(returnKeyType)) {
+            const char* value = JS_ToCString(ctx, returnKeyType);
+            if (value) {
+                imeAction = value;
+                JS_FreeCString(ctx, value);
+            }
+        }
+        JS_FreeValue(ctx, returnKeyType);
+    }
+#if defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
+    AndroidKeyboard_ShowForNode(-2, inputType, autocorrect, false, imeAction);
+#endif
+    return JS_UNDEFINED;
+}
+
+static JSValue JS_keyboardDismiss(JSContext*, JSValue, int, JSValueConst*) {
+#if defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
+    AndroidKeyboard_Hide();
+#endif
+    return JS_UNDEFINED;
 }
 
 // JavaScript function: initRaylib(width, height, title)
@@ -1770,6 +1882,23 @@ void engineQueueTouch(int action, int id, float x, float y) {
     }
 }
 
+void engineQueueKeyEvent(int type, const char* key, const char* code,
+                         const char* text, bool repeat, bool ctrl, bool alt,
+                         bool shift, bool meta) {
+    QueuedKeyEvent event;
+    event.type = type;
+    if (key) event.key = key;
+    if (code) event.code = code;
+    if (text) event.text = text;
+    event.repeat = repeat;
+    event.ctrl = ctrl;
+    event.alt = alt;
+    event.shift = shift;
+    event.meta = meta;
+    std::lock_guard<std::mutex> lock(g_keyEventMutex);
+    g_keyEvents.push_back(std::move(event));
+}
+
 bool engineLoadDevServer(const std::string& devServerUrl) {
     return loadDevServerBundle(g_ctx, devServerUrl);
 }
@@ -1951,6 +2080,7 @@ void enginePumpJS() {
     tickAnimationFrames(ctx);
     tickAnimatedStyles(ctx);
     tickSystemAppearance(ctx);
+    drainKeyEvents(ctx);
     pollDevServer(ctx);
 #ifndef RAYACT_NO_NET
     drainNetEvents(ctx);      // deliver fetch responses / SSE / WS frames

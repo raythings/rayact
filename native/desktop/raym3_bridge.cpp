@@ -4390,6 +4390,10 @@ static raym3::v2::Node* focusedRaym3TextInputForIme() {
     return node;
 }
 
+bool rayactHasFocusedTextInput() {
+    return focusedRaym3TextInputForIme() != nullptr;
+}
+
 static std::string focusedTextValue(raym3::v2::Node& node) {
     if (node.textInput.value) return *node.textInput.value;
     if (node.textInput.buffer) return std::string(node.textInput.buffer);
@@ -5758,6 +5762,10 @@ size_t applyStyleEntryBinary(int32_t keyId, const uint8_t* val, raym3::v2::Style
         case 29: s.borderRadius = cmdReadF64(val); return 8;
         case 30: s.borderWidth  = cmdReadF64(val); return 8;
         case 31: s.elevation    = cmdReadF64(val); return 8;
+        case 32: s.inset.top    = cmdReadF64(val); return 8;
+        case 33: s.inset.right  = cmdReadF64(val); return 8;
+        case 34: s.inset.bottom = cmdReadF64(val); return 8;
+        case 35: s.inset.left   = cmdReadF64(val); return 8;
         case 36: s.translateX   = cmdReadF64(val); return 8;
         case 37: s.translateY   = cmdReadF64(val); return 8;
         case 38: s.scale        = cmdReadF64(val); return 8;

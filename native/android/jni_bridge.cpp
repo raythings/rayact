@@ -139,6 +139,8 @@ static std::atomic<bool> g_pendingImeBlur{false};
 static std::mutex g_deviceInsetsMutex;
 static float g_lastDeviceSafeArea[4] = {0, 0, 0, 0};
 static PendingKeyboardInsets g_lastDeviceKeyboard;
+static std::mutex g_globalImeMutex;
+static std::string g_globalImeText;
 static std::atomic<int> g_imeNodeId{-1};
 
 std::string jstr(JNIEnv* env, jstring s) {
@@ -477,6 +479,10 @@ void AndroidKeyboard_ShowForNode(int nodeId, const std::string& inputType,
                                  const std::string& imeAction) {
     const int prevNode = g_imeNodeId.load();
     g_imeNodeId.store(nodeId);
+    if (nodeId == -2 && prevNode != -2) {
+        std::lock_guard<std::mutex> lock(g_globalImeMutex);
+        g_globalImeText.clear();
+    }
     // Called from render thread which already holds g_engineMutex — no re-lock.
     std::string value;
     {
@@ -492,6 +498,10 @@ void AndroidKeyboard_ShowForNode(int nodeId, const std::string& inputType,
 
 void AndroidKeyboard_Hide() {
     g_imeNodeId.store(-1);
+    {
+        std::lock_guard<std::mutex> lock(g_globalImeMutex);
+        g_globalImeText.clear();
+    }
     AndroidEngineInstance* inst = androidEngineCurrent();
     if (inst) inst->callHostVoid("hideSoftKeyboard");
 }
@@ -505,6 +515,27 @@ Java_com_rayact_engine_RayactEngineSession_nativeSetTextInputContent(
     if (!s) return;
     std::string str(s);
     env->ReleaseStringUTFChars(text, s);
+    if (nodeId == -2) {
+        if (composingStart >= 0 && composingEnd >= composingStart) return;
+        std::lock_guard<std::mutex> globalLock(g_globalImeMutex);
+        size_t prefix = 0;
+        while (prefix < g_globalImeText.size() && prefix < str.size() &&
+               g_globalImeText[prefix] == str[prefix]) {
+            ++prefix;
+        }
+        for (size_t i = prefix; i < g_globalImeText.size(); ++i) {
+            if ((static_cast<unsigned char>(g_globalImeText[i]) & 0xc0) != 0x80)
+                rayact::engineQueueKeyEvent(0, "Backspace", "Backspace", nullptr,
+                                            false, false, false, false, false);
+        }
+        if (str.size() > prefix) {
+            const std::string added = str.substr(prefix);
+            rayact::engineQueueKeyEvent(2, nullptr, nullptr, added.c_str(),
+                                        false, false, false, false, false);
+        }
+        g_globalImeText = str;
+        return;
+    }
     // QuickJS is render-thread-only. Queue the update; drain on render thread.
     std::lock_guard<std::mutex> lock(g_textUpdateMutex);
     int byteSelectionStart = utf16OffsetToUtf8Byte(str, (int)selectionStart);
@@ -1610,6 +1641,23 @@ Java_com_rayact_engine_RayactEngineSession_nativeTouch(JNIEnv*, jclass, jlong ha
     InstanceScope scope(handle);
     RcoreAndroidSurface_PushTouch(action, id, x, y);
     rayact::engineQueueTouch((int)action, (int)id, (float)x, (float)y);
+}
+
+JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngineSession_nativeKeyEvent(
+    JNIEnv* env, jclass, jlong handle, jint action, jstring keyValue,
+    jstring codeValue, jstring textValue, jboolean repeat, jboolean ctrl,
+    jboolean alt, jboolean shift, jboolean meta) {
+    InstanceScope scope(handle);
+    const char* key = keyValue ? env->GetStringUTFChars(keyValue, nullptr) : nullptr;
+    const char* code = codeValue ? env->GetStringUTFChars(codeValue, nullptr) : nullptr;
+    const char* text = textValue ? env->GetStringUTFChars(textValue, nullptr) : nullptr;
+    rayact::engineQueueKeyEvent((int)action, key, code, text,
+        repeat == JNI_TRUE, ctrl == JNI_TRUE, alt == JNI_TRUE,
+        shift == JNI_TRUE, meta == JNI_TRUE);
+    if (key) env->ReleaseStringUTFChars(keyValue, key);
+    if (code) env->ReleaseStringUTFChars(codeValue, code);
+    if (text) env->ReleaseStringUTFChars(textValue, text);
 }
 
 // Hardware-back press forwarded from the Kotlin OnBackPressedCallback.

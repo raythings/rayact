@@ -224,7 +224,7 @@ int main(int argc, char** argv) {
 
     std::cout << "========================================" << std::endl;
     std::cout << "  Rayact - QuickJS Desktop Renderer" << std::endl;
-    std::cout << "  Version 0.0.1" << std::endl;
+    std::cout << "  Version 0.0.2" << std::endl;
     std::cout << "========================================" << std::endl;
 
     PlatformBridge::printPlatformInfo();

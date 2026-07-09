@@ -1,6 +1,6 @@
 {
   "name": "@rayact/dev-app",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "description": "Standalone Rayact dev app — Expo-Go-style prebuilt host bundling native plugins + the dev client launcher (QR scan, HMR).",
   "bin": {
@@ -23,11 +23,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/raythings/rayact-dev-app.git"
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "apps/dev-app"
   },
-  "homepage": "https://github.com/raythings/rayact-dev-app#readme",
+  "homepage": "https://github.com/raythings/rayact/tree/main/apps/dev-app#readme",
   "bugs": {
-    "url": "https://github.com/raythings/rayact-dev-app/issues"
+    "url": "https://github.com/raythings/rayact/issues"
   },
   "dependencies": {
     "rayact": "file:../..",

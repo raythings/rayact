@@ -822,7 +822,34 @@ function StackNavigator({
   );
 }
 
-export const createStackNavigator = createNavigatorFactory(StackNavigator);
+const untypedCreateStackNavigator = createNavigatorFactory(StackNavigator);
+
+export interface RayactTypedStackNavigator<ParamList extends ParamListBase> {
+  Navigator: React.ComponentType<React.PropsWithChildren<{
+    initialRouteName?: keyof ParamList & string;
+    screenOptions?: RayactStackNavigationOptions & Record<string, unknown>;
+    detachInactiveScreens?: boolean;
+    lazyScreens?: boolean;
+    cacheScreensByName?: boolean;
+  }>>;
+  Screen: <RouteName extends keyof ParamList & string>(
+    props: {
+      name: RouteName;
+      component: React.ComponentType<unknown>;
+      initialParams?: ParamList[RouteName];
+      options?: RayactStackNavigationOptions;
+    },
+  ) => React.ReactElement | null;
+  Group: React.ComponentType<React.PropsWithChildren<{
+    screenOptions?: RayactStackNavigationOptions;
+  }>>;
+}
+
+export function createStackNavigator<
+  ParamList extends ParamListBase = ParamListBase,
+>(config?: unknown): RayactTypedStackNavigator<ParamList> {
+  return untypedCreateStackNavigator(config) as RayactTypedStackNavigator<ParamList>;
+}
 export const createNativeStackNavigator = createStackNavigator;
 
 export const NavigationContainer = React.forwardRef<

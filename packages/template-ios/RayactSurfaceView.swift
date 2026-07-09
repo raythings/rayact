@@ -230,6 +230,10 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
     }
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        if imeNodeId == -2 {
+            session.keyEvent(type: 0, key: "Enter", code: "Enter")
+            return false
+        }
         session.nativeBlurTextInput()
         clearIme()
         return true
@@ -264,7 +268,7 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
     }
 
     private func syncTextToNative() {
-        guard !applyingFromNative, imeNodeId >= 0 else { return }
+        guard !applyingFromNative, imeNodeId != -1 else { return }
         let text = hiddenTextField.text ?? ""
         let start = hiddenTextField.offset(from: hiddenTextField.beginningOfDocument, to: hiddenTextField.selectedTextRange?.start ?? hiddenTextField.endOfDocument)
         let end = hiddenTextField.offset(from: hiddenTextField.beginningOfDocument, to: hiddenTextField.selectedTextRange?.end ?? hiddenTextField.endOfDocument)
@@ -357,6 +361,43 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
         lastImeHeightDp = 0
         session.setKeyboardInsets(heightDp: 0, visible: false, durationMs: 250)
         session.host.renderScheduler.requestFrame()
+    }
+
+    private func forwardKeyboardPresses(_ presses: Set<UIPress>, type: Int32) {
+        for press in presses {
+            guard let uiKey = press.key else { continue }
+            let raw = uiKey.charactersIgnoringModifiers
+            let key: String
+            switch raw {
+            case UIKeyCommand.inputUpArrow: key = "ArrowUp"
+            case UIKeyCommand.inputDownArrow: key = "ArrowDown"
+            case UIKeyCommand.inputLeftArrow: key = "ArrowLeft"
+            case UIKeyCommand.inputRightArrow: key = "ArrowRight"
+            case "\r", "\n": key = "Enter"
+            case "\t": key = "Tab"
+            case "\u{8}": key = "Backspace"
+            case "\u{7f}": key = "Delete"
+            case "\u{1b}": key = "Escape"
+            default: key = raw
+            }
+            session.keyEvent(type: type, key: key, code: "", modifiers: uiKey.modifierFlags)
+            if type == 0 && raw.count == 1 &&
+                !uiKey.modifierFlags.contains(.control) &&
+                !uiKey.modifierFlags.contains(.command) &&
+                !uiKey.modifierFlags.contains(.alternate) {
+                session.keyEvent(type: 2, key: "", code: "", text: uiKey.characters, modifiers: uiKey.modifierFlags)
+            }
+        }
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        forwardKeyboardPresses(presses, type: 0)
+        super.pressesBegan(presses, with: event)
+    }
+
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        forwardKeyboardPresses(presses, type: 1)
+        super.pressesEnded(presses, with: event)
     }
 
     private func updateSafeAreaInsets() {

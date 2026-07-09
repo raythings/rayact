@@ -1,6 +1,6 @@
 {
   "name": "@rayact/template-android",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Thin Android Gradle shell for Rayact apps — links prebuilt native libs, no engine CMake",
   "files": [
     "app",

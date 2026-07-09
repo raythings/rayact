@@ -37,7 +37,7 @@ export type RayactBuildMode = 'development' | 'dev-client' | 'release';
 export interface BundleOptions {
   root: string;
   entry: string;
-  platform: string;
+  platform?: string;
   mode?: RayactBuildMode;
   outDir?: string;
   minify?: boolean;
@@ -602,13 +602,18 @@ function shouldMinify(options: BundleOptions): boolean {
   return options.mode === 'release';
 }
 
-export function createRayactViteConfig(options: BundleOptions, input = ENTRY_ID): UserConfig {
+export function createRayactViteConfig(
+  options: BundleOptions,
+  input = ENTRY_ID,
+  assetRegistry?: AssetRegistry,
+): UserConfig {
+  options = { ...options, platform: options.platform ?? 'desktop' };
   const mode = options.mode ?? 'development';
   const root = path.resolve(options.root);
   const isDev = mode === 'development';
   const compiler = compilerForMode(mode);
   const minify = shouldMinify(options);
-  const registry = new AssetRegistry(root);
+  const registry = assetRegistry ?? new AssetRegistry(root);
   const devBanner = isDev
     ? [
         `globalThis.__rayactPlatform = { os: ${JSON.stringify(options.platform)}, target: ${JSON.stringify(options.platform)}, ...(globalThis.__rayactPlatform || {}) };`,
@@ -673,12 +678,13 @@ export function createRayactViteConfig(options: BundleOptions, input = ENTRY_ID)
 }
 
 async function runViteBuild(options: BundleOptions, registry: AssetRegistry, input: string): Promise<string> {
+  const config = createRayactViteConfig({ ...options, outDir: undefined }, input, registry);
   const result = await build({
-    ...createRayactViteConfig({ ...options, outDir: undefined }, input),
+    ...config,
     configFile: false,
     logLevel: 'silent',
     build: {
-      ...createRayactViteConfig({ ...options, outDir: undefined }, input).build,
+      ...config.build,
       write: false
     }
   });
@@ -721,7 +727,11 @@ export function createRayactDevServerConfig(options: BundleOptions, httpServer?:
       skipWebSocketTokenCheck: true
     },
     optimizeDeps: {
-      include: ['react', 'react/jsx-runtime', 'react/jsx-dev-runtime']
+      include: ['react', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
+      // Asset virtual modules import createAsset from this package. Prebundling
+      // rayact causes Vite to resolve that virtual dependency outside the
+      // project plugin pipeline and return a 500 for static font/image imports.
+      exclude: ['rayact']
     }
   };
 }
@@ -743,6 +753,7 @@ export async function buildRayactBootstrap(options: BundleOptions): Promise<stri
 }
 
 export async function buildRayactBundle(options: BundleOptions): Promise<RayactBuildOutput> {
+  options = { ...options, platform: options.platform ?? 'desktop' };
   const mode = options.mode ?? 'development';
   const root = path.resolve(options.root);
   const registry = new AssetRegistry(root);
@@ -766,7 +777,7 @@ export async function buildRayactBundle(options: BundleOptions): Promise<RayactB
     bundleFormat,
     assets: registry.all(),
     entry: normalizePath(path.relative(root, path.resolve(root, options.entry))),
-    platform: options.platform,
+    platform: options.platform ?? 'desktop',
     mode,
     compiler,
     binaryCommands: RAYACT_BINARY_COMMANDS

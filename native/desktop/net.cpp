@@ -532,6 +532,8 @@ static JSValue buildRawFetch(JSContext* ctx, const NetEvent& ev) {
     JS_SetPropertyStr(ctx,raw,"statusText", JS_NewString(ctx,ev.statusText.c_str()));
     JS_SetPropertyStr(ctx,raw,"ok",         JS_NewBool(ctx,ev.ok));
     JS_SetPropertyStr(ctx,raw,"body",       JS_NewStringLen(ctx,ev.data.c_str(),ev.data.size()));
+    JS_SetPropertyStr(ctx,raw,"bytes",      JS_NewArrayBufferCopy(
+        ctx, reinterpret_cast<const uint8_t*>(ev.data.data()), ev.data.size()));
     JS_SetPropertyStr(ctx,raw,"url",        JS_NewString(ctx,ev.effectiveUrl.c_str()));
     JS_SetPropertyStr(ctx,raw,"redirected", JS_NewBool(ctx,ev.redirected));
     // headers as [[k,v], ...] array
@@ -956,6 +958,7 @@ static const char s_polyfill[] = R"JS(
   // ── Response ─────────────────────────────────────────────────────────────────
   function Response(body, init) {
     this._body = body||''; this.bodyUsed = false;
+    this._bytes = init&&init.bytes instanceof ArrayBuffer ? init.bytes : null;
     this.status = (init&&init.status)||200;
     this.statusText = (init&&init.statusText)||'';
     this.ok = this.status>=200&&this.status<300;
@@ -972,6 +975,7 @@ static const char s_polyfill[] = R"JS(
     },
     arrayBuffer: function() {
       this.bodyUsed=true;
+      if (this._bytes) return Promise.resolve(this._bytes);
       var s=this._body, n=s.length, buf=new ArrayBuffer(n), v=new Uint8Array(buf);
       for (var i=0;i<n;i++) v[i]=s.charCodeAt(i)&0xff;
       return Promise.resolve(buf);
@@ -979,7 +983,8 @@ static const char s_polyfill[] = R"JS(
     clone: function() {
       if (this.bodyUsed) throw new TypeError('Body already consumed');
       return new Response(this._body,{status:this.status,statusText:this.statusText,
-        headers:new Headers(this.headers),url:this.url,redirected:this.redirected});
+        headers:new Headers(this.headers),url:this.url,redirected:this.redirected,
+        bytes:this._bytes});
     }
   };
 
@@ -1057,7 +1062,8 @@ static const char s_polyfill[] = R"JS(
     return __native_fetch(url,{method:method,headers:headers,body:body},abortId)
       .then(function(raw) {
         return new Response(raw.body,{status:raw.status,statusText:raw.statusText,
-          headers:new Headers(raw.headers),url:raw.url,redirected:raw.redirected});
+          headers:new Headers(raw.headers),url:raw.url,redirected:raw.redirected,
+          bytes:raw.bytes});
       });
   }
 

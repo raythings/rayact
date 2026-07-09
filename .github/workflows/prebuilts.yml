@@ -52,14 +52,6 @@ jobs:
       - name: Install xcodegen
         run: brew install xcodegen
 
-      - name: Build CLI packages
-        run: |
-          cd "$RAYACT_ROOT/packages/rayact-prebuild" && npm install --ignore-scripts && npm run build
-          cd "$RAYACT_ROOT/packages/rayact-dev-server" && npm install --ignore-scripts && npm run build
-          cd "$RAYACT_ROOT/packages/rayact-cli" && npm install --ignore-scripts && npm run build
-        env:
-          RAYACT_ROOT: ${{ env.RAYACT_ROOT }}
-
       - name: Build macOS prebuilts + dev-app iOS
         working-directory: ${{ env.RAYACT_ROOT }}
         run: node scripts/build-prebuilts.mjs --target darwin --target ios --target dev-app
@@ -111,11 +103,8 @@ jobs:
       - name: Build publishable JS packages
         working-directory: ${{ env.RAYACT_ROOT }}
         run: |
-          npm install --no-audit --no-fund
+          npm install --force --no-audit --no-fund
           npm run build
-          npm run build:cli
-          npm run build:prebuild
-          npm run build:create-app
 
       - name: Verify package whitelists
         working-directory: ${{ env.RAYACT_ROOT }}
@@ -125,6 +114,7 @@ jobs:
         working-directory: ${{ env.RAYACT_ROOT }}
         run: |
           mkdir -p release-tarballs
+          npm pack --ignore-scripts --pack-destination release-tarballs
           for dir in packages/*/; do
             name=$(node -e "const p=require('./$dir/package.json');process.stdout.write(p.private?'':p.name||'')")
             [ -z "$name" ] && continue

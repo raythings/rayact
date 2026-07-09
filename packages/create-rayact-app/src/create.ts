@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
  * Bumped in lockstep with the published package version — keep this the single
  * source of truth so a release bump is a one-line change here.
  */
-const RAYACT_VERSION = '0.0.1';
+const RAYACT_VERSION = '0.0.2';
 
 export interface CreateOptions {
   projectName: string;

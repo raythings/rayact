@@ -1,6 +1,6 @@
 {
   "name": "create-rayact-app",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Scaffold a new Rayact app (like create-expo-app)",
   "type": "module",
   "bin": {
