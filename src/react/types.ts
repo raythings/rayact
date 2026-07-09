@@ -88,7 +88,108 @@ export interface RayactRoot {
 // Numeric style values are raym3 layout dp, not physical pixels. Native hosts
 // convert to/from pixels only at render, font/icon raster, safe-area, and input
 // boundaries.
-export type Style = Record<string, unknown>;
+export type AnimatedNumber = number | { bindToNode(nodeId: number, property: string): void };
+export type DimensionValue = number | `${number}%` | 'auto';
+export type EdgeValue = number | 'auto';
+export type Transform =
+  | { translateX: AnimatedNumber }
+  | { translateY: AnimatedNumber }
+  | { scale: AnimatedNumber }
+  | { rotate: AnimatedNumber }
+  | { rotation: AnimatedNumber };
+
+export interface TextStyle {
+  color?: ColorValue;
+  fontSize?: number;
+  lineHeight?: number;
+  letterSpacing?: number;
+  fontFamily?: string;
+  fontWeight?: number | string;
+  weight?: number | string;
+  italic?: boolean;
+  underline?: boolean;
+  whiteSpace?: 'normal' | 'pre-wrap' | 'preWrap';
+  wordBreak?: 'normal' | 'keep-all' | 'keepAll' | 'break-word' | 'breakWord';
+  textAlign?: 'left' | 'center' | 'right' | 'auto';
+  marginTop?: number;
+  marginBottom?: number;
+}
+
+export interface ViewStyle {
+  width?: DimensionValue;
+  height?: DimensionValue;
+  minWidth?: DimensionValue;
+  minHeight?: DimensionValue;
+  maxWidth?: DimensionValue;
+  maxHeight?: DimensionValue;
+  flex?: number;
+  flexGrow?: number;
+  flexShrink?: number;
+  flexBasis?: number;
+  flexDirection?: 'row' | 'column' | 'row-reverse' | 'column-reverse';
+  flexWrap?: 'nowrap' | 'wrap' | 'wrap-reverse';
+  justifyContent?: 'flex-start' | 'flex-end' | 'center' | 'space-between' | 'space-around' | 'space-evenly';
+  alignItems?: 'flex-start' | 'flex-end' | 'center' | 'stretch' | 'baseline';
+  alignSelf?: 'flex-start' | 'flex-end' | 'center' | 'stretch';
+  gap?: number;
+  rowGap?: number;
+  columnGap?: number;
+  padding?: number | { top?: number; right?: number; bottom?: number; left?: number };
+  paddingTop?: number;
+  paddingRight?: number;
+  paddingBottom?: number;
+  paddingLeft?: number;
+  paddingHorizontal?: number;
+  paddingVertical?: number;
+  margin?: EdgeValue | { top?: EdgeValue; right?: EdgeValue; bottom?: EdgeValue; left?: EdgeValue };
+  marginTop?: EdgeValue;
+  marginRight?: EdgeValue;
+  marginBottom?: EdgeValue;
+  marginLeft?: EdgeValue;
+  marginHorizontal?: EdgeValue;
+  marginVertical?: EdgeValue;
+  position?: 'absolute' | 'relative' | 'fixed';
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+  display?: 'flex' | 'none' | 'contents';
+  overflow?: 'hidden' | 'scroll' | 'visible';
+  pointerEvents?: 'none' | 'auto';
+  opacity?: number;
+  backgroundColor?: ColorValue;
+  backgroundGradientCss?: string;
+  borderColor?: ColorValue;
+  borderTopColor?: ColorValue;
+  borderRightColor?: ColorValue;
+  borderBottomColor?: ColorValue;
+  borderLeftColor?: ColorValue;
+  borderWidth?: number;
+  borderTopWidth?: number;
+  borderRightWidth?: number;
+  borderBottomWidth?: number;
+  borderLeftWidth?: number;
+  borderRadius?: number;
+  borderTopLeftRadius?: number;
+  borderTopRightRadius?: number;
+  borderBottomLeftRadius?: number;
+  borderBottomRightRadius?: number;
+  boxShadowCss?: string;
+  backdropFilterCss?: string;
+  scrimOpacity?: number;
+  elevation?: number;
+  translateX?: AnimatedNumber;
+  translateY?: AnimatedNumber;
+  scale?: AnimatedNumber;
+  rotation?: AnimatedNumber;
+  transform?: Transform[];
+  transition?: string;
+  transitionDurationMs?: number;
+  zIndex?: number;
+  text?: TextStyle;
+}
+
+export type Style = ViewStyle & TextStyle;
 export type StyleProp = Style | null | false | undefined | StyleProp[];
 
 export type ColorValue = number | string;
@@ -119,6 +220,8 @@ export interface BaseProps {
     nativeEvent: { layout: { x: number; y: number; width: number; height: number } };
   }) => void;
 }
+
+export interface ViewProps extends BaseProps {}
 
 export interface AvoidKeyboardProps extends BaseProps {
   /** `position` shifts with `bottom`; `padding` adds `marginBottom`. Default: `position`. */

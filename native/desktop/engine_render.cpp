@@ -36,6 +36,75 @@
 #include <string>
 #include <rlgl.h>
 
+namespace {
+struct GlobalKeyMapping {
+    int raylibKey;
+    const char* key;
+    const char* code;
+};
+
+static const GlobalKeyMapping kGlobalKeys[] = {
+    {KEY_ESCAPE, "Escape", "Escape"}, {KEY_TAB, "Tab", "Tab"},
+    {KEY_ENTER, "Enter", "Enter"}, {KEY_KP_ENTER, "Enter", "NumpadEnter"},
+    {KEY_BACKSPACE, "Backspace", "Backspace"}, {KEY_DELETE, "Delete", "Delete"},
+    {KEY_INSERT, "Insert", "Insert"}, {KEY_HOME, "Home", "Home"},
+    {KEY_END, "End", "End"}, {KEY_PAGE_UP, "PageUp", "PageUp"},
+    {KEY_PAGE_DOWN, "PageDown", "PageDown"}, {KEY_UP, "ArrowUp", "ArrowUp"},
+    {KEY_DOWN, "ArrowDown", "ArrowDown"}, {KEY_LEFT, "ArrowLeft", "ArrowLeft"},
+    {KEY_RIGHT, "ArrowRight", "ArrowRight"}, {KEY_SPACE, " ", "Space"},
+    {KEY_A, "a", "KeyA"}, {KEY_B, "b", "KeyB"}, {KEY_C, "c", "KeyC"},
+    {KEY_D, "d", "KeyD"}, {KEY_E, "e", "KeyE"}, {KEY_F, "f", "KeyF"},
+    {KEY_G, "g", "KeyG"}, {KEY_H, "h", "KeyH"}, {KEY_I, "i", "KeyI"},
+    {KEY_J, "j", "KeyJ"}, {KEY_K, "k", "KeyK"}, {KEY_L, "l", "KeyL"},
+    {KEY_M, "m", "KeyM"}, {KEY_N, "n", "KeyN"}, {KEY_O, "o", "KeyO"},
+    {KEY_P, "p", "KeyP"}, {KEY_Q, "q", "KeyQ"}, {KEY_R, "r", "KeyR"},
+    {KEY_S, "s", "KeyS"}, {KEY_T, "t", "KeyT"}, {KEY_U, "u", "KeyU"},
+    {KEY_V, "v", "KeyV"}, {KEY_W, "w", "KeyW"}, {KEY_X, "x", "KeyX"},
+    {KEY_Y, "y", "KeyY"}, {KEY_Z, "z", "KeyZ"},
+};
+
+static std::string utf8ForCodepoint(int codepoint) {
+    std::string out;
+    if (codepoint <= 0x7f) out.push_back((char)codepoint);
+    else if (codepoint <= 0x7ff) {
+        out.push_back((char)(0xc0 | (codepoint >> 6)));
+        out.push_back((char)(0x80 | (codepoint & 0x3f)));
+    } else if (codepoint <= 0xffff) {
+        out.push_back((char)(0xe0 | (codepoint >> 12)));
+        out.push_back((char)(0x80 | ((codepoint >> 6) & 0x3f)));
+        out.push_back((char)(0x80 | (codepoint & 0x3f)));
+    } else {
+        out.push_back((char)(0xf0 | (codepoint >> 18)));
+        out.push_back((char)(0x80 | ((codepoint >> 12) & 0x3f)));
+        out.push_back((char)(0x80 | ((codepoint >> 6) & 0x3f)));
+        out.push_back((char)(0x80 | (codepoint & 0x3f)));
+    }
+    return out;
+}
+
+static void queueGlobalDesktopKeyboard(const raym3::v2::NodePtr& root) {
+#if !defined(RAYACT_ANDROID) && !defined(RAYACT_IOS) && !defined(RAYACT_WEB)
+    if (rayactHasFocusedTextInput()) return;
+    const bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    const bool alt = IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT);
+    const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    const bool meta = IsKeyDown(KEY_LEFT_SUPER) || IsKeyDown(KEY_RIGHT_SUPER);
+    for (const auto& mapping : kGlobalKeys) {
+        if (IsKeyPressed(mapping.raylibKey))
+            rayact::engineQueueKeyEvent(0, mapping.key, mapping.code, nullptr, false, ctrl, alt, shift, meta);
+        if (IsKeyReleased(mapping.raylibKey))
+            rayact::engineQueueKeyEvent(1, mapping.key, mapping.code, nullptr, false, ctrl, alt, shift, meta);
+    }
+    for (int codepoint = GetCharPressed(); codepoint > 0; codepoint = GetCharPressed()) {
+        std::string text = utf8ForCodepoint(codepoint);
+        rayact::engineQueueKeyEvent(2, nullptr, nullptr, text.c_str(), false, ctrl, alt, shift, meta);
+    }
+#else
+    (void)root;
+#endif
+}
+} // namespace
+
 #ifdef RAYACT_ANDROID
 static void drawAndroidDiagnosticCube(int width, int height) {
     const float time = static_cast<float>(GetTime());
@@ -488,6 +557,7 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
         raym3::v2::NodeId preActive = raym3::v2::GetActiveId();
         raym3::v2::ResolveInput(g_root);
         raym3::v2::ResolveTextInput(g_root);
+        queueGlobalDesktopKeyboard(g_root);
         raym3::v2::ResolveScrollInput(g_root);
         inputDebugOnFrame(mouseDp, pressed, released, preActive);
         rayactDrainDeferredInputCallbacks();

@@ -1,6 +1,6 @@
 {
   "name": "@rayact/secure-store",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Native plugin artifacts for rayact/secure-store (librayact_secure_store, Keychain / Keystore). JS API ships in the rayact package as rayact/secure-store.",
   "keywords": [
     "secure-store",

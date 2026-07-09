@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 final class RayactEngineSession {
     static let TOUCH_DOWN = 0
@@ -100,6 +101,20 @@ final class RayactEngineSession {
 
     func setKeyboardInsets(heightDp: Float, visible: Bool, durationMs: Float) {
         RayactNativeBridge.sessionSetKeyboardInsets(nativeHandle, heightDp, visible, durationMs)
+    }
+
+    func keyEvent(type: Int32, key: String, code: String, text: String = "", modifiers: UIKeyModifierFlags = []) {
+        key.withCString { keyPtr in
+            code.withCString { codePtr in
+                text.withCString { textPtr in
+                    RayactNativeBridge.sessionKeyEvent(
+                        nativeHandle, type, keyPtr, codePtr, textPtr, false,
+                        modifiers.contains(.control), modifiers.contains(.alternate),
+                        modifiers.contains(.shift), modifiers.contains(.command)
+                    )
+                }
+            }
+        }
     }
 
     func destroySurface(_ surfaceId: Int) {

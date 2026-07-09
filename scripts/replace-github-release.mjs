@@ -11,7 +11,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const VERSION = process.env.RAYACT_RELEASE_VERSION || process.argv[2] || '0.0.1';
+const VERSION = process.env.RAYACT_RELEASE_VERSION || process.argv[2] ||
+  JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 const TAG = `v${VERSION}`;
 const REPO = process.env.RAYACT_GITHUB_REPO || 'raythings/rayact';
 const OUT = path.resolve(ROOT, process.env.RAYACT_RELEASE_DIR || 'release1');

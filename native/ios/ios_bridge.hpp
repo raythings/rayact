@@ -28,6 +28,9 @@ void RayactIOSSessionResizeSurface(RayactIOSHandle handle, int surfaceId, int wi
 bool RayactIOSSessionRelayoutOnSurfaceResizeEnabled(RayactIOSHandle handle);
 void RayactIOSSessionSetSafeAreaInsets(RayactIOSHandle handle, float top, float right, float bottom, float left);
 void RayactIOSSessionSetKeyboardInsets(RayactIOSHandle handle, float heightDp, bool visible, float durationMs);
+void RayactIOSSessionKeyEvent(RayactIOSHandle handle, int type, const char* key,
+                              const char* code, const char* text, bool repeat,
+                              bool ctrl, bool alt, bool shift, bool meta);
 void RayactIOSSessionDestroySurface(RayactIOSHandle handle, int surfaceId);
 void RayactIOSSessionPushSurface(RayactIOSHandle handle, int surfaceId);
 int RayactIOSSessionPopSurface(RayactIOSHandle handle);

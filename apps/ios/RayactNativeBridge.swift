@@ -79,6 +79,13 @@ enum RayactNativeBridge {
     @_silgen_name("RayactIOSSessionSetKeyboardInsets")
     static func sessionSetKeyboardInsets(_ handle: RayactIOSHandle, _ heightDp: Float, _ visible: Bool, _ durationMs: Float)
 
+    @_silgen_name("RayactIOSSessionKeyEvent")
+    static func sessionKeyEvent(
+        _ handle: RayactIOSHandle, _ type: Int32, _ key: UnsafePointer<CChar>?,
+        _ code: UnsafePointer<CChar>?, _ text: UnsafePointer<CChar>?, _ repeat: Bool,
+        _ ctrl: Bool, _ alt: Bool, _ shift: Bool, _ meta: Bool
+    )
+
     @_silgen_name("RayactIOSSessionDestroySurface")
     static func sessionDestroySurface(_ handle: RayactIOSHandle, _ surfaceId: Int32)
 

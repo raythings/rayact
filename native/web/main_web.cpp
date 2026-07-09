@@ -290,6 +290,13 @@ extern "C" EMSCRIPTEN_KEEPALIVE void rayactWebPointer(int action, int id, float 
     rayact::engineQueueTouch(action, id, x, y);
 }
 
+extern "C" EMSCRIPTEN_KEEPALIVE void rayactWebKey(
+    int type, const char* key, const char* code, const char* text, int repeat,
+    int ctrl, int alt, int shift, int meta) {
+    rayact::engineQueueKeyEvent(type, key, code, text, repeat != 0, ctrl != 0,
+                               alt != 0, shift != 0, meta != 0);
+}
+
 int main(void) {
     setvbuf(stdout, nullptr, _IOLBF, 0);
     emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, EM_TRUE, onBrowserResize);

@@ -56,6 +56,7 @@ export const SK = {
   margin: 21, marginTop: 22, marginRight: 23, marginBottom: 24, marginLeft: 25,
   marginHorizontal: 26, marginVertical: 27,
   opacity: 28, borderRadius: 29, borderWidth: 30, elevation: 31,
+  top: 32, right: 33, bottom: 34, left: 35,
   translateX: 36, translateY: 37, scale: 38, rotation: 39,
   fontSize: 40, lineHeight: 41, letterSpacing: 42,
   // colors (uint32)
@@ -75,6 +76,7 @@ export const F64_KEYS = new Set<string>([
   'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
   'marginHorizontal', 'marginVertical',
   'opacity', 'borderRadius', 'borderWidth', 'elevation',
+  'top', 'right', 'bottom', 'left',
   'translateX', 'translateY', 'scale', 'rotation',
   'fontSize', 'lineHeight', 'letterSpacing',
 ]);

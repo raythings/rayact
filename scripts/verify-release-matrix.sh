@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+VERSION="${RAYACT_RELEASE_VERSION:-$(node -p "require('$ROOT/package.json').version")}"
+TAG="v$VERSION"
 OUT="$ROOT/.rayact/verify/$(date +%Y%m%d-%H%M%S)/release-matrix"
 SMOKE="$ROOT/test-projects/release-consumer-smoke"
 RELEASE_SERVE_PID=""
@@ -73,18 +75,18 @@ else
 fi
 
 log "=== local release asset server ==="
-node scripts/serve-release-assets.mjs "$ROOT/release1" 9191 v0.0.1 >"$OUT/release-serve.log" 2>&1 &
+node scripts/serve-release-assets.mjs "$ROOT/release1" 9191 "$TAG" >"$OUT/release-serve.log" 2>&1 &
 RELEASE_SERVE_PID=$!
 sleep 1
-if curl -sf "http://127.0.0.1:9191/v0.0.1/SHA256SUMS" >/dev/null; then
+if curl -sf "http://127.0.0.1:9191/$TAG/SHA256SUMS" >/dev/null; then
   pass "serve-release-assets"
 else
   fail "serve-release-assets"
 fi
 
 log "=== release1 asset inventory ==="
-for asset in rayact-0.0.1.tgz create-rayact-app-0.0.1.tgz rayact-dev-app.apk rayact-dev-app-simulator.zip rayact-prebuilt-darwin-arm64-0.0.1.tgz rayact-web-0.0.1.tar.gz; do
-  if curl -sf "http://127.0.0.1:9191/v0.0.1/$asset" -o /dev/null; then
+for asset in "rayact-$VERSION.tgz" "create-rayact-app-$VERSION.tgz" rayact-dev-app.apk rayact-dev-app-simulator.zip "rayact-prebuilt-darwin-arm64-$VERSION.tgz" "rayact-web-$VERSION.tar.gz"; do
+  if curl -sf "http://127.0.0.1:9191/$TAG/$asset" -o /dev/null; then
     pass "release asset $asset"
   else
     fail "release asset missing: $asset"
@@ -98,7 +100,7 @@ else
   pass "no generated config platform"
 fi
 
-export RAYACT_PREBUILT_BASE_URL="http://127.0.0.1:9191/v0.0.1"
+export RAYACT_PREBUILT_BASE_URL="http://127.0.0.1:9191/$TAG"
 export RAYACT_WEB_HOST_DIR="$ROOT/build-web/bin"
 
 log "=== consumer smoke install ==="
@@ -201,4 +203,4 @@ fi
 
 log "All automated release-matrix checks passed."
 log "Artifacts: $OUT"
-log "Complete manual HMR/visual checks before publishing v0.0.1."
+log "Complete manual HMR/visual checks before publishing $TAG."

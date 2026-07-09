@@ -1,4 +1,4 @@
-export const RAYACT_ENGINE_VERSION = '0.0.1';
+export const RAYACT_ENGINE_VERSION = '0.0.2';
 export const RAYACT_MODULE_ABI_VERSION = 1;
 export const RAYACT_NDK_VERSION = '27.2.12479018';
 

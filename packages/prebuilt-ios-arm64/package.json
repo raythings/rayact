@@ -1,6 +1,6 @@
 {
   "name": "@rayact/prebuilt-ios-arm64",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Prebuilt Rayact engine XCFramework for iOS arm64 (device + simulator)",
   "files": [
     "RayactEngine.xcframework",

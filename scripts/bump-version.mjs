@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const check = process.argv.includes('--check');
 const arg = process.argv.slice(2).find((a) => !a.startsWith('-'));
 
-const current = JSON.parse(fs.readFileSync(path.join(ROOT, 'packages/rayact-cli/package.json'), 'utf8')).version;
+const current = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 const version = check ? current : arg;
 if (!version) {
   console.error('usage: bump-version.mjs <version> | --check');
@@ -64,7 +64,7 @@ for (const f of execSync('find packages -name manifest.json', { cwd: ROOT, encod
 }
 
 // Source-of-truth constants + banners.
-edit('packages/rayact-prebuild/src/constants.ts', (s) => s.replace(/RAYACT_ENGINE_VERSION = '[^']*'/, `RAYACT_ENGINE_VERSION = '${version}'`));
+edit('src/prebuild/constants.ts', (s) => s.replace(/RAYACT_ENGINE_VERSION = '[^']*'/, `RAYACT_ENGINE_VERSION = '${version}'`));
 edit('packages/create-rayact-app/src/create.ts', (s) => s.replace(/const RAYACT_VERSION = '[^']*'/, `const RAYACT_VERSION = '${version}'`));
 edit('native/desktop/main.cpp', (s) => s.replace(/Version \d+\.\d+\.\d+/, `Version ${version}`));
 edit('native/desktop/CMakeLists.txt', (s) => s.replace(/(project\(rayact_quickjs_desktop VERSION )\d+\.\d+\.\d+/, `$1${version}`));

@@ -1,0 +1,9 @@
+.rayact-AvoidKeyboard_paddingTransition {
+  transition: margin-bottom var(--rayact-avoid-keyboard-duration, 250ms)
+    cubic-bezier(0.17, 0.59, 0.4, 0.77);
+}
+
+.rayact-AvoidKeyboard_positionTransition {
+  transition: bottom var(--rayact-avoid-keyboard-duration, 500ms)
+    cubic-bezier(0.17, 0.59, 0.4, 0.77);
+}

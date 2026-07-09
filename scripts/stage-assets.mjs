@@ -22,7 +22,8 @@ const COPIES = [
   ['packages/create-rayact-app/dist', 'create-rayact-app/dist', true],
   ['src/shared/material_icons.js', 'shared/material_icons.js', true],
   ['src/shared/material_icons.d.ts', 'shared/material_icons.d.ts', true],
-  ['src/react/avoid-keyboard.css', 'react/avoid-keyboard.css', true]
+  ['src/react/avoid-keyboard.css', 'react/avoid-keyboard.css', true],
+  ['src/types/rayact.d.ts', 'types/rayact.d.ts', true]
 ];
 
 function copy(src, dest) {

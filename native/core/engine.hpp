@@ -80,6 +80,12 @@ void engineRequestSurfaceRelayout(int screenId);
 // pointer here so the render thread can dispatch press handlers on release.
 void engineQueueTouch(int action, int id, float x, float y);
 
+// Queue a global keyboard event for delivery to rayact/react Keyboard.
+// type: 0=keyDown, 1=keyUp, 2=textInput.
+void engineQueueKeyEvent(int type, const char* key, const char* code,
+                         const char* text, bool repeat, bool ctrl, bool alt,
+                         bool shift, bool meta);
+
 // Tear down JS subsystems, context and runtime.
 void engineDestroy();
 

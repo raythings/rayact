@@ -1,9 +1,8 @@
 /**
- * @rayact/types — ambient declarations for the rayact host globals injected by
+ * Ambient declarations for host globals injected by
  * the native engine into every JS context (main + workers).
  *
- * Use by adding to tsconfig:  "types": ["@rayact/types"]
- * or per-file:                /// <reference types="@rayact/types" />
+ * Loaded automatically by the public rayact declaration entrypoints.
  */
 
 declare global {
@@ -65,29 +64,10 @@ declare global {
 
   /** Desktop-only window bring-up (no-op on Android). */
   const initRaylib: ((width: number, height: number, title: string) => void) | undefined;
+  const registerFont: ((name: string, path: string) => void) | undefined;
 
   // ── Web-ish globals the engine provides (rayact is not a browser, so target
   //    "lib": ["ES2020"] without "DOM" and let these come from here). ──────────
-  const console: {
-    log(...args: unknown[]): void;
-    info(...args: unknown[]): void;
-    warn(...args: unknown[]): void;
-    error(...args: unknown[]): void;
-    debug(...args: unknown[]): void;
-  };
-  function setTimeout(handler: () => void, timeout?: number): number;
-  function clearTimeout(id: number): void;
-  function setInterval(handler: () => void, timeout?: number): number;
-  function clearInterval(id: number): void;
-  function queueMicrotask(callback: () => void): void;
-
-  class TextEncoder {
-    encode(input?: string): Uint8Array;
-  }
-  class TextDecoder {
-    constructor(label?: string);
-    decode(input?: ArrayBuffer | ArrayBufferView): string;
-  }
 }
 
 export {};

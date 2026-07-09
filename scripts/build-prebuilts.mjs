@@ -90,11 +90,12 @@ function buildDocker(target) {
   const tag = `rayact-prebuilt-${target}`;
   const dockerDir = path.join(ROOT, 'docker/prebuilts');
   const dockerfile = path.join(dockerDir, `Dockerfile.${target}`);
+  const platformArgs = target === 'linux' ? ['--platform', 'linux/amd64'] : [];
   console.log(`\n==> Docker build: ${tag}`);
-  run('docker', ['build', '-f', dockerfile, '-t', tag, dockerDir]);
+  run('docker', ['build', ...platformArgs, '-f', dockerfile, '-t', tag, dockerDir]);
   console.log(`\n==> Docker run: ${tag} (mount ${SUPER} -> /workspace)`);
   run('docker', [
-    'run', '--rm',
+    'run', '--rm', ...platformArgs,
     '-v', `${SUPER}:/workspace`,
     '-e', `RAYACT_ROOT=/workspace/rayact`,
     tag

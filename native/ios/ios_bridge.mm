@@ -91,6 +91,8 @@ std::atomic<bool> g_pendingImeBlur{false};
 std::mutex g_deviceInsetsMutex;
 float g_lastDeviceSafeArea[4] = {0, 0, 0, 0};
 PendingKeyboardInsets g_lastDeviceKeyboard;
+std::mutex g_globalImeMutex;
+std::string g_globalImeText;
 std::atomic<int> g_imeNodeId{-1};
 
 bool g_processBooted = false;
@@ -386,6 +388,10 @@ void AndroidKeyboard_ShowForNode(int nodeId, const std::string& inputType,
                                  const std::string& imeAction) {
     const int prevNode = g_imeNodeId.load();
     g_imeNodeId.store(nodeId);
+    if (nodeId == -2 && prevNode != -2) {
+        std::lock_guard<std::mutex> lock(g_globalImeMutex);
+        g_globalImeText.clear();
+    }
     std::string value;
     {
         auto it = g_nodes.find(nodeId);
@@ -400,6 +406,10 @@ void AndroidKeyboard_ShowForNode(int nodeId, const std::string& inputType,
 
 void AndroidKeyboard_Hide() {
     g_imeNodeId.store(-1);
+    {
+        std::lock_guard<std::mutex> lock(g_globalImeMutex);
+        g_globalImeText.clear();
+    }
     IOSEngineInstance* inst = iosEngineCurrent();
     if (inst) inst->callHostVoid("hideSoftKeyboard");
 }
@@ -629,6 +639,15 @@ extern "C" void RayactIOSSessionSetKeyboardInsets(RayactIOSHandle handle, float 
     g_lastDeviceKeyboard.heightDp = heightDp;
     g_lastDeviceKeyboard.visible = visible;
     g_lastDeviceKeyboard.durationMs = durationMs;
+}
+
+extern "C" void RayactIOSSessionKeyEvent(
+    RayactIOSHandle handle, int type, const char* key, const char* code,
+    const char* text, bool repeat, bool ctrl, bool alt, bool shift, bool meta) {
+    InstanceScope scope(handle);
+    rayact::engineQueueKeyEvent(type, key, code, text, repeat, ctrl, alt, shift, meta);
+    if (auto* inst = iosEngineInstanceFromHandle(handle))
+        inst->callHostVoid("requestRenderFrame");
 }
 
 extern "C" void RayactIOSSessionDestroySurface(RayactIOSHandle handle, int surfaceId) {
@@ -890,6 +909,27 @@ extern "C" void RayactIOSSessionSetTextInputContent(
     InstanceScope scope(handle);
     if (!text) return;
     std::string str(text);
+    if (nodeId == -2) {
+        if (composingStart >= 0 && composingEnd >= composingStart) return;
+        std::lock_guard<std::mutex> globalLock(g_globalImeMutex);
+        size_t prefix = 0;
+        while (prefix < g_globalImeText.size() && prefix < str.size() &&
+               g_globalImeText[prefix] == str[prefix]) {
+            ++prefix;
+        }
+        for (size_t i = prefix; i < g_globalImeText.size(); ++i) {
+            if ((static_cast<unsigned char>(g_globalImeText[i]) & 0xc0) != 0x80)
+                rayact::engineQueueKeyEvent(0, "Backspace", "Backspace", nullptr,
+                                            false, false, false, false, false);
+        }
+        if (str.size() > prefix) {
+            const std::string added = str.substr(prefix);
+            rayact::engineQueueKeyEvent(2, nullptr, nullptr, added.c_str(),
+                                        false, false, false, false, false);
+        }
+        g_globalImeText = str;
+        return;
+    }
     std::lock_guard<std::mutex> lock(g_textUpdateMutex);
     int byteSelectionStart = utf16OffsetToUtf8Byte(str, selectionStart);
     int byteSelectionEnd = utf16OffsetToUtf8Byte(str, selectionEnd);

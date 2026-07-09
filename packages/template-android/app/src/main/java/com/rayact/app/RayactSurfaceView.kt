@@ -334,6 +334,20 @@ class RayactSurfaceView @JvmOverloads constructor(
         }
 
         override fun sendKeyEvent(event: KeyEvent): Boolean {
+            if (imeNodeId == -2 && event.action == KeyEvent.ACTION_DOWN) {
+                when (event.keyCode) {
+                    KeyEvent.KEYCODE_DEL -> {
+                        session.nativeKeyEvent(0, "Backspace", "Backspace", "", false, false, false, false, false)
+                        session.host.renderScheduler.requestFrame()
+                        return true
+                    }
+                    KeyEvent.KEYCODE_ENTER -> {
+                        session.nativeKeyEvent(0, "Enter", "Enter", "", false, false, false, false, false)
+                        session.host.renderScheduler.requestFrame()
+                        return true
+                    }
+                }
+            }
             // Hardware/soft DEL key — delete one char before the cursor ourselves so
             // it works even when there is no composing region.
             if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_DEL) {
