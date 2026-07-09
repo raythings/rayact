@@ -72,21 +72,22 @@ else()
 endif()
 
 # Find QuickJS library
+set(QUICKJS_BUILD_DIR "${QUICKJS_DIR}/build" CACHE PATH "QuickJS build directory")
 if(PLATFORM_LINUX)
     # Look for static library first, then shared
-    find_library(QUICKJS_LIBRARY NAMES qjs PATHS ${QUICKJS_DIR}/build)
+    find_library(QUICKJS_LIBRARY NAMES qjs PATHS ${QUICKJS_BUILD_DIR})
 elseif(PLATFORM_MACOS)
     # Look for static library first, then shared
-    find_library(QUICKJS_LIBRARY NAMES qjs PATHS ${QUICKJS_DIR}/build)
+    find_library(QUICKJS_LIBRARY NAMES qjs PATHS ${QUICKJS_BUILD_DIR})
 elseif(WIN32)
-    find_library(QUICKJS_LIBRARY NAMES qjs PATHS ${QUICKJS_DIR}/build)
+    find_library(QUICKJS_LIBRARY NAMES qjs PATHS ${QUICKJS_BUILD_DIR})
 endif()
 
 if(NOT QUICKJS_LIBRARY)
     message(FATAL_ERROR "QuickJS library not found. Looking in all possible locations...")
     set(QUICKJS_SEARCH_PATHS
-        ${QUICKJS_DIR}/build
-        ${QUICKJS_DIR}/build/lib
+        ${QUICKJS_BUILD_DIR}
+        ${QUICKJS_BUILD_DIR}/lib
         ${QUICKJS_DIR})
     find_library(QUICKJS_LIBRARY NAMES qjs PATHS ${QUICKJS_SEARCH_PATHS})
 endif()
@@ -98,7 +99,7 @@ endif()
 message(STATUS "Found QuickJS library: ${QUICKJS_LIBRARY}")
 
 # Find QuickJS stdlib library (js_std_loop, js_init_module_std/os)
-find_library(QUICKJS_LIBC_LIBRARY NAMES quickjs-libc PATHS ${QUICKJS_DIR}/build)
+find_library(QUICKJS_LIBC_LIBRARY NAMES quickjs-libc qjs-libc PATHS ${QUICKJS_BUILD_DIR})
 if(QUICKJS_LIBC_LIBRARY)
     message(STATUS "Found QuickJS libc: ${QUICKJS_LIBC_LIBRARY}")
 endif()
@@ -123,12 +124,22 @@ set(RAYLIB_SRC
 add_library(raylib STATIC ${RAYLIB_SRC})
 target_include_directories(raylib PUBLIC ${RAYLIB_DIR}/src ${RAYLIB_DIR}/src/platforms)
 target_compile_options(raylib PRIVATE -Wno-unknown-pragmas)
-find_library(RAYLIB_GLFW_LIBRARY NAMES glfw3 libglfw3
-    PATHS ${RAYLIB_DIR}/build/raylib/external/glfw/src
-          ${RAYLIB_DIR}/build/raylib/external/glfw/src/Debug
-          ${RAYLIB_DIR}/examples/others/external/lib
-          ${RAYM3_DIR}/build-v2-yoga2/_deps/raylib-build/raylib/external/glfw/src
-          ${RAYM3_DIR}/build-v2-yoga2/_deps/raylib-src/examples/others/external/lib)
+if(PLATFORM_LINUX)
+    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    add_subdirectory(${RAYLIB_DIR}/src/external/glfw
+        ${CMAKE_CURRENT_BINARY_DIR}/glfw EXCLUDE_FROM_ALL)
+    set(RAYLIB_GLFW_LIBRARY glfw)
+    target_include_directories(raylib BEFORE PRIVATE ${RAYLIB_DIR}/src/external/glfw/include)
+else()
+    find_library(RAYLIB_GLFW_LIBRARY NAMES glfw3 libglfw3
+        PATHS ${RAYLIB_DIR}/build/raylib/external/glfw/src
+              ${RAYLIB_DIR}/build/raylib/external/glfw/src/Debug
+              ${RAYLIB_DIR}/examples/others/external/lib
+              ${RAYM3_DIR}/build-v2-yoga2/_deps/raylib-build/raylib/external/glfw/src
+              ${RAYM3_DIR}/build-v2-yoga2/_deps/raylib-src/examples/others/external/lib)
+endif()
 if(NOT RAYLIB_GLFW_LIBRARY)
     message(FATAL_ERROR "raylib GLFW library not found. Build raylib or provide libglfw3.a")
 endif()
