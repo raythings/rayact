@@ -10,6 +10,7 @@ interface RayactEngineHostCallbacks {
     fun finishActivity()
     fun toggleDevMenu()
     fun requestRenderFrame()
+    fun sendDevtoolsMessage(message: String)
 
     /**
      * Stop this session's render thread synchronously (blocks until it has
@@ -23,7 +24,9 @@ interface RayactEngineHostCallbacks {
         inputType: String,
         autocorrect: Boolean,
         secure: Boolean,
-        imeAction: String
+        imeAction: String,
+        autoCapitalize: String,
+        contextMenuHidden: Boolean
     )
     fun switchIme(
         nodeId: Int,
@@ -31,7 +34,9 @@ interface RayactEngineHostCallbacks {
         inputType: String,
         autocorrect: Boolean,
         secure: Boolean,
-        imeAction: String
+        imeAction: String,
+        autoCapitalize: String,
+        contextMenuHidden: Boolean
     )
     fun hideSoftKeyboard()
     fun updateImeState(

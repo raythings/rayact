@@ -2,6 +2,10 @@ import Foundation
 
 enum DevServerLoader {
     private static let platformQuery = "platform=ios"
+    private static let maxPrefetchAssetBytes = 4 * 1024 * 1024
+    private static let maxPrefetchTotalBytes = 16 * 1024 * 1024
+    private static let maxPrefetchAssets = 32
+
     struct BundlePayload {
         let baseUrl: String
         let bundleFormat: String
@@ -10,6 +14,21 @@ enum DevServerLoader {
     }
 
     private static let queue = DispatchQueue(label: "com.rayact.devserver.loader", qos: .userInitiated)
+    private static let prefetchQueue = DispatchQueue(
+        label: "com.rayact.devserver.prefetch",
+        qos: .utility,
+        attributes: .concurrent
+    )
+    private static let prefetchLock = NSLock()
+
+    private struct WarmBootstrap {
+        let payload: BundlePayload
+        let revision: Int64
+    }
+
+    private static var warmBootstraps: [String: WarmBootstrap] = [:]
+    private static var prefetchedResources: [String: Data] = [:]
+    private static var warming: Set<String> = []
 
     private(set) static var lastError: String?
     private(set) static var loading = false
@@ -25,7 +44,18 @@ enum DevServerLoader {
     }
 
     static func devFetchFromNative(url: String) -> String {
-        (try? httpGetText(url)) ?? ""
+        let data = takePrefetchedResource(url: url) ?? (try? httpGetBytes(url)) ?? Data()
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    private static var devFetchBytesStorage: [UInt8] = []
+
+    static let devFetchBytesCallback: RayactNativeBridge.DevFetchBytesFn = { urlPtr, outLenPtr in
+        let url = urlPtr.map { String(cString: $0) } ?? ""
+        let data = takePrefetchedResource(url: url) ?? (try? httpGetBytes(url)) ?? Data()
+        devFetchBytesStorage = Array(data)
+        outLenPtr?.pointee = UInt32(devFetchBytesStorage.count)
+        return devFetchBytesStorage.withUnsafeBufferPointer { $0.baseAddress }
     }
 
     static func loadAsync(baseUrl: String, session: RayactEngineSession, onSuccess: (() -> Void)? = nil) {
@@ -97,60 +127,156 @@ enum DevServerLoader {
         return json
     }
 
+    private static func requireCompatibleModules(_ manifest: [String: Any]) throws {
+        let bundled = DevClientBridge.bundledNativeModuleNames()
+        let required = manifest["nativeModules"] as? [[String: Any]] ?? []
+        let missing = required.compactMap { item -> String? in
+            guard let name = item["name"] as? String, !name.isEmpty, !bundled.contains(name) else { return nil }
+            return name
+        }
+        if !missing.isEmpty {
+            throw NSError(
+                domain: "RayactDevClientCompatibility",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey:
+                    "Incompatible server: missing bundled native modules: \(Array(Set(missing)).sorted().joined(separator: ", "))"]
+            )
+        }
+    }
+
     static func fetchBootstrap(baseUrl: String) throws -> BundlePayload {
         let normalized = normalizeBase(baseUrl)
         let manifest = try fetchManifest(baseUrl: normalized)
+        try requireCompatibleModules(manifest)
         let hmrMode = manifest["hmrMode"] as? String ?? "module"
         let bundleFormat = manifest["bundleFormat"] as? String ?? "js"
-        let path: String
-        if bundleFormat == "qjsbc" {
-            path = "/rayact/bundle.qjsbc"
-        } else if hmrMode == "module" {
-            path = "/rayact/bootstrap.js"
-        } else {
-            path = "/rayact/bundle"
+        let revision = (manifest["revision"] as? NSNumber)?.int64Value ?? -1
+        if let warm = takeWarmBootstrap(baseUrl: normalized, revision: revision) {
+            print("[DevServerLoader] using prefetched dev bootstrap for \(normalized)")
+            return warm
         }
+        let path = bundlePath(bundleFormat: bundleFormat, hmrMode: hmrMode)
         let bytes = try httpGetBytes("\(normalized)\(path)?\(platformQuery)")
         return BundlePayload(baseUrl: normalized, bundleFormat: bundleFormat, bytes: bytes, hmrMode: hmrMode)
     }
 
-    static func httpGetText(_ urlString: String) throws -> String {
-        let data = try httpGetBytes(urlString)
-        guard let text = String(data: data, encoding: .utf8) else {
-            throw URLError(.cannotDecodeContentData)
+    /// Warm the data needed before the first project frame as soon as Bonjour
+    /// resolves a server. Bootstrap reuse is revision-checked; modules and
+    /// assets are consumed once so HMR cannot observe stale discovery data.
+    static func prefetch(baseUrl: String) {
+        let normalized = normalizeBase(baseUrl)
+        prefetchLock.lock()
+        let alreadyWarm = warmBootstraps[normalized] != nil
+        let started = alreadyWarm ? false : warming.insert(normalized).inserted
+        prefetchLock.unlock()
+        guard !alreadyWarm, started else { return }
+
+        prefetchQueue.async {
+            defer {
+                prefetchLock.lock()
+                warming.remove(normalized)
+                prefetchLock.unlock()
+            }
+            do {
+                let manifest = try fetchManifest(baseUrl: normalized)
+                try requireCompatibleModules(manifest)
+                let hmrMode = manifest["hmrMode"] as? String ?? "module"
+                let bundleFormat = manifest["bundleFormat"] as? String ?? "js"
+                let path = bundlePath(bundleFormat: bundleFormat, hmrMode: hmrMode)
+                let payload = BundlePayload(
+                    baseUrl: normalized,
+                    bundleFormat: bundleFormat,
+                    bytes: try httpGetBytes("\(normalized)\(path)?\(platformQuery)"),
+                    hmrMode: hmrMode
+                )
+                let warm = WarmBootstrap(
+                    payload: payload,
+                    revision: (manifest["revision"] as? NSNumber)?.int64Value ?? -1
+                )
+                prefetchLock.lock()
+                warmBootstraps[normalized] = warm
+                prefetchLock.unlock()
+
+                let resourceCount = prefetchInitialResources(baseUrl: normalized, manifest: manifest)
+                print("[DevServerLoader] prefetched bootstrap + \(resourceCount) startup resources from \(normalized)")
+            } catch {
+                print("[DevServerLoader] prefetch unavailable for \(normalized): \(error.localizedDescription)")
+            }
         }
-        return text
     }
 
-    private static func httpGetBytes(_ urlString: String) throws -> Data {
-        guard let url = URL(string: urlString) else { throw URLError(.badURL) }
-        var request = URLRequest(url: url, timeoutInterval: 60)
-        request.httpMethod = "GET"
-        let sem = DispatchSemaphore(value: 0)
-        var result: Result<Data, Error> = .failure(URLError(.unknown))
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            defer { sem.signal() }
-            if let error {
-                result = .failure(error)
-                return
+    private static func bundlePath(bundleFormat: String, hmrMode: String) -> String {
+        if bundleFormat == "qjsbc" { return "/rayact/bundle.qjsbc" }
+        if hmrMode == "module" { return "/rayact/bootstrap.js" }
+        return "/rayact/bundle"
+    }
+
+    private static func takeWarmBootstrap(baseUrl: String, revision: Int64) -> BundlePayload? {
+        prefetchLock.lock()
+        defer { prefetchLock.unlock() }
+        guard let warm = warmBootstraps.removeValue(forKey: baseUrl), warm.revision == revision else {
+            return nil
+        }
+        return warm.payload
+    }
+
+    private static func prefetchInitialResources(baseUrl: String, manifest: [String: Any]) -> Int {
+        var urls: [(url: String, declaredSize: Int)] = []
+        if let entryUrl = manifest["entryModuleUrl"] as? String, !entryUrl.isEmpty {
+            urls.append((entryUrl, 0))
+        }
+        if let assets = manifest["assets"] as? [[String: Any]] {
+            for asset in assets.prefix(maxPrefetchAssets) {
+                let size = (asset["size"] as? NSNumber)?.intValue ?? 0
+                guard size >= 0, size <= maxPrefetchAssetBytes,
+                      let url = asset["url"] as? String, !url.isEmpty else { continue }
+                urls.append((url, size))
             }
-            guard let http = response as? HTTPURLResponse else {
-                result = .failure(URLError(.badServerResponse))
-                return
+        }
+
+        var total = 0
+        var count = 0
+        for item in urls {
+            if item.declaredSize > 0, total + item.declaredSize > maxPrefetchTotalBytes { continue }
+            let url = rebaseToBase(url: item.url, baseUrl: baseUrl)
+            do {
+                let bytes = try httpGetBytes(url)
+                guard total + bytes.count <= maxPrefetchTotalBytes else { continue }
+                prefetchLock.lock()
+                prefetchedResources[url] = bytes
+                prefetchLock.unlock()
+                total += bytes.count
+                count += 1
+            } catch {
+                print("[DevServerLoader] startup resource prefetch unavailable for \(url): \(error.localizedDescription)")
             }
-            guard (200...299).contains(http.statusCode) else {
-                let errBody = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-                let suffix = errBody.isEmpty ? "" : ": \(errBody)"
-                result = .failure(NSError(
-                    domain: "DevServerLoader",
-                    code: http.statusCode,
-                    userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode) from \(urlString)\(suffix)"]
-                ))
-                return
-            }
-            result = .success(data ?? Data())
-        }.resume()
-        _ = sem.wait(timeout: .now() + 75)
-        return try result.get()
+        }
+        return count
+    }
+
+    private static func takePrefetchedResource(url: String) -> Data? {
+        prefetchLock.lock()
+        defer { prefetchLock.unlock() }
+        return prefetchedResources.removeValue(forKey: url)
+    }
+
+    private static func rebaseToBase(url: String, baseUrl: String) -> String {
+        guard let requested = URL(string: url), requested.path.hasPrefix("/rayact/"),
+              let selected = URL(string: baseUrl),
+              var components = URLComponents(url: requested, resolvingAgainstBaseURL: false) else {
+            return url
+        }
+        components.scheme = selected.scheme
+        components.host = selected.host
+        components.port = selected.port
+        return components.url?.absoluteString ?? url
+    }
+
+    static func httpGetText(_ urlString: String) throws -> String {
+        try RayactHTTP.getText(urlString)
+    }
+
+    static func httpGetBytes(_ urlString: String) throws -> Data {
+        try RayactHTTP.getBytes(urlString)
     }
 }

@@ -36,13 +36,17 @@ const edit = (rel, fn) => {
 
 const isInternal = (k) => k.startsWith('@rayact/') || k === 'create-rayact-app' || k === 'rayact';
 const bumpRange = (v) => v
-  .replace(/^(\^|~)?\d+\.\d+\.\d+$/, (_, pre) => (pre || '') + version)
+  .replace(/^(\^|~)?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, (_, pre) => (pre || '') + version)
   .replace(/#v\d+\.\d+\.\d+$/, `#v${version}`)
   .replace(/\/download\/v\d+\.\d+\.\d+\//, `/download/v${version}/`)
   .replace(/-\d+\.\d+\.\d+\.tgz$/, `-${version}.tgz`);
 
 // All package.json: version + internal dep ranges.
-for (const f of execSync('find packages apps test-projects package.json -name package.json -maxdepth 3', { cwd: ROOT, encoding: 'utf8' }).trim().split('\n')) {
+for (const f of [
+  'package.json',
+  ...execSync('find packages -mindepth 2 -maxdepth 2 -name package.json', { cwd: ROOT, encoding: 'utf8' }).trim().split('\n'),
+  'apps/dev-app/package.json',
+].filter(Boolean)) {
   edit(f, (raw) => {
     const p = JSON.parse(raw);
     if (p.version && p.version !== version) p.version = version;
@@ -64,8 +68,11 @@ for (const f of execSync('find packages -name manifest.json', { cwd: ROOT, encod
 }
 
 // Source-of-truth constants + banners.
-edit('src/prebuild/constants.ts', (s) => s.replace(/RAYACT_ENGINE_VERSION = '[^']*'/, `RAYACT_ENGINE_VERSION = '${version}'`));
+edit('packages/rayact-prebuild/src/constants.ts', (s) => s.replace(/RAYACT_ENGINE_VERSION = '[^']*'/, `RAYACT_ENGINE_VERSION = '${version}'`));
 edit('packages/create-rayact-app/src/create.ts', (s) => s.replace(/const RAYACT_VERSION = '[^']*'/, `const RAYACT_VERSION = '${version}'`));
+edit('packages/rayact-renderer/src/reconciler.ts', (s) => s.replace(/rendererVersion: '[^']*'/, `rendererVersion: '${version}'`));
+edit('packages/rayact-dev-client/src/DevLauncherUI.tsx', (s) => s.replace(/DEV_CLIENT_VERSION = '[^']*'/, `DEV_CLIENT_VERSION = '${version}'`));
+edit('packages/rayact-dev-server/src/server.ts', (s) => s.replace(/Browser: 'Rayact\/[^']*'/, `Browser: 'Rayact/${version}'`));
 edit('native/desktop/main.cpp', (s) => s.replace(/Version \d+\.\d+\.\d+/, `Version ${version}`));
 edit('native/desktop/CMakeLists.txt', (s) => s.replace(/(project\(rayact_quickjs_desktop VERSION )\d+\.\d+\.\d+/, `$1${version}`));
 

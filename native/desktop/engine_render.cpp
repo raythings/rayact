@@ -11,6 +11,10 @@
 #include "worklet_runtime.hpp"
 #include "gesture_recognizer.hpp"
 #include "accessibility_bridge.hpp"
+#include "devtools.hpp"
+#ifndef RAYACT_PLATFORM_NET_BACKEND
+#include "net.hpp"
+#endif
 #include "../core/engine.hpp"
 #include "../core/config_loader.hpp"
 #ifndef RAYACT_NO_WORKERS
@@ -554,12 +558,16 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     // directional claim). Scroll never preempts ResolveInput.
     if (dispatchInput) {
         raym3::v2::BeginInputFrame(mouseDp, down, pressed, released, wheelY);
+        const bool inspectorConsumed =
+            handleInspectorPickInput(mouseDp, pressed, released);
         raym3::v2::NodeId preActive = raym3::v2::GetActiveId();
-        raym3::v2::ResolveInput(g_root);
-        raym3::v2::ResolveTextInput(g_root);
-        queueGlobalDesktopKeyboard(g_root);
-        raym3::v2::ResolveScrollInput(g_root);
-        inputDebugOnFrame(mouseDp, pressed, released, preActive);
+        if (!inspectorConsumed) {
+            raym3::v2::ResolveInput(g_root);
+            raym3::v2::ResolveTextInput(g_root);
+            queueGlobalDesktopKeyboard(g_root);
+            raym3::v2::ResolveScrollInput(g_root);
+            inputDebugOnFrame(mouseDp, pressed, released, preActive);
+        }
         rayactDrainDeferredInputCallbacks();
         if (engineThreadedModeEnabled())
             engineSignalVsync();
@@ -575,12 +583,51 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     if (rayactShouldApplyDpiDrawScale()) {
         rlScalef(dp, dp, 1.0f);
     }
+#ifndef RAYACT_NO_WORKERS
+    // A swapchain image cannot be assumed to contain the preceding frame.
+    // When a worker is the only producer that woke the loop, force the
+    // retained tree to repaint before compositing the worker's new buffer.
+    if (workersFramePending())
+        raym3::v2::MarkDirtyRect(bounds);
+#endif
 #if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
     SetMouseScale(1.0f / dp, 1.0f / dp); // M3 components call GetMousePosition() in dp space
 #else
     SetMouseScale(1.0f, 1.0f); // Desktop/web mouse positions are already logical.
 #endif
     raym3::v2::Render(g_root, bounds, /*layoutAlreadyComputed=*/!forceLayout);
+#ifndef RAYACT_NO_WORKERS
+    renderWorkerViews();
+#endif
+    // Worker canvases are external producers, but fixed-position UI is the
+    // framework's overlay layer (bottom sheets, dialogs, popovers, dev menu).
+    // Repaint each top-level fixed root after worker composition so those
+    // elements retain their normal always-on-top contract. The repaint helper
+    // preserves the full committed hit-test snapshot from the main tree pass.
+    const auto fixedOverlays = raym3::v2::GetFixedOverlayNodes();
+    std::set<raym3::v2::Node*> fixedSet;
+    for (const auto& node : fixedOverlays)
+        if (node) fixedSet.insert(node.get());
+    for (const auto& node : fixedOverlays) {
+        if (!node) continue;
+        bool nestedFixed = false;
+        auto parent = raym3::v2::CommittedParentOf(node.get());
+        while (parent) {
+            if (fixedSet.count(parent.get()) != 0) {
+                nestedFixed = true;
+                break;
+            }
+            parent = raym3::v2::CommittedParentOf(parent.get());
+        }
+        if (!nestedFixed)
+            raym3::v2::RenderOverlayRepaint(node, bounds);
+    }
+    // The draggable inspector pick bar is intentionally absolute (its x/y are
+    // updated while dragging), not fixed, and lives under renderer-owned
+    // developer chrome. Repaint that root as the final UI tier so both the
+    // pick bar and the dev menu stay above external worker producers.
+    if (auto devToolsRoot = findDevToolsRoot())
+        raym3::v2::RenderOverlayRepaint(devToolsRoot, bounds);
     drawInspectorHighlight();
     SetMouseScale(1.0f, 1.0f);
     rlPopMatrix();
@@ -680,6 +727,19 @@ void engineRenderFrameAndroid(int screenId, int width, int height) {
 }
 
 bool engineNeedsAnotherFrame() {
+    // DevTools: drain queued CDP commands even when the app is otherwise idle,
+    // so an attached Chrome frontend gets timely replies without user input.
+    if (devtoolsHasPendingWork())
+        return true;
+#ifndef RAYACT_PLATFORM_NET_BACKEND
+    // Undelivered fetch/SSE/WebSocket events (including CDP arriving over the dev
+    // client socket) are dispatched to JS in the per-frame net drain, so a frame
+    // must run while any are queued. (Android uses a Java net backend that wakes
+    // frames from its own callback thread instead.)
+    if (JSContext* ctx = engineContext())
+        if (netHasPendingEvents(ctx))
+            return true;
+#endif
     {
         // A queued touch event (e.g. the deferred UP of a one-pump tap) must
         // get a frame to dispatch in.
@@ -710,6 +770,12 @@ bool engineNeedsAnotherFrame() {
     }
     if (hasActiveStyleAnimations())
         return true;
+#ifndef RAYACT_NO_WORKERS
+    // Worker output (draw frames, node commands, messages) is drained on the
+    // JS pump and replayed during render — both need a frame.
+    if (workersFramePending())
+        return true;
+#endif
     bool needs = false;
     engineForEachVisibleScreen([&](int, const raym3::v2::NodePtr &root) {
         if (root && raym3::v2::NeedsAnotherFrame(root))

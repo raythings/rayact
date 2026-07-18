@@ -1,0 +1,13 @@
+{
+  "engineVersion": "0.0.3",
+  "moduleAbiVersion": 1,
+  "platform": "web",
+  "arch": "wasm32",
+  "requirements": [
+    "secure-context",
+    "webgpu",
+    "hardware-acceleration",
+    "coop",
+    "coep"
+  ]
+}

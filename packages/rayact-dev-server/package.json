@@ -1,0 +1,54 @@
+{
+  "name": "@rayact/dev-server",
+  "version": "0.0.3",
+  "description": "Rayact development server, bundler, and terminal UI",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "schema",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && mkdir -p schema && cp ../../schema/rayact.config.schema.json schema/",
+    "clean": "rm -rf dist schema"
+  },
+  "dependencies": {
+    "@rayact/devtools": "0.0.3",
+    "@rayact/prebuild": "0.0.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "bonjour-service": "^1.3.0",
+    "chokidar": "^4.0.3",
+    "esbuild": "^0.28.1",
+    "ink": "^7.0.5",
+    "qrcode-terminal": "^0.12.0",
+    "react": "^19.0.0",
+    "react-refresh": "^0.18.0",
+    "vite": "^7.3.6",
+    "ws": "^8.18.3"
+  },
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "license": "MIT",
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact-dev-server"
+  }
+}

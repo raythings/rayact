@@ -121,15 +121,18 @@ void IOSEngineInstance::callHostOrderSurfaces(const int* ids, int count) const {
 void IOSEngineInstance::callHostIme(
     const char* method, int nodeId, const std::string& value,
     const std::string& inputType, bool autocorrect, bool secure,
-    const std::string& imeAction) const {
+    const std::string& imeAction, const std::string& autoCapitalize,
+    bool contextMenuHidden) const {
     if (!hasHostCallbacks) return;
     void* ctx = hostCallbacks.context;
     if (strcmp(method, "showSoftKeyboard") == 0 && hostCallbacks.showSoftKeyboard)
         hostCallbacks.showSoftKeyboard(ctx, nodeId, value.c_str(), inputType.c_str(),
-                                       autocorrect, secure, imeAction.c_str());
+                                       autocorrect, secure, imeAction.c_str(),
+                                       autoCapitalize.c_str(), contextMenuHidden);
     else if (strcmp(method, "switchIme") == 0 && hostCallbacks.switchIme)
         hostCallbacks.switchIme(ctx, nodeId, value.c_str(), inputType.c_str(),
-                               autocorrect, secure, imeAction.c_str());
+                                autocorrect, secure, imeAction.c_str(),
+                                autoCapitalize.c_str(), contextMenuHidden);
 }
 
 void IOSEngineInstance::callHostCopyToClipboard(const std::string& text) const {
@@ -185,6 +188,13 @@ void iosEngineReleaseGraphics(int64_t handle) {
     if (!inst) return;
     releaseGraphicsLocked(inst);
     if (g_graphicsLeaseHolder == handle) g_graphicsLeaseHolder = 0;
+}
+
+void iosEngineRequestGraphicsFrame() {
+    std::lock_guard<std::mutex> leaseLock(g_graphicsLeaseMutex);
+    if (g_graphicsLeaseHolder == 0) return;
+    IOSEngineInstance* inst = iosEngineInstanceFromHandle(g_graphicsLeaseHolder);
+    if (inst) inst->callHostVoid("requestRenderFrame");
 }
 
 bool iosEngineAcquireGraphics(int64_t handle) {

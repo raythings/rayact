@@ -1,0 +1,102 @@
+{
+  "name": "rayact",
+  "version": "0.0.3",
+  "description": "Cross-platform React renderer with raylib backend",
+  "type": "module",
+  "sideEffects": [
+    "./dist/index.js",
+    "./dist/crypto/index.js"
+  ],
+  "bin": {
+    "rayact": "./bin/rayact.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "default": "./dist/runtime.js"
+    },
+    "./shared": {
+      "types": "./dist/shared.d.ts",
+      "default": "./dist/shared.js"
+    },
+    "./shared/material-icons": {
+      "types": "./dist/material-icons.d.ts",
+      "default": "./dist/material-icons.js"
+    },
+    "./crypto": {
+      "types": "./dist/crypto/index.d.ts",
+      "default": "./dist/crypto/index.js"
+    },
+    "./kv": {
+      "types": "./dist/kv/index.d.ts",
+      "default": "./dist/kv/index.js"
+    },
+    "./worker": {
+      "types": "./dist/worker/index.d.ts",
+      "default": "./dist/worker/index.js"
+    },
+    "./mmkv": {
+      "types": "./dist/mmkv.d.ts",
+      "default": "./dist/mmkv.js"
+    },
+    "./secure-store": {
+      "types": "./dist/secure-store.d.ts",
+      "default": "./dist/secure-store.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@rayact/cli": "0.0.3",
+    "@rayact/react": "0.0.3",
+    "@rayact/renderer": "0.0.3",
+    "@rayact/runtime": "0.0.3",
+    "@rayact/shared": "0.0.3"
+  },
+  "peerDependencies": {
+    "@rayact/mmkv": "0.0.3",
+    "@rayact/secure-store": "0.0.3",
+    "react": "^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@rayact/mmkv": {
+      "optional": true
+    },
+    "@rayact/secure-store": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "license": "MIT",
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact"
+  }
+}

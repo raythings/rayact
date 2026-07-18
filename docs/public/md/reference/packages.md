@@ -1,42 +1,53 @@
-# Packages & platforms
+# Packages and platforms
 
-Rayact is a monorepo of small `@rayact/*` packages plus per-platform prebuilts.
+Rayact uses one private npm workspace root with independently publishable packages. All first-party packages in the `0.0.3` release set use exact lockstep versions.
 
-## JavaScript packages
+## Consumer and framework
 
 | Package | Role |
 | --- | --- |
-| `@rayact/cli` | `rayact` command — dev, build, run, prebuild |
-| `@rayact/dev-server` | Vite bundler, dev server, config loader + schema |
-| `@rayact/prebuild` | Prebuilt resolution, downloader, plugin autolinking |
-| `@rayact/react` | React adapter for the host runtime |
-| `@rayact/runtime` | Renderer-agnostic host runtime |
-| `@rayact/core` | React reconciler host config |
-| `@rayact/renderer` | raylib graphics backend bindings |
-| `@rayact/quickjs` | QuickJS engine integration |
-| `@rayact/navigation` | `react-navigation` bindings |
-| `@rayact/shared` / `@rayact/types` | Shared utilities + ambient types |
-| `@rayact/mmkv` / `@rayact/secure-store` | Native storage plugins |
-| `create-rayact-app` | Project scaffolder |
+| `rayact` | Consumer umbrella; React APIs plus built-in KV, crypto, workers, and CLI forwarding |
+| `@rayact/shared` | Shared protocol and utility types |
+| `@rayact/runtime` | Host bridge, lifecycle, capabilities, reload state, and diagnostics |
+| `@rayact/renderer` | Reconciler and native command protocol |
+| `@rayact/react` | Components, hooks, themes, accessibility, and rendering entry points |
 
-## Prebuilt native hosts
+There is no public `@rayact/core` or `@rayact/quickjs` package.
 
-| Package | Platform | Ships |
-| --- | --- | --- |
-| `@rayact/prebuilt-darwin-arm64` | macOS arm64 | `rayact_desktop` + plugin dylibs |
-| `@rayact/prebuilt-darwin-x64` | macOS x64 | `rayact_desktop` + plugin dylibs |
-| `@rayact/prebuilt-linux-x64` | Linux x64 | `rayact_desktop` + plugin `.so` |
-| `@rayact/prebuilt-android-arm64` | Android arm64 | engine + plugin `.so` (JNI) |
-| `@rayact/prebuilt-ios-arm64` | iOS arm64 | `RayactEngine.xcframework` |
+## Optional features
 
-Each prebuilt carries a `manifest.json` (`engineVersion`, `moduleAbiVersion`,
-platform, arch). The CLI gates on `moduleAbiVersion` before using a prebuilt.
-
-## Platform support
-
-| Target | Status |
+| Package | Role |
 | --- | --- |
-| Desktop (macOS / Linux / Windows) | macOS/Linux prebuilts in `v0.0.1`; Windows source/build path |
-| Android | Supported |
-| iOS | Supported |
-| Web (WASM) | Supported; requires COOP/COEP serving for SharedArrayBuffer/WebGPU |
+| `@rayact/navigation` | Navigation bindings |
+| `@rayact/worklets` | Worklet APIs |
+| `@rayact/mmkv` | Optional high-performance storage module |
+| `@rayact/secure-store` | Optional Keychain/Keystore storage module |
+| `@rayact/crash-reporter` | Local-first, consent-gated crash reporting |
+
+Each native module owns `rayact.module.json`, native source, platform artifacts, declarations, tests, README, and changelog. Installing only one optional module does not add the other modules' binaries or registrations.
+
+## Tooling and distribution
+
+| Package | Role |
+| --- | --- |
+| `@rayact/cli` | `rayact` command |
+| `@rayact/dev-server` | Bundler, HMR, discovery, debugger, and inspector transport |
+| `@rayact/prebuild` | Manifest-based autolinking and native project generation |
+| `@rayact/dev-client` / `@rayact/devtools` | Client launcher and developer tools |
+| `create-rayact-app` | npm-first project scaffolder |
+| `@rayact/template-*` | Thin Android and iOS templates |
+| `@rayact/prebuilt-*` | Platform-specific engine artifacts |
+| `@rayact/dev-app` | Publishable official client that explicitly includes supported first-party modules |
+
+## Platform matrix
+
+| Target | Artifact | Status |
+| --- | --- | --- |
+| Android arm64 / x86_64 | engine `.so` packages | Tier 1 |
+| iOS device arm64; simulator arm64/x86_64 | engine XCFramework | Tier 1 |
+| macOS Apple Silicon (arm64) | desktop host package | Tier 1 |
+| Web wasm32 | WebGPU host package | Tier 1 |
+| Linux x64 | desktop host package | Preview |
+| Windows | source build | Graduation target |
+
+Every prebuilt carries an engine/version/ABI manifest. The CLI rejects incompatible native ABI or platform selections before linking.

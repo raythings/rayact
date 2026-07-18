@@ -4,9 +4,9 @@ Ships `RayactEngine.xcframework` — a real static-library XCFramework built fro
 `apps/ios`'s `RayactEngineStatic` target, which shares the exact same native
 sources as the `RayactIOS` dev-app target.
 
-Two slices: `ios-arm64` (device) and `ios-arm64-simulator` (Apple Silicon
-simulator; no Intel simulator slice, matching the project's "minimal but
-correct" precedent of the Android prebuilt shipping only `arm64-v8a`).
+The release XCFramework contains device arm64 and simulator arm64/x86_64
+slices. It contains only the generic engine; optional modules such as MMKV,
+Secure Store, and Crash Reporter provide their own XCFrameworks.
 
 Built with `-library`/`-headers`, **not** `-framework`: consumers bind to the
 engine purely via Swift `@_silgen_name`, resolved at link time — there's no

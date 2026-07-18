@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import { render } from 'rayact/react';
-import { DevLauncherProvider, DevLauncherUI, DevMenu } from 'rayact/dev-client';
+import { DevLauncherProvider, DevLauncherUI, DevMenu, getOfficialApp } from '@rayact/dev-client';
 
 function App() {
   return (
@@ -20,7 +20,7 @@ function App() {
 
 const host = globalThis as { initRaylib?: (w: number, h: number, t: string) => void };
 if (typeof host.initRaylib === 'function') {
-  host.initRaylib(420, 820, 'Rayact Dev App');
+  host.initRaylib(420, 820, getOfficialApp().displayName || 'Rayact Dev App');
 }
 
 render(<App />);

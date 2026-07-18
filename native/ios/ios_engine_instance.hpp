@@ -87,7 +87,9 @@ struct IOSEngineInstance {
     std::string callHostString(const char* method) const;
     void callHostIme(const char* method, int nodeId, const std::string& value,
                      const std::string& inputType, bool autocorrect, bool secure,
-                     const std::string& imeAction) const;
+                     const std::string& imeAction,
+                     const std::string& autoCapitalize,
+                     bool contextMenuHidden) const;
     void callHostCopyToClipboard(const std::string& text) const;
     void callHostUpdateImeState(int nodeId, int selectionStart, int selectionEnd,
                                 int composingStart, int composingEnd,
@@ -98,6 +100,7 @@ int64_t iosEngineInstanceCreate(const std::string& dataPath);
 void iosEngineInstanceDestroy(int64_t handle);
 bool iosEngineAcquireGraphics(int64_t handle);
 void iosEngineReleaseGraphics(int64_t handle);
+void iosEngineRequestGraphicsFrame();
 
 void iosEngineLoadInstanceState(IOSEngineInstance* inst);
 void iosEngineSaveInstanceState(IOSEngineInstance* inst);

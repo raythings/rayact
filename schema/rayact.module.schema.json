@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rayact.dev/schema/rayact.module.schema.json",
+  "title": "Rayact native module manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "name", "package", "jsEntry", "library", "platforms", "architectures", "abiRange", "engineRange", "artifacts", "linkage", "permissions", "configurationSchema", "officialDevApp"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "package": { "type": "string" },
+    "jsEntry": { "type": "string" },
+    "library": { "type": "string" },
+    "platforms": { "type": "array", "uniqueItems": true, "items": { "enum": ["android", "ios", "darwin", "linux", "windows", "web"] } },
+    "architectures": { "type": "array", "uniqueItems": true, "items": { "enum": ["arm64", "x86_64", "wasm32"] } },
+    "abiRange": { "type": "string" },
+    "engineRange": { "type": "string" },
+    "linkage": { "enum": ["dynamic", "static", "framework"] },
+    "permissions": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+    "configurationSchema": { "type": "object" },
+    "officialDevApp": { "type": "boolean" },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["platform", "architecture", "path", "sha256"],
+        "properties": {
+          "platform": { "type": "string" },
+          "architecture": { "type": "string" },
+          "path": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    }
+  }
+}

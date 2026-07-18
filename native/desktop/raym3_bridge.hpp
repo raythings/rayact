@@ -5,6 +5,8 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include <cstdint>
+#include <cstddef>
 
 extern "C" {
 #include "quickjs.h"
@@ -34,6 +36,9 @@ JSValue JS_createModal(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createSafeArea(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createExternalView(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setExternalViewProps(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_focusTextInput(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_setAccessibilityFocus(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_getReducedMotion(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createStatusBar(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createActivityIndicator(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createAvoidKeyboard(JSContext*, JSValue, int, JSValueConst*);
@@ -80,7 +85,9 @@ JSValue JS_loadEmoji(JSContext*, JSValue, int, JSValueConst*);
 #if defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
 void AndroidKeyboard_ShowForNode(int nodeId, const std::string &inputType,
                                  bool autocorrect, bool secure,
-                                 const std::string &imeAction);
+                                 const std::string &imeAction,
+                                 const std::string &autoCapitalize = "sentences",
+                                 bool contextMenuHidden = false);
 void AndroidKeyboard_Hide();
 void AndroidKeyboard_UpdateSelection(int nodeId, int selectionStart, int selectionEnd,
                                      int composingStart, int composingEnd,
@@ -93,6 +100,8 @@ void rayactSetTextInputContent(int nodeId, const char *text, int selectionStart 
                                int selectionEnd = -1, int composingStart = -1,
                                int composingEnd = -1);
 void rayactBlurFocusedTextInput();
+void rayactSubmitFocusedTextInput();
+JSValue JS_setTextInputProps(JSContext*, JSValue, int, JSValueConst*);
 
 // External (platform) views: host callbacks for layout-rect pushes and input
 // forwarding, plus texture replacement (e.g. backend AHardwareBuffer imports).
@@ -132,6 +141,14 @@ void installAnimatedStyleBuffer(JSContext* ctx, JSValue global);
 // in native (no per-field JS reads). Opcodes mirror packages/rayact-react/src/protocol.ts.
 void installCommandBuffer(JSContext* ctx, JSValue global);
 JSValue JS_rayactFlushCommands(JSContext*, JSValue, int, JSValueConst*);
+// Worker node-command lane: applies a binary mutation stream (same opcodes as
+// the JS command buffer) recorded inside a worker. Node/string ids remap into
+// per-worker namespaces; RCMD_SET_ROOT attaches under `viewNodeId` (the
+// worker's view node) instead of the app root. JS-pump thread only.
+void rayactApplyWorkerNodeCommands(int workerId, int viewNodeId,
+                                   const uint8_t* base, size_t len);
+// Drops a worker's remap state and its created nodes (terminate path).
+void rayactReleaseWorkerNodes(int workerId);
 void tickAnimatedStyles(JSContext* ctx);
 bool hasActiveStyleAnimations();
 void applyAnimatedStylesToNodes();
@@ -169,5 +186,22 @@ void engineSetScreenStack(const std::vector<int>& ids);
 void engineForEachVisibleScreen(const std::function<void(int, const raym3::v2::NodePtr&)>& fn);
 
 std::string buildNodeTreeJson();
+// Chrome DevTools (CDP) shapes. CDP nodeIds are rayact node ids offset by +1
+// (nodeId 1 is the #document wrapper emitted by the CDP handler).
+std::string buildCdpDomJson();
+std::string buildCdpNodeStyleJson(int cdpNodeId);
+std::string buildCdpComputedStyleJson(int cdpNodeId);
+std::string buildCdpBoxModelJson(int cdpNodeId);
+int rayactNodeIdFromCdpId(int cdpNodeId);
 void setInspectorHighlight(int nodeId);
+void setInspectorPickMode(bool enabled);
+void setInspectorSourceName(int nodeId, const char* name);
+void clearInspectorSourceName(int nodeId);
+int getInspectorPickedNode();
+int getInspectorNodeAt(float x, float y);
+// Selects the deepest project node at a point while inspector pick mode is
+// active. Returns true when the pointer sequence belongs to the inspector and
+// must not be delivered to the project.
+bool handleInspectorPickInput(Vector2 pointDp, bool pressed, bool released);
 void drawInspectorHighlight();
+raym3::v2::NodePtr findDevToolsRoot();

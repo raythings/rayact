@@ -1,0 +1,80 @@
+{
+  "$schema": "../../schema/rayact.module.schema.json",
+  "schemaVersion": 1,
+  "name": "crash-reporter",
+  "package": "@rayact/crash-reporter",
+  "jsEntry": ".",
+  "library": "rayact_crash_reporter",
+  "platforms": [
+    "android",
+    "ios",
+    "darwin",
+    "web"
+  ],
+  "architectures": [
+    "arm64",
+    "x86_64",
+    "wasm32"
+  ],
+  "abiRange": ">=1 <2",
+  "engineRange": ">=0.0.3 <0.1.0",
+  "linkage": "dynamic",
+  "permissions": [
+    "crash-report-storage",
+    "network-when-consented"
+  ],
+  "configurationSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "mode": {
+        "enum": [
+          "local",
+          "upload"
+        ]
+      },
+      "endpoint": {
+        "type": "string",
+        "format": "uri"
+      },
+      "maxStoredReports": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      }
+    }
+  },
+  "officialDevApp": true,
+  "artifacts": [
+    {
+      "platform": "android",
+      "architecture": "arm64",
+      "path": "android/arm64-v8a/librayact_crash_reporter.so",
+      "sha256": "0b05f2bea504c4850d43c0444f152347c04f495ab59c933686f565c32f56c6bb"
+    },
+    {
+      "platform": "android",
+      "architecture": "x86_64",
+      "path": "android/x86_64/librayact_crash_reporter.so",
+      "sha256": "982cc5ae4736d39b106a311d95b1d80eaae5e527519622922fb9dca223878c3e"
+    },
+    {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "path": "darwin-arm64/librayact_crash_reporter.dylib",
+      "sha256": "2e5414328e6ec76673e7b160f6cd1edcce1bc4a34cb94d59d294dd21fbae11e9"
+    },
+    {
+      "platform": "darwin",
+      "architecture": "x86_64",
+      "path": "darwin-x64/librayact_crash_reporter.dylib",
+      "sha256": "4b50ded24a17f6bd32da7181b43afd3c924a2e5d7878bfd2e0df34c16463e4a6"
+    },
+    {
+      "platform": "ios",
+      "architecture": "universal",
+      "path": "ios/rayact_crash_reporter.xcframework",
+      "sha256": "6a9f8886495a60127c2d45fa6df99402c720c221de82e31445c729f8212f78cd"
+    }
+  ]
+}

@@ -11,15 +11,18 @@ struct RayactIOSHostCallbacks {
     void (*releaseSurface)(void* ctx, int surfaceId) = nullptr;
     void (*orderSurfaces)(void* ctx, const int* ids, int count) = nullptr;
     void (*requestRenderFrame)(void* ctx) = nullptr;
+    void (*sendDevtoolsMessage)(void* ctx, const char* message) = nullptr;
     void (*toggleDevMenu)(void* ctx) = nullptr;
     void (*performHapticFeedback)(void* ctx) = nullptr;
     void (*hideSoftKeyboard)(void* ctx) = nullptr;
     void (*finishActivity)(void* ctx) = nullptr;
     void (*stopRenderScheduler)(void* ctx) = nullptr;
     void (*showSoftKeyboard)(void* ctx, int nodeId, const char* value, const char* inputType,
-                             bool autocorrect, bool secure, const char* imeAction) = nullptr;
+                             bool autocorrect, bool secure, const char* imeAction,
+                             const char* autoCapitalize, bool contextMenuHidden) = nullptr;
     void (*switchIme)(void* ctx, int nodeId, const char* value, const char* inputType,
-                      bool autocorrect, bool secure, const char* imeAction) = nullptr;
+                      bool autocorrect, bool secure, const char* imeAction,
+                      const char* autoCapitalize, bool contextMenuHidden) = nullptr;
     void (*copyToClipboard)(void* ctx, const char* text) = nullptr;
     const char* (*readClipboard)(void* ctx) = nullptr;
     void (*updateImeState)(void* ctx, int nodeId, int selectionStart, int selectionEnd,

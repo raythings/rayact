@@ -19,24 +19,26 @@ Add the `$schema` key for editor autocomplete:
 
 | Field | Type | Description |
 | --- | --- | --- |
+| `name` | string | Cross-platform display name used by generated clients and dev-server discovery. |
 | `rayactAppKey` | string | Stable app identifier. Also seeds the container-pack obfuscation key. |
 | `entry` | string | Entry source file (e.g. src/App.tsx), relative to the project root. |
-| `platform` | `desktop` \| `android` \| `ios` \| `web` | Default build/run target. |
+| `platform` | `desktop` \| `android` \| `ios` \| `web` | Deprecated. Use command flags such as --desktop, --android, --ios, or --web. |
 | `devServer` | object |  |
 | `devServer.host` | string |  |
 | `devServer.port` | integer |  |
 | `devServer.cdpPort` | integer |  |
+| `devServer.strictPort` | boolean | Fail if devServer.port is already in use instead of picking the next free port. |
 | `android` | object |  |
-| `android.package` | string |  |
+| `android.package` | string | Deprecated Android application id alias. Use packageName. |
 | `android.projectDir` | string | Gradle project dir (contains gradlew), relative to project root. |
-| `android.activity` | string |  |
-| `android.appName` | string |  |
-| `android.packageName` | string |  |
+| `android.activity` | string | Optional fully qualified Android activity class. Defaults to the prebuilt Rayact host activity. |
+| `android.appName` | string | Deprecated Android-only display name. Use top-level name. |
+| `android.packageName` | string | Android application id used by prebuild, install, and launch. |
 | `android.icon` | string |  |
 | `ios` | object |  |
 | `ios.projectDir` | string |  |
-| `ios.bundleId` | string |  |
-| `nativeModules` | object[] | Native plugin modules the host bundles / the project requires. |
+| `ios.bundleId` | string | iOS product bundle identifier used by prebuild, install, and launch. |
+| `nativeModules` | any[] | Installed native modules autolink automatically. Entries may disable or configure a package. Legacy name/lib/jsPackage objects are accepted with a warning through 0.0.x. |
 | `transform` | object | Per-build-mode transforms. Defaults: dev=false, debug=false, release=true. |
 | `transform.minify` | object |  |
 | `transform.minify.dev` | boolean |  |
@@ -51,5 +53,6 @@ Add the `$schema` key for editor autocomplete:
 | `pack.obfuscate` | boolean | XOR-obfuscate pack entries with a key derived from rayactAppKey. Default false. |
 | `pack.maxChunkSize` | integer | Max bytes per pack chunk before splitting. Default 104857600 (100 MB). |
 
-> Transforms default to `dev=false, debug=false, release=true`. Only record an
-> override — e.g. `"transform": { "bytecode": { "release": false } }`.
+> Transforms default to `dev=false, debug=false, release=true`. Development and
+> debug transforms can be overridden. Release bytecode is mandatory; a legacy
+> `transform.bytecode.release=false` value is accepted but ignored.

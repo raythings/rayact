@@ -143,6 +143,25 @@ void AndroidEngineInstance::callHostVoid(const char* method) const {
     if (needDetach) g_jvm->DetachCurrentThread();
 }
 
+void AndroidEngineInstance::callHostStringArg(const char* method, const std::string& value) const {
+    if (!g_jvm || !hostCallbacksGlobal) return;
+    JNIEnv* env = nullptr;
+    bool needDetach = false;
+    if (!attachEnv(&env, &needDetach)) return;
+    jclass cls = env->GetObjectClass(hostCallbacksGlobal);
+    if (cls) {
+        jmethodID m = env->GetMethodID(cls, method, "(Ljava/lang/String;)V");
+        if (m) {
+            jstring arg = env->NewStringUTF(value.c_str());
+            env->CallVoidMethod(hostCallbacksGlobal, m, arg);
+            env->DeleteLocalRef(arg);
+        }
+        env->DeleteLocalRef(cls);
+    }
+    if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); }
+    if (needDetach) g_jvm->DetachCurrentThread();
+}
+
 std::string AndroidEngineInstance::callHostString(const char* method) const {
     if (!g_jvm || !hostCallbacksGlobal) return {};
     JNIEnv* env = nullptr;
@@ -202,7 +221,8 @@ void AndroidEngineInstance::callHostOrderSurfaces(const int* ids, int count) con
 void AndroidEngineInstance::callHostIme(
     const char* method, int nodeId, const std::string& value,
     const std::string& inputType, bool autocorrect, bool secure,
-    const std::string& imeAction) const {
+    const std::string& imeAction, const std::string& autoCapitalize,
+    bool contextMenuHidden) const {
     if (!g_jvm || !hostCallbacksGlobal) return;
     JNIEnv* env = nullptr;
     bool needDetach = false;
@@ -211,13 +231,16 @@ void AndroidEngineInstance::callHostIme(
     if (cls) {
         jmethodID m = env->GetMethodID(
             cls, method,
-            "(ILjava/lang/String;Ljava/lang/String;ZZLjava/lang/String;)V");
+            "(ILjava/lang/String;Ljava/lang/String;ZZLjava/lang/String;Ljava/lang/String;Z)V");
         if (m) {
             jstring jVal = env->NewStringUTF(value.c_str());
             jstring jInputType = env->NewStringUTF(inputType.c_str());
             jstring jImeAction = env->NewStringUTF(imeAction.c_str());
+            jstring jAutoCapitalize = env->NewStringUTF(autoCapitalize.c_str());
             env->CallVoidMethod(hostCallbacksGlobal, m, (jint)nodeId, jVal, jInputType,
-                                (jboolean)autocorrect, (jboolean)secure, jImeAction);
+                                (jboolean)autocorrect, (jboolean)secure, jImeAction,
+                                jAutoCapitalize, (jboolean)contextMenuHidden);
+            env->DeleteLocalRef(jAutoCapitalize);
             env->DeleteLocalRef(jImeAction);
             env->DeleteLocalRef(jInputType);
             env->DeleteLocalRef(jVal);
@@ -324,6 +347,16 @@ void androidEngineReleaseGraphics(jlong handle) {
     if (!inst) return;
     releaseGraphicsLocked(inst);
     if (g_graphicsLeaseHolder == handle) g_graphicsLeaseHolder = 0;
+}
+
+void androidEngineRequestGraphicsFrame() {
+    // Instance destruction and lease transfer both take this mutex first, so
+    // the host callback remains alive for the duration of this cross-thread
+    // JNI call.
+    std::lock_guard<std::mutex> leaseLock(g_graphicsLeaseMutex);
+    if (g_graphicsLeaseHolder == 0) return;
+    AndroidEngineInstance* inst = androidEngineInstanceFromHandle(g_graphicsLeaseHolder);
+    if (inst) inst->callHostVoid("requestRenderFrame");
 }
 
 bool androidEngineAcquireGraphics(jlong handle) {

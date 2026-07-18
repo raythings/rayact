@@ -68,4 +68,8 @@ private:
 EngineRuntime* engineRuntimeActive();
 void engineRuntimeSetActive(EngineRuntime* runtime);
 
+// Thread-safe host wakeup used by native worker producers. The render thread
+// may be idle when a worker publishes its first/next retained frame.
+void androidRequestRenderFrame();
+
 } // namespace rayact

@@ -1,30 +1,25 @@
 {
-  "$schema": "../../node_modules/rayact/dist/schema/rayact.config.schema.json",
+  "$schema": "../../schema/rayact.config.schema.json",
+  "name": "Rayact Dev App",
   "rayactAppKey": "rayact-dev-app",
   "devServer": {
     "host": "0.0.0.0",
     "port": 8083,
-    "cdpPort": 9231
+    "cdpPort": 9229
   },
   "entry": "src/App.tsx",
   "android": {
     "projectDir": "../android",
-    "package": "com.rayact.app",
-    "activity": ".DevLauncherActivity",
-    "appName": "Rayact Dev App",
-    "packageName": "com.rayact.devapp",
+    "packageName": "com.rayact.app",
     "icon": "src/assets/icon.png"
   },
   "ios": {
     "projectDir": "../ios",
-    "bundleId": "com.rayact.ios"
+    "bundleId": "com.rayact.app"
   },
   "nativeModules": [
-    { "name": "kv", "lib": "", "jsPackage": "rayact/runtime" },
-    { "name": "mmkv", "lib": "rayact_mmkv", "jsPackage": "rayact/mmkv" },
-    { "name": "secure-store", "lib": "rayact_secure_store", "jsPackage": "rayact/secure-store" }
-  ],
-  "transform": {
-    "bytecode": { "release": false }
-  }
+    "@rayact/mmkv",
+    "@rayact/secure-store",
+    "@rayact/crash-reporter"
+  ]
 }

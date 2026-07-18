@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 /*
- * Runs the rayact CLI with the prebuilt dev-app's branding + bundled-module list
- * injected into the dev-client bundle. Reads official-app.json (branding) and
- * rayact.config.json `nativeModules` (the plugins this host bundles), exports
- * them as the env vars the dev-server bundler inlines via defines
- * (__RAYACT_OFFICIAL_APP__ / __RAYACT_BUNDLED_MODULES__), then execs:
+ * Runs the rayact CLI with the prebuilt dev-app's branding injected into the
+ * dev-client bundle. Bundled modules are resolved canonically from installed
+ * package manifests + rayact.config.json by @rayact/dev-server.
  *
  *   node scripts/with-branding.cjs build --android
  */
@@ -24,22 +22,26 @@ function readJson(file, fallback) {
 }
 
 const official = readJson('official-app.json', {});
-const config = readJson('rayact.config.json', {});
-const nativeModules = Array.isArray(config.nativeModules) ? config.nativeModules : [];
 
 function resolveCli() {
+  // The dev app is part of this workspace. Prefer its freshly built CLI over a
+  // hoisted/global `rayact` package, which can otherwise silently bundle an
+  // older launcher implementation into the native hosts.
+  const workspaceCli = path.resolve(appRoot, '../../packages/rayact-cli/dist/cli.js');
+  if (fs.existsSync(workspaceCli)) return workspaceCli;
+  const compatibilityCli = path.resolve(appRoot, '../../dist/cli/cli.js');
+  if (fs.existsSync(compatibilityCli)) return compatibilityCli;
   try {
     const rayactPackageJson = createRequire(path.join(appRoot, 'package.json')).resolve('rayact/package.json');
     return path.join(path.dirname(rayactPackageJson), 'bin/rayact.js');
   } catch {
-    return path.resolve(appRoot, '../../dist/cli/cli.js');
+    return compatibilityCli;
   }
 }
 
 const env = {
   ...process.env,
-  RAYACT_DEV_CLIENT_OFFICIAL_APP_METADATA_JSON: JSON.stringify(official),
-  RAYACT_DEV_CLIENT_BUNDLED_MODULES_JSON: JSON.stringify(nativeModules)
+  RAYACT_DEV_CLIENT_OFFICIAL_APP_METADATA_JSON: JSON.stringify(official)
 };
 
 const args = process.argv.slice(2);

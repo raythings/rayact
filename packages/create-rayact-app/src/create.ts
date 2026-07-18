@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
  * Bumped in lockstep with the published package version — keep this the single
  * source of truth so a release bump is a one-line change here.
  */
-const RAYACT_VERSION = '0.0.2';
+const RAYACT_VERSION = '0.0.3';
 
 export interface CreateOptions {
   projectName: string;
@@ -51,10 +51,10 @@ function depBlock(options: CreateOptions): {
   devDependencies: Record<string, string>;
 } {
   const devDependencies = {
-    '@types/node': '^25.0.0',
+    '@types/node': '^24.0.0',
     '@types/react': '^19.0.0',
     typescript: '^5.8.3',
-    vite: '^7.2.6'
+    vite: '^7.3.6'
   };
 
   const localRoot = options.localRayactPath
@@ -63,7 +63,8 @@ function depBlock(options: CreateOptions): {
     const abs = path.resolve(localRoot);
     const rel = path.relative(options.targetDir, abs).replace(/\\/g, '/');
     const dependencies: Record<string, string> = {
-      rayact: `file:${rel}`,
+      rayact: `file:${rel}/packages/rayact`,
+      '@rayact/dev-server': `file:${rel}/packages/rayact-dev-server`,
       react: '^19.0.0'
     };
     const prebuilt = hostPrebuiltFolder();
@@ -73,11 +74,10 @@ function depBlock(options: CreateOptions): {
     return { dependencies, devDependencies };
   }
 
-  const releaseAsset = (name: string) =>
-    `https://github.com/raythings/rayact/releases/download/v${RAYACT_VERSION}/${name}-${RAYACT_VERSION}.tgz`;
   return {
     dependencies: {
-      rayact: releaseAsset('rayact'),
+      rayact: RAYACT_VERSION,
+      '@rayact/dev-server': RAYACT_VERSION,
       react: '^19.0.0'
     },
     devDependencies
@@ -101,12 +101,12 @@ function copyTemplateFile(src: string, dest: string, vars: Record<string, string
 export function detectMonorepoRoot(fromDir: string): string | null {
   let dir = path.resolve(fromDir);
   for (let i = 0; i < 6; i++) {
-    // The collapsed rayact repo: root package named "rayact" with src/react.
+    // The Expo-style Rayact workspace root.
     const pkgPath = path.join(dir, 'package.json');
-    if (fs.existsSync(pkgPath) && fs.existsSync(path.join(dir, 'src', 'react'))) {
+    if (fs.existsSync(pkgPath) && fs.existsSync(path.join(dir, 'packages', 'rayact-react'))) {
       try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { name?: string };
-        if (pkg.name === 'rayact') return dir;
+        if (pkg.name === '@rayact/workspace') return dir;
       } catch {
         // Unreadable package.json — keep walking up.
       }
@@ -158,7 +158,7 @@ export function createRayactApp(options: CreateOptions): void {
 
   const pkg = {
     name: options.projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-    version: '0.1.0',
+    version: '0.0.3',
     private: true,
     type: 'module',
     description: 'Rayact app',
@@ -176,7 +176,7 @@ export function createRayactApp(options: CreateOptions): void {
       'build:android': 'rayact build --release --android',
       'build:android:install': 'rayact build --release --android --install',
       'build:ios': 'rayact build --release --ios',
-      'build:web': 'rayact build --release --web --no-bytecode',
+      'build:web': 'rayact build --release --web',
       start: 'rayact start',
       'start:dev': 'rayact start --dev'
     },

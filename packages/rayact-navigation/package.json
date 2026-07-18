@@ -1,0 +1,59 @@
+{
+  "name": "@rayact/navigation",
+  "version": "0.0.3",
+  "description": "Navigation primitives for Rayact applications",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./native": {
+      "types": "./dist/native.d.ts",
+      "default": "./dist/native.js"
+    },
+    "./stack": {
+      "types": "./dist/stack.d.ts",
+      "default": "./dist/stack.js"
+    },
+    "./bottom-tabs": {
+      "types": "./dist/bottom-tabs.d.ts",
+      "default": "./dist/bottom-tabs.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@react-navigation/core": "^7.0.0",
+    "@react-navigation/routers": "^7.0.0"
+  },
+  "peerDependencies": {
+    "@rayact/react": "0.0.3",
+    "react": "^19.0.0"
+  },
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "license": "MIT",
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact-navigation"
+  }
+}

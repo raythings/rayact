@@ -6,8 +6,5 @@
     "port": 8082,
     "cdpPort": 9230
   },
-  "entry": "src/App.tsx",
-  "transform": {
-    "bytecode": { "release": false }
-  }
+  "entry": "src/App.tsx"
 }

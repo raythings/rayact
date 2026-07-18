@@ -32,6 +32,7 @@ jobs:
             ${{ env.RAYACT_ROOT }}/packages/prebuilt-linux-x64/**
             ${{ env.RAYACT_ROOT }}/packages/rayact-mmkv/android/**
             ${{ env.RAYACT_ROOT }}/packages/rayact-secure-store/android/**
+            ${{ env.RAYACT_ROOT }}/packages/rayact-crash-reporter/android/**
 
   prebuilts-macos:
     runs-on: macos-14
@@ -47,7 +48,13 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
+
+      - name: Install and build Rayact CLI
+        working-directory: ${{ env.RAYACT_ROOT }}
+        run: |
+          npm install --force --no-audit --no-fund
+          npm run build
 
       - name: Install xcodegen
         run: brew install xcodegen
@@ -55,6 +62,25 @@ jobs:
       - name: Build macOS prebuilts + dev-app iOS
         working-directory: ${{ env.RAYACT_ROOT }}
         run: node scripts/build-prebuilts.mjs --target darwin --target ios --target dev-app
+
+      - name: Invoke every official module on an iOS simulator
+        working-directory: ${{ env.RAYACT_ROOT }}
+        shell: bash
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);const d=Object.values(j.devices).flat().find(x=>x.isAvailable&&x.name.includes('iPhone'));if(!d)process.exit(1);process.stdout.write(d.udid)})")
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          node dist/cli/cli.js build --release --ios --install --entry apps/dev-app/src/ModuleTest.tsx --out apps/dev-app/.module-smoke
+          xcrun simctl terminate "$DEVICE" com.rayact.app || true
+          xcrun simctl launch --console "$DEVICE" com.rayact.app > /tmp/rayact-module-smoke.log 2>&1 &
+          CONSOLE_PID=$!
+          for _ in $(seq 1 30); do
+            if grep -q 'MODTEST secure-store-roundtrip PASS' /tmp/rayact-module-smoke.log; then break; fi
+            sleep 1
+          done
+          kill "$CONSOLE_PID" || true
+          cat /tmp/rayact-module-smoke.log
+          node scripts/record-dev-app-smoke.mjs ios-simulator /tmp/rayact-module-smoke.log
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -65,6 +91,7 @@ jobs:
             ${{ env.RAYACT_ROOT }}/packages/prebuilt-ios-arm64/**
             ${{ env.RAYACT_ROOT }}/packages/rayact-mmkv/darwin-arm64/**
             ${{ env.RAYACT_ROOT }}/packages/rayact-secure-store/darwin-arm64/**
+            ${{ env.RAYACT_ROOT }}/packages/rayact-crash-reporter/darwin-arm64/**
             ${{ env.RAYACT_ROOT }}/apps/dev-app/dist/**
 
   release:
@@ -87,7 +114,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Merge artifacts into packages tree
         run: rsync -av merged/ "$RAYACT_ROOT/"
@@ -99,6 +126,10 @@ jobs:
         run: |
           chmod +x scripts/verify-prebuilts.sh
           ./scripts/verify-prebuilts.sh
+
+      - name: Gate official dev-app module completeness
+        working-directory: ${{ env.RAYACT_ROOT }}
+        run: node scripts/verify-dev-app-modules.mjs --require-device-smoke
 
       - name: Build publishable JS packages
         working-directory: ${{ env.RAYACT_ROOT }}

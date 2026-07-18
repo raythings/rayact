@@ -28,6 +28,15 @@ function walk(dir, acc = []) {
   return acc;
 }
 
+function walkGeneratedMarkdown(dir, acc = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const file = path.join(dir, entry.name);
+    if (entry.isDirectory()) walkGeneratedMarkdown(file, acc);
+    else if (entry.name.endsWith('.md')) acc.push(file);
+  }
+  return acc;
+}
+
 function meta(md) {
   const title = (md.match(/^#\s+(.+)$/m) || [, path.basename])[1]?.trim() ?? 'Untitled';
   // First non-empty, non-heading, non-comment line as the summary.
@@ -81,9 +90,17 @@ const outputs = [
   // Per-page raw markdown copies (so each page has an llm-readable .md URL).
   ...pages.map((p) => [path.join(PUBLIC, 'md', p.rel), p.md])
 ];
+const expectedOutputs = new Set(outputs.map(([file]) => file));
+const generatedMarkdownRoot = path.join(PUBLIC, 'md');
+const orphanedOutputs = fs.existsSync(generatedMarkdownRoot)
+  ? walkGeneratedMarkdown(generatedMarkdownRoot).filter(file => !expectedOutputs.has(file))
+  : [];
 
 const check = process.argv.includes('--check');
-let stale = false;
+let stale = orphanedOutputs.length > 0;
+if (!check) {
+  for (const file of orphanedOutputs) fs.rmSync(file);
+}
 for (const [file, content] of outputs) {
   const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
   if (current === content) continue;

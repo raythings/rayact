@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(rayact VERSION 0.1.0 LANGUAGES CXX C)
+project(rayact VERSION 0.0.3 LANGUAGES CXX C)
 
 # C++ Standard
 set(CMAKE_CXX_STANDARD 17)
@@ -52,7 +52,7 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 # --- External Dependencies ---
 
 # QuickJS
-set(QUICKJS_DIR "${CMAKE_SOURCE_DIR}/../quickjs")
+set(QUICKJS_DIR "${CMAKE_SOURCE_DIR}/third_party/quickjs")
 if(EXISTS ${QUICKJS_DIR}/quickjs.h)
     include_directories(${QUICKJS_DIR})
     message(STATUS "Found QuickJS at: ${QUICKJS_DIR}")
@@ -68,7 +68,7 @@ endif()
 
 # Raylib
 if(ENABLE_DESKTOP)
-    set(RAYLIB_DIR "${CMAKE_SOURCE_DIR}/../raylib")
+    set(RAYLIB_DIR "${CMAKE_SOURCE_DIR}/third_party/raylib")
 
     # Try different paths for raylib.h
     if(EXISTS "${RAYLIB_DIR}/src/raylib.h")
@@ -79,35 +79,6 @@ if(ENABLE_DESKTOP)
         message(STATUS "Found raylib.h in directory")
     else()
         message(FATAL_ERROR "raylib.h not found in ${RAYLIB_DIR}")
-    endif()
-
-    # Find raylib library - try multiple paths
-    find_library(RAYLIB_LIBRARY NAMES raylib
-        PATHS
-            ${RAYLIB_DIR}
-            ${RAYLIB_DIR}/lib
-            ${RAYLIB_DIR}/build
-            ${RAYLIB_DIR}/build/lib
-            ${RAYLIB_DIR}/build/src
-            ${RAYLIB_DIR}/build/Raylib)
-
-    if(NOT RAYLIB_LIBRARY)
-        message(FATAL_ERROR "raylib library not found. Looking in all possible locations...")
-        message(STATUS "Available library locations:")
-        list(APPEND RAYLIB_LIBRARY_PATHS
-            ${RAYLIB_DIR}
-            ${RAYLIB_DIR}/lib
-            ${RAYLIB_DIR}/build
-            ${RAYLIB_DIR}/build/lib
-            ${RAYLIB_DIR}/build/src
-            ${RAYLIB_DIR}/build/Raylib)
-        find_library(RAYLIB_LIBRARY NAMES raylib PATHS ${RAYLIB_LIBRARY_PATHS})
-    endif()
-
-    if(RAYLIB_LIBRARY)
-        message(STATUS "Found raylib library: ${RAYLIB_LIBRARY}")
-    else()
-        message(FATAL_ERROR "raylib library not found in ${RAYLIB_DIR}")
     endif()
 
     message(STATUS "Found raylib at: ${RAYLIB_DIR}")

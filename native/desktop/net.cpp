@@ -2,6 +2,8 @@
 // Requires: libcurl, libwebsockets, OpenSSL
 
 #include "net.hpp"
+#include "../core/engine.hpp"
+#include <functional>
 
 extern "C" {
 #include "quickjs.h"
@@ -61,11 +63,24 @@ struct NetEvent {
 struct NetEventQueue {
     std::mutex            mtx;
     std::vector<NetEvent> events;
-    void push(NetEvent ev) { std::lock_guard<std::mutex> lk(mtx); events.push_back(std::move(ev)); }
+    // Set only for the main render context's queue: invoked (outside the lock)
+    // when an event lands on an empty queue, so an idle on-demand host wakes a
+    // frame to deliver it (fetch/SSE/WebSocket, incl. CDP over the dev socket).
+    std::function<void()> onFirstEvent;
+    void push(NetEvent ev) {
+        bool wake = false;
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            wake = events.empty();
+            events.push_back(std::move(ev));
+        }
+        if (wake && onFirstEvent) onFirstEvent();
+    }
     std::vector<NetEvent> drain() {
         std::lock_guard<std::mutex> lk(mtx);
         std::vector<NetEvent> out; out.swap(events); return out;
     }
+    bool empty() { std::lock_guard<std::mutex> lk(mtx); return events.empty(); }
 };
 
 // ─── SSEHandle ────────────────────────────────────────────────────────────────
@@ -543,13 +558,26 @@ static JSValue buildRawFetch(JSContext* ctx, const NetEvent& ev) {
         JS_SetPropertyUint32(ctx,pair,0,JS_NewString(ctx,ev.headers[i].c_str()));
         JS_SetPropertyUint32(ctx,pair,1,JS_NewString(ctx,ev.headers[i+1].c_str()));
         JS_SetPropertyUint32(ctx,ha,(uint32_t)(i/2),pair);
-        JS_FreeValue(ctx,pair);
     }
     JS_SetPropertyStr(ctx,raw,"headers",ha);
     return raw;
 }
 
 // ─── drainNetEvents ───────────────────────────────────────────────────────────
+
+// Called once for the main render context: route "event landed on empty queue"
+// to a render-frame wake so idle on-demand hosts deliver net events promptly.
+void netEnableFrameWake(JSContext* ctx) {
+    NetCtx* nc=getNetCtx(ctx); if (!nc || !nc->queue) return;
+    nc->queue->onFirstEvent = []{ rayact::engineRequestFrame(); };
+}
+
+// True if this context has undelivered net events (fetch/SSE/WebSocket). Used as
+// an on-demand render-frame source so delivery is never stranded between frames.
+bool netHasPendingEvents(JSContext* ctx) {
+    NetCtx* nc=getNetCtx(ctx); if (!nc || !nc->queue) return false;
+    return !nc->queue->empty();
+}
 
 void drainNetEvents(JSContext* ctx) {
     NetCtx* nc=getNetCtx(ctx); if (!nc) return;

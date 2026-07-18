@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(rayact_web VERSION 0.1.0 LANGUAGES CXX C)
+project(rayact_web VERSION 0.0.3 LANGUAGES CXX C)
 
 # Configure with: emcmake cmake -S rayact -B build-web -DENABLE_WEB=ON
 if(NOT EMSCRIPTEN)
@@ -32,13 +32,15 @@ endif()
 # __rayactDevFetch) can deadlock under -pthread. So pthreads is OPT-IN: enable it for
 # the worker-capable production build; leave it OFF for the dev/module-HMR build.
 option(RAYACT_WEB_PTHREADS "Enable Emscripten pthreads (workers); incompatible with sync-XHR dev loader" OFF)
+option(RAYACT_RELEASE_HOST "Build an app-only Web host without development bootstrap/HMR" OFF)
 if(RAYACT_WEB_PTHREADS)
     add_compile_options(-pthread)
     add_link_options(-pthread -sPTHREAD_POOL_SIZE=4)
 endif()
 
-# Repo layout: this file lives in <repo>/rayact/apps/web.
-get_filename_component(OUTER "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
+# Repo layout: this file lives in <repo>/apps/web.
+get_filename_component(RAYACT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+set(THIRD_PARTY "${RAYACT_ROOT}/third_party")
 set(DESKTOP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../native/desktop")
 set(CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../native/core")
 set(WEB_NATIVE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../native/web")
@@ -46,7 +48,7 @@ set(WEB_NATIVE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../native/web")
 # ---------------------------------------------------------------------------
 # QuickJS (quickjs-ng) — compiled from source under emcc (no prebuilt arch lib).
 # ---------------------------------------------------------------------------
-set(QUICKJS_DIR "${OUTER}/quickjs")
+set(QUICKJS_DIR "${THIRD_PARTY}/quickjs")
 if(NOT EXISTS "${QUICKJS_DIR}/quickjs.c")
     message(FATAL_ERROR "QuickJS sources not found at ${QUICKJS_DIR}")
 endif()
@@ -66,7 +68,7 @@ target_compile_options(qjs_web PRIVATE -Wno-unknown-pragmas -Wno-implicit-fallth
 # wasm3 — embedded interpreter core (Phase 3 Path A: run user .wasm workers
 # inside the WASM engine). Same core source set as the desktop build.
 # ---------------------------------------------------------------------------
-set(WASM3_DIR "${OUTER}/wasm3")
+set(WASM3_DIR "${THIRD_PARTY}/wasm3")
 add_library(m3 STATIC
     "${WASM3_DIR}/source/m3_bind.c"
     "${WASM3_DIR}/source/m3_code.c"
@@ -86,8 +88,8 @@ target_compile_options(m3 PRIVATE -Wno-unused-function -Wno-unused-variable -Wno
 # ---------------------------------------------------------------------------
 # raylib with the rlwg WebGPU backend (rcore overlay + backend attach).
 # ---------------------------------------------------------------------------
-set(RAYLIB_DIR "${OUTER}/raylib")
-set(RAYLIB_BACKENDS_DIR "${OUTER}/raylib-backends")
+set(RAYLIB_DIR "${THIRD_PARTY}/raylib")
+set(RAYLIB_BACKENDS_DIR "${THIRD_PARTY}/raylib-backends")
 include("${RAYLIB_BACKENDS_DIR}/cmake/RaylibBackend.cmake")
 
 raylib_backend_prepare_rcore_overlay(
@@ -116,8 +118,8 @@ endif()
 # ---------------------------------------------------------------------------
 # raym3 (+ Yoga from source) — built for the WebGPU backend (skip the ES3 default).
 # ---------------------------------------------------------------------------
-set(RAYM3_DIR "${OUTER}/raym3")
-set(YOGA_DIR "${RAYM3_DIR}/build-v2-yoga2/_deps/yoga-src" CACHE PATH "" FORCE)
+set(RAYM3_DIR "${THIRD_PARTY}/raym3")
+set(YOGA_DIR "${THIRD_PARTY}/yoga" CACHE PATH "" FORCE)
 set(RAYM3_FETCH_DEPS OFF CACHE BOOL "" FORCE)
 set(RAYM3_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(RAYM3_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -133,7 +135,7 @@ target_include_directories(raym3 BEFORE PRIVATE "${RAYLIB_BACKENDS_DIR}/backends
 # ---------------------------------------------------------------------------
 # cssparser (CSS @import support)
 # ---------------------------------------------------------------------------
-set(CSSPARSER_DIR "${OUTER}/cssparser/cssparser")
+set(CSSPARSER_DIR "${THIRD_PARTY}/cssparser/cssparser")
 set(CSSPARSER_SOURCES
     ${CSSPARSER_DIR}/CSSParser.cpp
     ${CSSPARSER_DIR}/CSSProperties.cpp
@@ -142,11 +144,8 @@ set(CSSPARSER_SOURCES
 )
 
 # ---------------------------------------------------------------------------
-# Engine sources. Phase 1 strips networking, workers, and the TS validator via
-# RAYACT_NO_NET / RAYACT_NO_WORKERS / RAYACT_NO_TS (well-supported guards in
-# engine_js.cpp / engine_render.cpp). The desktop main()/loop, plugin dlopen,
-# dev tooling, and platform-specific files are excluded; main_web.cpp drives the
-# rAF loop instead.
+# Engine sources. Browser fetch and WebSocket are supplied by the web platform
+# bridge; main_web.cpp drives the rAF loop.
 # ---------------------------------------------------------------------------
 set(ENGINE_SOURCES
     ${DESKTOP_DIR}/../shared/rayactpack.cpp
@@ -175,27 +174,22 @@ set(ENGINE_SOURCES
     ${CORE_DIR}/config_loader.cpp
     # Phase 3 Path A workers: WASM (wasm3) + native; JS workers omitted on web.
     ${DESKTOP_DIR}/worker_wasm.cpp
+    ${DESKTOP_DIR}/worker_draw.cpp
     ${DESKTOP_DIR}/worker_native.cpp
     ${DESKTOP_DIR}/workers.cpp
-    # Built-in native plugins linked statically (no dlopen on web); file-backed
-    # backends (MEMFS now; IDBFS for persistence later). secure-store uses the
-    # non-Apple file fallback, not the macOS Keychain. web_stubs.cpp calls each
-    # plugin's unique rayact_<name>_register entry; the colliding generic
-    # rayact_module_register entry is compiled out on web (see the plugins).
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../native/plugins/mmkv/mmkv_plugin.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../native/plugins/secure-store/secure_store_plugin.cpp
     ${CSSPARSER_SOURCES}
     ${WEB_NATIVE_DIR}/main_web.cpp
     ${WEB_NATIVE_DIR}/web_text_input.cpp
     ${WEB_NATIVE_DIR}/web_stubs.cpp
     ${WEB_NATIVE_DIR}/web_websocket.cpp
+    ${WEB_NATIVE_DIR}/web_js_worker.cpp
 )
 
 # App-provided C++ native workers (Phase 3.5), same glob as the desktop build. Each
 # registers via RAYACT_REGISTER_NATIVE_WORKER and runs on a pthread Web Worker.
 file(GLOB_RECURSE RAYACT_APP_NATIVE_WORKERS
-    "${OUTER}/rayact/native/workers/*/*.cpp"
-    "${OUTER}/rayact/apps/*/native/workers/*/*.cpp"
+    "${RAYACT_ROOT}/native/workers/*/*.cpp"
+    "${RAYACT_ROOT}/apps/*/native/workers/*/*.cpp"
 )
 if(RAYACT_APP_NATIVE_WORKERS)
     list(APPEND ENGINE_SOURCES ${RAYACT_APP_NATIVE_WORKERS})
@@ -206,8 +200,9 @@ add_executable(rayact ${ENGINE_SOURCES})
 set(RAYACT_WEB_QJS_STACK_SIZE_BYTES "234881024" CACHE STRING "QuickJS stack guard for the Rayact web host, in bytes")
 target_compile_definitions(rayact PRIVATE
     RAYACT_WEB=1
-    RAYACT_NO_NET=1
+    RAYACT_PLATFORM_NET_BACKEND=1
     RAYACT_NO_TS=1
+    RAYACT_RELEASE_HOST=$<BOOL:${RAYACT_RELEASE_HOST}>
     RAYACT_WEB_QJS_STACK_SIZE_BYTES=${RAYACT_WEB_QJS_STACK_SIZE_BYTES}
 )
 target_include_directories(rayact PRIVATE
@@ -216,7 +211,7 @@ target_include_directories(rayact PRIVATE
     ${QUICKJS_DIR}
     ${RAYM3_DIR}/include
     ${YOGA_DIR}
-    ${OUTER}/cssparser
+    ${THIRD_PARTY}/cssparser
     ${WASM3_DIR}/source
 )
 target_link_libraries(rayact PRIVATE
@@ -247,13 +242,13 @@ endif()
 # (cwd is "/" on web). Without it, icon names don't resolve and render as placeholder
 # glyphs ("material_icons.js not found").
 option(RAYACT_WEB_EMBED_ICONS "Embed Material icon and emoji font resources" ON)
-set(_rayact_icons "${OUTER}/rayact/dist/shared/material_icons.js")
+set(_rayact_icons "${RAYACT_ROOT}/dist/shared/material_icons.js")
 if(NOT EXISTS "${_rayact_icons}")
-    set(_rayact_icons "${OUTER}/rayact/src/shared/material_icons.js")
+    set(_rayact_icons "${RAYACT_ROOT}/packages/rayact-shared/src/material_icons.js")
 endif()
-set(_rayact_iconfont "${OUTER}/rayact/resources/fonts/MaterialSymbolsRounded.ttf")
-set(_rayact_iconfont_filled "${OUTER}/rayact/resources/fonts/MaterialSymbolsRounded-Filled.ttf")
-set(_rayact_emoji_font "${OUTER}/rayact/resources/fonts/NotoColorEmoji.ttf")
+set(_rayact_iconfont "${RAYACT_ROOT}/resources/fonts/MaterialSymbolsRounded.ttf")
+set(_rayact_iconfont_filled "${RAYACT_ROOT}/resources/fonts/MaterialSymbolsRounded-Filled.ttf")
+set(_rayact_emoji_font "${RAYACT_ROOT}/resources/fonts/NotoColorEmoji.ttf")
 if(RAYACT_WEB_EMBED_ICONS AND EXISTS "${_rayact_icons}")
     # name->codepoint map (injectMaterialIcons sets globalThis.Icons from this)...
     set(_rayact_embed "${_rayact_embed} --embed-file ${_rayact_icons}@/resources/fonts/material_icons.js")
@@ -275,7 +270,7 @@ set(_rayact_dbg "")
 if(RAYACT_WEB_DEBUG)
     set(_rayact_dbg " --profiling-funcs -sASSERTIONS=2 -sSTACK_OVERFLOW_CHECK=2")
 endif()
-set(_rayact_exports " -sEXPORTED_FUNCTIONS=['_main','_rayactWebStart','_rayactWebFinishBoot','_rayactWebPointer','_rayactWebKey','_rayactWebImeUpdate','_rayactWebImeSubmit','_malloc','_free']")
+set(_rayact_exports " -sEXPORTED_FUNCTIONS=['_main','_rayactWebStart','_rayactWebFinishBoot','_rayactWebPointer','_rayactWebKey','_rayactWebImeUpdate','_rayactWebImeSubmit','_rayactWebJsWorkerMessage','_rayactWebJsWorkerClosed','_malloc','_free']")
 # The rlwg backend propagates a 16 MB stack, which is enough for simple demos but
 # the full smoke app (React navigation + large Material tree) can exhaust it while
 # QuickJS evaluates and mounts the bundle. Keep this above the web QuickJS guard in
@@ -283,6 +278,17 @@ set(_rayact_exports " -sEXPORTED_FUNCTIONS=['_main','_rayactWebStart','_rayactWe
 set_target_properties(rayact PROPERTIES
     SUFFIX ".html"
     LINK_FLAGS "--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/shell.html -sALLOW_MEMORY_GROWTH=1 -lidbfs.js${_rayact_embed}${_rayact_exports}${_rayact_dbg}")
+
+if(RAYACT_RELEASE_HOST)
+    set_target_properties(rayact PROPERTIES OUTPUT_NAME "rayact_release")
+    find_program(NODE_EXECUTABLE node REQUIRED)
+    add_custom_command(TARGET rayact POST_BUILD
+        COMMAND "${NODE_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/sanitize-release-web-host.mjs"
+                "$<TARGET_FILE:rayact>"
+        COMMENT "Removing development bootstrap from release Web shell"
+        VERBATIM)
+endif()
 
 set_property(TARGET rayact APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/shell.html")
 
@@ -293,4 +299,4 @@ if(RAYACT_WEB_EMBED_APP)
     endif()
 endif()
 
-message(STATUS "rayact web target configured (QuickJS+raym3+rlwg, no ASYNCIFY)")
+message(STATUS "rayact web target configured (QuickJS+raym3+rlwg, release-host=${RAYACT_RELEASE_HOST}, no ASYNCIFY)")

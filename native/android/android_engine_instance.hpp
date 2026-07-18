@@ -91,12 +91,15 @@ struct AndroidEngineInstance {
 
     jint callHostInt(const char* method) const;
     void callHostVoid(const char* method) const;
+    void callHostStringArg(const char* method, const std::string& value) const;
     void callHostReleaseSurface(int surfaceId) const;
     void callHostOrderSurfaces(const int* ids, int count) const;
     std::string callHostString(const char* method) const;
     void callHostIme(const char* method, int nodeId, const std::string& value,
                      const std::string& inputType, bool autocorrect, bool secure,
-                     const std::string& imeAction) const;
+                     const std::string& imeAction,
+                     const std::string& autoCapitalize,
+                     bool contextMenuHidden) const;
     void callHostCopyToClipboard(const std::string& text) const;
     void callHostUpdateImeState(int nodeId, int selectionStart, int selectionEnd,
                                 int composingStart, int composingEnd,
@@ -107,6 +110,10 @@ jlong androidEngineInstanceCreate(const std::string& dataPath);
 void androidEngineInstanceDestroy(jlong handle);
 bool androidEngineAcquireGraphics(jlong handle);
 void androidEngineReleaseGraphics(jlong handle);
+// Thread-safe wake for producers (such as JS workers) that are not executing
+// inside a particular engine instance. Targets the session that owns the
+// process-wide graphics lease, rather than whichever runtime was last current.
+void androidEngineRequestGraphicsFrame();
 
 void androidEngineLoadInstanceState(AndroidEngineInstance* inst);
 void androidEngineSaveInstanceState(AndroidEngineInstance* inst);

@@ -2,9 +2,28 @@ import UIKit
 import QuartzCore
 import Metal
 
+private final class RayactImeTextField: UITextField {
+    var contextMenuHidden = false
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if contextMenuHidden {
+            return false
+        }
+        return super.canPerformAction(action, withSender: sender)
+    }
+}
+
+private final class RayactSemanticElement: UIAccessibilityElement {
+    var activateHandler: (() -> Bool)?
+
+    override func accessibilityActivate() -> Bool {
+        activateHandler?() ?? false
+    }
+}
+
 final class RayactSurfaceView: UIView, UITextFieldDelegate {
     private let session: RayactEngineSession
-    private let hiddenTextField = UITextField()
+    private let hiddenTextField = RayactImeTextField()
 
     private(set) var surfaceId = 0
     var onSurfaceReady: ((Int) -> Void)?
@@ -14,9 +33,12 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
     private var imeAutocorrect = false
     private var imeSecure = false
     private var imeAction = "done"
+    private var imeAutoCapitalize = "sentences"
+    private var imeContextMenuHidden = false
     private var applyingFromNative = false
     private var lastImeHeightDp: Float = -1
     private var lastImeVisible = false
+    private var semanticElementCache: [Int: RayactSemanticElement] = [:]
 
     // Maps each active UITouch to a small, stable pointer index (0,1,2…) so the
     // engine sees the same id scheme as Android's MotionEvent.getPointerId. The
@@ -35,6 +57,7 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
         metalLayer.pixelFormat = .bgra8Unorm
         metalLayer.framebufferOnly = false
         backgroundColor = .black
+        isAccessibilityElement = false
 
         // The field captures IME input but must stay visually invisible. It must
         // NOT use isHidden=true: a hidden UITextField cannot become first
@@ -46,6 +69,64 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
         hiddenTextField.delegate = self
         hiddenTextField.addTarget(self, action: #selector(textFieldChanged), for: .editingChanged)
         addSubview(hiddenTextField)
+    }
+
+    override var accessibilityElements: [Any]? {
+        get {
+            guard let data = session.accessibilitySnapshot().data(using: .utf8),
+                  let nodes = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                return []
+            }
+            var liveIds = Set<Int>()
+            let elements: [RayactSemanticElement] = nodes.compactMap { node in
+                guard let id = node["id"] as? Int else { return nil }
+                liveIds.insert(id)
+                let element = semanticElementCache[id] ?? RayactSemanticElement(accessibilityContainer: self)
+                semanticElementCache[id] = element
+                let role = node["role"] as? String ?? ""
+                let disabled = node["disabled"] as? Bool ?? false
+                element.accessibilityIdentifier = "rayact-\(id)"
+                element.accessibilityLabel = node["label"] as? String
+                element.accessibilityTraits = accessibilityTraits(role: role, disabled: disabled,
+                                                                    selected: node["selected"] as? Bool ?? false)
+                if node["hasState"] as? Bool == true {
+                    var values: [String] = []
+                    if ["checkbox", "radio", "switch"].contains(role) {
+                        values.append((node["checked"] as? Bool ?? false) ? "On" : "Off")
+                    }
+                    if node["expanded"] as? Bool == true { values.append("Expanded") }
+                    element.accessibilityValue = values.isEmpty ? nil : values.joined(separator: ", ")
+                } else {
+                    element.accessibilityValue = nil
+                }
+                let x = node["x"] as? Double ?? 0
+                let y = node["y"] as? Double ?? 0
+                let width = max(1, node["w"] as? Double ?? 1)
+                let height = max(1, node["h"] as? Double ?? 1)
+                element.accessibilityFrameInContainerSpace = CGRect(x: x, y: y, width: width, height: height)
+                element.activateHandler = { [weak self] in self?.session.performAccessibilityAction(nodeId: id) ?? false }
+                return element
+            }
+            semanticElementCache = semanticElementCache.filter { liveIds.contains($0.key) }
+            return elements
+        }
+        set { /* The semantic tree is owned by the renderer snapshot. */ }
+    }
+
+    private func accessibilityTraits(role: String, disabled: Bool, selected: Bool) -> UIAccessibilityTraits {
+        var traits: UIAccessibilityTraits = []
+        switch role {
+        case "button", "switch": traits.insert(.button)
+        case "link": traits.insert(.link)
+        case "image": traits.insert(.image)
+        case "heading", "header": traits.insert(.header)
+        case "searchbox": traits.insert(.searchField)
+        case "slider", "spinbutton": traits.insert(.adjustable)
+        default: traits.insert(.staticText)
+        }
+        if disabled { traits.insert(.notEnabled) }
+        if selected { traits.insert(.selected) }
+        return traits
     }
 
     required init?(coder: NSCoder) {
@@ -95,13 +176,17 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
         inputType: String,
         autocorrect: Bool,
         secure: Bool,
-        imeAction: String
+        imeAction: String,
+        autoCapitalize: String,
+        contextMenuHidden: Bool
     ) {
         imeNodeId = nodeId
         imeInputType = inputType
         imeAutocorrect = autocorrect
         imeSecure = secure
         self.imeAction = imeAction
+        imeAutoCapitalize = autoCapitalize
+        imeContextMenuHidden = contextMenuHidden
         configureTextField()
         hiddenTextField.text = initialText
         hiddenTextField.becomeFirstResponder()
@@ -113,13 +198,17 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
         inputType: String,
         autocorrect: Bool,
         secure: Bool,
-        imeAction: String
+        imeAction: String,
+        autoCapitalize: String,
+        contextMenuHidden: Bool
     ) {
         imeNodeId = nodeId
         imeInputType = inputType
         imeAutocorrect = autocorrect
         imeSecure = secure
         self.imeAction = imeAction
+        imeAutoCapitalize = autoCapitalize
+        imeContextMenuHidden = contextMenuHidden
         configureTextField()
         hiddenTextField.text = initialText
     }
@@ -158,7 +247,6 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
     }
 
     func syncSurfaceSizeFromLayout() {
-        guard session.relayoutOnSurfaceResizeEnabled() else { return }
         setNeedsLayout()
         layoutIfNeeded()
         if bounds.width > 0, bounds.height > 0 {
@@ -235,8 +323,8 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
             session.keyEvent(type: 0, key: "Enter", code: "Enter")
             return false
         }
-        session.nativeBlurTextInput()
-        clearIme()
+        syncTextToNative()
+        session.nativeSubmitTextInput()
         return true
     }
 
@@ -251,6 +339,12 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
         case "phone":
             hiddenTextField.keyboardType = .phonePad
             hiddenTextField.isSecureTextEntry = false
+        case "url":
+            hiddenTextField.keyboardType = .URL
+            hiddenTextField.isSecureTextEntry = false
+        case "ascii", "visible-password":
+            hiddenTextField.keyboardType = .asciiCapable
+            hiddenTextField.isSecureTextEntry = false
         case "password":
             hiddenTextField.keyboardType = .default
             hiddenTextField.isSecureTextEntry = true
@@ -258,7 +352,19 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
             hiddenTextField.keyboardType = .default
             hiddenTextField.isSecureTextEntry = imeSecure
         }
-        hiddenTextField.autocorrectionType = (imeAutocorrect && !imeSecure) ? .default : .no
+        switch imeAutoCapitalize {
+        case "none": hiddenTextField.autocapitalizationType = .none
+        case "words": hiddenTextField.autocapitalizationType = .words
+        case "characters": hiddenTextField.autocapitalizationType = .allCharacters
+        default: hiddenTextField.autocapitalizationType = .sentences
+        }
+        let correctionsEnabled = imeAutocorrect && !imeSecure
+        hiddenTextField.autocorrectionType = correctionsEnabled ? .default : .no
+        hiddenTextField.spellCheckingType = correctionsEnabled ? .default : .no
+        hiddenTextField.smartDashesType = correctionsEnabled ? .default : .no
+        hiddenTextField.smartQuotesType = correctionsEnabled ? .default : .no
+        hiddenTextField.smartInsertDeleteType = correctionsEnabled ? .default : .no
+        hiddenTextField.contextMenuHidden = imeContextMenuHidden
         switch imeAction {
         case "go": hiddenTextField.returnKeyType = .go
         case "next": hiddenTextField.returnKeyType = .next

@@ -7,7 +7,14 @@
 #include <chrono>
 #include <cstdint>
 
-enum class WorkerMsgType { String, JSON, Primitive, CanvasReady };
+enum class WorkerMsgType {
+    String,
+    JSON,
+    Primitive,
+    CanvasReady,   // pixel buffer presented (entry->canvas)
+    DrawReady,     // draw-command buffer presented (entry->draw) — frame source only
+    NodeCommands,  // binary raym3 mutation stream in payload (applied on JS thread)
+};
 
 struct WorkerMessage {
     int workerId         = 0;
@@ -32,6 +39,11 @@ public:
         cv.notify_one();
     }
 
+    bool empty() {
+        std::lock_guard<std::mutex> lk(mtx);
+        return q.empty();
+    }
+
     // Non-blocking — main thread drain each frame
     bool pop(WorkerMessage& out) {
         std::lock_guard<std::mutex> lk(mtx);
@@ -45,6 +57,19 @@ public:
     bool wait_pop(WorkerMessage& out, std::atomic<bool>& stop) {
         std::unique_lock<std::mutex> lk(mtx);
         cv.wait(lk, [&] { return !q.empty() || stop.load(); });
+        if (q.empty()) return false;
+        out = std::move(q.front());
+        q.pop();
+        return true;
+    }
+
+    // Blocking with deadline — for workers that also service timers. Returns
+    // false on timeout or stop with no message queued.
+    bool wait_pop_for(WorkerMessage& out, std::atomic<bool>& stop, int64_t ms) {
+        std::unique_lock<std::mutex> lk(mtx);
+        auto ready = [&] { return !q.empty() || stop.load(); };
+        if (ms < 0) cv.wait(lk, ready);
+        else cv.wait_for(lk, std::chrono::milliseconds(ms), ready);
         if (q.empty()) return false;
         out = std::move(q.front());
         q.pop();

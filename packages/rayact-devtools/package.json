@@ -1,0 +1,48 @@
+{
+  "name": "@rayact/devtools",
+  "version": "0.0.3",
+  "description": "Development-only Chrome DevTools Protocol support for Rayact hosts",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./server.js"
+    },
+    "./server": {
+      "types": "./server.d.ts",
+      "default": "./server.js"
+    },
+    "./runtime": {
+      "types": "./runtime.d.ts",
+      "default": "./runtime.js"
+    },
+    "./react": {
+      "types": "./react.d.ts",
+      "default": "./react.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "*.js",
+    "*.d.ts",
+    "native"
+  ],
+  "dependencies": {
+    "@react-native/debugger-frontend": "0.86.0",
+    "react-devtools-core": "6.1.5"
+  },
+  "license": "MIT",
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact-devtools"
+  }
+}

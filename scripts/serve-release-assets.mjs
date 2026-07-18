@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Serve release1/ assets over HTTP with GitHub-release URL layout so
- * RAYACT_PREBUILT_BASE_URL=http://127.0.0.1:PORT/v0.0.1 works locally.
+ * RAYACT_PREBUILT_BASE_URL=http://127.0.0.1:PORT/v0.0.3 works locally.
  *
  * Usage:
  *   node scripts/serve-release-assets.mjs [releaseDir] [port] [tag]
@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const releaseDir = path.resolve(ROOT, process.argv[2] ?? 'release1');
 const port = Number(process.argv[3] ?? process.env.RAYACT_RELEASE_SERVE_PORT ?? 9191);
-const tag = process.argv[4] ?? process.env.RAYACT_PREBUILT_TAG ?? 'v0.0.1';
+const tag = process.argv[4] ?? process.env.RAYACT_PREBUILT_TAG ?? 'v0.0.3';
 
 if (!fs.existsSync(releaseDir)) {
   console.error(`Release directory not found: ${releaseDir}`);

@@ -136,11 +136,11 @@ final class RayactRenderScheduler {
                 return
             }
 
-            // Idle: pause the link and re-arm via the next due JS timer (or a
-            // 60Hz fallback) so timers/late-scheduled animations still wake us.
+            // Idle remains paused until a real timer or explicit owner wake.
             link.isPaused = true
             let delayMs = session.nativeNextJSTimerDelayMs()
-            let delay = delayMs >= 0 ? max(0.001, Double(delayMs) / 1000.0) : 1.0 / 60.0
+            guard delayMs >= 0 else { return }
+            let delay = max(0.001, Double(delayMs) / 1000.0)
             let work = DispatchWorkItem { [weak self] in
                 guard let self, self.running else { return }
                 self.displayLink?.isPaused = false

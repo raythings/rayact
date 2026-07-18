@@ -15,6 +15,7 @@ Declared in `rayact.config.json` → `nativeModules`:
 | `kv` | `@rayact/runtime` (`Storage`) | built-in |
 | `mmkv` | `@rayact/mmkv` | `librayact_mmkv` (file-backed) |
 | `secure-store` | `@rayact/secure-store` | `librayact_secure_store` (Keychain / app-private) |
+| `crash-reporter` | `@rayact/crash-reporter` | local-first crash marker/report storage |
 
 On Android these ride in the APK `jniLibs` and are auto-discovered by the module
 bus's plugin loader. On desktop the CLI copies `librayact_*` next to the host in
@@ -31,21 +32,24 @@ npm run build:android:install
 npm run build:desktop
 ```
 
-## Install from the launch release
+## Install
 
 ```bash
-npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform android
-npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform ios-simulator
-npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform ios-device
+npx @rayact/dev-app@0.0.3 install --platform android
+npx @rayact/dev-app@0.0.3 install --platform ios-simulator
+npx @rayact/dev-app@0.0.3 install --platform ios-device
 ```
+
+The equivalent GitHub fallback is `https://github.com/raythings/rayact/releases/download/v0.0.3/rayact-dev-app-0.0.3.tgz`.
 
 The installer defaults to release assets from `raythings/rayact`. Override with
 `RAYACT_DEV_APP_REPO` or `RAYACT_DEV_APP_VERSION` only for maintainer testing.
 
-Branding comes from `official-app.json`; the build wrapper
-(`scripts/with-branding.cjs`) injects it and the bundled-module list into the
-dev-client bundle so the launcher's About tab and compatibility check reflect
-this host.
+The app name and bundled-module list come from `rayact.config.json`, exactly as
+they do for a generated custom dev client. `official-app.json` contains only the
+official app's additional credit and resource links; the build wrapper injects
+those extras into the same shared launcher. About links open through the native
+platform browser/mail handler.
 
 ## Connect
 

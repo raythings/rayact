@@ -1,8 +1,8 @@
 {
-  "engineVersion": "0.0.2",
+  "engineVersion": "0.0.3",
   "moduleAbiVersion": 1,
-  "ndkVersion": "27.2.12479018",
+  "ndkVersion": "27.3.13750724",
   "platform": "android",
   "arch": "arm64-v8a",
-  "builtAt": "2026-07-09T07:07:18Z"
+  "builtAt": "2026-07-17T08:38:28Z"
 }

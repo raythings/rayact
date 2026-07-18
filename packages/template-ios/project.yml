@@ -53,9 +53,16 @@ targets:
           # static archive (libRayactEngine.a) pulls in __cxa_throw/
           # __gxx_personality_v0/etc, which only libc++ provides.
           - -lc++
+      configs:
+        Release:
+          INFOPLIST_FILE: Info-Release.plist
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: RAYACT_RELEASE
+          DEAD_CODE_STRIPPING: YES
+          EXCLUDED_SOURCE_FILE_NAMES: "DevClientBridge.swift DevLauncherController.swift DevMenuOverlay.swift DevServerLoader.swift DevShakeDetector.swift ProjectHmrClient.swift RayactDevToolsTransport.swift"
     dependencies:
       - framework: Frameworks/RayactEngine.xcframework
         embed: false
+    # RAYACT_AUTOLINKED_MODULES
     preBuildScripts:
       - name: SyncRayactAssets
         script: |

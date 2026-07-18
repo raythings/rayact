@@ -107,7 +107,10 @@ log "=== consumer smoke install ==="
 (
   cd "$SMOKE"
   rm -rf node_modules package-lock.json
-  npm install --no-workspaces --no-audit --no-fund --ignore-scripts >"$OUT/smoke-install.log" 2>&1
+  # Install the complete unpublished release set together so the consumer
+  # smoke test never falls back to the public registry for lockstep packages.
+  npm install --no-save --no-workspaces --no-audit --no-fund --ignore-scripts \
+    "$ROOT"/release1/*.tgz >"$OUT/smoke-install.log" 2>&1
 ) && pass "consumer npm install" || fail "consumer npm install"
 
 log "=== CLI prebuild ==="

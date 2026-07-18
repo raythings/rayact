@@ -7,9 +7,14 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.os.Trace
 import android.util.Log
+import android.view.Gravity
 import android.view.KeyEvent
+import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -23,6 +28,7 @@ import org.json.JSONObject
 class DevLauncherActivity : AppCompatActivity() {
     companion object {
         private const val PERF_TAG = "RayactPerf"
+        // chrome://inspect port; `rayact dev` adb-reverses it automatically.
     }
 
     private enum class ActivePane { LAUNCHER, PROJECT }
@@ -34,10 +40,12 @@ class DevLauncherActivity : AppCompatActivity() {
     private var projectSession: RayactEngineSession? = null
     private var projectHost: NavigationHost? = null
     private var projectUrl: String? = null
+    private var projectLoadingView: View? = null
     private var activePane: ActivePane = ActivePane.LAUNCHER
     @Volatile private var projectLoadGeneration = 0
     private var shakeDetector: DevShakeDetector? = null
     @Volatile private var destroyed = false
+    @Volatile private var reloadInProgress = false
     private var projectBackBlockedUntilMs = 0L
     private var launcherBackBlockedUntilMs = 0L
     private val backCallback = object : OnBackPressedCallback(true) {
@@ -127,6 +135,11 @@ class DevLauncherActivity : AppCompatActivity() {
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_MENU && activePane == ActivePane.PROJECT) {
+            projectSession?.nativeToggleDevMenu()
+            projectSession?.host?.renderScheduler?.requestFrame()
+            return true
+        }
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             if (handleDevHostBack()) return true
         }
@@ -176,10 +189,14 @@ class DevLauncherActivity : AppCompatActivity() {
 
     private fun showLauncher() {
         projectLoadGeneration++
+        hideProjectLoading()
         val hadProject = activePane == ActivePane.PROJECT
         stopProjectDebugTools()
         if (hadProject) {
             projectSession?.nativeBlurTextInput()
+            // Dispose while this host is still mounted. FragmentManager needs
+            // its container to synchronously remove every pushed SurfaceView.
+            projectHost?.dispose()
             unmountCurrentPane()
         }
         // Always destroy any project session — mounted, in-flight from the launcher,
@@ -210,10 +227,14 @@ class DevLauncherActivity : AppCompatActivity() {
         traceInstant("project.open.tap")
         projectLoadGeneration++
         val generation = projectLoadGeneration
+        showProjectLoading(normalized)
 
         if (activePane == ActivePane.PROJECT) {
             stopProjectDebugTools()
             projectSession?.nativeBlurTextInput()
+            // Dispose before detach so native navigation fragments cannot be
+            // carried over into the replacement session.
+            projectHost?.dispose()
             unmountCurrentPane()
         } else {
             // Stop the launcher render thread and release the GPU lease before
@@ -234,13 +255,15 @@ class DevLauncherActivity : AppCompatActivity() {
                 runCatching { DevServerLoader.fetchBootstrap(normalized) }
             }
             if (destroyed || generation != projectLoadGeneration) return@Thread
+            val effectiveUrl = result.getOrNull()?.baseUrl ?: normalized
+            val bundleFormat = result.getOrNull()?.bundleFormat ?: "js"
             val loaded = traceSection("bundle.eval") {
                 val payload = result.getOrNull()
                 if (payload != null) {
                     if (payload.bundleFormat == "qjsbc") {
                         session.loadBytecode(payload.bytes)
                     } else {
-                        session.loadDevBootstrap(normalized, payload.bytes.toString(Charsets.UTF_8))
+                        session.loadDevBootstrap(effectiveUrl, payload.bytes.toString(Charsets.UTF_8))
                     }
                 } else {
                     val message = result.exceptionOrNull()?.message ?: "Failed to load dev server"
@@ -253,46 +276,32 @@ class DevLauncherActivity : AppCompatActivity() {
                         """.trimIndent()
                     )
                 }
-            }
+            } && traceSection("bundle.prepare") { session.prepareScript() }
             runOnUiThread {
                 if (destroyed || generation != projectLoadGeneration) return@runOnUiThread
                 if (!loaded) Log.w(PERF_TAG, "bundle.eval.rejected")
                 if (destroyed || generation != projectLoadGeneration) return@runOnUiThread
                 traceInstant("project.root.ready")
+                projectUrl = effectiveUrl
                 switchToProjectPane(session)
-                ProjectHmrClient.start(normalized, session)
+                reloadInProgress = false
+                if (bundleFormat == "qjsbc") ProjectHmrClient.stop()
+                else ProjectHmrClient.start(effectiveUrl, session)
+                DevClientBridge.configureProjectDevTools(session, effectiveUrl, bundleFormat)
             }
         }.start()
     }
 
     private fun reloadProject() {
+        if (reloadInProgress) return
         val url = projectUrl ?: DevClientBridge.savedDevServerUrl()
         if (url.isNullOrBlank()) return
-        val session = projectSession
-        if (activePane == ActivePane.PROJECT && session != null && session.isAlive()) {
-            ProjectHmrClient.stop()
-            reloadProjectInPlace(url, session)
-        } else {
-            openProject(url)
-        }
-    }
-
-    private fun reloadProjectInPlace(url: String, session: RayactEngineSession) {
-        Thread {
-            runCatching {
-                val payload = DevServerLoader.fetchBootstrap(url)
-                if (payload.bundleFormat == "qjsbc") {
-                    session.loadBytecode(payload.bytes)
-                } else {
-                    session.loadDevBootstrap(url, payload.bytes.toString(Charsets.UTF_8))
-                }
-            }
-            runOnUiThread {
-                ProjectHmrClient.start(url, session)
-                projectHost?.syncSurfacesToCurrentLayout()
-                session.host.renderScheduler.requestFrame()
-            }
-        }.start()
+        reloadInProgress = true
+        // A bootstrap is not safely re-entrant: React and the project's module
+        // graph can already be partially initialized (especially after a runtime
+        // exception). Recreate the project session so reload is a recovery path,
+        // not another eval in the corrupted QuickJS context.
+        openProject(url)
     }
 
     private fun switchToProjectPane(session: RayactEngineSession) {
@@ -303,6 +312,7 @@ class DevLauncherActivity : AppCompatActivity() {
         activePane = ActivePane.PROJECT
         val host = projectHost ?: return
         mountPane(ActivePane.PROJECT, host, session)
+        hideProjectLoading()
         host.post {
             host.syncSurfacesToCurrentLayout()
             session.host.renderScheduler.traceNextFrame("project.first.frame")
@@ -323,6 +333,49 @@ class DevLauncherActivity : AppCompatActivity() {
         val host = NavigationHost(this, session)
         host.installRoot(RayactSurfaceView(this, session))
         return host
+    }
+
+    private fun showProjectLoading(url: String) {
+        hideProjectLoading()
+        val density = resources.displayMetrics.density
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding((32 * density).toInt(), (32 * density).toInt(), (32 * density).toInt(), (32 * density).toInt())
+            setBackgroundColor(Color.rgb(10, 14, 20))
+            isClickable = true
+        }
+        val spinner = ProgressBar(this).apply { isIndeterminate = true }
+        container.addView(spinner, LinearLayout.LayoutParams(
+            (48 * density).toInt(),
+            (48 * density).toInt()
+        ).apply { bottomMargin = (22 * density).toInt() })
+        container.addView(TextView(this).apply {
+            text = "Preparing project"
+            setTextColor(Color.WHITE)
+            textSize = 22f
+            gravity = Gravity.CENTER
+        })
+        container.addView(TextView(this).apply {
+            text = url
+            setTextColor(Color.rgb(148, 163, 184))
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setPadding(0, (8 * density).toInt(), 0, 0)
+        })
+        root.addView(container, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+        container.bringToFront()
+        projectLoadingView = container
+    }
+
+    private fun hideProjectLoading() {
+        projectLoadingView?.let { view ->
+            if (view.parent === root) root.removeView(view)
+        }
+        projectLoadingView = null
     }
 
     /**
@@ -382,7 +435,9 @@ class DevLauncherActivity : AppCompatActivity() {
 
     private fun destroyProjectSession() {
         val session = projectSession ?: return
+        session.disableDevtools()
         session.nativeBlurTextInput()
+        if (projectHost?.parent === root) projectHost?.dispose()
         if (projectHost?.parent === root) {
             root.removeView(projectHost)
         }

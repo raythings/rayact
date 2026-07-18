@@ -15,15 +15,6 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 
-function resolveSuperRoot() {
-  const parent = path.resolve(ROOT, '..');
-  if (fs.existsSync(path.join(parent, 'quickjs')) && fs.existsSync(path.join(parent, 'raylib'))) {
-    return parent;
-  }
-  return ROOT;
-}
-
-const SUPER = resolveSuperRoot();
 const IS_MAC = process.platform === 'darwin';
 
 const DOCKER_TARGETS = new Set(['android', 'linux']);
@@ -40,10 +31,10 @@ function parseArgs(argv) {
 Usage: node scripts/build-prebuilts.mjs [--target <name>]...
 
 Targets:
-  android   Docker — @rayact/prebuilt-android-arm64 + plugin .so
+  android   Docker — generic Android prebuilts + package-owned module .so files
   linux     Docker — @rayact/prebuilt-linux-x64
   darwin    macOS  — prebuilt-darwin-arm64/x64
-  ios       macOS  — prebuilt-ios-arm64 (XCFramework stub or build)
+  ios       macOS  — generic engine and package-owned module XCFrameworks
   dev-app   macOS  — rayact-dev-app APK + unsigned IPA + simulator zip
   all       All targets (skips mac-only on non-macOS)
 
@@ -93,10 +84,10 @@ function buildDocker(target) {
   const platformArgs = target === 'linux' ? ['--platform', 'linux/amd64'] : [];
   console.log(`\n==> Docker build: ${tag}`);
   run('docker', ['build', ...platformArgs, '-f', dockerfile, '-t', tag, dockerDir]);
-  console.log(`\n==> Docker run: ${tag} (mount ${SUPER} -> /workspace)`);
+  console.log(`\n==> Docker run: ${tag} (mount recursive repository -> /workspace/rayact)`);
   run('docker', [
     'run', '--rm', ...platformArgs,
-    '-v', `${SUPER}:/workspace`,
+    '-v', `${ROOT}:/workspace/rayact`,
     '-e', `RAYACT_ROOT=/workspace/rayact`,
     '-e', `ENGINE_VERSION=${process.env.ENGINE_VERSION || JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version}`,
     tag

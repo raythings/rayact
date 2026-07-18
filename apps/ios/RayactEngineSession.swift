@@ -13,12 +13,22 @@ final class RayactEngineSession {
     )
     private var hostBridge: RayactHostCallbacksBridge?
     private var destroyed = false
+#if !RAYACT_RELEASE
+    private var devtoolsTransport: RayactDevToolsTransport?
+#endif
 
     private init(handle: RayactIOSHandle) {
         nativeHandle = handle
     }
 
     func isAlive() -> Bool { !destroyed }
+    func isDevToolsEnabled() -> Bool {
+#if !RAYACT_RELEASE
+        devtoolsTransport != nil
+#else
+        false
+#endif
+    }
 
     func acquireGraphics() -> Bool {
         RayactNativeBridge.sessionAcquireGraphics(nativeHandle)
@@ -30,6 +40,10 @@ final class RayactEngineSession {
     }
 
     func destroy() {
+#if !RAYACT_RELEASE
+        disableDevTools()
+#endif
+        RayactMobileNetwork.closeAll(owner: nativeHandle)
         destroyed = true
         hostBridge = nil
         RayactNativeBridge.sessionDestroy(nativeHandle)
@@ -39,6 +53,7 @@ final class RayactEngineSession {
         source.withCString { RayactNativeBridge.sessionLoadScript(nativeHandle, 0, $0) }
     }
 
+#if !RAYACT_RELEASE
     func loadDevClient(_ source: String) -> Bool {
         loadSource(source)
     }
@@ -50,10 +65,12 @@ final class RayactEngineSession {
     func loadDevBootstrap(serverUrl: String, source: String) -> Bool {
         let transport = """
         globalThis.__RAYACT_DEV_SERVER__ = \(Self.jsonQuote(serverUrl));
+        globalThis.__rayactNativeDevtoolsTransport = true;
         globalThis.__rayactDevFetch = function(url) { return rayactDevFetch(url); };
         """
         return loadSource(transport + "\n" + source)
     }
+#endif
 
     func loadBytecode(_ bytes: Data) -> Bool {
         bytes.withUnsafeBytes { buffer in
@@ -62,6 +79,7 @@ final class RayactEngineSession {
         }
     }
 
+#if !RAYACT_RELEASE
     func applyModuleUpdate(path: String, source: String) -> Bool {
         path.withCString { pathPtr in
             source.withCString { sourcePtr in
@@ -69,6 +87,7 @@ final class RayactEngineSession {
             }
         }
     }
+#endif
 
     func createSurface(metalLayer: UnsafeMutableRawPointer, density: Float, widthPx: Int, heightPx: Int, scale: Float) -> Int {
         Int(RayactNativeBridge.sessionCreateSurface(
@@ -142,7 +161,9 @@ final class RayactEngineSession {
     }
 
     func nativeToggleDevMenu() {
+#if !RAYACT_RELEASE
         RayactNativeBridge.sessionToggleDevMenu(nativeHandle)
+#endif
     }
 
     func nativeOnBackPressed() {
@@ -155,6 +176,15 @@ final class RayactEngineSession {
 
     func nativeTouch(action: Int, id: Int, x: Float, y: Float) {
         RayactNativeBridge.sessionTouch(nativeHandle, Int32(action), Int32(id), x, y)
+    }
+
+    func accessibilitySnapshot() -> String {
+        guard let pointer = RayactNativeBridge.sessionGetAccessibilitySnapshot(nativeHandle) else { return "[]" }
+        return String(cString: pointer)
+    }
+
+    func performAccessibilityAction(nodeId: Int) -> Bool {
+        RayactNativeBridge.sessionPerformAccessibilityAction(nativeHandle, Int32(nodeId))
     }
 
     func nativeSetTextInputContent(
@@ -182,9 +212,42 @@ final class RayactEngineSession {
         RayactNativeBridge.sessionBlurTextInput(nativeHandle)
     }
 
+    func nativeSubmitTextInput() {
+        RayactNativeBridge.sessionSubmitTextInput(nativeHandle)
+    }
+
     func nativeImeHiddenBySystem() {
         RayactNativeBridge.sessionImeHiddenBySystem(nativeHandle)
     }
+
+#if !RAYACT_RELEASE
+    func enableDevTools(serverUrl: String, title: String = "Rayact iOS") {
+        guard !destroyed else { return }
+        disableDevTools()
+        devtoolsTransport = RayactDevToolsTransport(session: self, serverUrl: serverUrl, title: title)
+        devtoolsTransport?.start()
+        title.withCString { RayactNativeBridge.sessionEnableDevTools(nativeHandle, 0, $0) }
+    }
+
+    func disableDevTools() {
+        devtoolsTransport?.stop()
+        devtoolsTransport = nil
+        if !destroyed { RayactNativeBridge.sessionDisableDevTools(nativeHandle) }
+    }
+
+    func sendDevtoolsMessage(_ message: String) {
+        if message.first == "\u{001e}" { devtoolsTransport?.sendEnvelope(String(message.dropFirst())) }
+        else { devtoolsTransport?.sendCDP(message) }
+    }
+
+    func receiveDevtoolsMessage(_ message: String) {
+        guard isAlive() else { return }
+        message.withCString { RayactNativeBridge.sessionDevToolsMessage(nativeHandle, $0) }
+    }
+#else
+    func disableDevTools() {}
+    func sendDevtoolsMessage(_ message: String) { _ = message }
+#endif
 
     static func create(dataPath: String) -> RayactEngineSession? {
         let handle = dataPath.withCString { RayactNativeBridge.sessionCreate($0) }

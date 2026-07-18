@@ -1,6 +1,6 @@
 {
   "name": "@rayact/docs",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "private": true,
   "type": "module",
   "description": "Rayact documentation site (Vitepress) + llms.txt generation",

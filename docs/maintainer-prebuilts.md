@@ -1,125 +1,66 @@
-# Maintainer: Prebuilt Native Libraries
+# Maintainer: native prebuilts
 
-**App developers never run these scripts.** Until npm publishing exists, they install Rayact packages from `github:raythings/*#v0.0.1`; native prebuilts and dev-app binaries come from the `raythings/rayact` GitHub release.
+Application developers do not run these scripts. They consume npm packages at `0.0.3`; GitHub Releases carry the exact same tarballs and native artifacts as a fallback.
 
-## Quick reference
+## Reproducible inputs
 
-| Target | Command | Host |
-|--------|---------|------|
-| Android prebuilts | `node scripts/build-prebuilts.mjs --target android` | Docker (any OS) |
-| Linux desktop | `node scripts/build-prebuilts.mjs --target linux` | Docker |
-| macOS desktop | `node scripts/build-prebuilts.mjs --target darwin` | macOS only |
-| iOS prebuilts | `node scripts/build-prebuilts.mjs --target ios` | macOS only |
-| Web host | `npm run verify:web` | Emscripten |
-| Dev-app APK/IPA | `node scripts/build-prebuilts.mjs --target dev-app` | macOS (iOS); APK also via Docker |
-| Everything | `node scripts/build-prebuilts.mjs --target all` | Docker + macOS |
+Native foundations are commit-pinned submodules under `third_party/`. Start from a recursive clone:
 
-Verify outputs:
+```bash
+git clone --recursive https://github.com/raythings/rayact.git
+git submodule update --init --recursive
+```
+
+The release build must not read sibling repositories. Historical sibling clones are not authoritative.
+
+## Toolchains
+
+- Node 22 or 24 LTS
+- Android API 26 minimum, compile/target API 36, AGP 8.9.1+, JDK 17, NDK `27.3.13750724`
+- Xcode 26 with the iOS 26 SDK; deployment targets iOS 16 and macOS 13
+- Emscripten for the wasm32 WebGPU host
+
+## Build matrix
+
+| Target | Command |
+| --- | --- |
+| Android arm64/x86_64 | `node scripts/build-prebuilts.mjs --target android` |
+| Linux x64 preview | `node scripts/build-prebuilts.mjs --target linux` |
+| macOS Apple Silicon (arm64) | `node scripts/build-prebuilts.mjs --target darwin` |
+| iOS device/simulator XCFrameworks | `node scripts/build-prebuilts.mjs --target ios` |
+| Web wasm32 | `npm run verify:web` |
+| Official dev app | `node scripts/build-prebuilts.mjs --target dev-app` |
+
+Then run:
 
 ```bash
 ./scripts/verify-prebuilts.sh
-./scripts/verify-prebuilts.sh --skip darwin,ios,dev-app   # after Docker-only build
-```
-
-Legacy entrypoint: `./scripts/build-prebuilts.sh` forwards to the Node orchestrator.
-
-## Prerequisites
-
-### Super-repo layout
-
-Docker and native builds expect sibling checkouts next to `rayact/`:
-
-```
-projects/
-  rayact/          # this repo
-  quickjs/
-  raylib/
-  raym3/
-  raylib-backends/
-  ...
-```
-
-### Docker (Android + Linux)
-
-- Docker Desktop or engine on Linux/macOS/Windows WSL2
-- Images: `docker/prebuilts/Dockerfile.android`, `Dockerfile.linux`
-- NDK **27.2.12479018** pinned in the Android image
-
-### macOS (Darwin + iOS + dev-app)
-
-- Xcode 15+, XcodeGen (`brew install xcodegen`)
-- raym3 built: `raym3/build-v2/include` must exist
-- Built CLI packages: `packages/rayact-cli`, `rayact-dev-server`, `rayact-prebuild`
-
-## Dev-app artifacts
-
-Built by [`scripts/build-dev-app.mjs`](scripts/build-dev-app.mjs) into `apps/dev-app/dist/`:
-
-| File | Use |
-|------|-----|
-| `rayact-dev-app.apk` | Android sideload |
-| `rayact-dev-app-device-unsigned.ipa` | Physical device — **re-sign required** |
-| `rayact-dev-app-simulator.zip` | Simulator — unzip and `xcrun simctl install booted Rayact.app` |
-
-### Re-sign unsigned device IPA
-
-```bash
-fastlane resign rayact-dev-app-device-unsigned.ipa \
-  --signing-cert "Apple Development: Your Name (TEAMID)" \
-  -p YourProfile.mobileprovision
-```
-
-Install with Xcode Devices, `ios-deploy`, or Apple Configurator.
-
-### Install via npm script
-
-```bash
-npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform android
-npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform ios-device
-npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform ios-simulator
-```
-
-For the `v0.0.1` GitHub-only launch, verify the install path with:
-
-```bash
-npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-dev-app-0.0.1.tgz install --platform android
-```
-
-## Web artifacts
-
-Web is part of the `v0.0.1` launch contract. Build and verify it before packing
-release assets:
-
-```bash
-npm run verify:web
+npm run test:packages
+npm run verify:dev-app-modules
 npm run pack:release
 ```
 
-`verify:web` runs the `apps/web` bundle/configure/native build flow and checks
-for `rayact.html`, `rayact.js`, and `rayact.wasm` in `build-web/bin`. Serve the
-result through `apps/web/coep_server.py` or `proxy_coep_server.py`; the browser
-must be cross-origin isolated with COOP/COEP for SharedArrayBuffer and WebGPU.
+The package gate packs every workspace, installs only candidate tarballs into a clean temporary npm project, and rejects local references, cycles, missing declarations, undeclared dependencies, and source leaks.
 
-## CI
-
-[`.github/workflows/prebuilts.yml`](../.github/workflows/prebuilts.yml) runs on `v*` tags:
-
-1. **ubuntu** — Docker android + linux prebuilts
-2. **macos-14** — darwin, ios, dev-app APK + IPA/simulator
-3. **release** — merge, verify, `npm pack`, GitHub Release upload
-
-Binaries are **not** committed to git. They ship on GitHub Releases and in npm tarballs per tag.
-
-## Publishing
+## Dev-app installers
 
 ```bash
-git tag -f v0.0.1 && git push -f origin v0.0.1
-npm run pack:release
-# Upload release1/*, including SHA256SUMS, to the replacement v0.0.1 release.
+npx @rayact/dev-app@0.0.3 install --platform android
+npx @rayact/dev-app@0.0.3 install --platform ios-device
+npx @rayact/dev-app@0.0.3 install --platform ios-simulator
 ```
 
-Local pack for testing:
+GitHub fallback:
 
 ```bash
-npm pack -C packages/prebuilt-android-arm64
+npx https://github.com/raythings/rayact/releases/download/v0.0.3/rayact-dev-app-0.0.3.tgz install --platform android
 ```
+
+## Release channels
+
+- `canary` builds a unique prerelease for each main commit.
+- `preview` publishes the final immutable candidate bits under the `preview` dist-tag.
+- `stable` verifies and promotes those same tarballs to `stable` and `latest`; it never rebuilds.
+- rollback restores dist-tags and GitHub `latest` to the previous signed release set without unpublishing.
+
+`release-set.json` is signed and records each package version, native ABI, platform, dev-app build, and artifact SHA-256. Root `rayact` is always published last.

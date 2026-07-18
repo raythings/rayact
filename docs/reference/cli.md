@@ -15,6 +15,7 @@ The `rayact` command (from `@rayact/cli`) drives development, building, and runn
 | `rayact export` | Alias for `rayact build --release` |
 | `rayact compile <in> <out>` | Compile a JS bundle to QuickJS bytecode |
 | `rayact prebuild` | Ensure the native host + plugin shells are present |
+| `rayact doctor` | Check toolchains, prebuilt integrity/ABI, module support, signing, and Web hosting requirements |
 | `rayact init [name]` | Scaffold a new app (alias for `create-rayact-app`) |
 
 ## Common options
@@ -25,7 +26,7 @@ The `rayact` command (from `@rayact/cli`) drives development, building, and runn
 | `--install` | Install + launch on device after an Android/iOS build |
 | `--release` / `--debug` | Build mode |
 | `--minify` / `--no-minify` | Override the config's minify setting |
-| `--bytecode` / `--no-bytecode` | Override bytecode emission |
+| `--bytecode` / `--no-bytecode` | Override bytecode emission in development/debug; release always emits bytecode |
 | `--entry <path>` | App entry file |
 | `--out <dir>` | Output directory |
 | `--desktop-bin <path>` | Use a specific `rayact_desktop` host |

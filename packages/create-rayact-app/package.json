@@ -1,6 +1,6 @@
 {
   "name": "create-rayact-app",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Scaffold a new Rayact app (like create-expo-app)",
   "type": "module",
   "bin": {
@@ -10,16 +10,16 @@
     "build": "tsc && node scripts/copy-templates.mjs",
     "clean": "rm -rf dist"
   },
+  "sideEffects": false,
   "files": [
-    "dist",
-    "templates"
+    "dist"
   ],
   "devDependencies": {
     "@types/node": "^25.9.1",
     "typescript": "^5.8.3"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22 <25"
   },
   "license": "MIT",
   "repository": {
@@ -30,5 +30,12 @@
   "homepage": "https://github.com/raythings/rayact#readme",
   "bugs": {
     "url": "https://github.com/raythings/rayact/issues"
+  },
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

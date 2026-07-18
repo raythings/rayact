@@ -8,6 +8,7 @@ enum DevClientBridge {
     private static let prefsName = "rayact_dev_client"
     private static let keyUrl = "dev_server_url"
     private static let keyRecent = "recent_urls"
+    private static let keyDevToolsEnabled = "devtools_enabled"
     private static let serviceType = "_rayact._tcp."
 
     private static var prefs: UserDefaults { UserDefaults.standard }
@@ -18,6 +19,9 @@ enum DevClientBridge {
     private static var openProjectCallback: ((String) -> Void)?
     private static var reloadProjectCallback: (() -> Void)?
     private static var showLauncherCallback: (() -> Void)?
+    private static weak var projectDevToolsSession: RayactEngineSession?
+    private static var projectDevToolsUrl = ""
+    private static var projectBundleFormat = "js"
 
     private static let discoveryLock = NSLock()
     private static var discovered: [String: [String: Any]] = [:]
@@ -35,6 +39,24 @@ enum DevClientBridge {
 
     static func initBridge(launcher: RayactEngineSession?) {
         if let launcher { launcherSession = launcher }
+    }
+
+    static func bundledNativeModuleNames() -> Set<String> {
+        let candidates = [
+            Bundle.main.resourceURL?.appendingPathComponent("runtime/native-modules.json"),
+            FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("runtime/native-modules.json")
+        ].compactMap { $0 }
+        for url in candidates {
+            guard let data = try? Data(contentsOf: url),
+                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let modules = root["nativeModules"] as? [[String: Any]] else { continue }
+            return Set(modules.compactMap { item in
+                guard let name = item["name"] as? String, !name.isEmpty else { return nil }
+                return name
+            })
+        }
+        return []
     }
 
     static func registerDevHost(
@@ -103,7 +125,37 @@ enum DevClientBridge {
         if let session {
             if activeSession === session { activeSession = nil }
             if launcherSession === session { launcherSession = nil }
+            if projectDevToolsSession === session {
+                projectDevToolsSession = nil
+                projectDevToolsUrl = ""
+                projectBundleFormat = "js"
+            }
         }
+    }
+
+    static func configureProjectDevTools(session: RayactEngineSession, serverUrl: String, bundleFormat: String) {
+        projectDevToolsSession = session
+        projectDevToolsUrl = serverUrl
+        projectBundleFormat = bundleFormat
+        if bundleFormat == "qjsbc" {
+            session.disableDevTools()
+        } else if prefs.object(forKey: keyDevToolsEnabled) == nil || prefs.bool(forKey: keyDevToolsEnabled) {
+            session.enableDevTools(serverUrl: serverUrl, title: "Rayact: \(serverUrl)")
+        } else {
+            session.disableDevTools()
+        }
+    }
+
+    private static func devToolsStateJson() -> String {
+        let forcedOff = projectBundleFormat == "qjsbc"
+        let state: [String: Any] = [
+            "enabled": !forcedOff && (projectDevToolsSession?.isDevToolsEnabled() == true),
+            "forcedOff": forcedOff,
+            "bundleFormat": projectBundleFormat,
+            "reason": forcedOff ? "Rayact DevTools are disabled for bytecode projects to preserve performance." : "",
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: state) else { return "{}" }
+        return String(data: data, encoding: .utf8) ?? "{}"
     }
 
     static func savedDevServerUrl() -> String? {
@@ -152,7 +204,16 @@ enum DevClientBridge {
             guard let url = (data?["url"] as? String).map(cleanUrl), !url.isEmpty else {
                 return errorJson("Invalid server URL")
             }
-            print("[DevClientBridge] openProjectDirect url=\(url)")
+            let manifestValidated = data?["manifestValidated"] as? Bool == true
+            print("[DevClientBridge] openProjectDirect url=\(url) manifestValidated=\(manifestValidated)")
+            if manifestValidated {
+                let cleaned = DevServerLoader.normalizeBase(url)
+                openProjectFromNative(url: cleaned)
+                let obj: [String: Any] = ["ok": true, "url": cleaned]
+                guard let jsonData = try? JSONSerialization.data(withJSONObject: obj),
+                      let json = String(data: jsonData, encoding: .utf8) else { return "{\"ok\":true}" }
+                return json
+            }
             return validateAndOpenProject(url: url)
         case "reloadWithProjectBundle":
             if let url = prefs.string(forKey: keyUrl), !url.isEmpty {
@@ -160,8 +221,34 @@ enum DevClientBridge {
                 reloadCurrentProject()
             }
             return nil
+        case "returnToLauncher":
+            _ = showLauncher()
+            return nil
         case "getAppInfo":
             return appInfoJson()
+        case "openExternalUrl":
+            guard let raw = data?["url"] as? String,
+                  let url = URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)),
+                  let scheme = url.scheme?.lowercased(),
+                  ["http", "https", "mailto"].contains(scheme) else { return false }
+            DispatchQueue.main.async {
+                UIApplication.shared.open(url, options: [:])
+            }
+            return true
+        case "getPerformanceMetrics":
+            return performanceMetricsJson()
+        case "getDevToolsState":
+            return devToolsStateJson()
+        case "setDevToolsEnabled":
+            let requested = data?["enabled"] as? Bool ?? false
+            if projectBundleFormat != "qjsbc" {
+                prefs.set(requested, forKey: keyDevToolsEnabled)
+                if let session = projectDevToolsSession, session.isAlive() {
+                    if requested { session.enableDevTools(serverUrl: projectDevToolsUrl, title: "Rayact: \(projectDevToolsUrl)") }
+                    else { session.disableDevTools() }
+                }
+            }
+            return devToolsStateJson()
         case "getConnectError":
             return DevServerLoader.lastError ?? ""
         case "isConnectLoading":
@@ -219,12 +306,51 @@ enum DevClientBridge {
     private static func appInfoJson() -> String {
         let info: [String: Any] = [
             "bundleId": Bundle.main.bundleIdentifier ?? "com.rayact.app",
-            "nativeAppVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0",
-            "rayactVersion": "0.1.0",
+            "nativeAppVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.3",
+            "rayactVersion": "0.0.3",
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: info),
               let json = String(data: data, encoding: .utf8) else { return "{}" }
         return json
+    }
+
+    private static func performanceMetricsJson() -> String {
+        let metrics: [String: Any] = ["cpuPercent": processCpuPercent(), "memoryMb": processMemoryMb()]
+        guard let data = try? JSONSerialization.data(withJSONObject: metrics),
+              let json = String(data: data, encoding: .utf8) else { return "{}" }
+        return json
+    }
+
+    private static func processCpuPercent() -> Double {
+        var threads: thread_act_array_t?
+        var count: mach_msg_type_number_t = 0
+        guard task_threads(mach_task_self_, &threads, &count) == KERN_SUCCESS, let threads else { return 0 }
+        defer { vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: threads)), vm_size_t(count) * vm_size_t(MemoryLayout<thread_t>.size)) }
+        var total = 0.0
+        for index in 0..<Int(count) {
+            var info = thread_basic_info()
+            var infoCount = mach_msg_type_number_t(MemoryLayout<thread_basic_info>.size / MemoryLayout<natural_t>.size)
+            let result = withUnsafeMutablePointer(to: &info) { pointer in
+                pointer.withMemoryRebound(to: integer_t.self, capacity: Int(infoCount)) {
+                    thread_info(threads[index], thread_flavor_t(THREAD_BASIC_INFO), $0, &infoCount)
+                }
+            }
+            if result == KERN_SUCCESS && (info.flags & TH_FLAGS_IDLE) == 0 {
+                total += Double(info.cpu_usage) / Double(TH_USAGE_SCALE) * 100
+            }
+        }
+        return min(100, max(0, total / Double(max(1, ProcessInfo.processInfo.activeProcessorCount))))
+    }
+
+    private static func processMemoryMb() -> Double {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        return result == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576.0 : 0
     }
 
     private static func errorJson(_ message: String) -> String {
@@ -265,12 +391,14 @@ enum DevClientBridge {
     fileprivate static func noteResolvedService(_ service: NetService) {
         guard let host = service.hostName?.trimmingCharacters(in: CharacterSet(charactersIn: ".")),
               !host.contains(":") else { return }
+        let serverUrl = "http://\(host):\(service.port)"
         let entry: [String: Any] = [
-            "url": "http://\(host):\(service.port)",
+            "url": serverUrl,
             "name": service.name,
             "appKey": "",
         ]
         noteDiscovered(name: service.name, entry: entry)
+        DevServerLoader.prefetch(baseUrl: serverUrl)
     }
 
     private static func startQrScan() {

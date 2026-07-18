@@ -1,5 +1,6 @@
 #include "raym3_bridge.hpp"
 #include "css_bridge.hpp"
+#include "workers.hpp"
 #include "color_parse.hpp"
 #include "commit_queue.hpp"
 #include "shadow_tree.hpp"
@@ -26,10 +27,12 @@
 #include <raylib.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <optional>
 #include <sstream>
 #include <set>
@@ -249,8 +252,11 @@ static void clearAnimatedNode(JSContext* ctx, int nodeId) {
     g_animatedNodes.erase(nodeId);
 }
 
+static void applyAccessibilityProps(JSContext* ctx, int id, JSValueConst props);
+
 static void captureNodeClassName(JSContext* ctx, int id, JSValueConst styleObj) {
     if (!JS_IsObject(styleObj)) return;
+    applyAccessibilityProps(ctx, id, styleObj);
     JSValue classVal = JS_GetPropertyStr(ctx, styleObj, "className");
     if (JS_IsString(classVal)) {
         const char* classStr = JS_ToCString(ctx, classVal);
@@ -730,6 +736,27 @@ static bool jsHasProperty(JSContext* ctx, JSValue obj, const char* key) {
     bool hasValue = !JS_IsUndefined(value) && !JS_IsNull(value);
     JS_FreeValue(ctx, value);
     return hasValue;
+}
+
+static void applyAccessibilityProps(JSContext* ctx, int id, JSValueConst props) {
+    auto it = g_nodes.find(id);
+    if (it == g_nodes.end() || !it->second || !JS_IsObject(props)) return;
+    auto& info = it->second->accessibility;
+    if (jsHasProperty(ctx, props, "accessibilityRole"))
+        info.role = jsGetString(ctx, props, "accessibilityRole");
+    else if (jsHasProperty(ctx, props, "role"))
+        info.role = jsGetString(ctx, props, "role");
+    if (jsHasProperty(ctx, props, "accessibilityLabel"))
+        info.label = jsGetString(ctx, props, "accessibilityLabel");
+    JSValue state = JS_GetPropertyStr(ctx, props, "accessibilityState");
+    if (JS_IsObject(state)) {
+        info.hasState = true;
+        if (jsHasProperty(ctx, state, "checked")) info.stateChecked = jsGetBool(ctx, state, "checked", false);
+        if (jsHasProperty(ctx, state, "disabled")) info.stateDisabled = jsGetBool(ctx, state, "disabled", false);
+        if (jsHasProperty(ctx, state, "selected")) info.stateSelected = jsGetBool(ctx, state, "selected", false);
+        if (jsHasProperty(ctx, state, "expanded")) info.stateExpanded = jsGetBool(ctx, state, "expanded", false);
+    }
+    JS_FreeValue(ctx, state);
 }
 
 static raym3::v2::Style parseStyle(JSContext* ctx, JSValue obj);
@@ -1918,6 +1945,17 @@ JSValue JS_createView(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
     }
 
     auto node = raym3::v2::View(props);
+    if (argc >= 1 && JS_IsObject(argv[0])) {
+        // Preserve the React-facing identifier on the native node. Besides
+        // making inspector labels useful, renderer-owned subtrees use a
+        // reserved id prefix so the element inspector can exclude them.
+        node->id = jsGetString(ctx, argv[0], "id");
+        // RN keyboardShouldPersistTaps, honoured on plain Views too so a
+        // tappable surface (e.g. a terminal) can keep the IME open.
+        std::string persistTaps = jsGetString(ctx, argv[0], "keyboardShouldPersistTaps");
+        if (!persistTaps.empty())
+            node->keepTextInputFocusOnTap = persistTaps == "always" || persistTaps == "handled";
+    }
     int id = nextNativeNodeId();
     g_nodes[id] = node;
     rayact::shadowTree().createNode((uint32_t)id, props.style);
@@ -1967,6 +2005,18 @@ JSValue JS_createButton(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueC
 
 void rayactBlurFocusedTextInput() {
     raym3::v2::Blur();
+}
+
+void rayactSubmitFocusedTextInput() {
+    raym3::v2::Node* node = nullptr;
+    raym3::v2::NodeId focusedId = raym3::v2::GetFocusedId();
+    if (focusedId) {
+        node = reinterpret_cast<raym3::v2::Node*>(focusedId);
+        if (!node || node->kind != raym3::v2::NodeKind::TextInput) node = nullptr;
+    }
+    if (!node) return;
+
+    raym3::v2::TextInputSubmitEditing(*node);
 }
 
 #if defined(__ANDROID__) || defined(RAYACT_IOS)
@@ -2048,6 +2098,7 @@ JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSVal
         props.caretHidden = jsGetBool(ctx, argv[1], "caretHidden", false);
         props.blurOnSubmit = jsGetBool(ctx, argv[1], "blurOnSubmit", !props.multiline);
         props.selectTextOnFocus = jsGetBool(ctx, argv[1], "selectTextOnFocus", false);
+        props.contextMenuHidden = jsGetBool(ctx, argv[1], "contextMenuHidden", false);
         props.autoFocus = jsGetBool(ctx, argv[1], "autoFocus", false);
         { std::string ac = jsGetString(ctx, argv[1], "autoCapitalize");
           if (!ac.empty()) props.autoCapitalize = ac; }
@@ -2086,13 +2137,15 @@ JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSVal
         JS_FreeValue(g_bridge_ctx, result);
         JS_FreeValue(g_bridge_ctx, arg);
     };
-    node->textInput.onFocus = [id = g_nextNodeId,
-                               inputType = props.inputType,
-                               autocorrect = props.autocorrect,
-                               secure = props.secure || props.passwordMode,
-                               imeAction = props.imeAction]() {
+    node->textInput.onFocus = [id = g_nextNodeId]() {
 #if defined(__ANDROID__) || defined(RAYACT_IOS)
-        AndroidKeyboard_ShowForNode(id, inputType, autocorrect, secure, imeAction);
+        auto itNode = g_nodes.find(id);
+        if (itNode != g_nodes.end() && itNode->second) {
+            const auto& ti = itNode->second->textInput;
+            AndroidKeyboard_ShowForNode(id, ti.inputType, ti.autocorrect,
+                                        ti.secure || ti.passwordMode, ti.imeAction,
+                                        ti.autoCapitalize, ti.contextMenuHidden);
+        }
 #endif
         auto it = g_focusCallbacks.find(id);
         if (it == g_focusCallbacks.end() || !g_bridge_ctx) return;
@@ -2142,6 +2195,12 @@ JSValue JS_createScrollView(JSContext* ctx, JSValue, int argc, JSValueConst* arg
         if (auto z = jsGetFloat(ctx, argv[0], "zIndex")) props.zIndex = (int)roundf(*z);
     }
     auto node = raym3::v2::View(props);
+    if (argc >= 1 && JS_IsObject(argv[0])) {
+        node->scrollHorizontal = jsGetBool(ctx, argv[0], "horizontal", false);
+        node->scrollFollowEnd = jsGetBool(ctx, argv[0], "autoScrollToEnd", false);
+        std::string persistTaps = jsGetString(ctx, argv[0], "keyboardShouldPersistTaps");
+        node->keepTextInputFocusOnTap = persistTaps == "always" || persistTaps == "handled";
+    }
 #if defined(RAYACT_ANDROID) || defined(__ANDROID__)
     node->scrollMomentumEnabled = true;
 #endif
@@ -2386,6 +2445,50 @@ JSValue JS_setExternalViewProps(JSContext* ctx, JSValue, int argc, JSValueConst*
         JS_FreeValue(ctx, v);
     }
     return JS_UNDEFINED;
+}
+
+// focusTextInput(nodeId, focused=true) — imperative react-native
+// ref.focus()/ref.blur(). Sets the raym3 v2 focus id; the per-frame focus
+// watcher in raym3 TextInput.cpp fires textInput.onFocus/onBlur (which shows
+// or hides the IME on Android/iOS) on the next frame.
+JSValue JS_focusTextInput(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "focusTextInput: expected (nodeId[, focused])");
+    int id = 0;
+    JS_ToInt32(ctx, &id, argv[0]);
+    bool focus = argc < 2 || JS_ToBool(ctx, argv[1]) != 0;
+    auto it = g_nodes.find(id);
+    if (it == g_nodes.end() || !it->second) return JS_UNDEFINED;
+    raym3::v2::NodeId nid = raym3::v2::IdOf(it->second);
+    if (focus) {
+        if (raym3::v2::GetFocusedId() == nid) {
+            // Already focused: no focus transition, so the per-frame watcher
+            // won't refire onFocus. The IME may still be hidden (user
+            // dismissed it) — fire onFocus directly to reshow it, matching
+            // the renderer's tap-on-focused-input path.
+            if (it->second->textInput.onFocus) it->second->textInput.onFocus();
+        } else {
+            raym3::v2::SetFocusedId(nid);
+        }
+    } else if (raym3::v2::GetFocusedId() == nid) {
+        raym3::v2::SetFocusedId(0);
+    }
+    workerRequestRenderFrame();
+    return JS_UNDEFINED;
+}
+
+JSValue JS_setAccessibilityFocus(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "setAccessibilityFocus: expected nodeId");
+    int id = 0;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto it = g_nodes.find(id);
+    if (it == g_nodes.end() || !it->second) return JS_ThrowRangeError(ctx, "invalid accessibility node id");
+    raym3::v2::RequestFocus(it->second);
+    return JS_UNDEFINED;
+}
+
+JSValue JS_getReducedMotion(JSContext* ctx, JSValue, int, JSValueConst*) {
+    const char* value = std::getenv("RAYACT_REDUCED_MOTION");
+    return JS_NewBool(ctx, value && value[0] != '\0' && value[0] != '0');
 }
 
 JSValue JS_createSafeArea(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
@@ -3421,7 +3524,12 @@ JSValue JS_setStyle(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst
     int id;
     JS_ToInt32(ctx, &id, argv[0]);
     auto it = g_nodes.find(id);
-    if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setStyle: invalid node id");
+    if (it == g_nodes.end()) {
+        // A screen can dispose a host node before late commit/layout work
+        // lands during teardown. Treat that race as a no-op instead of
+        // surfacing a fatal runtime error while navigating away.
+        return JS_UNDEFINED;
+    }
     raym3::v2::Style parsed = parseStyle(ctx, argv[1]);
     // Material components carry layout defaults (flexDirection, gap, alignItems,
     // ...) that aren't expressed in CSS. updateNode applies the className via
@@ -3497,6 +3605,47 @@ JSValue JS_setValue(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     it->second->textInput.bufferSize = (int)it->second->inputBuffer.size();
     it->second->textInput.value = &it->second->inputScratch;
     JS_FreeCString(ctx, value);
+    return JS_UNDEFINED;
+}
+
+JSValue JS_setTextInputProps(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setTextInputProps: expected (nodeId, props)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto it = g_nodes.find(id);
+    if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setTextInputProps: invalid node id");
+    if (!it->second || it->second->kind != raym3::v2::NodeKind::TextInput)
+        return JS_UNDEFINED;
+    if (!JS_IsObject(argv[1])) return JS_UNDEFINED;
+
+    if (jsHasProperty(ctx, argv[1], "multiline"))
+        it->second->textInput.multiline = jsGetBool(ctx, argv[1], "multiline", false);
+    if (jsHasProperty(ctx, argv[1], "blurOnSubmit"))
+        it->second->textInput.blurOnSubmit =
+            jsGetBool(ctx, argv[1], "blurOnSubmit", !it->second->textInput.multiline);
+    if (jsHasProperty(ctx, argv[1], "readOnly"))
+        it->second->textInput.readOnly = jsGetBool(ctx, argv[1], "readOnly", false);
+    if (jsHasProperty(ctx, argv[1], "disabled"))
+        it->second->textInput.disabled = jsGetBool(ctx, argv[1], "disabled", false);
+    if (jsHasProperty(ctx, argv[1], "inputType"))
+        it->second->textInput.inputType = jsGetString(ctx, argv[1], "inputType");
+    if (jsHasProperty(ctx, argv[1], "imeAction"))
+        it->second->textInput.imeAction = jsGetString(ctx, argv[1], "imeAction");
+    if (jsHasProperty(ctx, argv[1], "autocorrect"))
+        it->second->textInput.autocorrect = jsGetBool(ctx, argv[1], "autocorrect", false);
+    if (jsHasProperty(ctx, argv[1], "autoCapitalize")) {
+        std::string ac = jsGetString(ctx, argv[1], "autoCapitalize");
+        it->second->textInput.autoCapitalize = ac.empty() ? "sentences" : ac;
+    }
+    if (jsHasProperty(ctx, argv[1], "secure") || jsHasProperty(ctx, argv[1], "secureTextEntry")) {
+        bool secure = jsGetBool(ctx, argv[1], "secure", false) ||
+                      jsGetBool(ctx, argv[1], "secureTextEntry", false);
+        it->second->textInput.secure = secure;
+        it->second->textInput.passwordMode = secure;
+    }
+    if (jsHasProperty(ctx, argv[1], "contextMenuHidden"))
+        it->second->textInput.contextMenuHidden =
+            jsGetBool(ctx, argv[1], "contextMenuHidden", false);
     return JS_UNDEFINED;
 }
 
@@ -3588,6 +3737,7 @@ JSValue JS_disposeNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
         JS_FreeValue(ctx, cb->second);
         g_pressCallbacks.erase(cb);
     }
+    clearInspectorSourceName(id);
     auto changeCb = g_changeTextCallbacks.find(id);
     if (changeCb != g_changeTextCallbacks.end()) {
         JS_FreeValue(ctx, changeCb->second);
@@ -3902,13 +4052,14 @@ static bool readPathOrBytes(JSContext* ctx, JSValueConst v, std::string& outPath
     return true;
 }
 
-// loadFont(name: string, source: string | Uint8Array)
+// loadFont(name: string, source: string | Uint8Array, options?: { codepoints?: number[] })
 JSValue JS_loadFont(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
     if (argc < 2) return JS_ThrowTypeError(ctx, "loadFont: expected (name, source)");
     const char* name = JS_ToCString(ctx, argv[0]);
     if (!name) return JS_ThrowTypeError(ctx, "loadFont: name must be a string");
     std::string path;
     std::vector<unsigned char> bytes;
+    std::vector<int> codepoints;
     bool ok = readPathOrBytes(ctx, argv[1], path, bytes);
     if (!ok) {
         JS_FreeCString(ctx, name);
@@ -3921,10 +4072,30 @@ JSValue JS_loadFont(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst
         bytes.clear();
     }
 #endif
+    if (argc >= 3 && JS_IsObject(argv[2])) {
+        JSValue list = JS_GetPropertyStr(ctx, argv[2], "codepoints");
+        if (!JS_IsUndefined(list) && !JS_IsNull(list) && JS_IsArray(list)) {
+            JSValue lengthValue = JS_GetPropertyStr(ctx, list, "length");
+            uint32_t length = 0;
+            JS_ToUint32(ctx, &length, lengthValue);
+            JS_FreeValue(ctx, lengthValue);
+            codepoints.reserve(length);
+            for (uint32_t index = 0; index < length; ++index) {
+                JSValue value = JS_GetPropertyUint32(ctx, list, index);
+                int32_t codepoint = 0;
+                if (JS_ToInt32(ctx, &codepoint, value) == 0 && codepoint >= 0 && codepoint <= 0x10FFFF)
+                    codepoints.push_back(codepoint);
+                JS_FreeValue(ctx, value);
+            }
+            std::sort(codepoints.begin(), codepoints.end());
+            codepoints.erase(std::unique(codepoints.begin(), codepoints.end()), codepoints.end());
+        }
+        JS_FreeValue(ctx, list);
+    }
     if (!bytes.empty())
-        raym3::FontManager::RegisterFontFromMemory(std::string(name), std::move(bytes));
+        raym3::FontManager::RegisterFontFromMemory(std::string(name), std::move(bytes), std::move(codepoints));
     else
-        raym3::FontManager::RegisterFont(std::string(name), path);
+        raym3::FontManager::RegisterFont(std::string(name), path, std::move(codepoints));
     JS_FreeCString(ctx, name);
     return JS_UNDEFINED;
 }
@@ -4877,12 +5048,42 @@ static const char* nodeKindLabel(raym3::v2::NodeKind kind) {
     }
 }
 
+static bool isDevToolsNode(const raym3::v2::NodePtr& node) {
+    return node && node->id.rfind("__rayact_devtools_", 0) == 0;
+}
+
+// Source component names reported by the dev-mode reconciler (nearest named
+// function/class component owning the host node). Inspector chrome only —
+// emitted as "component" in the node-tree JSON.
+static std::map<int, std::string> g_inspectorSourceNames;
+
+void setInspectorSourceName(int nodeId, const char* name) {
+    if (!name || !*name) {
+        g_inspectorSourceNames.erase(nodeId);
+        return;
+    }
+    g_inspectorSourceNames[nodeId] = name;
+}
+
+void clearInspectorSourceName(int nodeId) {
+    g_inspectorSourceNames.erase(nodeId);
+}
+
+static bool isProjectWrapperNode(const raym3::v2::NodePtr& node) {
+    return node && node->id == "__rayact_project_wrapper";
+}
+
 static void appendNodeTree(std::ostringstream& ss, int id, const raym3::v2::NodePtr& node, bool first) {
     if (!node) return;
+    // Developer tooling is renderer chrome, not part of the application being
+    // inspected. Skip the entire marked subtree.
+    if (isDevToolsNode(node)) return;
     if (!first) ss << ",";
     ss << "{\"id\":" << id
        << ",\"type\":\"" << nodeKindLabel(node->kind) << "\"";
     if (!node->id.empty()) ss << ",\"name\":\"" << node->id << "\"";
+    if (auto cit = g_inspectorSourceNames.find(id); cit != g_inspectorSourceNames.end())
+        ss << ",\"component\":\"" << cit->second << "\"";
     if (!node->text.empty()) ss << ",\"text\":\"" << node->text << "\"";
     ss << ",\"layout\":{\"x\":" << node->layout.x
        << ",\"y\":" << node->layout.y
@@ -4891,6 +5092,17 @@ static void appendNodeTree(std::ostringstream& ss, int id, const raym3::v2::Node
     ss << ",\"children\":[";
     bool childFirst = true;
     for (const auto& child : node->children) {
+        if (isDevToolsNode(child)) continue;
+        if (isProjectWrapperNode(child)) {
+            for (const auto& projectChild : child->children) {
+                if (isDevToolsNode(projectChild)) continue;
+                int projectChildId = nodeIdFor(projectChild);
+                if (projectChildId < 0) continue;
+                appendNodeTree(ss, projectChildId, projectChild, childFirst);
+                childFirst = false;
+            }
+            continue;
+        }
         int childId = nodeIdFor(child);
         if (childId < 0) continue;
         appendNodeTree(ss, childId, child, childFirst);
@@ -4904,8 +5116,21 @@ std::string buildNodeTreeJson() {
     ss << "[";
     bool first = true;
     if (g_root) {
-        int rootId = nodeIdFor(g_root);
-        if (rootId >= 0) appendNodeTree(ss, rootId, g_root, first);
+        if (isProjectWrapperNode(g_root)) {
+            // The decorator wrapper only co-locates project content and
+            // renderer chrome. Flatten it so the inspector starts at the
+            // application's actual root nodes.
+            for (const auto& child : g_root->children) {
+                if (isDevToolsNode(child)) continue;
+                int childId = nodeIdFor(child);
+                if (childId < 0) continue;
+                appendNodeTree(ss, childId, child, first);
+                first = false;
+            }
+        } else {
+            int rootId = nodeIdFor(g_root);
+            if (rootId >= 0) appendNodeTree(ss, rootId, g_root, first);
+        }
     } else {
         for (const auto& [id, node] : g_nodes) {
             appendNodeTree(ss, id, node, first);
@@ -4916,10 +5141,396 @@ std::string buildNodeTreeJson() {
     return ss.str();
 }
 
+// ─── Chrome DevTools (CDP) JSON builders ─────────────────────────────────────
+// CDP nodeIds must be positive and unique, and nodeId 1 is reserved for the
+// #document wrapper the CDP handler emits. Rayact node ids start at 1, so the
+// wire id is always rayactId + 1.
+// 1 is #document and 2 is the synthetic rayact-app root. Keep host ids in a
+// separate range so native ids remain stable without colliding with protocol
+// structure nodes or text-node ids.
+static inline int cdpIdForNode(int rayactId) { return rayactId + 100; }
+int rayactNodeIdFromCdpId(int cdpNodeId) { return cdpNodeId - 100; }
+
+static std::string cdpJsonEscape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (unsigned char c : s) {
+        switch (c) {
+            case '\\': out += "\\\\"; break;
+            case '"': out += "\\\""; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if (c < 0x20) {
+                    char buf[8];
+                    snprintf(buf, sizeof(buf), "\\u%04x", c);
+                    out += buf;
+                } else {
+                    out += (char)c;
+                }
+                break;
+        }
+    }
+    return out;
+}
+
+static std::string toUpperAscii(std::string s) {
+    for (char& c : s) c = (char)toupper((unsigned char)c);
+    return s;
+}
+
+static std::string toLowerAscii(std::string s) {
+    for (char& c : s) c = (char)tolower((unsigned char)c);
+    return s;
+}
+
+static void appendCdpDomNode(std::ostringstream& ss, int id,
+                             const raym3::v2::NodePtr& node, bool first) {
+    if (!node) return;
+    if (isDevToolsNode(node)) return;
+    if (!first) ss << ",";
+
+    const char* kind = nodeKindLabel(node->kind);
+    ss << "{\"nodeId\":" << cdpIdForNode(id)
+       << ",\"backendNodeId\":" << cdpIdForNode(id)
+       << ",\"nodeType\":1"
+       << ",\"nodeName\":\"" << toUpperAscii(kind) << "\""
+       << ",\"localName\":\"" << toLowerAscii(kind) << "\""
+       << ",\"nodeValue\":\"\"";
+
+    ss << ",\"attributes\":[";
+    bool attrFirst = true;
+    auto attr = [&](const char* name, const std::string& value) {
+        if (!attrFirst) ss << ",";
+        ss << "\"" << name << "\",\"" << cdpJsonEscape(value) << "\"";
+        attrFirst = false;
+    };
+    if (auto cit = g_inspectorSourceNames.find(id); cit != g_inspectorSourceNames.end())
+        attr("data-rayact-component", cit->second);
+    if (!node->id.empty()) attr("id", node->id);
+    {
+        char layoutBuf[96];
+        snprintf(layoutBuf, sizeof(layoutBuf), "%.1f,%.1f,%.1f,%.1f",
+                 node->layout.x, node->layout.y,
+                 node->layout.width, node->layout.height);
+        attr("layout", layoutBuf);
+    }
+    ss << "]";
+
+    // Collect renderable children (flattening the project wrapper) so the
+    // reported childNodeCount matches the emitted children array.
+    std::vector<std::pair<int, raym3::v2::NodePtr>> kids;
+    std::function<void(const raym3::v2::NodePtr&)> collect =
+        [&](const raym3::v2::NodePtr& parent) {
+            for (const auto& child : parent->children) {
+                if (isDevToolsNode(child)) continue;
+                if (isProjectWrapperNode(child)) { collect(child); continue; }
+                int childId = nodeIdFor(child);
+                if (childId < 0) continue;
+                kids.emplace_back(childId, child);
+            }
+        };
+    collect(node);
+
+    const bool hasText = !node->text.empty();
+    ss << ",\"childNodeCount\":" << (kids.size() + (hasText ? 1 : 0));
+    ss << ",\"children\":[";
+    bool childFirst = true;
+    if (hasText) {
+        // Text content as a CDP text node so the Elements tree shows it inline.
+        ss << "{\"nodeId\":" << (cdpIdForNode(id) + 1000000)
+           << ",\"backendNodeId\":" << (cdpIdForNode(id) + 1000000)
+           << ",\"nodeType\":3,\"nodeName\":\"#text\",\"localName\":\"\""
+           << ",\"nodeValue\":\"" << cdpJsonEscape(node->text) << "\""
+           << ",\"childNodeCount\":0,\"children\":[]}";
+        childFirst = false;
+    }
+    for (const auto& [childId, child] : kids) {
+        appendCdpDomNode(ss, childId, child, childFirst);
+        childFirst = false;
+    }
+    ss << "]}";
+}
+
+std::string buildCdpDomJson() {
+    std::ostringstream ss;
+    ss << "[";
+    bool first = true;
+    if (g_root) {
+        if (isProjectWrapperNode(g_root)) {
+            for (const auto& child : g_root->children) {
+                if (isDevToolsNode(child)) continue;
+                int childId = nodeIdFor(child);
+                if (childId < 0) continue;
+                appendCdpDomNode(ss, childId, child, first);
+                first = false;
+            }
+        } else {
+            int rootId = nodeIdFor(g_root);
+            if (rootId >= 0) appendCdpDomNode(ss, rootId, g_root, first);
+        }
+    }
+    ss << "]";
+    return ss.str();
+}
+
+static std::string cssColor(const Color& c) {
+    char buf[48];
+    snprintf(buf, sizeof(buf), "rgba(%d, %d, %d, %.3g)",
+             c.r, c.g, c.b, (double)c.a / 255.0);
+    return buf;
+}
+
+static std::string cssPx(float v) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%.4gpx", v);
+    return buf;
+}
+
+static const char* cssFlexDirection(raym3::v2::FlexDirection d) {
+    switch (d) {
+        case raym3::v2::FlexDirection::Row: return "row";
+        case raym3::v2::FlexDirection::Column: return "column";
+        case raym3::v2::FlexDirection::RowReverse: return "row-reverse";
+        case raym3::v2::FlexDirection::ColumnReverse: return "column-reverse";
+    }
+    return "column";
+}
+
+static const char* cssJustify(raym3::v2::Justify j) {
+    switch (j) {
+        case raym3::v2::Justify::FlexStart: return "flex-start";
+        case raym3::v2::Justify::FlexEnd: return "flex-end";
+        case raym3::v2::Justify::Center: return "center";
+        case raym3::v2::Justify::SpaceBetween: return "space-between";
+        case raym3::v2::Justify::SpaceAround: return "space-around";
+        case raym3::v2::Justify::SpaceEvenly: return "space-evenly";
+    }
+    return "flex-start";
+}
+
+static const char* cssAlign(raym3::v2::Align a) {
+    switch (a) {
+        case raym3::v2::Align::Auto: return "auto";
+        case raym3::v2::Align::FlexStart: return "flex-start";
+        case raym3::v2::Align::FlexEnd: return "flex-end";
+        case raym3::v2::Align::Center: return "center";
+        case raym3::v2::Align::Stretch: return "stretch";
+        case raym3::v2::Align::Baseline: return "baseline";
+    }
+    return "auto";
+}
+
+static const char* cssPosition(raym3::v2::PositionType p) {
+    switch (p) {
+        case raym3::v2::PositionType::Relative: return "relative";
+        case raym3::v2::PositionType::Absolute: return "absolute";
+        case raym3::v2::PositionType::Static: return "static";
+        case raym3::v2::PositionType::Fixed: return "fixed";
+    }
+    return "relative";
+}
+
+// CSS name/value pairs for a node's resolved style + computed layout. Shared
+// by CSS.getMatchedStylesForNode (inline style) and CSS.getComputedStyleForNode.
+static std::vector<std::pair<std::string, std::string>> cdpStyleProperties(
+    const raym3::v2::NodePtr& node) {
+    std::vector<std::pair<std::string, std::string>> props;
+    const raym3::v2::Style& s = node->style;
+    auto add = [&](const char* name, const std::string& value) {
+        props.emplace_back(name, value);
+    };
+
+    add("width", cssPx(node->layout.width));
+    add("height", cssPx(node->layout.height));
+    if (s.display) add("display", *s.display == raym3::v2::Display::None ? "none"
+                        : *s.display == raym3::v2::Display::Contents ? "contents" : "flex");
+    if (s.position) add("position", cssPosition(*s.position));
+    if (s.flexDirection) add("flex-direction", cssFlexDirection(*s.flexDirection));
+    if (s.justifyContent) add("justify-content", cssJustify(*s.justifyContent));
+    if (s.alignItems) add("align-items", cssAlign(*s.alignItems));
+    if (s.alignSelf) add("align-self", cssAlign(*s.alignSelf));
+    if (s.flexGrow) add("flex-grow", std::to_string(*s.flexGrow));
+    if (s.flexShrink) add("flex-shrink", std::to_string(*s.flexShrink));
+    if (s.flexBasis) add("flex-basis", cssPx(*s.flexBasis));
+    if (s.gap) add("gap", cssPx(*s.gap));
+    if (s.minWidth) add("min-width", cssPx(*s.minWidth));
+    if (s.minHeight) add("min-height", cssPx(*s.minHeight));
+    if (s.maxWidth) add("max-width", cssPx(*s.maxWidth));
+    if (s.maxHeight) add("max-height", cssPx(*s.maxHeight));
+
+    const auto edge = [&](const char* base, const raym3::v2::EdgeValues& e) {
+        const float top = e.Top(-1.0f), right = e.Right(-1.0f);
+        const float bottom = e.Bottom(-1.0f), left = e.Left(-1.0f);
+        char name[48];
+        if (top >= 0) { snprintf(name, sizeof(name), "%s-top", base); add(name, cssPx(top)); }
+        if (right >= 0) { snprintf(name, sizeof(name), "%s-right", base); add(name, cssPx(right)); }
+        if (bottom >= 0) { snprintf(name, sizeof(name), "%s-bottom", base); add(name, cssPx(bottom)); }
+        if (left >= 0) { snprintf(name, sizeof(name), "%s-left", base); add(name, cssPx(left)); }
+    };
+    edge("margin", node->style.margin);
+    edge("padding", node->style.padding);
+    {
+        const auto& e = node->style.inset;
+        const float top = e.Top(-1.0f), right = e.Right(-1.0f);
+        const float bottom = e.Bottom(-1.0f), left = e.Left(-1.0f);
+        if (top >= 0) add("top", cssPx(top));
+        if (right >= 0) add("right", cssPx(right));
+        if (bottom >= 0) add("bottom", cssPx(bottom));
+        if (left >= 0) add("left", cssPx(left));
+    }
+
+    if (s.backgroundColor) add("background-color", cssColor(*s.backgroundColor));
+    if (s.borderColor) add("border-color", cssColor(*s.borderColor));
+    if (s.borderWidth) add("border-width", cssPx(*s.borderWidth));
+    if (s.borderRadius) add("border-radius", cssPx(*s.borderRadius));
+    if (s.opacity) add("opacity", std::to_string(*s.opacity));
+    if (s.elevation) add("elevation", std::to_string(*s.elevation));
+    if (s.overflow) add("overflow", *s.overflow == raym3::v2::Overflow::Hidden ? "hidden"
+                        : *s.overflow == raym3::v2::Overflow::Scroll ? "scroll" : "visible");
+    if (s.translateX) add("translate-x", cssPx(*s.translateX));
+    if (s.translateY) add("translate-y", cssPx(*s.translateY));
+    if (s.scale) add("scale", std::to_string(*s.scale));
+    if (s.rotation) add("rotation", std::to_string(*s.rotation) + "deg");
+
+    if (s.text.fontSize) add("font-size", cssPx(*s.text.fontSize));
+    if (s.text.lineHeight) add("line-height", cssPx(*s.text.lineHeight));
+    if (s.text.letterSpacing) add("letter-spacing", cssPx(*s.text.letterSpacing));
+    if (s.text.color) add("color", cssColor(*s.text.color));
+    if (s.text.fontFamily) add("font-family", *s.text.fontFamily);
+
+    return props;
+}
+
+std::string buildCdpNodeStyleJson(int cdpNodeId) {
+    auto it = g_nodes.find(rayactNodeIdFromCdpId(cdpNodeId));
+    if (it == g_nodes.end() || !it->second) return "";
+    const auto props = cdpStyleProperties(it->second);
+    std::ostringstream ss;
+    ss << "{\"cssProperties\":[";
+    bool first = true;
+    for (const auto& [name, value] : props) {
+        if (!first) ss << ",";
+        ss << "{\"name\":\"" << name << "\",\"value\":\"" << cdpJsonEscape(value) << "\"}";
+        first = false;
+    }
+    ss << "],\"shorthandEntries\":[],\"styleSheetId\":\"rayact-inline\"}";
+    return ss.str();
+}
+
+std::string buildCdpComputedStyleJson(int cdpNodeId) {
+    auto it = g_nodes.find(rayactNodeIdFromCdpId(cdpNodeId));
+    if (it == g_nodes.end() || !it->second) return "";
+    const auto props = cdpStyleProperties(it->second);
+    std::ostringstream ss;
+    ss << "[";
+    bool first = true;
+    for (const auto& [name, value] : props) {
+        if (!first) ss << ",";
+        ss << "{\"name\":\"" << name << "\",\"value\":\"" << cdpJsonEscape(value) << "\"}";
+        first = false;
+    }
+    ss << "]";
+    return ss.str();
+}
+
+std::string buildCdpBoxModelJson(int cdpNodeId) {
+    auto it = g_nodes.find(rayactNodeIdFromCdpId(cdpNodeId));
+    if (it == g_nodes.end() || !it->second) return "";
+    const Rectangle& r = it->second->layout;
+    char quad[160];
+    snprintf(quad, sizeof(quad), "[%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f]",
+             r.x, r.y, r.x + r.width, r.y, r.x + r.width, r.y + r.height,
+             r.x, r.y + r.height);
+    std::ostringstream ss;
+    ss << "{\"content\":" << quad << ",\"padding\":" << quad
+       << ",\"border\":" << quad << ",\"margin\":" << quad
+       << ",\"width\":" << (int)r.width << ",\"height\":" << (int)r.height << "}";
+    return ss.str();
+}
+
 static int g_inspectorHighlightId = -1;
+static int g_inspectorPickedNodeId = -1;
+static bool g_inspectorPickMode = false;
+static bool g_inspectorPickTouchActive = false;
+
+static raym3::v2::NodePtr deepestInspectableNodeAt(
+    const raym3::v2::NodePtr& node, Vector2 point) {
+    if (!node || isDevToolsNode(node) ||
+        node->style.display == raym3::v2::Display::None ||
+        !CheckCollisionPointRec(point, node->layout)) {
+        return nullptr;
+    }
+    // Later siblings paint above earlier siblings, so inspect them first.
+    for (auto it = node->children.rbegin(); it != node->children.rend(); ++it) {
+        if (auto hit = deepestInspectableNodeAt(*it, point)) return hit;
+    }
+    return isProjectWrapperNode(node) ? nullptr : node;
+}
+
+int getInspectorNodeAt(float x, float y) {
+    Vector2 point{x, y};
+    raym3::v2::NodePtr hit;
+    if (g_root) hit = deepestInspectableNodeAt(g_root, point);
+    return hit ? nodeIdFor(hit) : -1;
+}
 
 void setInspectorHighlight(int nodeId) {
-    g_inspectorHighlightId = nodeId;
+    if (nodeId < 0) {
+        g_inspectorHighlightId = -1;
+        return;
+    }
+    auto it = g_nodes.find(nodeId);
+    g_inspectorHighlightId = (it != g_nodes.end() && !isDevToolsNode(it->second)) ? nodeId : -1;
+}
+
+void setInspectorPickMode(bool enabled) {
+    g_inspectorPickMode = enabled;
+    g_inspectorPickTouchActive = false;
+    if (!enabled) {
+        g_inspectorPickedNodeId = -1;
+        g_inspectorHighlightId = -1;
+    }
+}
+
+int getInspectorPickedNode() { return g_inspectorPickedNodeId; }
+
+// True when the resolved input owner sits inside developer-tool chrome
+// (any node whose id carries the __rayact_devtools_ prefix, or a descendant
+// of one). Walks the committed parent map so it agrees with hit testing —
+// including dragged/floating chrome whose position is layout-driven.
+static bool nodeWithinDevTools(raym3::v2::NodePtr node) {
+    while (node) {
+        if (isDevToolsNode(node)) return true;
+        node = raym3::v2::CommittedParentOf(node.get());
+    }
+    return false;
+}
+
+bool handleInspectorPickInput(Vector2 pointDp, bool pressed, bool released) {
+    if (!g_inspectorPickMode) return false;
+    if (g_inspectorPickTouchActive) {
+        if (released) g_inspectorPickTouchActive = false;
+        return true;
+    }
+    if (!pressed) return false;
+
+    // Developer-tool controls retain normal input (the floating pick bar,
+    // the dev menu if reopened). Everything else — project content,
+    // including the project's own modals — is interceptable for picking.
+    if (nodeWithinDevTools(raym3::v2::InputOwnerAt(pointDp))) {
+        return false;
+    }
+
+    auto hit = deepestInspectableNodeAt(g_root, pointDp);
+    const int id = nodeIdFor(hit);
+    if (id >= 0) {
+        g_inspectorPickedNodeId = id;
+        g_inspectorHighlightId = id;
+    }
+    g_inspectorPickTouchActive = true;
+    return true;
 }
 
 void drawInspectorHighlight() {
@@ -4929,6 +5540,14 @@ void drawInspectorHighlight() {
     const Rectangle& r = it->second->layout;
     if (r.width <= 0 || r.height <= 0) return;
     DrawRectangleLinesEx(r, 2.0f, {255, 0, 255, 255});
+}
+
+raym3::v2::NodePtr findDevToolsRoot() {
+    for (const auto& [id, node] : g_nodes) {
+        (void)id;
+        if (isDevToolsNode(node)) return node;
+    }
+    return nullptr;
 }
 
 // ─── Reconciler fast path ─────────────────────────────────────────────────────
@@ -5000,7 +5619,6 @@ static bool fastPathFlattenTransformInto(JSContext* ctx, JSValue styleObj, bool 
                     if (isCreate) {
                         JSValue sv = JS_GetPropertyStr(ctx, raw, "value");
                         JS_SetPropertyStr(ctx, styleObj, key, sv);
-                        JS_FreeValue(ctx, sv);
                     } else if (unsupported) {
                         *unsupported = true;
                     }
@@ -5993,7 +6611,39 @@ void createParamNodeFromBuffer(
     }
 }
 
-void applyCommandBuffer(const uint8_t* base, size_t len) {
+// Optional per-worker decode context. Worker-recorded streams reuse the same
+// opcodes, but their node/string ids live in a private namespace: node ids are
+// remapped into the native (odd) id space on first sight, strings intern into
+// a per-worker table, and RCMD_SET_ROOT attaches under the worker's view node
+// instead of replacing the app root. Null context = main-thread stream,
+// identity mapping (the hot path — zero behavior change).
+struct RcmdWorkerCtx {
+    std::unordered_map<int, int> idMap;             // worker-local → global
+    std::map<int32_t, std::string> strings;          // worker-local intern table
+    std::vector<int> createdIds;                     // for release on terminate
+    int viewNodeId = -1;                             // attach target for SET_ROOT
+    int rootId = -1;                                 // current attached root (global id)
+};
+
+static void applyCommandBufferCtx(const uint8_t* base, size_t len, RcmdWorkerCtx* wc) {
+    // Node-id mapping. `create` allocates on first sight; lookups of unknown
+    // worker ids return -1 (tolerant helpers no-op on missing nodes).
+    auto mapNew = [&](int id) {
+        if (!wc) return id;
+        auto it = wc->idMap.find(id);
+        if (it != wc->idMap.end()) return it->second;
+        int g = nextNativeNodeId();
+        wc->idMap[id] = g;
+        wc->createdIds.push_back(g);
+        return g;
+    };
+    auto mapRef = [&](int id) {
+        if (!wc) return id;
+        auto it = wc->idMap.find(id);
+        return it != wc->idMap.end() ? it->second : -1;
+    };
+    std::map<int32_t, std::string>& strings = wc ? wc->strings : g_cmdStrings;
+
     size_t off = 0;
     while (off + 4 <= len) {
         int32_t op = cmdReadI32(base + off);
@@ -6004,7 +6654,7 @@ void applyCommandBuffer(const uint8_t* base, size_t len) {
                 int p = cmdReadI32(base + off);
                 int c = cmdReadI32(base + off + 4);
                 off += 8;
-                batchAppendChildTolerant(p, c);
+                batchAppendChildTolerant(mapRef(p), mapRef(c));
                 break;
             }
             case RCMD_INSERT: {
@@ -6013,7 +6663,7 @@ void applyCommandBuffer(const uint8_t* base, size_t len) {
                 int c = cmdReadI32(base + off + 4);
                 int b = cmdReadI32(base + off + 8);
                 off += 12;
-                batchInsertBeforeTolerant(p, c, b);
+                batchInsertBeforeTolerant(mapRef(p), mapRef(c), mapRef(b));
                 break;
             }
             case RCMD_REMOVE: {
@@ -6021,21 +6671,31 @@ void applyCommandBuffer(const uint8_t* base, size_t len) {
                 int p = cmdReadI32(base + off);
                 int c = cmdReadI32(base + off + 4);
                 off += 8;
-                batchRemoveChildTolerant(p, c);
+                batchRemoveChildTolerant(mapRef(p), mapRef(c));
                 break;
             }
             case RCMD_DISPOSE: {
                 if (off + 4 > len) return;
                 int n = cmdReadI32(base + off);
                 off += 4;
-                batchDisposeNodeTolerant(n);
+                batchDisposeNodeTolerant(mapRef(n));
                 break;
             }
             case RCMD_SET_ROOT: {
                 if (off + 4 > len) return;
                 int n = cmdReadI32(base + off);
                 off += 4;
-                batchSetRootTolerant(n);
+                if (wc) {
+                    // Attach the worker tree under its view node. Replace any
+                    // previous root so re-mounts behave like setRootNode.
+                    int newRoot = mapRef(n);
+                    if (wc->rootId >= 0 && wc->rootId != newRoot)
+                        batchRemoveChildTolerant(wc->viewNodeId, wc->rootId);
+                    batchAppendChildTolerant(wc->viewNodeId, newRoot);
+                    wc->rootId = newRoot;
+                } else {
+                    batchSetRootTolerant(n);
+                }
                 break;
             }
             case RCMD_CREATE: {
@@ -6045,7 +6705,7 @@ void applyCommandBuffer(const uint8_t* base, size_t len) {
                 off += 8;
                 raym3::v2::Style style;
                 off = readStyleRun(base, off, len, style);
-                createNodeFromBuffer(id, typeId, style);
+                createNodeFromBuffer(mapNew(id), typeId, style);
                 break;
             }
             case RCMD_CREATE_PARAM: {
@@ -6060,11 +6720,11 @@ void applyCommandBuffer(const uint8_t* base, size_t len) {
                 off += 32;
                 raym3::v2::Style style;
                 off = readStyleRun(base, off, len, style);
-                auto sit = g_cmdStrings.find(strId);
-                std::string param = sit != g_cmdStrings.end() ? sit->second : "";
-                auto vit = g_cmdStrings.find(variantId);
-                std::string variant = vit != g_cmdStrings.end() ? vit->second : "";
-                createParamNodeFromBuffer(id, typeId, param, flags, sizeArg, colorArg, variant, style);
+                auto sit = strings.find(strId);
+                std::string param = sit != strings.end() ? sit->second : "";
+                auto vit = strings.find(variantId);
+                std::string variant = vit != strings.end() ? vit->second : "";
+                createParamNodeFromBuffer(mapNew(id), typeId, param, flags, sizeArg, colorArg, variant, style);
                 break;
             }
             case RCMD_SET_STYLE: {
@@ -6073,10 +6733,10 @@ void applyCommandBuffer(const uint8_t* base, size_t len) {
                 off += 4;
                 raym3::v2::Style delta;
                 off = readStyleRun(base, off, len, delta);
-                auto it = g_nodes.find(id);
+                auto it = g_nodes.find(mapRef(id));
                 if (it != g_nodes.end() && it->second) {
                     it->second->style = raym3::v2::MergeStyles(it->second->style, delta);
-                    rayact::shadowTree().setStyle((uint32_t)id, it->second->style);
+                    rayact::shadowTree().setStyle((uint32_t)it->first, it->second->style);
                 }
                 break;
             }
@@ -6086,7 +6746,7 @@ void applyCommandBuffer(const uint8_t* base, size_t len) {
                 int byteLen = cmdReadI32(base + off + 4);
                 off += 8;
                 if (byteLen < 0 || off + (size_t)byteLen > len) return;
-                g_cmdStrings[strId] = std::string(reinterpret_cast<const char*>(base + off), (size_t)byteLen);
+                strings[strId] = std::string(reinterpret_cast<const char*>(base + off), (size_t)byteLen);
                 off += ((size_t)byteLen + 3) & ~size_t(3);  // 4-byte padded
                 break;
             }
@@ -6095,9 +6755,9 @@ void applyCommandBuffer(const uint8_t* base, size_t len) {
                 int id = cmdReadI32(base + off);
                 int strId = cmdReadI32(base + off + 4);
                 off += 8;
-                auto it = g_nodes.find(id);
-                auto sit = g_cmdStrings.find(strId);
-                if (it != g_nodes.end() && it->second && sit != g_cmdStrings.end()) {
+                auto it = g_nodes.find(mapRef(id));
+                auto sit = strings.find(strId);
+                if (it != g_nodes.end() && it->second && sit != strings.end()) {
                     it->second->text = sit->second;
                     it->second->preparedTextCache.reset();
                 }
@@ -6109,7 +6769,31 @@ void applyCommandBuffer(const uint8_t* base, size_t len) {
         }
     }
 }
+
+void applyCommandBuffer(const uint8_t* base, size_t len) {
+    applyCommandBufferCtx(base, len, nullptr);
+}
+
+// workerId → decode context. JS-pump thread only (drainWorkerOutbox).
+std::unordered_map<int, RcmdWorkerCtx> g_workerRcmdCtx;
 }  // namespace
+
+void rayactApplyWorkerNodeCommands(int workerId, int viewNodeId,
+                                   const uint8_t* base, size_t len) {
+    RcmdWorkerCtx& wc = g_workerRcmdCtx[workerId];
+    wc.viewNodeId = viewNodeId;
+    applyCommandBufferCtx(base, len, &wc);
+}
+
+void rayactReleaseWorkerNodes(int workerId) {
+    auto it = g_workerRcmdCtx.find(workerId);
+    if (it == g_workerRcmdCtx.end()) return;
+    for (int id : it->second.createdIds) {
+        auto nit = g_nodes.find(id);
+        if (nit != g_nodes.end()) g_nodes.erase(nit);
+    }
+    g_workerRcmdCtx.erase(it);
+}
 
 JSValue JS_rayactFlushCommands(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;

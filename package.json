@@ -1,91 +1,12 @@
 {
-  "name": "rayact",
-  "version": "0.0.2",
-  "description": "Cross-platform React renderer with raylib backend",
+  "name": "@rayact/workspace",
+  "version": "0.0.3",
+  "private": true,
+  "description": "Rayact framework monorepo",
   "type": "module",
-  "main": "./index.js",
-  "types": "./index.d.ts",
-  "bin": {
-    "rayact": "./bin/rayact.js"
-  },
-  "exports": {
-    ".": {
-      "types": "./index.d.ts",
-      "default": "./index.js"
-    },
-    "./react": {
-      "types": "./react.d.ts",
-      "default": "./react.js"
-    },
-    "./runtime": {
-      "types": "./runtime.d.ts",
-      "default": "./runtime.js"
-    },
-    "./shared": {
-      "types": "./shared.d.ts",
-      "default": "./shared.js"
-    },
-    "./shared/material-icons": {
-      "types": "./shared-material-icons.d.ts",
-      "default": "./shared-material-icons.js"
-    },
-    "./navigation": {
-      "types": "./navigation.d.ts",
-      "default": "./navigation.js"
-    },
-    "./navigation/native": {
-      "types": "./navigation-native.d.ts",
-      "default": "./navigation-native.js"
-    },
-    "./navigation/stack": {
-      "types": "./navigation-stack.d.ts",
-      "default": "./navigation-stack.js"
-    },
-    "./navigation/bottom-tabs": {
-      "types": "./navigation-bottom-tabs.d.ts",
-      "default": "./navigation-bottom-tabs.js"
-    },
-    "./dev-server": {
-      "types": "./dev-server.d.ts",
-      "default": "./dev-server.js"
-    },
-    "./prebuild": {
-      "types": "./prebuild.d.ts",
-      "default": "./prebuild.js"
-    },
-    "./cli": {
-      "types": "./cli.d.ts",
-      "default": "./cli.js"
-    },
-    "./dev-client": {
-      "types": "./dev-client.d.ts",
-      "default": "./dev-client.js"
-    },
-    "./crypto": {
-      "types": "./crypto.d.ts",
-      "default": "./crypto.js"
-    },
-    "./mmkv": {
-      "types": "./mmkv.d.ts",
-      "default": "./mmkv.js"
-    },
-    "./secure-store": {
-      "types": "./secure-store.d.ts",
-      "default": "./secure-store.js"
-    },
-    "./worklets": {
-      "types": "./worklets.d.ts",
-      "default": "./worklets.js"
-    },
-    "./package.json": "./package.json"
-  },
-  "files": [
-    "bin",
-    "dist",
-    "*.js",
-    "*.d.ts",
-    "README.md",
-    "package.json"
+  "workspaces": [
+    "packages/*",
+    "apps/dev-app"
   ],
   "scripts": {
     "dev": "npm run rayact -- dev --host 0.0.0.0 --port 8081 --entry test-projects/release-consumer-smoke/src/App.tsx",
@@ -93,77 +14,43 @@
     "android": "npm run rayact -- dev --android --host 0.0.0.0 --port 8081 --entry test-projects/release-consumer-smoke/src/App.tsx",
     "ios": "npm run rayact -- dev --ios --host 0.0.0.0 --port 8081 --entry test-projects/release-consumer-smoke/src/App.tsx",
     "web": "npm run rayact -- dev --web --host 0.0.0.0 --port 8081 --entry test-projects/release-consumer-smoke/src/App.tsx",
-    "rayact": "node dist/cli/cli.js",
-    "dev:android": "cd apps/android && ./gradlew --warning-mode all",
-    "dev:web": "cd apps/web && npm run dev",
-    "build": "tsc -p tsconfig.app.json && tsc -p tsconfig.node.json && npm run build:create-app && npm run stage:root",
+    "rayact": "node packages/rayact-cli/dist/cli.js",
+    "build": "node scripts/build-workspaces.mjs && node scripts/stage-compat-dist.mjs",
+    "build:packages": "node scripts/build-workspaces.mjs",
+    "build:create-app": "npm run build --workspace=create-rayact-app",
+    "stage:root": "node scripts/stage-compat-dist.mjs",
     "verify": "npm run rayact -- verify",
     "verify:android": "npm run rayact -- verify --android",
     "verify:web": "bash scripts/verify-web.sh",
+    "build:web-release-host": "sh scripts/build-web-release-host.sh",
     "verify:release": "bash scripts/verify-release-matrix.sh",
     "serve:release": "node scripts/serve-release-assets.mjs",
     "pack:release": "node scripts/pack-release-assets.mjs",
     "release:replace": "node scripts/replace-github-release.mjs",
     "test": "node --test test/**/*.test.mjs",
-    "test:packages": "npm test",
+    "test:packages": "node scripts/verify-packages.mjs",
+    "test:reproducibility": "node scripts/verify-reproducibility.mjs",
+    "verify:stable-gate": "node scripts/verify-stable-gate.mjs release1",
     "test:native": "npm run test:desktop-smoke",
     "test:desktop-smoke": "cd test-projects/desktop-smoke && npm run test:desktop",
-    "build:create-app": "cd packages/create-rayact-app && npm run build",
-    "stage:root": "node scripts/stage-assets.mjs",
-    "clean": "rm -rf dist"
+    "gen:dev-app-capabilities": "node scripts/generate-dev-app-capabilities.mjs",
+    "verify:dev-app-modules": "node scripts/generate-dev-app-capabilities.mjs --check && node scripts/verify-dev-app-modules.mjs",
+    "clean": "node scripts/clean-workspaces.mjs"
   },
-  "workspaces": [
-    "packages/prebuilt-*",
-    "packages/template-android",
-    "packages/template-ios",
-    "packages/create-rayact-app",
-    "packages/rayact-mmkv",
-    "packages/rayact-secure-store",
-    "apps/*"
-  ],
   "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/qrcode-terminal": "^0.12.2",
     "@types/react": "^19.2.16",
     "@types/react-reconciler": "^0.31.0",
+    "@types/ws": "^8.18.1",
     "babel-plugin-react-compiler": "^1.0.0",
     "esbuild": "^0.28.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "typescript": "^5.8.3"
   },
-  "peerDependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
-  },
-  "peerDependenciesMeta": {
-    "react-dom": {
-      "optional": true
-    }
-  },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22 <25"
   },
-  "keywords": [
-    "react",
-    "renderer",
-    "cross-platform",
-    "raylib",
-    "desktop",
-    "mobile",
-    "web"
-  ],
-  "license": "MIT",
-  "dependencies": {
-    "@callstack/react-theme-provider": "^3.0.9",
-    "@react-navigation/core": "*",
-    "@react-navigation/routers": "*",
-    "@vitejs/plugin-react": "^5.1.1",
-    "bonjour-service": "^1.3.0",
-    "chokidar": "^4.0.3",
-    "ink": "^7.0.5",
-    "qrcode-terminal": "^0.12.0",
-    "react-reconciler": "^0.31.0",
-    "react-refresh": "^0.18.0",
-    "vite": "^7.2.6",
-    "ws": "^8.18.3"
-  }
+  "license": "MIT"
 }

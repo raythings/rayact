@@ -1,6 +1,7 @@
 #include "module_bus.hpp"
 
 #include "data_dir.hpp"
+#include "../core/engine.hpp"
 
 #include <cstring>
 #include <map>
@@ -237,6 +238,7 @@ JSValue jsInvokeAsync(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
                       std::to_string(err) + ")");
     }
     queue->push(std::move(r));
+    engineRequestFrame();
   }).detach();
 
   return promise;

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(here, '../..');
-const SCHEMA = path.join(ROOT, 'packages/rayact-dev-server/schema/rayact.config.schema.json');
+const SCHEMA = path.join(ROOT, 'schema/rayact.config.schema.json');
 const OUT = path.join(here, '..', 'reference', 'config.md');
 
 const schema = JSON.parse(fs.readFileSync(SCHEMA, 'utf8'));
@@ -63,8 +63,9 @@ Add the \`$schema\` key for editor autocomplete:
 | Field | Type | Description |
 | --- | --- | --- |
 ${rows(schema.properties)}
-> Transforms default to \`dev=false, debug=false, release=true\`. Only record an
-> override — e.g. \`"transform": { "bytecode": { "release": false } }\`.
+> Transforms default to \`dev=false, debug=false, release=true\`. Development and
+> debug transforms can be overridden. Release bytecode is mandatory; a legacy
+> \`transform.bytecode.release=false\` value is accepted but ignored.
 `;
 
 if (process.argv.includes('--check')) {
