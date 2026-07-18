@@ -24,10 +24,10 @@ EOF
 }
 
 DESKTOP_BIN="$RAYACT_ROOT/build-linux/bin/rayact_desktop"
-MODULES_DIR="$RAYACT_ROOT/build-linux/modules"
 LINUX_PKG="$RAYACT_ROOT/packages/prebuilt-linux-x64"
 
-mkdir -p "$LINUX_PKG/bin" "$LINUX_PKG/modules"
+rm -rf "$LINUX_PKG/modules"
+mkdir -p "$LINUX_PKG/bin"
 
 if [[ ! -f "$DESKTOP_BIN" ]]; then
   echo "ERROR: $DESKTOP_BIN not found" >&2
@@ -36,10 +36,6 @@ fi
 
 cp "$DESKTOP_BIN" "$LINUX_PKG/bin/"
 chmod +x "$LINUX_PKG/bin/rayact_desktop"
-
-if [[ -d "$MODULES_DIR" ]]; then
-  cp "$MODULES_DIR"/librayact_*.so "$LINUX_PKG/modules/" 2>/dev/null || true
-fi
 
 write_manifest "$LINUX_PKG" "linux" "x86_64"
 echo "==> Linux prebuilts packed."

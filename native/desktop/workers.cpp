@@ -1,9 +1,19 @@
 #include "workers.hpp"
 #include "worker_js.hpp"
 #include "worker_wasm.hpp"
+#if defined(__APPLE__) && defined(RAYACT_IOS)
+#include "../ios/ios_engine_instance.hpp"
+#endif
 #include "worker_native.hpp"
 #include "worker_queue.hpp"
+#include "worker_draw.hpp"
 #include "raym3_bridge.hpp"
+#if defined(__ANDROID__)
+#include "../android/engine_runtime.hpp"
+#endif
+#ifdef RAYACT_WEB
+#include "../web/web_js_worker.hpp"
+#endif
 
 extern "C" {
 #include "quickjs.h"
@@ -22,6 +32,12 @@ extern "C" {
 #include <atomic>
 #include <unordered_map>
 #include <map>
+#if defined(__ANDROID__)
+#include <android/log.h>
+#define WORKERS_LOG_I(...) __android_log_print(ANDROID_LOG_INFO, "RayactWorkers", __VA_ARGS__)
+#else
+#define WORKERS_LOG_I(...) do {} while (0)
+#endif
 
 // ── Global outbox (worker → main) ───────────────────────────────────────────
 RayactMessageQueue g_workerOutbox;
@@ -31,13 +47,35 @@ static std::atomic<int> g_nextWorkerId{1};
 static std::mutex g_workerMtx;
 static std::unordered_map<int, std::shared_ptr<WorkerEntry>> g_workers;
 
+// Waiting for a worker to exit must never happen on the JS/render thread.
+// QuickJS normally observes WorkerEntry::stop through its interrupt handler,
+// but WASM and native workers can be inside arbitrary user code and may take an
+// unbounded amount of time to return.  Keep the entry alive in a detached
+// reaper while it owns (and eventually joins) the std::thread.
+static void reapWorkerAsync(std::shared_ptr<WorkerEntry> entry) {
+    if (!entry || !entry->thread.joinable()) return;
+    std::thread([entry = std::move(entry)]() mutable {
+        entry->thread.join();
+    }).detach();
+}
+
 // ── Worker canvas nodes ──────────────────────────────────────────────────────
+// Render-thread copy of the last presented draw-command stream. The render
+// lambda refreshes it from entry->draw under the mutex only when the version
+// changed, then replays without holding any lock.
+struct WorkerDrawReplay {
+    std::vector<uint8_t> buf;
+    uint64_t version = 0;
+};
+
 // One entry per workerId that has called createWorkerView().
 struct WorkerCanvasEntry {
     int        workerId;
     int        nodeId;
     Texture2D  texture;                        // GPU texture — updated on main thread
     std::shared_ptr<Rectangle> layoutRect;     // written by render lambda, read by input
+    std::shared_ptr<WorkerDrawReplay> replay;  // render-thread draw state
+    raym3::v2::NodePtr viewportNode;           // existing React/raym3 host view
 };
 
 // workerId → canvas entry
@@ -150,6 +188,8 @@ static JSValue JS_spawnWorker(JSContext* ctx, JSValue,
     int id = g_nextWorkerId.fetch_add(1);
     auto entry = std::make_shared<WorkerEntry>();
     entry->workerId = id;
+    entry->isWasm = isWasm;
+    if (isWasm) entry->modulePath = filePath;
     {
         std::lock_guard<std::mutex> lk(g_workerMtx);
         g_workers[id] = entry;
@@ -159,9 +199,19 @@ static JSValue JS_spawnWorker(JSContext* ctx, JSValue,
         spawnWASMWorker(id, std::move(filePath), std::move(initJSON), entry);
     else
 #ifdef RAYACT_WEB
-        // The web host only ships the WASM (wasm3) worker backend — there's no
-        // QuickJS-in-worker build — so JS-backed workers aren't available here.
-        fprintf(stderr, "rayact: JS workers are not supported on web (use a .wasm worker)\n");
+    {
+        FILE* f = fopen(filePath.c_str(), "r");
+        if (!f)
+            return JS_ThrowTypeError(ctx, "spawnWorker: cannot open JS worker '%s'", filePath.c_str());
+        fseek(f, 0, SEEK_END);
+        long sz = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        std::string src(sz > 0 ? (size_t)sz : 0, '\0');
+        if (sz > 0) fread(&src[0], 1, (size_t)sz, f);
+        fclose(f);
+        if (!rayact::webSpawnJSWorker(id, filePath, src, initJSON, entry))
+            return JS_ThrowTypeError(ctx, "spawnWorker: failed to spawn web JS worker '%s'", filePath.c_str());
+    }
 #else
         spawnJSWorker(id, std::move(filePath), std::move(initJSON), entry);
 #endif
@@ -194,6 +244,9 @@ static JSValue JS_postToWorker(JSContext* ctx, JSValue,
         JS_FreeValue(ctx, j);
     } else { JS_FreeValue(ctx, j); }
 
+#ifdef RAYACT_WEB
+    if (rayact::webPostToJSWorker(id, payload)) return JS_UNDEFINED;
+#endif
     entry->inbox.push({id, WorkerMsgType::JSON, std::move(payload)});
     return JS_UNDEFINED;
 }
@@ -216,26 +269,33 @@ static JSValue JS_terminateWorker(JSContext* ctx, JSValue,
 
     entry->stop.store(true);
     entry->inbox.wake_all();
-    if (entry->thread.joinable()) entry->thread.join();
+#ifdef RAYACT_WEB
+    rayact::webTerminateJSWorker(id);
+#endif
 
     // Clean up canvas node (OpenGL must be on main thread — we are)
     auto cit = g_workerCanvases.find(id);
     if (cit != g_workerCanvases.end()) {
         UnloadTexture(cit->second.texture);
-        g_canvasNodeToWorker.erase(g_nodes[cit->second.nodeId].get());
+        auto nodeIt = g_nodes.find(cit->second.nodeId);
+        if (nodeIt != g_nodes.end())
+            g_canvasNodeToWorker.erase(nodeIt->second.get());
         g_nodes.erase(cit->second.nodeId);
         g_workerCanvases.erase(cit);
     }
+    // Drop any raym3 nodes the worker created via node commands
+    rayactReleaseWorkerNodes(id);
 
     if (s_lastHoveredWorker == id) s_lastHoveredWorker = -1;
+    reapWorkerAsync(std::move(entry));
     return JS_UNDEFINED;
 }
 
-// createWorkerView(workerId, width, height, styleObj?) → nodeId
+// createWorkerView(workerId, width, height, viewportNodeId?) → nodeId
 //
 // Creates a raym3 Custom node backed by a Texture2D that the named worker
-// fills via sys_present_canvas. The node participates in normal Yoga layout
-// and receives input events routed to the worker's inbox.
+// fills via sys_present_canvas. The viewport host supplies its layout rect;
+// worker output is composited before fixed-position overlays.
 //
 // Must be called after initRaylib() (OpenGL context required for Texture2D).
 static JSValue JS_createWorkerView(JSContext* ctx, JSValue,
@@ -248,6 +308,8 @@ static JSValue JS_createWorkerView(JSContext* ctx, JSValue,
     JS_ToInt32(ctx, &workerId, argv[0]);
     JS_ToInt32(ctx, &w, argv[1]);
     JS_ToInt32(ctx, &h, argv[2]);
+    int viewportNodeId = -1;
+    if (argc >= 4) JS_ToInt32(ctx, &viewportNodeId, argv[3]);
 
     if (w <= 0 || h <= 0)
         return JS_ThrowRangeError(ctx, "createWorkerView: width/height must be > 0");
@@ -282,9 +344,27 @@ static JSValue JS_createWorkerView(JSContext* ctx, JSValue,
 
     // Capture tex by value — UpdateTexture mutates GPU data for the same ID in-place
     Texture2D capturedTex = tex;
+    auto replay = std::make_shared<WorkerDrawReplay>();
+    std::weak_ptr<WorkerEntry> weakEntry = entry;
     auto node = raym3::v2::Custom(props,
-        [capturedTex, layoutRect](Rectangle layout) {
+        [capturedTex, layoutRect, replay, weakEntry](Rectangle layout) {
             *layoutRect = layout;
+            // Draw-command lane takes precedence once the worker has presented
+            // a command frame; otherwise fall back to the pixel texture lane
+            // (sys_present_canvas / GIF decode).
+            if (auto e = weakEntry.lock()) {
+                {
+                    std::lock_guard<std::mutex> lk(e->draw.mtx);
+                    if (e->draw.version != replay->version) {
+                        replay->buf = e->draw.front;
+                        replay->version = e->draw.version;
+                    }
+                }
+                if (!replay->buf.empty()) {
+                    rayactReplayWorkerDraw(replay->buf.data(), replay->buf.size(), layout);
+                    return;
+                }
+            }
             Rectangle src{0.f, 0.f, (float)capturedTex.width, (float)capturedTex.height};
             DrawTexturePro(capturedTex, src, layout, {0.f, 0.f}, 0.f, WHITE);
         }
@@ -304,6 +384,7 @@ static JSValue JS_createWorkerView(JSContext* ctx, JSValue,
 
     int nodeId = nextRaym3NodeId();
     g_nodes[nodeId] = node;
+    auto viewportIt = g_nodes.find(viewportNodeId);
 
     // Register canvas entry
     WorkerCanvasEntry ce;
@@ -311,10 +392,37 @@ static JSValue JS_createWorkerView(JSContext* ctx, JSValue,
     ce.nodeId     = nodeId;
     ce.texture    = tex;
     ce.layoutRect = layoutRect;
+    ce.replay     = replay;
+    if (viewportIt != g_nodes.end()) ce.viewportNode = viewportIt->second;
     g_workerCanvases[workerId] = std::move(ce);
     g_canvasNodeToWorker[node.get()] = workerId;
 
     return JS_NewInt32(ctx, nodeId);
+}
+
+void renderWorkerViews() {
+    for (auto& [workerId, ce] : g_workerCanvases) {
+        if (!ce.viewportNode || !ce.replay) continue;
+        std::shared_ptr<WorkerEntry> entry;
+        {
+            std::lock_guard<std::mutex> lk(g_workerMtx);
+            auto it = g_workers.find(workerId);
+            if (it != g_workers.end()) entry = it->second;
+        }
+        if (!entry) continue;
+        {
+            std::lock_guard<std::mutex> lk(entry->draw.mtx);
+            if (entry->draw.version != ce.replay->version) {
+                ce.replay->buf = entry->draw.front;
+                ce.replay->version = entry->draw.version;
+            }
+        }
+        const Rectangle layout = ce.viewportNode->layout;
+        *ce.layoutRect = layout;
+        if (!ce.replay->buf.empty() && layout.width > 0 && layout.height > 0) {
+            rayactReplayWorkerDraw(ce.replay->buf.data(), ce.replay->buf.size(), layout);
+        }
+    }
 }
 
 // ── Main-thread outbox drain (called each frame) ─────────────────────────────
@@ -325,6 +433,23 @@ void drainWorkerOutbox(JSContext* ctx) {
 
     WorkerMessage msg;
     while (g_workerOutbox.pop(msg)) {
+
+        // Draw-command frame — the render lambda pulls the buffer itself;
+        // the message only exists to keep frames scheduled. No JS callback.
+        if (msg.type == WorkerMsgType::DrawReady) continue;
+
+        // raym3 node mutations recorded in the worker — apply on this (JS)
+        // thread where the node tree is owned. No JS callback.
+        if (msg.type == WorkerMsgType::NodeCommands) {
+            int viewNodeId = -1;
+            auto cit = g_workerCanvases.find(msg.workerId);
+            if (cit != g_workerCanvases.end()) viewNodeId = cit->second.nodeId;
+            rayactApplyWorkerNodeCommands(
+                msg.workerId, viewNodeId,
+                reinterpret_cast<const uint8_t*>(msg.payload.data()),
+                msg.payload.size());
+            continue;
+        }
 
         // Canvas frame — update the Custom node's GPU texture
         if (msg.type == WorkerMsgType::CanvasReady) {
@@ -364,6 +489,10 @@ void drainWorkerOutbox(JSContext* ctx) {
                 break;
             case WorkerMsgType::Primitive:
                 jsData = JS_NewFloat64(ctx, msg.numericValue);
+                break;
+            case WorkerMsgType::DrawReady:
+            case WorkerMsgType::NodeCommands:
+                // Handled above (frame wake / node application) — never here.
                 break;
             case WorkerMsgType::CanvasReady: {
                 jsData = JS_NewObject(ctx);
@@ -486,6 +615,69 @@ void processWorkerInputEvents(float mouseX, float mouseY,
     s_lastMouseY = mouseY;
 }
 
+// ── Worker-thread draw/node publication ─────────────────────────────────────
+
+void workerPresentDrawCommands(const std::shared_ptr<WorkerEntry>& entry,
+                               const uint8_t* data, size_t len) {
+    if (!entry) return;
+    {
+        std::lock_guard<std::mutex> lk(entry->draw.mtx);
+        entry->draw.front.assign(data, data + len);
+        entry->draw.version++;
+    }
+    // Wake message only — drained (and dropped) on the JS pump; the render
+    // lambda pulls the buffer directly.
+    g_workerOutbox.push({entry->workerId, WorkerMsgType::DrawReady, ""});
+    workerRequestRenderFrame();
+}
+
+void workerRequestRenderFrame() {
+#if defined(__ANDROID__)
+    rayact::androidRequestRenderFrame();
+#elif defined(RAYACT_IOS)
+    iosEngineRequestGraphicsFrame();
+#endif
+}
+
+void workerPostNodeCommands(int workerId, std::string bytes) {
+    WorkerMessage msg;
+    msg.workerId = workerId;
+    msg.type = WorkerMsgType::NodeCommands;
+    msg.payload = std::move(bytes);
+    g_workerOutbox.push(std::move(msg));
+    workerRequestRenderFrame();
+}
+
+bool workersFramePending() {
+    if (!g_workerOutbox.empty()) return true;
+    // A presented draw frame that the render lambda hasn't copied yet also
+    // needs a frame (the DrawReady message may already be drained).
+    for (auto& [id, ce] : g_workerCanvases) {
+        if (!ce.replay) continue;
+        std::shared_ptr<WorkerEntry> entry;
+        {
+            std::lock_guard<std::mutex> lk(g_workerMtx);
+            auto it = g_workers.find(id);
+            if (it != g_workers.end()) entry = it->second;
+        }
+        if (!entry) continue;
+        std::lock_guard<std::mutex> lk(entry->draw.mtx);
+        if (entry->draw.version != ce.replay->version) return true;
+    }
+    return false;
+}
+
+std::vector<std::string> getLoadedWasmModulePaths() {
+    std::vector<std::string> paths;
+    std::lock_guard<std::mutex> lk(g_workerMtx);
+    for (auto& [id, entry] : g_workers) {
+        (void)id;
+        if (entry && entry->isWasm && !entry->stop.load(std::memory_order_relaxed))
+            paths.push_back(entry->modulePath);
+    }
+    return paths;
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 void registerWorkerBindings(JSContext* ctx) {
@@ -532,11 +724,20 @@ void shutdownWorkers() {
     for (auto& [id, entry] : workers) {
         entry->stop.store(true);
         entry->inbox.wake_all();
-        if (entry->thread.joinable()) entry->thread.join();
+        // Reload is initiated from the platform UI thread. Never block it on
+        // arbitrary user worker code; cancellation host calls unwind WASM/JS
+        // and this reaper owns the thread until that happens.
+        reapWorkerAsync(std::move(entry));
     }
     // Unload canvas textures on main (OpenGL) thread
-    for (auto& [id, ce] : g_workerCanvases)
-        UnloadTexture(ce.texture);
+    for (auto& [id, ce] : g_workerCanvases) {
+        // Mobile reloads can release the graphics lease before their runtime
+        // is torn down. The GL/Vulkan device is then gone, but the registry
+        // still must be cleared; only issue the GPU delete while it is live.
+        if (IsWindowReady()) UnloadTexture(ce.texture);
+        rayactReleaseWorkerNodes(id);
+    }
     g_workerCanvases.clear();
     g_canvasNodeToWorker.clear();
+    rayactWorkerDrawShutdown();
 }

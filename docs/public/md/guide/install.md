@@ -25,18 +25,21 @@ The desktop prebuilts are wired as `optionalDependencies` of `@rayact/cli` with
 machine. Android and iOS engine libraries are pulled per-project when you target
 those platforms (kept off desktop installs — the Android engine alone is ~80 MB).
 
-## Git now, npm later
+## npm installation
 
-Until the packages are on the npm registry, install the framework packages from
-GitHub refs and let the prebuilt resolver fetch native hosts from GitHub
-releases:
+Use npm for `0.0.3`. The prebuilt resolver prefers installed platform packages
+and falls back to the matching, checksummed GitHub Release artifact:
 
 ```sh
-npx github:raythings/rayact#v0.0.1 init my-app
+npx create-rayact-app@0.0.3 my-app
 ```
 
-The release also attaches an `npm pack` tarball for every publishable package, so
-generated templates can reference those tarball URLs in the interim.
+The release attaches the exact npm tarball for every publishable package. If npm
+is unavailable, run the scaffolder tarball directly:
+
+```sh
+npx https://github.com/raythings/rayact/releases/download/v0.0.3/create-rayact-app-0.0.3.tgz my-app
+```
 
 Override the download source with environment variables when needed:
 

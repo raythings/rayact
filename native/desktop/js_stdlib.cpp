@@ -1,4 +1,5 @@
 #include "js_stdlib.hpp"
+#include "devtools.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -72,42 +73,51 @@ static std::string groupIndent() { return std::string(s_groupDepth * 2, ' '); }
 static JSValue con_log(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     std::string msg = groupIndent() + argsToStr(ctx, argc, argv);
     TraceLog(LOG_INFO, "JS: %s", msg.c_str());
+    rayact::devtoolsConsoleArgs(ctx, "log", argc, argv);
     return JS_UNDEFINED;
 }
 
 static JSValue con_info(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    std::string msg = groupIndent() + argsToStr(ctx, argc, argv);
 #ifdef __ANDROID__
     TraceLog(LOG_INFO, "JS[info]: %s%s", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
 #else
     printf("\033[36m%s[info]\033[0m %s\n", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
 #endif
+    rayact::devtoolsConsoleArgs(ctx, "info", argc, argv);
     return JS_UNDEFINED;
 }
 
 static JSValue con_warn(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    std::string msg = groupIndent() + argsToStr(ctx, argc, argv);
 #ifdef __ANDROID__
     TraceLog(LOG_WARNING, "JS[warn]: %s%s", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
 #else
     fprintf(stderr, "\033[33m%s[warn]\033[0m %s\n", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
 #endif
+    rayact::devtoolsConsoleArgs(ctx, "warning", argc, argv);
     return JS_UNDEFINED;
 }
 
 static JSValue con_error(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    std::string msg = groupIndent() + argsToStr(ctx, argc, argv);
 #ifdef __ANDROID__
     TraceLog(LOG_ERROR, "JS[error]: %s%s", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
 #else
     fprintf(stderr, "\033[31m%s[error]\033[0m %s\n", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
 #endif
+    rayact::devtoolsConsoleArgs(ctx, "error", argc, argv);
     return JS_UNDEFINED;
 }
 
 static JSValue con_debug(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    std::string msg = groupIndent() + argsToStr(ctx, argc, argv);
 #ifdef __ANDROID__
     TraceLog(LOG_DEBUG, "JS[debug]: %s%s", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
 #else
     printf("\033[90m%s[debug]\033[0m %s\n", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
 #endif
+    rayact::devtoolsConsoleArgs(ctx, "debug", argc, argv);
     return JS_UNDEFINED;
 }
 
@@ -117,6 +127,7 @@ static JSValue con_assert(JSContext* ctx, JSValue, int argc, JSValueConst* argv)
         std::string msg = "Assertion failed";
         if (argc > 1) msg += ": " + argsToStr(ctx, argc - 1, argv + 1);
         fprintf(stderr, "\033[31m%s[assert] %s\033[0m\n", groupIndent().c_str(), msg.c_str());
+        rayact::devtoolsConsoleArgs(ctx, "assert", argc > 1 ? argc - 1 : 0, argc > 1 ? argv + 1 : argv);
     }
     return JS_UNDEFINED;
 }
@@ -133,7 +144,9 @@ static JSValue con_timeEnd(JSContext* ctx, JSValue, int argc, JSValueConst* argv
     std::string label = argc >= 1 ? jsValToStr(ctx, argv[0]) : "default";
     auto it = s_consoleTimes.find(label);
     if (it != s_consoleTimes.end()) {
-        printf("%s%s: %.3fms\n", groupIndent().c_str(), label.c_str(), nowMs() - it->second);
+        const std::string message = label + ": " + std::to_string(nowMs() - it->second) + "ms";
+        printf("%s%s\n", groupIndent().c_str(), message.c_str());
+        rayact::devtoolsConsole(ctx, "timeEnd", message.c_str());
         s_consoleTimes.erase(it);
     }
     return JS_UNDEFINED;
@@ -142,14 +155,19 @@ static JSValue con_timeEnd(JSContext* ctx, JSValue, int argc, JSValueConst* argv
 static JSValue con_timeLog(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     std::string label = argc >= 1 ? jsValToStr(ctx, argv[0]) : "default";
     auto it = s_consoleTimes.find(label);
-    if (it != s_consoleTimes.end())
-        printf("%s%s: %.3fms\n", groupIndent().c_str(), label.c_str(), nowMs() - it->second);
+    if (it != s_consoleTimes.end()) {
+        const std::string message = label + ": " + std::to_string(nowMs() - it->second) + "ms";
+        printf("%s%s\n", groupIndent().c_str(), message.c_str());
+        rayact::devtoolsConsole(ctx, "log", message.c_str());
+    }
     return JS_UNDEFINED;
 }
 
 static JSValue con_count(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     std::string label = argc >= 1 ? jsValToStr(ctx, argv[0]) : "default";
-    printf("%s%s: %d\n", groupIndent().c_str(), label.c_str(), ++s_consoleCounts[label]);
+    const std::string message = label + ": " + std::to_string(++s_consoleCounts[label]);
+    printf("%s%s\n", groupIndent().c_str(), message.c_str());
+    rayact::devtoolsConsole(ctx, "count", message.c_str());
     return JS_UNDEFINED;
 }
 
@@ -162,18 +180,21 @@ static JSValue con_countReset(JSContext* ctx, JSValue, int argc, JSValueConst* a
 static JSValue con_group(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (argc > 0)
         printf("%s%s\n", groupIndent().c_str(), argsToStr(ctx, argc, argv).c_str());
+    rayact::devtoolsConsoleArgs(ctx, "startGroup", argc, argv);
     s_groupDepth++;
     return JS_UNDEFINED;
 }
 
-static JSValue con_groupEnd(JSContext*, JSValue, int, JSValueConst*) {
+static JSValue con_groupEnd(JSContext* ctx, JSValue, int, JSValueConst*) {
     if (s_groupDepth > 0) s_groupDepth--;
+    rayact::devtoolsConsole(ctx, "endGroup", "");
     return JS_UNDEFINED;
 }
 
-static JSValue con_clear(JSContext*, JSValue, int, JSValueConst*) {
+static JSValue con_clear(JSContext* ctx, JSValue, int, JSValueConst*) {
     printf("\033[2J\033[H");
     fflush(stdout);
+    rayact::devtoolsConsole(ctx, "clear", "");
     return JS_UNDEFINED;
 }
 
@@ -186,12 +207,14 @@ static JSValue con_table(JSContext* ctx, JSValue, int argc, JSValueConst* argv) 
     printf("%s%s\n", groupIndent().c_str(), s ? s : "{}");
     JS_FreeCString(ctx, s);
     JS_FreeValue(ctx, j);
+    rayact::devtoolsConsoleArgs(ctx, "table", argc, argv);
     return JS_UNDEFINED;
 }
 
 static JSValue con_trace(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     std::string msg = argc > 0 ? argsToStr(ctx, argc, argv) : "Trace";
     printf("\033[90m%s[trace] %s\033[0m\n", groupIndent().c_str(), msg.c_str());
+    rayact::devtoolsConsoleArgs(ctx, "trace", argc, argv);
     return JS_UNDEFINED;
 }
 
@@ -204,6 +227,7 @@ static JSValue con_dir(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     printf("%s%s\n", groupIndent().c_str(), s ? s : "[object]");
     JS_FreeCString(ctx, s);
     JS_FreeValue(ctx, j);
+    rayact::devtoolsConsoleArgs(ctx, "dir", argc, argv);
     return JS_UNDEFINED;
 }
 
@@ -627,6 +651,10 @@ void registerJSStdlib(JSContext* ctx) {
     // globalThis self-reference
     JS_SetPropertyStr(ctx, global, "globalThis", JS_DupValue(ctx, global));
     JS_SetPropertyStr(ctx, global, "window", JS_DupValue(ctx, global));
+    // UMD builds such as react-devtools-core resolve their global through
+    // `self`. QuickJS has no browser global aliases unless the host supplies
+    // them, so keep all three names pointed at the same runtime object.
+    JS_SetPropertyStr(ctx, global, "self", JS_DupValue(ctx, global));
     JSValue navigator = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, navigator, "userAgent", JS_NewString(ctx, "rayact-quickjs"));
     JS_SetPropertyStr(ctx, navigator, "platform", JS_NewString(ctx, ""));

@@ -5,7 +5,7 @@ Scaffold a new app, run it in development, then build a release.
 ## Create an app
 
 ```sh
-npx https://github.com/raythings/rayact/releases/download/v0.0.1/rayact-0.0.1.tgz init my-app
+npx create-rayact-app@0.0.3 my-app
 cd my-app
 npm install
 ```
@@ -37,7 +37,7 @@ rayact run --ios               # build + launch on the iOS simulator
 rayact build --release             # desktop release (bytecode + .rayactpack)
 rayact build --release --android   # release APK
 rayact build --release --ios       # release iOS app
-rayact build --web --no-bytecode   # web bundle + WASM/WebGPU host
+rayact build --release --web       # bytecode web bundle + WASM/WebGPU host
 ```
 
-Native release builds compile the JS bundle to QuickJS bytecode and emit a single [`.rayactpack`](/reference/rayactpack) container. The native host needed to compile bytecode is fetched automatically — see [Installation](/guide/install). Web builds use the WASM/WebGPU host and must be served with COOP/COEP headers for SharedArrayBuffer/WebGPU isolation.
+All release builds compile the JS bundle to QuickJS bytecode. Native releases also emit a single [`.rayactpack`](/reference/rayactpack) container. The host needed to compile bytecode is fetched automatically — see [Installation](/guide/install). Web builds use the WASM/WebGPU host and must be served with COOP/COEP headers for SharedArrayBuffer/WebGPU isolation.

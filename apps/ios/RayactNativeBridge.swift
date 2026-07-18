@@ -11,13 +11,14 @@ struct RayactIOSHostCallbacks {
     var releaseSurface: (@convention(c) (UnsafeMutableRawPointer?, Int32) -> Void)?
     var orderSurfaces: (@convention(c) (UnsafeMutableRawPointer?, UnsafePointer<Int32>?, Int32) -> Void)?
     var requestRenderFrame: (@convention(c) (UnsafeMutableRawPointer?) -> Void)?
+    var sendDevtoolsMessage: (@convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?) -> Void)?
     var toggleDevMenu: (@convention(c) (UnsafeMutableRawPointer?) -> Void)?
     var performHapticFeedback: (@convention(c) (UnsafeMutableRawPointer?) -> Void)?
     var hideSoftKeyboard: (@convention(c) (UnsafeMutableRawPointer?) -> Void)?
     var finishActivity: (@convention(c) (UnsafeMutableRawPointer?) -> Void)?
     var stopRenderScheduler: (@convention(c) (UnsafeMutableRawPointer?) -> Void)?
-    var showSoftKeyboard: (@convention(c) (UnsafeMutableRawPointer?, Int32, UnsafePointer<CChar>?, UnsafePointer<CChar>?, Bool, Bool, UnsafePointer<CChar>?) -> Void)?
-    var switchIme: (@convention(c) (UnsafeMutableRawPointer?, Int32, UnsafePointer<CChar>?, UnsafePointer<CChar>?, Bool, Bool, UnsafePointer<CChar>?) -> Void)?
+    var showSoftKeyboard: (@convention(c) (UnsafeMutableRawPointer?, Int32, UnsafePointer<CChar>?, UnsafePointer<CChar>?, Bool, Bool, UnsafePointer<CChar>?, UnsafePointer<CChar>?, Bool) -> Void)?
+    var switchIme: (@convention(c) (UnsafeMutableRawPointer?, Int32, UnsafePointer<CChar>?, UnsafePointer<CChar>?, Bool, Bool, UnsafePointer<CChar>?, UnsafePointer<CChar>?, Bool) -> Void)?
     var copyToClipboard: (@convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?) -> Void)?
     var readClipboard: (@convention(c) (UnsafeMutableRawPointer?) -> UnsafePointer<CChar>?)?
     var updateImeState: (@convention(c) (UnsafeMutableRawPointer?, Int32, Int32, Int32, Int32, Int32, UnsafePointer<CChar>?) -> Void)?
@@ -26,15 +27,51 @@ struct RayactIOSHostCallbacks {
 enum RayactNativeBridge {
     typealias DevCallFn = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafePointer<CChar>?
     typealias DevFetchFn = @convention(c) (UnsafePointer<CChar>?) -> UnsafePointer<CChar>?
+    typealias DevFetchBytesFn = @convention(c) (UnsafePointer<CChar>?, UnsafeMutablePointer<UInt32>?) -> UnsafePointer<UInt8>?
+    typealias NetworkFetchFn = @convention(c) (UnsafePointer<CChar>?) -> UnsafePointer<CChar>?
+    typealias NetworkFetchBytesFn = @convention(c) (UnsafePointer<CChar>?, UnsafeMutablePointer<UInt32>?) -> UnsafePointer<UInt8>?
+    typealias NetworkFetchStartFn = @convention(c) (Int64, Int32, UnsafePointer<CChar>?) -> Void
+    typealias WebSocketOpenFn = @convention(c) (Int64, UnsafePointer<CChar>?) -> Int32
+    typealias WebSocketSendFn = @convention(c) (Int64, Int32, UnsafePointer<CChar>?) -> Bool
+    typealias WebSocketCloseFn = @convention(c) (Int64, Int32, Int32, UnsafePointer<CChar>?) -> Bool
+    typealias WebSocketPollFn = @convention(c) (Int64) -> UnsafePointer<CChar>?
 
     @_silgen_name("RayactIOSSetDevCallbacks")
     static func setDevCallbacks(_ devCall: DevCallFn?, _ devFetch: DevFetchFn?)
 
+    @_silgen_name("RayactIOSSetDevFetchBytes")
+    static func setDevFetchBytes(_ devFetchBytes: DevFetchBytesFn?)
+
+    @_silgen_name("RayactIOSSetNetworkCallbacks")
+    static func setNetworkCallbacks(
+        _ fetchText: NetworkFetchFn?,
+        _ fetchBytes: NetworkFetchBytesFn?,
+        _ wsOpen: WebSocketOpenFn?,
+        _ wsSend: WebSocketSendFn?,
+        _ wsClose: WebSocketCloseFn?,
+        _ wsPollEvents: WebSocketPollFn?
+    )
+
+    @_silgen_name("RayactIOSSetNetworkFetchStart")
+    static func setNetworkFetchStart(_ fetchStart: NetworkFetchStartFn?)
+
     @_silgen_name("RayactIOSSessionCreate")
     static func sessionCreate(_ dataPath: UnsafePointer<CChar>?) -> RayactIOSHandle
 
+    @_silgen_name("RayactIOSRequestGraphicsFrame")
+    static func requestGraphicsFrame(_ handle: RayactIOSHandle)
+
     @_silgen_name("RayactIOSSessionDestroy")
     static func sessionDestroy(_ handle: RayactIOSHandle)
+
+    @_silgen_name("RayactIOSSessionEnableDevTools")
+    static func sessionEnableDevTools(_ handle: RayactIOSHandle, _ port: Int32, _ title: UnsafePointer<CChar>?)
+
+    @_silgen_name("RayactIOSSessionDevToolsMessage")
+    static func sessionDevToolsMessage(_ handle: RayactIOSHandle, _ message: UnsafePointer<CChar>?)
+
+    @_silgen_name("RayactIOSSessionDisableDevTools")
+    static func sessionDisableDevTools(_ handle: RayactIOSHandle)
 
     @_silgen_name("RayactIOSSessionRegisterHost")
     static func sessionRegisterHost(_ handle: RayactIOSHandle, _ callbacks: UnsafePointer<RayactIOSHostCallbacks>?)
@@ -107,8 +144,20 @@ enum RayactNativeBridge {
     @_silgen_name("RayactIOSSessionTouch")
     static func sessionTouch(_ handle: RayactIOSHandle, _ action: Int32, _ id: Int32, _ x: Float, _ y: Float)
 
+    @_silgen_name("RayactIOSSessionGetAccessibilitySnapshot")
+    static func sessionGetAccessibilitySnapshot(_ handle: RayactIOSHandle) -> UnsafePointer<CChar>?
+
+    @_silgen_name("RayactIOSSessionPerformAccessibilityAction")
+    static func sessionPerformAccessibilityAction(_ handle: RayactIOSHandle, _ nodeId: Int32) -> Bool
+
     @_silgen_name("RayactIOSSessionOnBackPressed")
     static func sessionOnBackPressed(_ handle: RayactIOSHandle)
+
+    @_silgen_name("RayactIOSGetGpuFrameTimeMs")
+    static func getGpuFrameTimeMs() -> Double
+
+    @_silgen_name("RayactIOSGetGpuDeviceName")
+    static func getGpuDeviceNamePtr() -> UnsafePointer<CChar>?
 
     @_silgen_name("RayactIOSSessionRefreshAppearance")
     static func sessionRefreshAppearance(_ handle: RayactIOSHandle)
@@ -126,6 +175,9 @@ enum RayactNativeBridge {
 
     @_silgen_name("RayactIOSSessionBlurTextInput")
     static func sessionBlurTextInput(_ handle: RayactIOSHandle)
+
+    @_silgen_name("RayactIOSSessionSubmitTextInput")
+    static func sessionSubmitTextInput(_ handle: RayactIOSHandle)
 
     @_silgen_name("RayactIOSSessionImeHiddenBySystem")
     static func sessionImeHiddenBySystem(_ handle: RayactIOSHandle)

@@ -19,6 +19,7 @@
 #include <cstring>
 #include <chrono>
 #include <functional>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -203,6 +204,15 @@ int main(int argc, char** argv) {
     setvbuf(stdout, nullptr, _IOLBF, 0);
     setvbuf(stderr, nullptr, _IONBF, 0);
 
+    std::filesystem::path executableDir = std::filesystem::current_path();
+    if (argc > 0 && argv[0]) {
+        std::error_code executablePathError;
+        auto executablePath = std::filesystem::weakly_canonical(argv[0], executablePathError);
+        if (!executablePathError && executablePath.has_parent_path()) {
+            executableDir = executablePath.parent_path();
+        }
+    }
+
 #ifndef _WIN32
     // A packaged desktop app ships bundled native plugins in <exeDir>/modules.
     // Point the plugin loader there (without clobbering a user-set value) before
@@ -228,7 +238,7 @@ int main(int argc, char** argv) {
 
     std::cout << "========================================" << std::endl;
     std::cout << "  Rayact - QuickJS Desktop Renderer" << std::endl;
-    std::cout << "  Version 0.0.2" << std::endl;
+    std::cout << "  Version 0.0.3" << std::endl;
     std::cout << "========================================" << std::endl;
 
     PlatformBridge::printPlatformInfo();
@@ -292,7 +302,9 @@ int main(int argc, char** argv) {
     // Load JavaScript application
     bool success = false;
     std::string jsFile;
-    std::string devServer = getArgValue(argc, argv, "--dev-server");
+    std::string devServer;
+#if !RAYACT_RELEASE_HOST
+    devServer = getArgValue(argc, argv, "--dev-server");
     if (devServer.empty()) {
         const char* envDevServer = std::getenv("RAYACT_DEV_SERVER");
         if (envDevServer && envDevServer[0]) devServer = envDevServer;
@@ -301,11 +313,32 @@ int main(int argc, char** argv) {
 
     if (devMode) {
         success = rayact::engineLoadDevServer(devServer);
-    } else if (argc > 1 && argv[1][0] != '-') {
+    } else
+#else
+    bool devMode = false;
+#endif
+    if (argc > 1 && argv[1][0] != '-') {
         jsFile = argv[1];
         std::cout << "\nAttempting to load: " << jsFile << std::endl;
         success = rayact::engineLoadFile(jsFile);
     }
+
+#if RAYACT_RELEASE_HOST
+    if (!success && argc <= 1) {
+        for (const char* name : {"app.qjsbc", "app.js", "bundle.qjsbc", "bundle.js"}) {
+            const auto candidate = executableDir / name;
+            if (!std::filesystem::exists(candidate)) continue;
+            jsFile = candidate.string();
+            success = rayact::engineLoadFile(jsFile);
+            if (success) break;
+        }
+    }
+    if (!success) {
+        std::cerr << "Release bundle is missing or failed to load next to the executable" << std::endl;
+        rayact::engineDestroy();
+        return 1;
+    }
+#endif
 
 if (!success && !devMode) {
         std::cout << "\n[4/4] Using built-in demo application" << std::endl;

@@ -3,6 +3,8 @@ package com.rayact.app
 import android.content.Context
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Rect
+import android.os.Bundle
 import android.text.InputType
 import android.text.Selection
 import android.text.SpannableStringBuilder
@@ -13,6 +15,10 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.View
+import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityNodeProvider
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
@@ -24,6 +30,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.rayact.engine.RayactEngineSession
 import java.util.concurrent.atomic.AtomicInteger
+import org.json.JSONArray
 
 /**
  * One render surface in the Rayact multi-surface model. Each instance owns:
@@ -45,6 +52,126 @@ class RayactSurfaceView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : SurfaceView(context, attrs), SurfaceHolder.Callback {
 
+    private data class SemanticNode(
+        val id: Int,
+        val role: String,
+        val label: String,
+        val focusable: Boolean,
+        val disabled: Boolean,
+        val hasState: Boolean,
+        val checked: Boolean,
+        val selected: Boolean,
+        val expanded: Boolean,
+        val x: Float,
+        val y: Float,
+        val width: Float,
+        val height: Float
+    )
+
+    private var accessibilityFocusedNodeId = View.NO_ID
+    private val semanticProvider = object : AccessibilityNodeProvider() {
+        override fun createAccessibilityNodeInfo(virtualViewId: Int): AccessibilityNodeInfo? {
+            val nodes = semanticNodes()
+            if (virtualViewId == View.NO_ID) {
+                return AccessibilityNodeInfo.obtain(this@RayactSurfaceView).also { info ->
+                    this@RayactSurfaceView.onInitializeAccessibilityNodeInfo(info)
+                    info.className = RayactSurfaceView::class.java.name
+                    for (node in nodes) info.addChild(this@RayactSurfaceView, node.id)
+                }
+            }
+            val node = nodes.firstOrNull { it.id == virtualViewId } ?: return null
+            val density = resources.displayMetrics.density
+            val left = (node.x * density).toInt()
+            val top = (node.y * density).toInt()
+            val right = ((node.x + node.width) * density).toInt().coerceAtLeast(left + 1)
+            val bottom = ((node.y + node.height) * density).toInt().coerceAtLeast(top + 1)
+            return AccessibilityNodeInfo.obtain().also { info ->
+                info.setSource(this@RayactSurfaceView, node.id)
+                info.setParent(this@RayactSurfaceView)
+                info.packageName = context.packageName
+                info.className = accessibilityClassName(node.role)
+                info.contentDescription = node.label
+                info.isEnabled = !node.disabled
+                info.isFocusable = node.focusable
+                info.isClickable = node.focusable && !node.disabled
+                info.isVisibleToUser = visibility == View.VISIBLE
+                info.isAccessibilityFocused = accessibilityFocusedNodeId == node.id
+                info.isCheckable = node.hasState && node.role in setOf("checkbox", "radio", "switch")
+                info.isChecked = node.checked
+                info.isSelected = node.selected
+                info.setBoundsInParent(Rect(left, top, right, bottom))
+                val screen = IntArray(2)
+                getLocationOnScreen(screen)
+                info.setBoundsInScreen(Rect(left + screen[0], top + screen[1], right + screen[0], bottom + screen[1]))
+                info.addAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
+                if (accessibilityFocusedNodeId == node.id) info.addAction(AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS)
+                if (info.isClickable) info.addAction(AccessibilityNodeInfo.ACTION_CLICK)
+            }
+        }
+
+        override fun performAction(virtualViewId: Int, action: Int, arguments: Bundle?): Boolean {
+            return when (action) {
+                AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS -> {
+                    accessibilityFocusedNodeId = virtualViewId
+                    sendVirtualAccessibilityEvent(virtualViewId, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED)
+                    true
+                }
+                AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS -> {
+                    if (accessibilityFocusedNodeId == virtualViewId) accessibilityFocusedNodeId = View.NO_ID
+                    sendVirtualAccessibilityEvent(virtualViewId, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED)
+                    true
+                }
+                AccessibilityNodeInfo.ACTION_CLICK -> {
+                    val handled = session.performAccessibilityAction(virtualViewId)
+                    if (handled) sendVirtualAccessibilityEvent(virtualViewId, AccessibilityEvent.TYPE_VIEW_CLICKED)
+                    handled
+                }
+                else -> false
+            }
+        }
+    }
+
+    init {
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+    }
+
+    override fun getAccessibilityNodeProvider(): AccessibilityNodeProvider = semanticProvider
+
+    private fun semanticNodes(): List<SemanticNode> {
+        val array = try { JSONArray(session.accessibilitySnapshot()) } catch (_: Throwable) { JSONArray() }
+        return buildList {
+            for (index in 0 until array.length()) {
+                val node = array.optJSONObject(index) ?: continue
+                add(SemanticNode(
+                    id = node.optInt("id"), role = node.optString("role"), label = node.optString("label"),
+                    focusable = node.optBoolean("focusable"), disabled = node.optBoolean("disabled"),
+                    hasState = node.optBoolean("hasState"), checked = node.optBoolean("checked"),
+                    selected = node.optBoolean("selected"), expanded = node.optBoolean("expanded"),
+                    x = node.optDouble("x").toFloat(), y = node.optDouble("y").toFloat(),
+                    width = node.optDouble("w").toFloat(), height = node.optDouble("h").toFloat()
+                ))
+            }
+        }
+    }
+
+    private fun accessibilityClassName(role: String): String = when (role) {
+        "button" -> "android.widget.Button"
+        "checkbox" -> "android.widget.CheckBox"
+        "radio" -> "android.widget.RadioButton"
+        "switch" -> "android.widget.Switch"
+        "image" -> "android.widget.ImageView"
+        "textbox", "searchbox" -> "android.widget.EditText"
+        else -> "android.view.View"
+    }
+
+    private fun sendVirtualAccessibilityEvent(nodeId: Int, type: Int) {
+        val event = AccessibilityEvent.obtain(type)
+        event.packageName = context.packageName
+        event.className = accessibilityClassName(semanticNodes().firstOrNull { it.id == nodeId }?.role.orEmpty())
+        event.setSource(this, nodeId)
+        parent?.requestSendAccessibilityEvent(this, event)
+    }
+
     /** Native surfaceId == engine screenId, or 0 if not yet created. */
     var surfaceId: Int = 0
         private set
@@ -63,6 +190,8 @@ class RayactSurfaceView @JvmOverloads constructor(
     private var imeAutocorrect: Boolean = false
     private var imeSecure: Boolean = false
     private var imeAction: String = "done"
+    private var imeAutoCapitalize: String = "sentences"
+    private var imeContextMenuHidden: Boolean = false
 
     /** Called from Kotlin main thread by showSoftKeyboardFromHost. */
     fun setupForIme(
@@ -71,7 +200,9 @@ class RayactSurfaceView @JvmOverloads constructor(
         inputType: String,
         autocorrect: Boolean,
         secure: Boolean,
-        imeActionValue: String
+        imeActionValue: String,
+        autoCapitalize: String,
+        contextMenuHidden: Boolean
     ) {
         imeNodeId = nodeId
         imeText.replace(0, imeText.length, initialText)
@@ -80,6 +211,8 @@ class RayactSurfaceView @JvmOverloads constructor(
         imeAutocorrect = autocorrect
         imeSecure = secure
         this.imeAction = imeActionValue
+        imeAutoCapitalize = autoCapitalize
+        imeContextMenuHidden = contextMenuHidden
         requestFocus()
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.restartInput(this)
@@ -93,7 +226,9 @@ class RayactSurfaceView @JvmOverloads constructor(
         inputType: String,
         autocorrect: Boolean,
         secure: Boolean,
-        imeActionValue: String
+        imeActionValue: String,
+        autoCapitalize: String,
+        contextMenuHidden: Boolean
     ) {
         imeNodeId = nodeId
         imeText.replace(0, imeText.length, initialText)
@@ -102,6 +237,8 @@ class RayactSurfaceView @JvmOverloads constructor(
         imeAutocorrect = autocorrect
         imeSecure = secure
         this.imeAction = imeActionValue
+        imeAutoCapitalize = autoCapitalize
+        imeContextMenuHidden = contextMenuHidden
         activeInputConnection?.editable?.let { ed ->
             ed.replace(0, ed.length, initialText)
             Selection.setSelection(ed, initialText.length)
@@ -229,12 +366,24 @@ class RayactSurfaceView @JvmOverloads constructor(
             "email" -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
             "number" -> InputType.TYPE_CLASS_NUMBER
             "phone" -> InputType.TYPE_CLASS_PHONE
+            "url" -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            "ascii" -> InputType.TYPE_CLASS_TEXT
+            "visible-password" -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
             "password" -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             "multiline" -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
             else -> InputType.TYPE_CLASS_TEXT
         }
+        flags = flags or when (imeAutoCapitalize) {
+            "words" -> InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            "characters" -> InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+            "none" -> 0
+            else -> InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        }
         if (!imeAutocorrect || imeSecure) {
             flags = flags or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            if (imeInputType == "text" || imeInputType == "ascii") {
+                flags = flags or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            }
         }
         return flags
     }
@@ -333,6 +482,11 @@ class RayactSurfaceView @JvmOverloads constructor(
             return ok
         }
 
+        override fun performContextMenuAction(id: Int): Boolean {
+            if (imeContextMenuHidden) return false
+            return super.performContextMenuAction(id)
+        }
+
         override fun sendKeyEvent(event: KeyEvent): Boolean {
             if (imeNodeId == -2 && event.action == KeyEvent.ACTION_DOWN) {
                 when (event.keyCode) {
@@ -365,8 +519,8 @@ class RayactSurfaceView @JvmOverloads constructor(
                 return true
             }
             if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_ENTER) {
-                session.nativeBlurTextInput()
-                clearIme()
+                syncToNative()
+                session.nativeSubmitTextInput()
                 return true
             }
             val ok = super.sendKeyEvent(event)
@@ -377,8 +531,8 @@ class RayactSurfaceView @JvmOverloads constructor(
         override fun performEditorAction(actionCode: Int): Boolean {
             if (actionCode == EditorInfo.IME_ACTION_DONE || actionCode == EditorInfo.IME_ACTION_GO ||
                 actionCode == EditorInfo.IME_ACTION_NEXT || actionCode == EditorInfo.IME_ACTION_SEND) {
-                session.nativeBlurTextInput()
-                clearIme()
+                syncToNative()
+                session.nativeSubmitTextInput()
                 return true
             }
             return super.performEditorAction(actionCode)

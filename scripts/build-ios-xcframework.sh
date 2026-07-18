@@ -4,9 +4,7 @@
 # same sources/settings via a YAML anchor in project.yml) and package it into
 # packages/prebuilt-ios-arm64/RayactEngine.xcframework.
 #
-# Ships two slices — device (arm64) and Apple Silicon simulator (arm64) — no
-# Intel simulator slice, matching the project's "minimal but correct"
-# precedent (the Android prebuilt only ships arm64-v8a).
+# Ships device arm64 plus a universal arm64/x86_64 simulator slice.
 #
 # Uses -library + -headers (not -framework): the Swift template binds to the
 # engine purely via @_silgen_name, resolved at link time — no Clang module
@@ -44,23 +42,27 @@ build_slice() {
 }
 
 build_slice "generic/platform=iOS" "engine-device"
-build_slice "generic/platform=iOS Simulator" "engine-simulator" "ARCHS=arm64"
+build_slice "generic/platform=iOS Simulator" "engine-simulator-arm64" "ARCHS=arm64"
+build_slice "generic/platform=iOS Simulator" "engine-simulator-x64" "ARCHS=x86_64"
 
 find_lib() {
   find "$DERIVED/$1" -name 'libRayactEngine.a' -type f 2>/dev/null | head -1
 }
 
 DEVICE_LIB="$(find_lib engine-device)"
-SIM_LIB="$(find_lib engine-simulator)"
+SIM_ARM64_LIB="$(find_lib engine-simulator-arm64)"
+SIM_X64_LIB="$(find_lib engine-simulator-x64)"
+SIM_LIB="$DERIVED/libRayactEngine-simulator.a"
 
 if [[ -z "$DEVICE_LIB" || ! -f "$DEVICE_LIB" ]]; then
   echo "ERROR: device libRayactEngine.a not found under $DERIVED/engine-device" >&2
   exit 1
 fi
-if [[ -z "$SIM_LIB" || ! -f "$SIM_LIB" ]]; then
-  echo "ERROR: simulator libRayactEngine.a not found under $DERIVED/engine-simulator" >&2
+if [[ -z "$SIM_ARM64_LIB" || ! -f "$SIM_ARM64_LIB" || -z "$SIM_X64_LIB" || ! -f "$SIM_X64_LIB" ]]; then
+  echo "ERROR: simulator libraries not found" >&2
   exit 1
 fi
+xcrun lipo -create "$SIM_ARM64_LIB" "$SIM_X64_LIB" -output "$SIM_LIB"
 
 echo "  device slice:    $DEVICE_LIB"
 echo "  simulator slice: $SIM_LIB"
@@ -90,6 +92,10 @@ for lib in "$DEVICE_LIB" "$SIM_LIB"; do
   echo "  $lib: $count RayactIOSSession* symbol(s)"
   if [[ "$count" -eq 0 ]]; then
     echo "ERROR: no RayactIOSSession* symbols found in $lib" >&2
+    exit 1
+  fi
+  if nm -g "$lib" 2>/dev/null | grep -E '[[:space:]][TDSB][[:space:]]+_?rayact_(mmkv|secure_store|crash_reporter)_register$' >/dev/null; then
+    echo "ERROR: optional module registration was compiled into generic engine: $lib" >&2
     exit 1
   fi
 done

@@ -5,16 +5,16 @@ plugins {
 
 android {
     namespace 'com.rayact.app'
-    compileSdk 34
-    ndkVersion '27.2.12479018'
+    compileSdk 36
+    ndkVersion '27.3.13750724'
 
     defaultConfig {
         applicationId 'com.rayact.app'
         minSdk 26
-        targetSdk 34
+        targetSdk 36
         versionCode 1
-        versionName '0.1.0'
-        ndk { abiFilters 'arm64-v8a' }
+        versionName '0.0.3'
+        ndk { abiFilters 'arm64-v8a', 'x86_64' }
     }
 
     buildTypes {
@@ -22,9 +22,11 @@ android {
             buildConfigField "boolean", "RAYACT_DEV_CLIENT", "true"
         }
         release {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
             signingConfig signingConfigs.debug
             buildConfigField "boolean", "RAYACT_DEV_CLIENT", "false"
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
@@ -43,6 +45,10 @@ android {
             assets.srcDirs += ['../../rayact-assets']
             jniLibs.srcDirs = ['src/main/jniLibs']
         }
+        // Engine prebuilts are configuration-specific. The release host omits
+        // development entry points and must never be linked into a dev client.
+        debug { jniLibs.srcDirs += ['src/debug/jniLibs'] }
+        release { jniLibs.srcDirs += ['src/release/jniLibs'] }
     }
 
     compileOptions {
@@ -56,5 +62,6 @@ dependencies {
     implementation 'androidx.core:core-ktx:1.13.1'
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
-    implementation 'com.google.android.gms:play-services-code-scanner:16.1.0'
+    debugImplementation 'com.google.android.gms:play-services-code-scanner:16.1.0'
+    releaseCompileOnly 'com.google.android.gms:play-services-code-scanner:16.1.0'
 }

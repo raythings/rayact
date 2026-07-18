@@ -1,6 +1,6 @@
 {
   "name": "rayact-web",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "scripts": {
     "dev": "cd ../../test-projects/desktop-smoke && node ../../dist/cli/cli.js dev --entry src/App.tsx --platform web",

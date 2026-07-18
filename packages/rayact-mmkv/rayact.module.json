@@ -1,0 +1,58 @@
+{
+  "$schema": "../../schema/rayact.module.schema.json",
+  "schemaVersion": 1,
+  "name": "mmkv",
+  "package": "@rayact/mmkv",
+  "jsEntry": ".",
+  "library": "rayact_mmkv",
+  "platforms": [
+    "android",
+    "ios",
+    "darwin"
+  ],
+  "architectures": [
+    "arm64",
+    "x86_64"
+  ],
+  "abiRange": ">=1 <2",
+  "engineRange": ">=0.0.3 <0.1.0",
+  "linkage": "dynamic",
+  "permissions": [],
+  "configurationSchema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "officialDevApp": true,
+  "artifacts": [
+    {
+      "platform": "android",
+      "architecture": "arm64",
+      "path": "android/arm64-v8a/librayact_mmkv.so",
+      "sha256": "f3fef2998860fb24df5a0f7576e55d6b5cb83bb6d511d0bed248b4685dc5ece9"
+    },
+    {
+      "platform": "android",
+      "architecture": "x86_64",
+      "path": "android/x86_64/librayact_mmkv.so",
+      "sha256": "e74f89171b4e0dee772195c2b886329bced9d20016f1ee35de50467d12dbbc51"
+    },
+    {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "path": "darwin-arm64/librayact_mmkv.dylib",
+      "sha256": "d96f3d6bcec2e0fbfd1a95353ab09575c4347f24e8f9f6f5a657218f1fe2a198"
+    },
+    {
+      "platform": "darwin",
+      "architecture": "x86_64",
+      "path": "darwin-x64/librayact_mmkv.dylib",
+      "sha256": "4ef45a208c6bc0ad81f9736ed9a0da1663b144dce7aa185d8235e92def09918d"
+    },
+    {
+      "platform": "ios",
+      "architecture": "universal",
+      "path": "ios/rayact_mmkv.xcframework",
+      "sha256": "1ae74a6c6116c1957b52e46c718a431c1dd024091f585638e53724614d69a0ed"
+    }
+  ]
+}

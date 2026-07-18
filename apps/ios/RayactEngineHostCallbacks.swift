@@ -10,6 +10,7 @@ protocol RayactEngineHostCallbacks: AnyObject {
     func finishActivity()
     func toggleDevMenu()
     func requestRenderFrame()
+    func sendDevtoolsMessage(_ message: String)
     func stopRenderScheduler()
     func showSoftKeyboard(
         nodeId: Int,
@@ -17,7 +18,9 @@ protocol RayactEngineHostCallbacks: AnyObject {
         inputType: String,
         autocorrect: Bool,
         secure: Bool,
-        imeAction: String
+        imeAction: String,
+        autoCapitalize: String,
+        contextMenuHidden: Bool
     )
     func switchIme(
         nodeId: Int,
@@ -25,7 +28,9 @@ protocol RayactEngineHostCallbacks: AnyObject {
         inputType: String,
         autocorrect: Bool,
         secure: Bool,
-        imeAction: String
+        imeAction: String,
+        autoCapitalize: String,
+        contextMenuHidden: Bool
     )
     func hideSoftKeyboard()
     func updateImeState(

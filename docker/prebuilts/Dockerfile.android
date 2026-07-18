@@ -1,4 +1,4 @@
-# Maintainer-only: Android arm64 prebuilts + plugin .so files.
+# Maintainer-only: Android arm64/x86_64 engine and module artifacts.
 FROM eclipse-temurin:17-jammy
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl unzip git cmake ninja-build python3 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Android command-line tools + platform 34 + NDK 27.2
+# Android command-line tools + API 36 + latest NDK r27 LTS patch.
 RUN mkdir -p "$ANDROID_HOME/cmdline-tools" \
     && curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/cmdline-tools.zip \
     && unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_HOME/cmdline-tools" \
@@ -19,9 +19,9 @@ RUN mkdir -p "$ANDROID_HOME/cmdline-tools" \
     && yes | sdkmanager --licenses >/dev/null \
     && sdkmanager \
         "platform-tools" \
-        "platforms;android-34" \
-        "build-tools;34.0.0" \
-        "ndk;27.2.12479018"
+        "platforms;android-36" \
+        "build-tools;36.0.0" \
+        "ndk;27.3.13750724"
 
 WORKDIR /workspace
 COPY build-android.sh pack-android.sh /scripts/

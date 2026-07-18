@@ -1,0 +1,48 @@
+{
+  "name": "@rayact/dev-client",
+  "version": "0.0.3",
+  "description": "Rayact custom development-client UI and diagnostics",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@rayact/navigation": "0.0.3",
+    "@rayact/react": "0.0.3",
+    "@rayact/runtime": "0.0.3",
+    "@rayact/shared": "0.0.3"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "license": "MIT",
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact-dev-client"
+  }
+}

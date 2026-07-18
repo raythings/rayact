@@ -5,6 +5,7 @@ node_modules/
 
 # Build outputs
 build/
+build-linux/
 dist/
 .gradle/
 .cxx/
@@ -22,15 +23,28 @@ compile_commands.json
 # Packaged tarballs (build outputs — produced by npm pack / CI)
 *.tgz
 
+# The workspace root is orchestration-only. Package JavaScript and declarations
+# belong under packages/*; screenshots belong in test fixtures or release evidence.
+/*.js
+/*.ts
+/*.png
+/release1/
+/release-tarballs/
+
 # Prebuilt native binaries — shipped via GitHub Releases / npm pack, never git
 packages/prebuilt-*/jni/
 packages/prebuilt-*/bin/
 packages/prebuilt-*/modules/
 packages/prebuilt-ios-arm64/RayactEngine.xcframework/
 packages/rayact-mmkv/android/
-packages/rayact-mmkv/darwin-arm64/
+packages/rayact-mmkv/darwin-*/
+packages/rayact-mmkv/ios/
 packages/rayact-secure-store/android/
-packages/rayact-secure-store/darwin-arm64/
+packages/rayact-secure-store/darwin-*/
+packages/rayact-secure-store/ios/
+packages/rayact-crash-reporter/android/
+packages/rayact-crash-reporter/darwin-*/
+packages/rayact-crash-reporter/ios/
 
 # Build caches / generated app assets
 apps/ios/.xcode-derived/
@@ -54,6 +68,7 @@ docs/.vitepress/cache/
 /tamer-screen/
 /KeyboardAvoidingView
 /Handoff: *.md
+/.cursor/
 
 # Logs
 *.log

@@ -5,18 +5,55 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Rayact (Web / WebGPU)</title>
   <style>
-    html, body { margin: 0; padding: 0; background: #12121a; color: #ddd; font-family: monospace; }
-    #wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #12121a; color: #ddd; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { overflow: hidden; }
+    #wrap { position: fixed; inset: 0; display: grid; place-items: center; }
     canvas {
       background: #000;
       display: block;
-      outline: 1px solid #333;
-      width: auto;
-      max-width: calc(100vw - 24px);
-      height: auto;
+      width: 100vw;
+      height: 100vh;
       box-sizing: border-box;
     }
-    #log { width: 960px; max-width: 95vw; height: 96px; overflow: auto; font-size: 12px; white-space: pre-wrap; }
+    #unsupported {
+      display: none;
+      max-width: 560px;
+      margin: 24px;
+      padding: 20px;
+      border: 1px solid #363646;
+      border-radius: 8px;
+      background: #191923;
+      color: #f3f3f7;
+      line-height: 1.45;
+    }
+    #unsupported h1 { margin: 0 0 8px; font-size: 20px; font-weight: 650; }
+    #unsupported p { margin: 0; color: #c7c7d2; }
+    #rayact-loading {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      background: #12121a;
+      transition: opacity 160ms ease;
+    }
+    #rayact-loading[hidden] { display: none; }
+    .rayact-loading-card { display: grid; justify-items: center; gap: 12px; padding: 28px; text-align: center; }
+    .rayact-spinner {
+      width: 34px;
+      height: 34px;
+      border: 3px solid #343445;
+      border-top-color: #a9c7ff;
+      border-radius: 50%;
+      animation: rayact-spin 800ms linear infinite;
+    }
+    .rayact-loading-title { color: #f3f3f7; font-size: 18px; font-weight: 650; }
+    .rayact-loading-detail { color: #aaaab8; font-size: 13px; }
+    @keyframes rayact-spin { to { transform: rotate(360deg); } }
+    body.rayact-unsupported canvas,
+    body.rayact-unsupported .rayact-ime,
+    body.rayact-unsupported #rayact-loading { display: none; }
+    body.rayact-unsupported #unsupported { display: block; }
     .rayact-ime {
       position: fixed;
       left: -1000px;
@@ -37,27 +74,134 @@
     <canvas id="canvas" width="960" height="540" oncontextmenu="event.preventDefault()" tabindex="0"></canvas>
     <input id="rayact-ime-input" class="rayact-ime" autocomplete="off" autocapitalize="none" spellcheck="false">
     <textarea id="rayact-ime-textarea" class="rayact-ime" autocomplete="off" autocapitalize="none" spellcheck="false"></textarea>
-    <div id="log"></div>
+    <section id="rayact-loading" role="status" aria-live="polite">
+      <div class="rayact-loading-card">
+        <div class="rayact-spinner" aria-hidden="true"></div>
+        <div class="rayact-loading-title">Preparing project</div>
+        <div id="rayact-loading-detail" class="rayact-loading-detail">Loading the initial project files…</div>
+      </div>
+    </section>
+    <section id="unsupported" role="alert" aria-live="polite">
+      <h1>WebGPU is not available</h1>
+      <p>Rayact Web requires a browser with WebGPU enabled and cross-origin isolation headers. Use a current Chrome or Edge build, then reload this page.</p>
+    </section>
   </div>
   <script>
     if (!navigator.gpu) {
-      document.getElementById('log').textContent =
-        'WebGPU not available in this browser. Use a recent Chrome/Edge with WebGPU enabled.';
+      document.body.classList.add('rayact-unsupported');
     }
+
+    // Browsers cannot browse raw mDNS. The web launcher receives the resolved
+    // server as ?dev=<origin>; start warming that server immediately, before
+    // the WASM runtime has downloaded and initialized.
+    var rayactDevMatch = (location.search || '').match(/[?&]dev=([^&]+)/);
+    var rayactDevBase = rayactDevMatch
+      ? decodeURIComponent(rayactDevMatch[1]).replace(/\/+$/, '')
+      : '';
+    var rayactPrefetchCache = new Map();
+    var rayactPrefetchBytes = 0;
+    var rayactPrefetchLimit = 16 * 1024 * 1024;
+    var rayactPrefetchFileLimit = 4 * 1024 * 1024;
+
+    function rayactAbsoluteUrl(url) {
+      try {
+        var resolved = new URL(url, rayactDevBase || location.href);
+        if (rayactDevBase && resolved.pathname.indexOf('/rayact/') === 0) {
+          var selected = new URL(rayactDevBase);
+          resolved.protocol = selected.protocol;
+          resolved.hostname = selected.hostname;
+          resolved.port = selected.port;
+        }
+        return resolved.href;
+      }
+      catch (_) { return url; }
+    }
+
+    function rayactCacheResponse(url, bytes, revision) {
+      if (!bytes || bytes.byteLength > rayactPrefetchFileLimit) return false;
+      if (rayactPrefetchBytes + bytes.byteLength > rayactPrefetchLimit) return false;
+      var key = rayactAbsoluteUrl(url);
+      if (rayactPrefetchCache.has(key)) return true;
+      rayactPrefetchCache.set(key, { bytes: bytes, revision: revision });
+      rayactPrefetchBytes += bytes.byteLength;
+      return true;
+    }
+
+    async function rayactFetchBytes(url) {
+      var controller = new AbortController();
+      var timeout = setTimeout(function() { controller.abort(); }, 5000);
+      try {
+        var response = await fetch(rayactAbsoluteUrl(url), {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error('HTTP ' + response.status + ' from ' + url);
+        return new Uint8Array(await response.arrayBuffer());
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    window.__rayactDevPrefetchReady = rayactDevBase ? (async function() {
+      try {
+        var manifestUrl = rayactDevBase + '/rayact/manifest.json?platform=web';
+        var manifestBytes = await rayactFetchBytes(manifestUrl);
+        var manifest = JSON.parse(new TextDecoder().decode(manifestBytes));
+        var revision = Number(manifest.revision == null ? -1 : manifest.revision);
+        rayactCacheResponse(manifestUrl, manifestBytes, revision);
+
+        var critical = [];
+        var assets = [];
+        if (manifest.bundleFormat === 'qjsbc' && manifest.bundleUrl) {
+          critical.push({ url: manifest.bundleUrl, size: 0 });
+        } else {
+          if (manifest.bootstrapUrl) critical.push({ url: manifest.bootstrapUrl, size: 0 });
+          if (manifest.entryModuleUrl) critical.push({ url: manifest.entryModuleUrl, size: 0 });
+        }
+        (Array.isArray(manifest.assets) ? manifest.assets.slice(0, 32) : []).forEach(function(asset) {
+          var size = Number(asset && asset.size || 0);
+          if (asset && asset.url && size >= 0 && size <= rayactPrefetchFileLimit) {
+            assets.push({ url: asset.url, size: size });
+          }
+        });
+
+        async function warmResource(resource) {
+          if (resource.size && rayactPrefetchBytes + resource.size > rayactPrefetchLimit) return;
+          try {
+            var bytes = await rayactFetchBytes(resource.url);
+            rayactCacheResponse(resource.url, bytes, revision);
+          } catch (error) {
+            console.debug('[rayact-web] startup prefetch skipped:', error);
+          }
+        }
+
+        // Bootstrap and entry are the only pre-run dependency. Assets continue
+        // warming opportunistically and can never hold the first frame hostage.
+        await Promise.all(critical.map(warmResource));
+        void Promise.all(assets.map(warmResource)).then(function() {
+          console.log('[rayact-web] prefetched ' + rayactPrefetchCache.size + ' startup files');
+        });
+      } catch (error) {
+        console.warn('[rayact-web] dev prefetch unavailable:', error);
+      }
+    })() : Promise.resolve();
+
     var Module = {
       canvas: (function() { return document.getElementById('canvas'); })(),
-      print: function(text) {
-        var el = document.getElementById('log');
-        el.textContent += text + '\n';
-        el.scrollTop = el.scrollHeight;
-      },
-      printErr: function(text) { Module.print('[err] ' + text); },
+      print: function(text) { console.log(text); },
+      printErr: function(text) { console.error(text); },
       // Consumer bundles: fetch a same-origin app bundle into MEMFS before
       // main() runs, so loadBundledApp() finds /app.qjsbc or /app.js without
       // the bundle being embedded at link time. Missing files are fine (the
       // host falls through to ?dev= or the demo).
       preRun: [function() {
-        if (/[?&]dev=/.test(location.search)) return; // dev server mode
+        if (rayactDevBase) {
+          addRunDependency('rayact-dev-prefetch');
+          Promise.resolve(window.__rayactDevPrefetchReady).finally(function() {
+            removeRunDependency('rayact-dev-prefetch');
+          });
+          return;
+        }
         addRunDependency('rayact-app-bundle');
         var tryLoad = function(name, next) {
           fetch(name).then(function(res) {
@@ -71,7 +215,15 @@
           });
         };
         tryLoad('app.qjsbc', function() { tryLoad('app.js', null); });
-      }]
+      }],
+      __rayactPrefetchCache: rayactPrefetchCache,
+      __rayactActiveRevision: null,
+      __rayactSetLoading: function(visible, detail) {
+        var loading = document.getElementById('rayact-loading');
+        var detailEl = document.getElementById('rayact-loading-detail');
+        if (detailEl && detail) detailEl.textContent = detail;
+        if (loading) loading.hidden = !visible;
+      }
     };
     window.Module = Module;
     (function() {
@@ -80,6 +232,7 @@
       var activeEl = null;
       var composing = false;
       var globalImeValue = '';
+      var activeBlurOnSubmit = true;
       var canvas = document.getElementById('canvas');
       var lastPointerEventTime = 0;
       var mouseFallbackDown = false;
@@ -252,9 +405,11 @@
       function configure(el, opts) {
         el.inputMode = opts.inputMode || 'text';
         el.enterKeyHint = opts.imeAction || 'done';
-        el.autocapitalize = opts.autocapitalize || 'none';
+        el.autocapitalize = opts.autocapitalize || 'sentences';
         el.autocomplete = opts.autocorrect ? 'on' : 'off';
         el.spellcheck = !!opts.autocorrect;
+        el.style.webkitUserSelect = opts.contextMenuHidden ? 'none' : '';
+        el.style.userSelect = opts.contextMenuHidden ? 'none' : '';
         if (el.tagName === 'INPUT') el.type = opts.secure ? 'password' : 'text';
       }
 
@@ -264,7 +419,7 @@
         el.addEventListener('compositionstart', function() { composing = true; sendState(false); });
         el.addEventListener('compositionend', function() { composing = false; sendState(true); });
         el.addEventListener('keydown', function(event) {
-          if (event.key === 'Enter' && el.tagName !== 'TEXTAREA') {
+          if (event.key === 'Enter' && (el.tagName !== 'TEXTAREA' || activeBlurOnSubmit)) {
             event.preventDefault();
             sendState(true);
             if (activeNode === -2) sendKey(0, event, '');
@@ -279,9 +434,10 @@
       });
 
       Module.rayactTextInput = {
-        show: function(nodeId, value, inputType, autocorrect, secure, imeAction) {
+        show: function(nodeId, value, inputType, autocorrect, secure, imeAction, blurOnSubmit, autoCapitalize, contextMenuHidden) {
           activeNode = nodeId;
           if (nodeId === -2) globalImeValue = value || '';
+          activeBlurOnSubmit = !!blurOnSubmit;
           var multiline = inputType === 'multiline';
           activeEl = document.getElementById(multiline ? 'rayact-ime-textarea' : 'rayact-ime-input');
           var inputMode = inputType === 'email' ? 'email'
@@ -289,7 +445,14 @@
             : inputType === 'phone' ? 'tel'
             : inputType === 'url' ? 'url'
             : 'text';
-          configure(activeEl, { inputMode: inputMode, autocorrect: autocorrect, secure: secure, imeAction: imeAction });
+          configure(activeEl, {
+            inputMode: inputMode,
+            autocorrect: autocorrect,
+            secure: secure,
+            imeAction: imeAction,
+            autocapitalize: autoCapitalize,
+            contextMenuHidden: !!contextMenuHidden,
+          });
           if (activeEl.value !== value) activeEl.value = value || '';
           var end = activeEl.value.length;
           activeEl.focus({ preventScroll: true });
@@ -298,6 +461,7 @@
         hide: function() {
           if (activeEl) activeEl.blur();
           activeNode = -1;
+          activeBlurOnSubmit = true;
           globalImeValue = '';
           activeEl = null;
           composing = false;

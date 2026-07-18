@@ -1,19 +1,66 @@
 {
   "nativeModules": [
     {
-      "name": "kv",
-      "lib": "",
-      "jsPackage": "rayact/runtime"
+      "name": "crash-reporter",
+      "lib": "rayact_crash_reporter",
+      "jsPackage": "@rayact/crash-reporter",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin",
+        "web"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=1 <2",
+      "engineRange": ">=0.0.3 <0.1.0",
+      "permissions": [
+        "crash-report-storage",
+        "network-when-consented"
+      ],
+      "officialDevApp": true
     },
     {
       "name": "mmkv",
       "lib": "rayact_mmkv",
-      "jsPackage": "rayact/mmkv"
+      "jsPackage": "@rayact/mmkv",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "abiRange": ">=1 <2",
+      "engineRange": ">=0.0.3 <0.1.0",
+      "permissions": [],
+      "officialDevApp": true
     },
     {
       "name": "secure-store",
       "lib": "rayact_secure_store",
-      "jsPackage": "rayact/secure-store"
+      "jsPackage": "@rayact/secure-store",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "abiRange": ">=1 <2",
+      "engineRange": ">=0.0.3 <0.1.0",
+      "permissions": [
+        "keychain",
+        "keystore"
+      ],
+      "officialDevApp": true
     }
   ]
 }

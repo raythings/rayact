@@ -1,0 +1,48 @@
+{
+  "name": "@rayact/cli",
+  "version": "0.0.3",
+  "description": "Rayact command-line interface",
+  "type": "module",
+  "sideEffects": false,
+  "bin": {
+    "rayact": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./cli": "./dist/cli.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@rayact/dev-server": "0.0.3",
+    "@rayact/prebuild": "0.0.3",
+    "create-rayact-app": "0.0.3"
+  },
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "license": "MIT",
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact-cli"
+  }
+}

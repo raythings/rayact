@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "engineVersion": "0.0.3",
+  "modules": [
+    {
+      "name": "kv",
+      "lib": "",
+      "jsPackage": "rayact/kv",
+      "platforms": ["android", "ios", "darwin", "web"],
+      "architectures": ["arm64", "x64", "wasm32"],
+      "abiRange": ">=1 <2",
+      "officialDevApp": true,
+      "integratedInEngine": true,
+      "smokeTest": "kv-roundtrip"
+    },
+    {
+      "name": "mmkv",
+      "lib": "rayact_mmkv",
+      "jsPackage": "@rayact/mmkv",
+      "pluginPackage": "@rayact/mmkv",
+      "platforms": ["android", "ios", "darwin"],
+      "architectures": ["arm64", "x86_64"],
+      "abiRange": ">=1 <2",
+      "officialDevApp": true,
+      "iosIntegratedInEngine": false,
+      "smokeTest": "mmkv-roundtrip"
+    },
+    {
+      "name": "secure-store",
+      "lib": "rayact_secure_store",
+      "jsPackage": "@rayact/secure-store",
+      "pluginPackage": "@rayact/secure-store",
+      "platforms": ["android", "ios", "darwin"],
+      "architectures": ["arm64", "x86_64"],
+      "abiRange": ">=1 <2",
+      "officialDevApp": true,
+      "iosIntegratedInEngine": false,
+      "permissions": ["keychain", "keystore"],
+      "smokeTest": "secure-store-roundtrip"
+    },
+    {
+      "name": "crash-reporter",
+      "lib": "rayact_crash_reporter",
+      "jsPackage": "@rayact/crash-reporter",
+      "pluginPackage": "@rayact/crash-reporter",
+      "platforms": ["android", "ios", "darwin"],
+      "architectures": ["arm64", "x86_64"],
+      "abiRange": ">=1 <2",
+      "officialDevApp": true,
+      "iosIntegratedInEngine": false,
+      "smokeTest": "crash-reporter-local"
+    }
+  ]
+}

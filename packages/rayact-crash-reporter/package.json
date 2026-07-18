@@ -1,0 +1,53 @@
+{
+  "name": "@rayact/crash-reporter",
+  "version": "0.0.3",
+  "description": "Provider-neutral, privacy-first crash reporting for Rayact",
+  "type": "module",
+  "sideEffects": [
+    "./dist/index.js"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "rayact": {
+    "manifest": "./rayact.module.json"
+  },
+  "files": [
+    "dist",
+    "native",
+    "android",
+    "darwin-arm64",
+    "darwin-x64",
+    "ios",
+    "rayact.module.json",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "rayact": ">=0.0.3 <0.1.0"
+  },
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "license": "MIT",
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact-crash-reporter"
+  }
+}

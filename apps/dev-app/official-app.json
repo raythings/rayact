@@ -2,7 +2,7 @@
   "displayName": "Rayact Dev App",
   "packageLabel": "Rayact Dev App",
   "source": "official",
-  "androidPackageId": "com.rayact.devapp",
+  "androidPackageId": "com.rayact.app",
   "creditTitle": "The official Rayact development client",
   "links": [
     {

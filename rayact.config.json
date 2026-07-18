@@ -8,6 +8,6 @@
   },
   "entry": "test-projects/release-consumer-smoke/src/App.tsx",
   "android": {
-    "package": "com.rayact.app"
+    "packageName": "com.rayact.app"
   }
 }

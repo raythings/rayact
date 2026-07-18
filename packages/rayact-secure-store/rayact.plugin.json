@@ -1,5 +1,0 @@
-{
-  "name": "secure-store",
-  "lib": "rayact_secure_store",
-  "platforms": ["android", "ios", "darwin", "linux"]
-}

@@ -9,7 +9,9 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
     // Cleared on destroy so callers (e.g. the shared DevClientBridge) can avoid
     // invoking native methods on a torn-down engine handle.
     @Volatile private var destroyed = false
+    @Volatile private var devtoolsTransport: RayactDevToolsTransport? = null
     fun isAlive(): Boolean = !destroyed
+    fun isDevtoolsEnabled(): Boolean = devtoolsTransport != null
 
     fun acquireGraphics(): Boolean = nativeAcquireGraphics(nativeHandle)
     fun releaseGraphics() {
@@ -17,6 +19,8 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
         nativeReleaseGraphics(nativeHandle)
     }
     fun destroy() {
+        if (com.rayact.app.BuildConfig.RAYACT_DEV_CLIENT) disableDevtools()
+        RayactMobileNetwork.closeAll(nativeHandle)
         destroyed = true
         nativeDestroy(nativeHandle)
     }
@@ -25,8 +29,10 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
     fun loadDevClient(source: String): Boolean = nativeLoadScript(nativeHandle, 0, source)
     fun loadDevServer(url: String): Boolean = nativeLoadScript(nativeHandle, 1, url)
     fun loadBytecode(bytes: ByteArray): Boolean = nativeLoadBytecode(nativeHandle, bytes)
+    fun prepareScript(): Boolean = nativePrepareScript(nativeHandle)
     private fun devTransportScript(serverUrl: String): String = """
         globalThis.__RAYACT_DEV_SERVER__ = ${org.json.JSONObject.quote(serverUrl)};
+        globalThis.__rayactNativeDevtoolsTransport = true;
         globalThis.__rayactDevFetch = function(url) { return rayactDevFetch(url); };
     """.trimIndent()
 
@@ -51,6 +57,26 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
     fun relayoutOnSurfaceResizeEnabled(): Boolean =
         nativeRelayoutOnSurfaceResizeEnabled(nativeHandle)
 
+    /** Attach Chrome DevTools (CDP) to this session. Dev-app: project session only. */
+    fun enableDevtools(serverUrl: String, title: String) {
+        if (destroyed) return
+        disableDevtools()
+        devtoolsTransport = RayactDevToolsTransport(this, serverUrl, title).also { it.start() }
+        nativeEnableDevtools(nativeHandle, title)
+    }
+    fun disableDevtools() {
+        devtoolsTransport?.stop()
+        devtoolsTransport = null
+        if (!destroyed) nativeDisableDevtools(nativeHandle)
+    }
+    internal fun sendDevtoolsMessage(message: String) {
+        if (message.startsWith('\u001e')) devtoolsTransport?.sendEnvelope(message.substring(1))
+        else devtoolsTransport?.sendCdp(message)
+    }
+    internal fun receiveDevtoolsMessage(message: String) {
+        if (isAlive()) nativeDevtoolsMessage(nativeHandle, message)
+    }
+
     fun setSafeAreaInsets(top: Float, right: Float, bottom: Float, left: Float) =
         nativeSetSafeAreaInsets(nativeHandle, top, right, bottom, left)
 
@@ -69,6 +95,14 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
     fun nativeToggleDevMenu() = nativeToggleDevMenu(nativeHandle)
     fun nativeOnBackPressed() = nativeOnBackPressed(nativeHandle)
 
+    fun nativeGetGpuFrameTimeMs(): Double = nativeGetGpuFrameTimeMs(nativeHandle)
+
+    fun nativeGetGpuDeviceName(): String = nativeGetGpuDeviceName(nativeHandle)
+
+    fun accessibilitySnapshot(): String = nativeGetAccessibilitySnapshot(nativeHandle)
+    fun performAccessibilityAction(nodeId: Int): Boolean =
+        nativePerformAccessibilityAction(nativeHandle, nodeId)
+
     fun nativeTouch(action: Int, id: Int, x: Float, y: Float) =
         nativeTouch(nativeHandle, action, id, x, y)
 
@@ -86,6 +120,7 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
     )
 
     fun nativeBlurTextInput() = nativeBlurTextInput(nativeHandle)
+    fun nativeSubmitTextInput() = nativeSubmitTextInput(nativeHandle)
     fun nativeImeHiddenBySystem() = nativeImeHiddenBySystem(nativeHandle)
 
     fun nativePushExternalViewFrame(nodeId: Int, buffer: android.hardware.HardwareBuffer) =
@@ -120,11 +155,15 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
         @JvmStatic external fun nativeReleaseGraphics(handle: Long)
         @JvmStatic external fun nativeLoadScript(handle: Long, mode: Int, arg: String): Boolean
         @JvmStatic external fun nativeLoadBytecode(handle: Long, bytes: ByteArray): Boolean
+        @JvmStatic external fun nativePrepareScript(handle: Long): Boolean
         @JvmStatic external fun nativeApplyModuleUpdate(handle: Long, path: String, source: String): Boolean
         @JvmStatic external fun nativeToggleDevMenu(handle: Long)
         @JvmStatic external fun nativeCreateSurface(handle: Long, surface: Surface, density: Float): Int
         @JvmStatic external fun nativeResizeSurface(handle: Long, surfaceId: Int, width: Int, height: Int, density: Float)
         @JvmStatic external fun nativeRelayoutOnSurfaceResizeEnabled(handle: Long): Boolean
+        @JvmStatic external fun nativeEnableDevtools(handle: Long, title: String)
+        @JvmStatic external fun nativeDisableDevtools(handle: Long)
+        @JvmStatic external fun nativeDevtoolsMessage(handle: Long, message: String)
         @JvmStatic external fun nativeSetSafeAreaInsets(handle: Long, top: Float, right: Float, bottom: Float, left: Float)
         @JvmStatic external fun nativeSetKeyboardInsets(handle: Long, heightDp: Float, visible: Boolean, durationMs: Float)
         @JvmStatic external fun nativeDestroySurface(handle: Long, surfaceId: Int)
@@ -139,11 +178,16 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
             repeat: Boolean, ctrl: Boolean, alt: Boolean, shift: Boolean, meta: Boolean
         )
         @JvmStatic external fun nativeOnBackPressed(handle: Long)
+        @JvmStatic external fun nativeGetGpuFrameTimeMs(handle: Long): Double
+        @JvmStatic external fun nativeGetGpuDeviceName(handle: Long): String
+        @JvmStatic external fun nativeGetAccessibilitySnapshot(handle: Long): String
+        @JvmStatic external fun nativePerformAccessibilityAction(handle: Long, nodeId: Int): Boolean
         @JvmStatic external fun nativeSetTextInputContent(
             handle: Long, nodeId: Int, text: String,
             selectionStart: Int, selectionEnd: Int, composingStart: Int, composingEnd: Int
         )
         @JvmStatic external fun nativeBlurTextInput(handle: Long)
+        @JvmStatic external fun nativeSubmitTextInput(handle: Long)
         @JvmStatic external fun nativeImeHiddenBySystem(handle: Long)
         @JvmStatic external fun nativePushExternalViewFrame(handle: Long, nodeId: Int, buffer: android.hardware.HardwareBuffer)
         @JvmStatic external fun nativeExternalViewTextChanged(handle: Long, nodeId: Int, text: String)

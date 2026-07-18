@@ -1,0 +1,59 @@
+{
+  "name": "@rayact/renderer",
+  "version": "0.0.3",
+  "description": "Rayact React reconciler and native command protocol",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "default": "./dist/protocol.js"
+    },
+    "./shared-value": {
+      "types": "./dist/anim/SharedValue.d.ts",
+      "default": "./dist/anim/SharedValue.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@rayact/runtime": "0.0.3",
+    "@rayact/shared": "0.0.3",
+    "react-reconciler": "^0.31.0"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "license": "MIT",
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact-renderer"
+  }
+}

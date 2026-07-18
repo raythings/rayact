@@ -1,10 +1,25 @@
 #include "dev_client_bridge.hpp"
+#include "cdp_handler.hpp"
+#if !defined(__ANDROID__) && !defined(RAYACT_IOS) && !defined(RAYACT_WEB)
+#include "desktop_mdns.hpp"
+#include "desktop_dev_loader.hpp"
+#include "devtools.hpp"
+#endif
 #include "raym3_bridge.hpp"
 #include "../core/engine.hpp"
+#ifndef RAYACT_NO_WORKERS
+#include "workers.hpp"
+#endif
 
 #include <sstream>
 #include <string>
 #include <vector>
+
+#if defined(RAYACT_WEB)
+#include <emscripten.h>
+#elif !defined(__ANDROID__) && !defined(RAYACT_IOS)
+#include "raylib.h"
+#endif
 
 namespace rayact {
 
@@ -12,6 +27,23 @@ namespace {
 
 static std::string g_devServerUrl;
 static std::vector<std::string> g_recentUrls;
+
+static std::string jsonStringField(const char* dataJson, const char* key) {
+    if (!dataJson || !key) return {};
+    const std::string needle = std::string("\"") + key + "\"";
+    const char* pos = strstr(dataJson, needle.c_str());
+    if (!pos) return {};
+    pos = strchr(pos + needle.size(), '"');
+    if (!pos) return {};
+    ++pos;
+    const char* end = strchr(pos, '"');
+    return end ? std::string(pos, end - pos) : std::string();
+}
+
+static bool isAllowedExternalUrl(const std::string& url) {
+    return url.rfind("https://", 0) == 0 || url.rfind("http://", 0) == 0 ||
+           url.rfind("mailto:", 0) == 0;
+}
 
 static std::string jsonEscape(const std::string& s) {
     std::string out;
@@ -49,9 +81,33 @@ static std::string recentEntriesJson() {
     return ss.str();
 }
 
-#ifndef __ANDROID__
+#if !defined(__ANDROID__) && !defined(RAYACT_IOS) && !defined(RAYACT_WEB)
 static std::string desktopDevCall(const char* method, const char* dataJson) {
     const std::string m = method ? method : "";
+    if (m == "openExternalUrl") {
+        const std::string url = jsonStringField(dataJson, "url");
+        if (!isAllowedExternalUrl(url)) return "false";
+        OpenURL(url.c_str());
+        return "true";
+    }
+    if (m == "getDevToolsState" || m == "setDevToolsEnabled") {
+        JSContext* ctx = engineContext();
+        const bool forcedOff = std::string(engineDevBundleFormat()) == "qjsbc";
+        if (m == "setDevToolsEnabled" && !forcedOff && ctx) {
+            const bool requested = dataJson && strstr(dataJson, "\"enabled\":true");
+            if (requested) devtoolsEnableForContext(ctx, 9229, "Rayact Desktop");
+            else devtoolsDetachContext(ctx);
+        }
+        const bool enabled = !forcedOff && ctx && devtoolsActiveForContext(ctx);
+        std::ostringstream out;
+        out << "{\"enabled\":" << (enabled ? "true" : "false")
+            << ",\"forcedOff\":" << (forcedOff ? "true" : "false")
+            << ",\"bundleFormat\":\"" << (forcedOff ? "qjsbc" : "js") << "\""
+            << ",\"reason\":\"";
+        if (forcedOff) out << "Rayact DevTools are disabled while running bytecode for better performance.";
+        out << "\"}";
+        return out.str();
+    }
     if (m == "setDevServerUrl") {
         std::string url;
         if (dataJson) {
@@ -69,6 +125,7 @@ static std::string desktopDevCall(const char* method, const char* dataJson) {
         if (!url.empty()) {
             g_devServerUrl = url;
             addRecent(url);
+            desktopMdnsStop();
             engineLoadDevServer(url);
         }
         return "null";
@@ -90,6 +147,7 @@ static std::string desktopDevCall(const char* method, const char* dataJson) {
         if (url.empty()) return "{\"ok\":false,\"error\":\"Invalid server URL\"}";
         g_devServerUrl = url;
         addRecent(url);
+        desktopMdnsStop();
         if (!engineLoadDevServer(url)) {
             return "{\"ok\":false,\"error\":\"Failed to load dev server\"}";
         }
@@ -116,11 +174,45 @@ static std::string desktopDevCall(const char* method, const char* dataJson) {
         g_recentUrls = std::move(next);
         return "null";
     }
-    if (m == "getDiscoveredServers") return "[]";
-    if (m == "startDiscovery" || m == "stopDiscovery" || m == "scanQR") return "null";
+    if (m == "getDiscoveredServers") return desktopMdnsServersJson();
+    if (m == "startDiscovery") {
+        desktopMdnsStart();
+        return "null";
+    }
+    if (m == "stopDiscovery") {
+        desktopMdnsStop();
+        return "null";
+    }
+    if (m == "scanQR") return "null";
     if (m == "reloadWithProjectBundle") {
         if (!g_devServerUrl.empty()) engineLoadDevServer(g_devServerUrl);
         return "null";
+    }
+    return "null";
+}
+#endif
+
+#if defined(RAYACT_WEB)
+static std::string webDevCall(const char* method, const char* dataJson) {
+    const std::string m = method ? method : "";
+    if (m == "openExternalUrl") {
+        const std::string url = jsonStringField(dataJson, "url");
+        if (!isAllowedExternalUrl(url)) return "false";
+        EM_ASM({
+            const url = UTF8ToString($0);
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }, url.c_str());
+        return "true";
+    }
+    if (m == "getDevToolsState" || m == "setDevToolsEnabled") {
+        const bool bytecode = std::string(engineDevBundleFormat()) == "qjsbc";
+        return std::string("{\"enabled\":false,\"forcedOff\":true,\"bundleFormat\":\"")
+            + (bytecode ? "qjsbc" : "js")
+            + "\",\"reason\":\""
+            + (bytecode
+                ? "Rayact DevTools are disabled while running bytecode for better performance."
+                : "Use the browser developer tools on web builds.")
+            + "\"}";
     }
     return "null";
 }
@@ -160,6 +252,8 @@ static JSValue JS_devCall(JSContext* ctx, JSValue, int argc, JSValueConst* argv)
     resultJson = androidDevCall(method, dataJson.empty() ? nullptr : dataJson.c_str());
 #elif defined(RAYACT_IOS)
     resultJson = iosDevCall(method, dataJson.empty() ? nullptr : dataJson.c_str());
+#elif defined(RAYACT_WEB)
+    resultJson = webDevCall(method, dataJson.empty() ? nullptr : dataJson.c_str());
 #else
     resultJson = desktopDevCall(method, dataJson.empty() ? nullptr : dataJson.c_str());
 #endif
@@ -209,6 +303,85 @@ static JSValue JS_setInspectorHighlight(JSContext* ctx, JSValue, int argc, JSVal
     return JS_UNDEFINED;
 }
 
+static JSValue JS_setInspectorPickMode(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    setInspectorPickMode(argc >= 1 && JS_ToBool(ctx, argv[0]));
+    return JS_UNDEFINED;
+}
+
+static JSValue JS_getInspectorPickedNode(JSContext* ctx, JSValue, int, JSValueConst*) {
+    return JS_NewInt32(ctx, getInspectorPickedNode());
+}
+
+// __rayactRegisterDebugScript(url, source) — runtime-owned, dev-only module
+// source registry. This avoids re-reading project files on the host and gives
+// CDP Sources the exact Vite transform that QuickJS evaluated.
+static JSValue JS_registerDebugScript(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+#if RAYACT_ENABLE_DEVTOOLS
+    if (argc < 2 || !CDPHandler::instance()) return JS_UNDEFINED;
+    const char* url = JS_ToCString(ctx, argv[0]);
+    const char* source = JS_ToCString(ctx, argv[1]);
+    if (url && source) CDPHandler::instance()->registerScript(url, source);
+    if (url) JS_FreeCString(ctx, url);
+    if (source) JS_FreeCString(ctx, source);
+    return JS_UNDEFINED;
+#else
+    (void)ctx; (void)argc; (void)argv;
+    return JS_UNDEFINED;
+#endif
+}
+
+static JSValue JS_emitReactDevtoolsEvent(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+#if RAYACT_ENABLE_DEVTOOLS
+    if (argc < 2 || !CDPHandler::instance()) return JS_UNDEFINED;
+    const char* method = JS_ToCString(ctx, argv[0]);
+    const char* payload = JS_ToCString(ctx, argv[1]);
+    if (method) CDPHandler::instance()->emitEvent(method, payload ? payload : "{}");
+    if (method) JS_FreeCString(ctx, method);
+    if (payload) JS_FreeCString(ctx, payload);
+    return JS_UNDEFINED;
+#else
+    (void)ctx; (void)argc; (void)argv;
+    return JS_UNDEFINED;
+#endif
+}
+
+// setInspectorSourceName(nodeId, name) — dev-mode reconciler reports the
+// nearest named source component owning a host node so the inspector can
+// label nodes with app-code names instead of host kinds.
+static JSValue JS_setInspectorSourceName(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_UNDEFINED;
+    int id = -1;
+    JS_ToInt32(ctx, &id, argv[0]);
+    if (id < 0) return JS_UNDEFINED;
+    if (JS_IsString(argv[1])) {
+        const char* name = JS_ToCString(ctx, argv[1]);
+        if (name) {
+            setInspectorSourceName(id, name);
+            JS_FreeCString(ctx, name);
+        }
+    } else {
+        clearInspectorSourceName(id);
+    }
+    return JS_UNDEFINED;
+}
+
+// getLoadedWasmModules() → JSON string array of currently-running .wasm
+// worker file paths. Shows what's ACTUALLY loaded at runtime, as opposed to
+// the native modules declared at build time (already shown in the launcher).
+static JSValue JS_getLoadedWasmModules(JSContext* ctx, JSValue, int, JSValueConst*) {
+    std::ostringstream ss;
+    ss << "[";
+#ifndef RAYACT_NO_WORKERS
+    auto paths = getLoadedWasmModulePaths();
+    for (size_t i = 0; i < paths.size(); ++i) {
+        if (i) ss << ",";
+        ss << "\"" << jsonEscape(paths[i]) << "\"";
+    }
+#endif
+    ss << "]";
+    return JS_NewString(ctx, ss.str().c_str());
+}
+
 } // namespace
 
 void installDevClientBridge(JSContext* ctx, JSValue global) {
@@ -218,6 +391,20 @@ void installDevClientBridge(JSContext* ctx, JSValue global) {
                       JS_NewCFunction(ctx, JS_getNodeTree, "getNodeTree", 0));
     JS_SetPropertyStr(ctx, global, "setInspectorHighlight",
                       JS_NewCFunction(ctx, JS_setInspectorHighlight, "setInspectorHighlight", 1));
+    JS_SetPropertyStr(ctx, global, "setInspectorPickMode",
+                      JS_NewCFunction(ctx, JS_setInspectorPickMode, "setInspectorPickMode", 1));
+    JS_SetPropertyStr(ctx, global, "getInspectorPickedNode",
+                      JS_NewCFunction(ctx, JS_getInspectorPickedNode, "getInspectorPickedNode", 0));
+#if RAYACT_ENABLE_DEVTOOLS
+    JS_SetPropertyStr(ctx, global, "__rayactRegisterDebugScript",
+                      JS_NewCFunction(ctx, JS_registerDebugScript, "__rayactRegisterDebugScript", 2));
+    JS_SetPropertyStr(ctx, global, "__rayactEmitReactDevtoolsEvent",
+                      JS_NewCFunction(ctx, JS_emitReactDevtoolsEvent, "__rayactEmitReactDevtoolsEvent", 2));
+#endif
+    JS_SetPropertyStr(ctx, global, "setInspectorSourceName",
+                      JS_NewCFunction(ctx, JS_setInspectorSourceName, "setInspectorSourceName", 2));
+    JS_SetPropertyStr(ctx, global, "getLoadedWasmModules",
+                      JS_NewCFunction(ctx, JS_getLoadedWasmModules, "getLoadedWasmModules", 0));
 }
 
 } // namespace rayact

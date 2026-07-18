@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.20)
+project(rayact_crash_reporter LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_library(rayact_crash_reporter SHARED crash_reporter_plugin.cpp)
+set_target_properties(rayact_crash_reporter PROPERTIES OUTPUT_NAME rayact_crash_reporter PREFIX "lib")
+target_include_directories(rayact_crash_reporter PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../../native/core)

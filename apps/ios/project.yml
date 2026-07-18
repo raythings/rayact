@@ -19,10 +19,10 @@ _engineSettings: &engineSettings
   USE_HEADERMAP: NO
   CLANG_CXX_LANGUAGE_STANDARD: "gnu++20"
   CLANG_CXX_LIBRARY: "libc++"
-  HEADER_SEARCH_PATHS: "$(inherited) ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../../raylib-backends/backends/rlmt ../../../raylib-backends/backends/rlmt/platforms ../../../raylib/src ../../../raym3/include ../../../raym3/build-v2/include ../../../raym3/build-v2-yoga2/_deps/yoga-src ../../../quickjs ../../../lynx/third_party/quickjs/include ../../../wasm3/source ../../../cssparser"
-  USER_HEADER_SEARCH_PATHS: "$(inherited) ../../../raylib-backends/backends/rlmt ../../../raylib-backends/backends/rlmt/platforms ../../../raylib/src ../../../raym3/include ../../../raym3/build-v2/include ../../../raym3/build-v2-yoga2/_deps/yoga-src ../../../quickjs ../../../lynx/third_party/quickjs/include ../../../wasm3/source ../../../cssparser"
+  HEADER_SEARCH_PATHS: "$(inherited) ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser"
+  USER_HEADER_SEARCH_PATHS: "$(inherited) ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser"
   OTHER_CFLAGS: "$(inherited) -D_GNU_SOURCE"
-  GCC_PREPROCESSOR_DEFINITIONS: "$(inherited) RAYACT_NO_NET=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1"
+  GCC_PREPROCESSOR_DEFINITIONS: "$(inherited) RAYACT_PLATFORM_NET_BACKEND=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1"
 
 targets:
   RayactIOS:
@@ -68,12 +68,18 @@ targets:
           - window_manager.hpp
           - main_new.cpp
           - net.cpp
-          - cdp_handler.cpp
-          - devtools.cpp
+          # Desktop-only libcurl/mDNS implementations. iOS provides these
+          # transports through RayactMobileNetwork.swift.
+          - desktop_dev_loader.cpp
+          - desktop_dev_loader.hpp
+          - desktop_mdns.cpp
+          - desktop_mdns.hpp
           - utils/TypeStripper.cpp
           - utils/ScriptValidator.cpp
           - CMakeLists.txt
           - build
+          - build-*
+          - build-*/**
       - path: ../../native/android
         includes:
           - engine_runtime.cpp
@@ -81,7 +87,7 @@ targets:
         excludes:
           - engine_runtime.cpp
           - engine_runtime.hpp
-      - path: ../../../wasm3/source
+      - path: ../../third_party/wasm3/source
         excludes:
           - CMakeLists.txt
           - m3_api_*.c
@@ -104,11 +110,11 @@ targets:
           - wasm3.h
           - wasm3_defs.h
           - build
-      - path: ../../../cssparser/cssparser
+      - path: ../../third_party/cssparser/cssparser
         excludes:
           - main.cpp
           - "*.h"
-      - path: ../../../quickjs
+      - path: ../../third_party/quickjs
         excludes:
           - "*.h"
           - "*.js"
@@ -125,6 +131,8 @@ targets:
           - unicode_gen.c
           - lre-test.c
           - build
+          - build-*
+          - build-*/**
           - docs
           - examples
           - gen
@@ -143,41 +151,44 @@ targets:
           - LICENSE
           - update-version.sh
           - test262
-      - path: ../../../raym3/src
+      - path: ../../third_party/raym3/src
         excludes:
           - main.cpp
           - examples
           - build
-      - path: ../../../raylib/src
+      - path: ../../third_party/raylib/src
         includes:
           - rshapes.c
           - rtextures.c
           - rtext.c
           - rmodels.c
-      - path: ../../../raym3/build-v2-yoga2/_deps/yoga-src/yoga
+      - path: ../../third_party/yoga/yoga
         excludes:
           - "*.h"
           - CMakeLists.txt
           - module.modulemap
-      - path: ../../../raylib-backends/backends/rlmt
+      - path: ../../third_party/raylib-backends/backends/rlmt
         excludes:
           - rlgl.h
           - rlmt.h
           - platforms
-      - path: ../../../raylib-backends/backends/rlmt/platforms
+      - path: ../../third_party/raylib-backends/backends/rlmt/platforms
         excludes:
           - rcore_desktop_glfw.c
           - rcore_ios_metal.c
-      - path: ../../../raylib-backends/backends/rlmt/platforms
+      - path: ../../third_party/raylib-backends/backends/rlmt/platforms
         includes:
           - rcore_ios_metal_overlay.c
-      - path: ../../native/plugins/mmkv
+      - path: ../../packages/rayact-mmkv/native
         includes:
           - mmkv_plugin.cpp
-      - path: ../../native/plugins/secure-store
+      - path: ../../packages/rayact-secure-store/native
         includes:
           - secure_store_plugin.cpp
           - secure_store_mac.mm
+      - path: ../../packages/rayact-crash-reporter/native
+        includes:
+          - crash_reporter_plugin.cpp
     resources:
       - path: ../../resources/fonts
       - path: Assets.xcassets
@@ -188,12 +199,21 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.rayact.app
         PRODUCT_NAME: Rayact
         OTHER_LDFLAGS: "$(inherited) -framework Metal -framework QuartzCore -framework UIKit -framework CoreFoundation -framework Security"
+      configs:
+        Debug:
+          OTHER_CFLAGS: "$(inherited) -DRAYACT_ENABLE_DEVTOOLS=1"
+        Release:
+          INFOPLIST_FILE: Info-Release.plist
+          OTHER_CFLAGS: "$(inherited) -DRAYACT_ENABLE_DEVTOOLS=0 -DRAYACT_RELEASE_HOST=1"
+          EXCLUDED_SOURCE_FILE_NAMES: "devtools.cpp cdp_handler.cpp dev_client_bridge.cpp desktop_dev_loader.cpp desktop_mdns.cpp DevClientBridge.swift DevLauncherController.swift DevMenuOverlay.swift DevServerLoader.swift DevShakeDetector.swift ProjectHmrClient.swift RayactDevToolsTransport.swift"
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: RAYACT_RELEASE
+          DEAD_CODE_STRIPPING: YES
     preBuildScripts:
       - name: Generate iOS Metal overlay
         script: |
           set -eu
           ROOT="${SRCROOT}/../../.."
-          "${ROOT}/raylib-backends/scripts/generate_ios_metal_overlay.sh" "${ROOT}/raylib" "${ROOT}/raylib-backends/backends/rlmt/platforms/rcore_ios_metal_overlay.c" "${ROOT}/raylib-backends"
+          "${ROOT}/rayact/third_party/raylib-backends/scripts/generate_ios_metal_overlay.sh" "${ROOT}/rayact/third_party/raylib" "${ROOT}/rayact/third_party/raylib-backends/backends/rlmt/platforms/rcore_ios_metal_overlay.c" "${ROOT}/rayact/third_party/raylib-backends"
     postBuildScripts:
       - name: Copy bundled runtime assets
         script: |
@@ -246,12 +266,16 @@ targets:
           - window_manager.hpp
           - main_new.cpp
           - net.cpp
-          - cdp_handler.cpp
-          - devtools.cpp
+          - desktop_dev_loader.cpp
+          - desktop_dev_loader.hpp
+          - desktop_mdns.cpp
+          - desktop_mdns.hpp
           - utils/TypeStripper.cpp
           - utils/ScriptValidator.cpp
           - CMakeLists.txt
           - build
+          - build-*
+          - build-*/**
       - path: ../../native/android
         headerVisibility: project
         includes:
@@ -261,7 +285,8 @@ targets:
         excludes:
           - engine_runtime.cpp
           - engine_runtime.hpp
-      - path: ../../../wasm3/source
+          - ios_plugins_register.cpp
+      - path: ../../third_party/wasm3/source
         headerVisibility: project
         excludes:
           - CMakeLists.txt
@@ -285,12 +310,12 @@ targets:
           - wasm3.h
           - wasm3_defs.h
           - build
-      - path: ../../../cssparser/cssparser
+      - path: ../../third_party/cssparser/cssparser
         headerVisibility: project
         excludes:
           - main.cpp
           - "*.h"
-      - path: ../../../quickjs
+      - path: ../../third_party/quickjs
         headerVisibility: project
         excludes:
           - "*.h"
@@ -308,6 +333,8 @@ targets:
           - unicode_gen.c
           - lre-test.c
           - build
+          - build-*
+          - build-*/**
           - docs
           - examples
           - gen
@@ -326,51 +353,48 @@ targets:
           - LICENSE
           - update-version.sh
           - test262
-      - path: ../../../raym3/src
+      - path: ../../third_party/raym3/src
         headerVisibility: project
         excludes:
           - main.cpp
           - examples
           - build
-      - path: ../../../raylib/src
+      - path: ../../third_party/raylib/src
         headerVisibility: project
         includes:
           - rshapes.c
           - rtextures.c
           - rtext.c
           - rmodels.c
-      - path: ../../../raym3/build-v2-yoga2/_deps/yoga-src/yoga
+      - path: ../../third_party/yoga/yoga
         headerVisibility: project
         excludes:
           - "*.h"
           - CMakeLists.txt
           - module.modulemap
-      - path: ../../../raylib-backends/backends/rlmt
+      - path: ../../third_party/raylib-backends/backends/rlmt
         headerVisibility: project
         excludes:
           - rlgl.h
           - rlmt.h
           - platforms
-      - path: ../../../raylib-backends/backends/rlmt/platforms
+      - path: ../../third_party/raylib-backends/backends/rlmt/platforms
         headerVisibility: project
         excludes:
           - rcore_desktop_glfw.c
           - rcore_ios_metal.c
-      - path: ../../../raylib-backends/backends/rlmt/platforms
+      - path: ../../third_party/raylib-backends/backends/rlmt/platforms
         headerVisibility: project
         includes:
           - rcore_ios_metal_overlay.c
-      - path: ../../native/plugins/mmkv
-        headerVisibility: project
-        includes:
-          - mmkv_plugin.cpp
-      - path: ../../native/plugins/secure-store
-        headerVisibility: project
-        includes:
-          - secure_store_plugin.cpp
-          - secure_store_mac.mm
     settings:
       base:
         <<: *engineSettings
         PRODUCT_NAME: RayactEngine
         SKIP_INSTALL: NO
+      configs:
+        Debug:
+          OTHER_CFLAGS: "$(inherited) -DRAYACT_ENABLE_DEVTOOLS=1"
+        Release:
+          OTHER_CFLAGS: "$(inherited) -DRAYACT_ENABLE_DEVTOOLS=0 -DRAYACT_RELEASE_HOST=1"
+          EXCLUDED_SOURCE_FILE_NAMES: "devtools.cpp cdp_handler.cpp dev_client_bridge.cpp desktop_dev_loader.cpp desktop_mdns.cpp"

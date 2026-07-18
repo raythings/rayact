@@ -29,6 +29,9 @@ JSContext* engineContext();
 
 // Load the application JS. Exactly one of these is used per run.
 bool engineLoadDevServer(const std::string& devServerUrl);
+// Format advertised by the currently loaded development manifest. Desktop's
+// developer-menu bridge uses this to make DevTools unavailable for bytecode.
+const char* engineDevBundleFormat();
 bool engineApplyModuleUpdate(const std::string& path, const std::string& source);
 bool engineLoadFile(const std::string& path);          // sets release asset base dir
 bool engineLoadSource(const std::string& source, const std::string& name);
@@ -69,9 +72,19 @@ void engineResyncMaterialIcons();
 //     the already-bound EGL window that corresponds to screenId. The caller
 //     binds/swaps each visible SurfaceView window; Android composites them.
 void enginePumpJS();
+// Supply scheduler/vsync timing from native mobile hosts. This avoids using
+// raylib's desktop frame clock for Android/iOS diagnostics.
+void engineSetHostFrameTiming(double frameTimeMs, double targetRefreshRate);
 void engineRenderFrame(int width, int height);
 void engineRenderFrameAndroid(int screenId, int width, int height);
 bool engineNeedsAnotherFrame();
+// Wake the render loop from any thread on on-demand hosts (Android/iOS) so a
+// pending frame runs even when the app is otherwise idle. Used by the net layer
+// when a fetch/SSE/WebSocket event arrives (including CDP inbound over the dev
+// WebSocket) so DevTools stays responsive without user interaction. No-op on
+// the desktop continuous loop. Thread-safe; the waker must be too.
+void engineSetFrameWaker(void (*waker)());
+void engineRequestFrame();
 void engineSetRelayoutOnSurfaceResize(bool enabled);
 bool engineRelayoutOnSurfaceResizeEnabled();
 void engineRequestSurfaceRelayout(int screenId);

@@ -1,0 +1,43 @@
+{
+  "name": "@rayact/shared",
+  "version": "0.0.3",
+  "description": "Shared public types and constants for Rayact",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./material-icons": {
+      "types": "./dist/material_icons.d.ts",
+      "default": "./dist/material_icons.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && cp src/material_icons.js src/material_icons.d.ts dist/",
+    "clean": "rm -rf dist"
+  },
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "license": "MIT",
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact-shared"
+  }
+}

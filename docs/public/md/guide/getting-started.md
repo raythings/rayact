@@ -5,12 +5,12 @@ Scaffold a new app, run it in development, then build a release.
 ## Create an app
 
 ```sh
-npx github:raythings/rayact#v0.0.1 init my-app
+npx create-rayact-app@0.0.3 my-app
 cd my-app
 npm install
 ```
 
-The generated project has a `rayact.config.json` (see the [config reference](/reference/config)), a `src/App.tsx` entry, and the `@rayact/*` dependencies for your chosen template.
+The generated project has a `rayact.config.json` (see the [config reference](/reference/config)), a `src/App.tsx` entry, and only the public `rayact` and `react` dependencies.
 
 ## Develop
 
@@ -37,7 +37,7 @@ rayact run --ios               # build + launch on the iOS simulator
 rayact build --release             # desktop release (bytecode + .rayactpack)
 rayact build --release --android   # release APK
 rayact build --release --ios       # release iOS app
-rayact build --web --no-bytecode   # web bundle + WASM/WebGPU host
+rayact build --release --web       # bytecode web bundle + WASM/WebGPU host
 ```
 
-Native release builds compile the JS bundle to QuickJS bytecode and emit a single [`.rayactpack`](/reference/rayactpack) container. The native host needed to compile bytecode is fetched automatically — see [Installation](/guide/install). Web builds use the WASM/WebGPU host and must be served with COOP/COEP headers for SharedArrayBuffer/WebGPU isolation.
+All release builds compile the JS bundle to QuickJS bytecode. Native releases also emit a single [`.rayactpack`](/reference/rayactpack) container. The host needed to compile bytecode is fetched automatically — see [Installation](/guide/install). Web builds use the WASM/WebGPU host and must be served with COOP/COEP headers for SharedArrayBuffer/WebGPU isolation.

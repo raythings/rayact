@@ -5,30 +5,26 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 99)
 
-# Repo layout: this file is at <repo>/rayact/apps/android/app/src/main/cpp.
-# <repo> contains siblings: raylib, quickjs, raym3, cssparser, and the rayact project.
-get_filename_component(OUTER "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../.." ABSOLUTE)
-set(RAYACT      "${OUTER}/rayact")
-set(RAYLIB_DIR  "${OUTER}/raylib")
-set(RAYLIB_BACKENDS_DIR "${OUTER}/raylib-backends")
-set(QUICKJS_DIR "${OUTER}/quickjs")
-set(RAYM3_DIR   "${OUTER}/raym3")
-set(CSSPARSER_DIR "${OUTER}/cssparser/cssparser")
-set(RAYGPU_DIR   "${OUTER}/raygpu")
+# Native dependencies are commit-pinned inside this repository.
+get_filename_component(RAYACT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../.." ABSOLUTE)
+set(THIRD_PARTY "${RAYACT}/third_party")
+set(RAYLIB_DIR  "${THIRD_PARTY}/raylib")
+set(RAYLIB_BACKENDS_DIR "${THIRD_PARTY}/raylib-backends")
+set(QUICKJS_DIR "${THIRD_PARTY}/quickjs")
+set(RAYM3_DIR   "${THIRD_PARTY}/raym3")
+set(CSSPARSER_DIR "${THIRD_PARTY}/cssparser/cssparser")
+set(RAYGPU_DIR   "${THIRD_PARTY}/raygpu")
 
-# Feature scope for the first device bring-up. Networking (curl/lws/openssl),
-# workers (wasm3/native), and the TS validator (tree-sitter) are deferred — the
-# engine call sites are guarded by RAYACT_NO_NET/NO_WORKERS/NO_TS.
-option(RAYACT_ANDROID_FULL "Build net + workers + TS subsystems" OFF)
-# WASM/worker subsystem without networking or the TS validator. Lets WASM and JS
-# workers (and the module bus's sys_invoke) run on Android while keeping curl/lws
-# and tree-sitter out of the build. Implied by RAYACT_ANDROID_FULL.
-option(RAYACT_ANDROID_WASM "Build the worker subsystem (wasm3 + workers) on Android" OFF)
+# Core runtime capabilities are not build options. Android always ships fetch,
+# WebSocket, JS/native workers, and wasm3. Networking is supplied by the Android
+# platform bridge rather than the desktop curl/libwebsockets implementation.
 option(RAYACT_ANDROID_USE_RAYLIB_BACKEND "Build Android with the raylib-backends Vulkan renderer" ON)
 # 3D smoke-test scene is opt-in. Pass -DRAYACT_ANDROID_3D_SMOKE=ON at configure
 # time to re-enable the in-process probe (FBO + grid + cube + lines). Default
 # is OFF so the engine renders the real QuickJS app.js path.
 option(RAYACT_ANDROID_3D_SMOKE "Render the temporary 3D smoke test scene on Android" OFF)
+option(RAYACT_ENABLE_DEVTOOLS "Link the development-only CDP inspector" OFF)
+option(RAYACT_RELEASE_HOST "Build an embedded-project-only host without development entry points" OFF)
 
 # Don't build/run dependency unit tests (yoga's gtest_discover_tests would try
 # to execute arm64 test binaries on the build host).
@@ -101,7 +97,7 @@ set(RAYM3_FETCH_DEPS OFF CACHE BOOL "" FORCE)
 set(RAYM3_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(RAYM3_USE_YOGA ON CACHE BOOL "" FORCE)
 set(RAYM3_USE_INPUT_LAYERS 0 CACHE BOOL "" FORCE)  # raw-test: v2::Render draws immediately (no deferred RenderQueue)
-set(YOGA_DIR "${RAYM3_DIR}/build-v2-yoga2/_deps/yoga-src" CACHE PATH "" FORCE)
+set(YOGA_DIR "${THIRD_PARTY}/yoga" CACHE PATH "" FORCE)
 # Bake SVG icons + Roboto fonts into the .so — no filesystem access needed at runtime.
 set(RAYM3_EMBED_RESOURCES ON CACHE BOOL "" FORCE)
 set(RAYM3_EMBED_ALL_ICONS  ON CACHE BOOL "" FORCE)
@@ -121,7 +117,7 @@ add_library(cssparser STATIC
     ${CSSPARSER_DIR}/CSSUtils.cpp
     ${CSSPARSER_DIR}/CSSDeNest.cpp
 )
-target_include_directories(cssparser PUBLIC ${OUTER}/cssparser)
+target_include_directories(cssparser PUBLIC ${THIRD_PARTY}/cssparser)
 
 # ---------------------------------------------------------------------------
 # Rayact engine (shared core, compiled with RAYACT_ANDROID so main() is excluded)
@@ -145,9 +141,6 @@ set(ENGINE_SRC
     ${RAYACT}/native/desktop/data_dir.cpp
     ${RAYACT}/native/desktop/module_bus.cpp
     ${RAYACT}/native/desktop/plugin_loader.cpp
-    ${RAYACT}/native/desktop/devtools.cpp
-    ${RAYACT}/native/desktop/cdp_handler.cpp
-    ${RAYACT}/native/desktop/dev_client_bridge.cpp
     ${RAYACT}/native/desktop/accessibility_bridge.cpp
     ${RAYACT}/native/desktop/platform_wayland.cpp
     ${RAYACT}/native/desktop/quickjs_bridge.cpp
@@ -162,33 +155,39 @@ set(ENGINE_SRC
     ${RAYACT}/native/android/android_engine_instance.cpp
     ${RAYACT}/native/android/jni_bridge.cpp
 )
-
-# Worker subsystem (WASM + JS + native workers). Compiled when FULL or WASM is
-# on. worker_js's net/TS use is guarded by RAYACT_NO_NET/NO_TS, so this links
-# without curl/lws/tree-sitter when only RAYACT_ANDROID_WASM is set.
-if(RAYACT_ANDROID_FULL OR RAYACT_ANDROID_WASM)
-    set(WASM3_DIR "${OUTER}/wasm3")
-    add_library(m3 STATIC
-        ${WASM3_DIR}/source/m3_bind.c   ${WASM3_DIR}/source/m3_code.c
-        ${WASM3_DIR}/source/m3_compile.c ${WASM3_DIR}/source/m3_core.c
-        ${WASM3_DIR}/source/m3_env.c     ${WASM3_DIR}/source/m3_exec.c
-        ${WASM3_DIR}/source/m3_function.c ${WASM3_DIR}/source/m3_info.c
-        ${WASM3_DIR}/source/m3_module.c  ${WASM3_DIR}/source/m3_parse.c)
-    target_include_directories(m3 PUBLIC ${WASM3_DIR}/source)
-    target_compile_options(m3 PRIVATE
-        -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter -Wno-sign-compare)
-    list(APPEND ENGINE_SRC
-        ${RAYACT}/native/desktop/workers.cpp
-        ${RAYACT}/native/desktop/worker_js.cpp
-        ${RAYACT}/native/desktop/worker_wasm.cpp
-        ${RAYACT}/native/desktop/worker_native.cpp)
+if(NOT RAYACT_RELEASE_HOST)
+    list(APPEND ENGINE_SRC ${RAYACT}/native/desktop/dev_client_bridge.cpp)
 endif()
+
+# Worker subsystem (WASM + JS + native workers) is part of every runtime build.
+set(WASM3_DIR "${THIRD_PARTY}/wasm3")
+add_library(m3 STATIC
+    ${WASM3_DIR}/source/m3_bind.c   ${WASM3_DIR}/source/m3_code.c
+    ${WASM3_DIR}/source/m3_compile.c ${WASM3_DIR}/source/m3_core.c
+    ${WASM3_DIR}/source/m3_env.c     ${WASM3_DIR}/source/m3_exec.c
+    ${WASM3_DIR}/source/m3_function.c ${WASM3_DIR}/source/m3_info.c
+    ${WASM3_DIR}/source/m3_module.c  ${WASM3_DIR}/source/m3_parse.c)
+target_include_directories(m3 PUBLIC ${WASM3_DIR}/source)
+target_compile_options(m3 PRIVATE
+    -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter -Wno-sign-compare)
+list(APPEND ENGINE_SRC
+    ${RAYACT}/native/desktop/workers.cpp
+    ${RAYACT}/native/desktop/worker_js.cpp
+    ${RAYACT}/native/desktop/worker_draw.cpp
+    ${RAYACT}/native/desktop/worker_wasm.cpp
+    ${RAYACT}/native/desktop/worker_native.cpp)
 
 add_library(rayact SHARED ${ENGINE_SRC})
-if(RAYACT_ANDROID_FULL OR RAYACT_ANDROID_WASM)
-    target_link_libraries(rayact m3)
-    target_include_directories(rayact PRIVATE ${OUTER}/wasm3/source)
+if(RAYACT_ENABLE_DEVTOOLS)
+    add_subdirectory(${RAYACT}/packages/rayact-devtools/native
+        ${CMAKE_BINARY_DIR}/rayact-devtools)
+    target_link_libraries(rayact rayact_devtools)
+else()
+    target_sources(rayact PRIVATE
+        ${RAYACT}/packages/rayact-devtools/native/src/devtools_stub.cpp)
 endif()
+target_link_libraries(rayact m3)
+target_include_directories(rayact PRIVATE ${WASM3_DIR}/source)
 # Real QuickJS app path: app.js (React 19 + raym3 v2 retained mode) drives
 # engineRenderFrame() via g_root. The C++ smoke tests are still available
 # behind RAYACT_ANDROID_3D_SMOKE and RAYACT_ANDROID_DIAGNOSTIC for one-off
@@ -196,18 +195,14 @@ endif()
 # to re-enable. Default is OFF so the app surface is the actual product.
 target_compile_definitions(rayact PRIVATE
     RAYACT_ANDROID ${GLES3}
+    RAYACT_ENABLE_DEVTOOLS=$<BOOL:${RAYACT_ENABLE_DEVTOOLS}>
+    RAYACT_RELEASE_HOST=$<BOOL:${RAYACT_RELEASE_HOST}>
     RL_DEFAULT_BATCH_BUFFER_ELEMENTS=8192
     $<$<BOOL:${RAYACT_ANDROID_3D_SMOKE}>:RAYACT_ANDROID_3D_SMOKE>
 )
-# Per-subsystem gating (independent so workers can build without net/TS):
-#   NET/TS  → only with FULL
-#   WORKERS → with FULL or WASM
-if(NOT RAYACT_ANDROID_FULL)
-    target_compile_definitions(rayact PRIVATE RAYACT_NO_NET RAYACT_NO_TS)
-endif()
-if(NOT (RAYACT_ANDROID_FULL OR RAYACT_ANDROID_WASM))
-    target_compile_definitions(rayact PRIVATE RAYACT_NO_WORKERS)
-endif()
+# Select the Android network implementation. This does not disable networking;
+# JNI installs the fetch and WebSocket bindings for every engine context.
+target_compile_definitions(rayact PRIVATE RAYACT_PLATFORM_NET_BACKEND RAYACT_NO_TS)
 target_include_directories(rayact PRIVATE
     ${RAYACT}/native/desktop
     ${RAYACT}/native/core
@@ -237,11 +232,16 @@ endif()
 # the engine, only a relink of the plugin. Each depends only on the stable ABI
 # header in native/core.
 # ---------------------------------------------------------------------------
-add_library(rayact_mmkv SHARED ${RAYACT}/native/plugins/mmkv/mmkv_plugin.cpp)
+add_library(rayact_mmkv SHARED ${RAYACT}/packages/rayact-mmkv/native/mmkv_plugin.cpp)
 target_include_directories(rayact_mmkv PRIVATE ${RAYACT}/native/core)
 target_link_libraries(rayact_mmkv log)
 
 add_library(rayact_secure_store SHARED
-    ${RAYACT}/native/plugins/secure-store/secure_store_plugin.cpp)
+    ${RAYACT}/packages/rayact-secure-store/native/secure_store_plugin.cpp)
 target_include_directories(rayact_secure_store PRIVATE ${RAYACT}/native/core)
 target_link_libraries(rayact_secure_store log)
+
+add_library(rayact_crash_reporter SHARED
+    ${RAYACT}/packages/rayact-crash-reporter/native/crash_reporter_plugin.cpp)
+target_include_directories(rayact_crash_reporter PRIVATE ${RAYACT}/native/core)
+target_link_libraries(rayact_crash_reporter log)

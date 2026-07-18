@@ -3,6 +3,7 @@ import UIKit
 final class DevLauncherController: UIViewController {
     private enum ActivePane { case launcher, project }
 
+    private let initialDevServerUrl: String?
     private let rootContainer = UIView()
     private var launcherSession: RayactEngineSession!
     private var launcherHost: NavigationHost!
@@ -10,12 +11,24 @@ final class DevLauncherController: UIViewController {
     private var projectSession: RayactEngineSession?
     private var projectHost: NavigationHost?
     private var projectUrl: String?
+    private var projectLoadingView: UIView?
     private var activePane: ActivePane = .launcher
     private var projectLoadGeneration = 0
     private var shakeDetector: DevShakeDetector?
     private var destroyed = false
+    private var reloadInProgress = false
     private var projectBackBlockedUntil: TimeInterval = 0
     private var launcherBackBlockedUntil: TimeInterval = 0
+
+    init(initialDevServerUrl: String? = nil) {
+        self.initialDevServerUrl = initialDevServerUrl
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        initialDevServerUrl = nil
+        super.init(coder: coder)
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -48,7 +61,7 @@ final class DevLauncherController: UIViewController {
         edge.edges = .left
         view.addGestureRecognizer(edge)
 
-        if let initialUrl = launchDevServerUrl(), !initialUrl.isEmpty {
+        if let initialUrl = initialDevServerUrl, !initialUrl.isEmpty {
             openProject(url: initialUrl)
         } else {
             loadLauncherJs()
@@ -78,6 +91,7 @@ final class DevLauncherController: UIViewController {
     deinit {
         destroyed = true
         projectLoadGeneration += 1
+        hideProjectLoading()
         stopProjectDebugTools()
         destroyProjectSession()
         DevClientBridge.clearDevHost(self)
@@ -92,21 +106,30 @@ final class DevLauncherController: UIViewController {
         activeHost()?.syncSurfacesToCurrentLayout()
     }
 
-    override var prefersStatusBarHidden: Bool { false }
-
-    private func launchDevServerUrl() -> String? {
-        if let url = UserDefaults.standard.string(forKey: DevClientBridge.extraDevServerUrl), !url.isEmpty {
-            return url
+    override func viewWillTransition(
+        to size: CGSize,
+        with coordinator: UIViewControllerTransitionCoordinator
+    ) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            guard let self, let host = self.activeHost(), let session = self.activeSession() else { return }
+            host.syncSurfacesToCurrentLayout()
+            session.host.renderScheduler.requestFrame()
         }
-        return nil
     }
+
+    override var prefersStatusBarHidden: Bool { false }
 
     private func showLauncher() {
         projectLoadGeneration += 1
+        hideProjectLoading()
         let hadProject = activePane == .project
         stopProjectDebugTools()
         if hadProject {
             projectSession?.nativeBlurTextInput()
+            // Dispose while this host is still mounted so every child native
+            // navigation controller is removed before the session changes.
+            projectHost?.dispose()
             unmountCurrentPane()
         }
         destroyProjectSession()
@@ -129,10 +152,14 @@ final class DevLauncherController: UIViewController {
 
         projectLoadGeneration += 1
         let generation = projectLoadGeneration
+        showProjectLoading(url: normalized)
 
         if activePane == .project {
             stopProjectDebugTools()
             projectSession?.nativeBlurTextInput()
+            // Dispose before detach so child native screens cannot survive
+            // into the replacement JS runtime.
+            projectHost?.dispose()
             unmountCurrentPane()
         } else {
             parkLauncherPane()
@@ -153,8 +180,10 @@ final class DevLauncherController: UIViewController {
             let result = Result { try DevServerLoader.fetchBootstrap(baseUrl: normalized) }
             if self.destroyed || generation != self.projectLoadGeneration { return }
 
+            let payload = try? result.get()
+            let bundleFormat = payload?.bundleFormat ?? "js"
             let loaded: Bool
-            if let payload = try? result.get() {
+            if let payload {
                 if payload.bundleFormat == "qjsbc" {
                     loaded = session.loadBytecode(payload.bytes)
                 } else if let source = String(data: payload.bytes, encoding: .utf8) {
@@ -176,40 +205,28 @@ final class DevLauncherController: UIViewController {
                 if !loaded { print("[RayactPerf] bundle.eval.rejected") }
                 if self.destroyed || generation != self.projectLoadGeneration { return }
                 self.switchToProjectPane(session: session)
-                ProjectHmrClient.start(serverUrl: normalized, engineSession: session)
+                self.reloadInProgress = false
+                if bundleFormat == "qjsbc" { ProjectHmrClient.stop() }
+                else { ProjectHmrClient.start(serverUrl: normalized, engineSession: session) }
+                DevClientBridge.configureProjectDevTools(
+                    session: session,
+                    serverUrl: normalized,
+                    bundleFormat: bundleFormat
+                )
             }
         }
     }
 
     private func reloadProject() {
+        guard !reloadInProgress else { return }
         let url = projectUrl ?? DevClientBridge.savedDevServerUrl()
         guard let url, !url.isEmpty else { return }
-        if activePane == .project, let session = projectSession, session.isAlive() {
-            ProjectHmrClient.stop()
-            reloadProjectInPlace(url: url, session: session)
-        } else {
-            openProject(url: url)
-        }
-    }
-
-    private func reloadProjectInPlace(url: String, session: RayactEngineSession) {
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                let payload = try DevServerLoader.fetchBootstrap(baseUrl: url)
-                if payload.bundleFormat == "qjsbc" {
-                    _ = session.loadBytecode(payload.bytes)
-                } else if let source = String(data: payload.bytes, encoding: .utf8) {
-                    _ = session.loadDevBootstrap(serverUrl: url, source: source)
-                }
-            } catch {
-                print("[RayactPerf] reloadProjectInPlace failed: \(error)")
-            }
-            DispatchQueue.main.async {
-                ProjectHmrClient.start(serverUrl: url, engineSession: session)
-                self.projectHost?.syncSurfacesToCurrentLayout()
-                session.host.renderScheduler.requestFrame()
-            }
-        }
+        reloadInProgress = true
+        // A bootstrap is not safely re-entrant: React and the project's module
+        // graph can already be partially initialized (especially after a runtime
+        // exception). Recreate the project session so reload is a recovery path,
+        // not another eval in the corrupted QuickJS context.
+        openProject(url: url)
     }
 
     private func switchToProjectPane(session: RayactEngineSession) {
@@ -217,6 +234,7 @@ final class DevLauncherController: UIViewController {
         activePane = .project
         guard let host = projectHost else { return }
         mountPane(.project, host: host, session: session)
+        hideProjectLoading()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             host.syncSurfacesToCurrentLayout()
@@ -239,6 +257,62 @@ final class DevLauncherController: UIViewController {
         let host = NavigationHost(session: session, parent: self)
         host.installRoot(RayactSurfaceView(session: session))
         return host
+    }
+
+    private func showProjectLoading(url: String) {
+        hideProjectLoading()
+
+        let container = UIView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.backgroundColor = UIColor(red: 10 / 255, green: 14 / 255, blue: 20 / 255, alpha: 1)
+        container.isUserInteractionEnabled = true
+
+        let spinner = UIActivityIndicatorView(style: .large)
+        spinner.color = .white
+        spinner.startAnimating()
+
+        let title = UILabel()
+        title.text = "Preparing project"
+        title.textColor = .white
+        title.font = .systemFont(ofSize: 22, weight: .semibold)
+        title.textAlignment = .center
+
+        let server = UILabel()
+        server.text = url
+        server.textColor = UIColor(red: 148 / 255, green: 163 / 255, blue: 184 / 255, alpha: 1)
+        server.font = .systemFont(ofSize: 13)
+        server.textAlignment = .center
+        server.numberOfLines = 2
+        server.lineBreakMode = .byTruncatingMiddle
+
+        let stack = UIStackView(arrangedSubviews: [spinner, title, server])
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 10
+        stack.setCustomSpacing(22, after: spinner)
+
+        container.addSubview(stack)
+        rootContainer.addSubview(container)
+        NSLayoutConstraint.activate([
+            container.leadingAnchor.constraint(equalTo: rootContainer.leadingAnchor),
+            container.trailingAnchor.constraint(equalTo: rootContainer.trailingAnchor),
+            container.topAnchor.constraint(equalTo: rootContainer.topAnchor),
+            container.bottomAnchor.constraint(equalTo: rootContainer.bottomAnchor),
+            stack.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 32),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -32),
+        ])
+        container.accessibilityViewIsModal = true
+        container.bringSubviewToFront(stack)
+        rootContainer.bringSubviewToFront(container)
+        projectLoadingView = container
+    }
+
+    private func hideProjectLoading() {
+        projectLoadingView?.removeFromSuperview()
+        projectLoadingView = nil
     }
 
     private func rebuildLauncherSession() {
@@ -303,6 +377,7 @@ final class DevLauncherController: UIViewController {
     private func destroyProjectSession() {
         guard let session = projectSession else { return }
         session.nativeBlurTextInput()
+        if projectHost?.superview === rootContainer { projectHost?.dispose() }
         if projectHost?.superview === rootContainer {
             projectHost?.removeFromSuperview()
         }

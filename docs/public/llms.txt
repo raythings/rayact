@@ -2,20 +2,32 @@
 
 > Rayact is a cross-platform React renderer with a native raylib + QuickJS backend. You write React (with react-navigation, CSS, Material components) and it renders natively on desktop, Android, iOS, and the web — no DOM, no platform WebView.
 
+## Pages
+
+- [Accessibility](https://rayact.dev/accessibility): Rayact components accept role, label, hint, state/value, actions, focusability, tab order, live-region, and text-scaling props. useReducedMotion() follows the host preference and setAccessibilityFocus() moves semantic focus programmatically.
+- [Crash reporting and privacy](https://rayact.dev/crash-reporting): @rayact/crash-reporter is local-only by default. Upload requires mode: "upload", an HTTPS endpoint, and explicit runtime consent set to granted; unknown or denied consent sends no traffic.
+- [Deployment](https://rayact.dev/deployment): Create immutable release output with npx rayact build --release. Release
+- [Navigation And Windowing Status](https://rayact.dev/multi-window-system): Rayact no longer exposes the early prototype createWindow / registerScreen
+- [Native modules](https://rayact.dev/native-modules): Install optional capabilities as direct npm dependencies:
+- [Recovery](https://rayact.dev/recovery): If development reload fails, Rayact keeps the last running revision. Restore
+- [Release process](https://rayact.dev/releasing): The 0.0.3 train uses three channels:
+- [Release rollback](https://rayact.dev/rollback): Rayact does not unpublish a bad release. Choose the preceding verified
+- [Security](https://rayact.dev/security): Install only published 0.0.3 tarballs represented in the signed release set.
+- [Support policy](https://rayact.dev/support): Rayact supports the latest two stable minor lines or twelve months, whichever is
+- [Supported toolchains for 0.0.3](https://rayact.dev/toolchains): - Node.js 22 and 24 LTS.
+- [Troubleshooting](https://rayact.dev/troubleshooting): Start with npx rayact doctor, then verify Node 22 or 24 and the supported
+- [Upgrades and migration](https://rayact.dev/upgrades): Commit the application before upgrading. Install the desired Rayact version and
+
 ## Guide
 
 - [Getting started](https://rayact.dev/guide/getting-started): Scaffold a new app, run it in development, then build a release.
 - [Installation](https://rayact.dev/guide/install): Rayact splits into small @rayact/ JavaScript packages plus per-platform
 
-## Pages
-
-- [Navigation And Windowing Status](https://rayact.dev/multi-window-system): Rayact no longer exposes the early prototype createWindow / registerScreen
-
 ## Reference
 
 - [CLI reference](https://rayact.dev/reference/cli): The rayact command (from @rayact/cli) drives development, building, and running.
 - [Configuration: `rayact.config.json`](https://rayact.dev/reference/config): Schema for rayact.config.json. Fields omitted fall back to built-in defaults; only set a field to override a default.
-- [Packages & platforms](https://rayact.dev/reference/packages): Rayact is a monorepo of small @rayact/ packages plus per-platform prebuilts.
+- [Packages and platforms](https://rayact.dev/reference/packages): Rayact uses one private npm workspace root with independently publishable packages. All first-party packages in the 0.0.3 release set use exact lockstep versions.
 - [Container format (`.rayactpack`)](https://rayact.dev/reference/rayactpack): Release builds ship a single self-contained container instead of a loose tree of
 
 ## Full corpus

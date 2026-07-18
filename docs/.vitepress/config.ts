@@ -20,7 +20,12 @@ export default defineConfig({
         text: 'Guide',
         items: [
           { text: 'Getting started', link: '/guide/getting-started' },
-          { text: 'Installation', link: '/guide/install' }
+          { text: 'Installation', link: '/guide/install' },
+          { text: 'Native modules', link: '/native-modules' },
+          { text: 'Deployment', link: '/deployment' },
+          { text: 'Upgrades', link: '/upgrades' },
+          { text: 'Recovery', link: '/recovery' },
+          { text: 'Troubleshooting', link: '/troubleshooting' }
         ]
       },
       {
@@ -34,7 +39,14 @@ export default defineConfig({
       },
       {
         text: 'Advanced',
-        items: [{ text: 'Multi-window system', link: '/multi-window-system' }]
+        items: [
+          { text: 'Accessibility', link: '/accessibility' },
+          { text: 'Crash privacy', link: '/crash-reporting' },
+          { text: 'Security', link: '/security' },
+          { text: 'Support policy', link: '/support' },
+          { text: 'Rollback', link: '/rollback' },
+          { text: 'Multi-window system', link: '/multi-window-system' }
+        ]
       }
     ],
     socialLinks: [{ icon: 'github', link: 'https://github.com/raythings/rayact' }],

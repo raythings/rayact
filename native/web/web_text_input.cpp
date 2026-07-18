@@ -19,17 +19,27 @@ std::string inputModeForType(const std::string& inputType) {
 
 void AndroidKeyboard_ShowForNode(int nodeId, const std::string& inputType,
                                  bool autocorrect, bool secure,
-                                 const std::string& imeAction) {
+                                 const std::string& imeAction,
+                                 const std::string& autoCapitalize,
+                                 bool contextMenuHidden) {
     std::string value;
+    bool blurOnSubmit = inputType != "multiline";
+    auto it = g_nodes.find(nodeId);
+    if (it != g_nodes.end() && it->second && it->second->kind == raym3::v2::NodeKind::TextInput) {
+        if (it->second->textInput.value) value = *it->second->textInput.value;
+        else if (it->second->textInput.buffer) value = it->second->textInput.buffer;
+        blurOnSubmit = it->second->textInput.blurOnSubmit;
+    }
     EM_ASM({
         var canvas = document.getElementById('canvas');
         if (canvas) canvas.focus({ preventScroll: true });
     });
     EM_ASM_({
         if (!Module.rayactTextInput) return;
-        Module.rayactTextInput.show($0, UTF8ToString($1), UTF8ToString($2), !!$3, !!$4, UTF8ToString($5));
+        Module.rayactTextInput.show($0, UTF8ToString($1), UTF8ToString($2), !!$3, !!$4, UTF8ToString($5), !!$6, UTF8ToString($7), !!$8);
     }, nodeId, value.c_str(), inputModeForType(inputType).c_str(), autocorrect ? 1 : 0,
-       secure ? 1 : 0, imeAction.c_str());
+       secure ? 1 : 0, imeAction.c_str(), blurOnSubmit ? 1 : 0,
+       autoCapitalize.c_str(), contextMenuHidden ? 1 : 0);
 }
 
 void AndroidKeyboard_Hide() {
@@ -61,5 +71,5 @@ extern "C" EMSCRIPTEN_KEEPALIVE void rayactWebImeUpdate(
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE void rayactWebImeSubmit(void) {
-    rayactBlurFocusedTextInput();
+    rayactSubmitFocusedTextInput();
 }

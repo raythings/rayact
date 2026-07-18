@@ -131,4 +131,21 @@ final class NavigationHost: UIView {
     func topFragmentSurfaceId() -> Int {
         screensBySurfaceId.keys.sorted().last ?? 0
     }
+
+    /// Remove native navigation screens before destroying the engine session.
+    /// Removing only this host leaves its child view controllers attached to
+    /// the launcher, allowing stale canvas screens to cover a reloaded app.
+    func dispose() {
+        session.host.clearNavigationHost(self)
+        let screens = childScreens
+        childScreens.removeAll()
+        screensBySurfaceId.removeAll()
+        for screen in screens {
+            screen.willMove(toParent: nil)
+            screen.view.removeFromSuperview()
+            screen.removeFromParent()
+        }
+        rootSurfaceView?.removeFromSuperview()
+        rootSurfaceView = nil
+    }
 }

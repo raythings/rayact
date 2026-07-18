@@ -1,0 +1,36 @@
+[submodule "third_party/raym3"]
+	path = third_party/raym3
+	url = https://github.com/fovea-engine/raym3
+[submodule "third_party/raylib"]
+	path = third_party/raylib
+	url = https://github.com/raysan5/raylib
+[submodule "third_party/raylib-backends"]
+	path = third_party/raylib-backends
+	url = https://github.com/raythings/raylib-backends.git
+[submodule "third_party/quickjs"]
+	path = third_party/quickjs
+	url = https://github.com/quickjs-ng/quickjs
+[submodule "third_party/cssparser"]
+	path = third_party/cssparser
+	url = https://github.com/Sigil-Ebook/cssparser
+[submodule "third_party/wasm3"]
+	path = third_party/wasm3
+	url = https://github.com/wasm3/wasm3
+[submodule "third_party/raygpu"]
+	path = third_party/raygpu
+	url = https://github.com/manuel5975p/raygpu
+[submodule "third_party/rlvk"]
+	path = third_party/rlvk
+	url = https://github.com/raythings/rlvk
+[submodule "third_party/tree-sitter-typescript"]
+	path = third_party/tree-sitter-typescript
+	url = https://github.com/tree-sitter/tree-sitter-typescript.git
+[submodule "third_party/yoga"]
+	path = third_party/yoga
+	url = https://github.com/facebook/yoga.git
+[submodule "third_party/tree-sitter"]
+	path = third_party/tree-sitter
+	url = https://github.com/tree-sitter/tree-sitter.git
+[submodule "third_party/WGVK"]
+	path = third_party/WGVK
+	url = https://github.com/manuel5975p/WGVK.git

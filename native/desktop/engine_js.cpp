@@ -5,9 +5,18 @@
 #include "platform.hpp"
 #include "../core/engine.hpp"
 #include "../core/config_loader.hpp"
+#include "../core/platform_asset_fetch.hpp"
 #include "quickjs_bridge.hpp"
 #include "raym3_bridge.hpp"
+#if !RAYACT_RELEASE_HOST
 #include "dev_client_bridge.hpp"
+#endif
+#if defined(RAYACT_WEB)
+#include "../web/web_platform.hpp"
+#endif
+#if !RAYACT_RELEASE_HOST && !defined(__ANDROID__) && !defined(RAYACT_IOS) && !defined(RAYACT_WEB)
+#include "desktop_dev_loader.hpp"
+#endif
 #include <raym3/v2/IconRenderer.h>
 #include "commit_queue.hpp"
 #include "shadow_tree.hpp"
@@ -25,7 +34,7 @@
 #ifndef RAYACT_NO_WORKERS
 #include "workers.hpp"
 #endif
-#ifndef RAYACT_NO_NET
+#ifndef RAYACT_PLATFORM_NET_BACKEND
 #include "net.hpp"
 #endif
 #ifndef RAYACT_NO_TS
@@ -53,12 +62,14 @@ extern "C" {
 #include <raym3/v2/Style.h>
 #include <raym3/v2/Density.h>
 #include <raym3/styles/Theme.h>
-#ifndef RAYACT_NO_NET
+#ifndef RAYACT_PLATFORM_NET_BACKEND
 #include <curl/curl.h>
 #endif
 
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
+#include <cerrno>
 #include <cctype>
 #include <cstring>
 #include <algorithm>
@@ -115,6 +126,13 @@ namespace rayact { std::string rayactAssetBaseDir(); } // defined below; used by
 // Default: MSAA 4x + HighDPI. User can override before initRaylib() via setConfigFlags().
 static unsigned int g_configFlags = FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI;
 static int g_targetFPS = 60;
+static double g_diagnosticFrameMs = 0.0;
+static double g_diagnosticRollingMs = 0.0;
+static uint64_t g_diagnosticSamples = 0;
+static uint64_t g_diagnosticDropped = 0;
+static uint64_t g_diagnosticJanky = 0;
+static double g_hostFrameMs = -1.0;
+static double g_hostRefreshRate = 0.0;
 
 // Window management
 #include "window_manager.hpp"
@@ -136,6 +154,7 @@ std::vector<Shape> g_shapes;
 static std::string g_devServerUrl;
 static int g_devRevision = 0;
 static bool g_devModuleHmr = false;
+static std::string g_devBundleFormat = "js";
 static std::chrono::steady_clock::time_point g_nextDevPoll = std::chrono::steady_clock::now();
 
 std::mutex g_touchMutex;
@@ -284,13 +303,15 @@ static JSValue JS_getCurrentContext(JSContext* ctx, JSValue this_val,
 }
 
 // Register native functions
-#ifndef RAYACT_NO_NET
+#ifndef RAYACT_PLATFORM_NET_BACKEND
 static bool httpGet(const std::string& url, std::string& body, std::string& error);
 static bool httpGetWithTimeout(const std::string& url, std::string& body, std::string& error,
                                long timeoutMs, long connectTimeoutMs);
 #endif
-#if !defined(RAYACT_NO_NET) || defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
+#if !defined(RAYACT_PLATFORM_NET_BACKEND) || defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
+#if !RAYACT_RELEASE_HOST
 static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst* argv);
+#endif
 #endif
 
 static void registerNativeFunctions(JSContext* ctx) {
@@ -341,9 +362,6 @@ static void registerNativeFunctions(JSContext* ctx) {
 
     // console, timers, performance, queueMicrotask, print, structuredClone, globalThis
     registerJSStdlib(ctx);
-#ifndef RAYACT_NO_NET
-    registerNetBindings(ctx);
-#endif
 
     // Original Raylib functions
     JS_SetPropertyStr(ctx, global, "initRaylib",
@@ -369,6 +387,23 @@ static void registerNativeFunctions(JSContext* ctx) {
             }
             return JS_UNDEFINED;
         }, "setTargetFPS", 1));
+
+    // Scheduler-owned diagnostics. Values are read from raylib's real frame
+    // clock; unsupported system metrics are deliberately handled as unavailable
+    // by the public diagnostics API instead of being estimated here.
+    JS_SetPropertyStr(ctx, global, "__rayactGetFrameDiagnostics",
+        JS_NewCFunction(ctx, [](JSContext* ctx, JSValue, int, JSValueConst*) -> JSValue {
+            JSValue out = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, out, "frameTimeMs", JS_NewFloat64(ctx, g_diagnosticFrameMs));
+            JS_SetPropertyStr(ctx, out, "rollingFrameTimeMs", JS_NewFloat64(ctx, g_diagnosticRollingMs));
+            JS_SetPropertyStr(ctx, out, "fps", JS_NewFloat64(ctx, g_diagnosticRollingMs > 0.0 ? 1000.0 / g_diagnosticRollingMs : 0.0));
+            JS_SetPropertyStr(ctx, out, "targetRefreshRate", JS_NewFloat64(ctx,
+                g_hostRefreshRate > 0.0 ? g_hostRefreshRate : (g_targetFPS > 0 ? g_targetFPS : 60)));
+            JS_SetPropertyStr(ctx, out, "droppedFrames", JS_NewInt64(ctx, (int64_t)g_diagnosticDropped));
+            JS_SetPropertyStr(ctx, out, "jankyFrames", JS_NewInt64(ctx, (int64_t)g_diagnosticJanky));
+            JS_SetPropertyStr(ctx, out, "sampleFrames", JS_NewInt64(ctx, (int64_t)g_diagnosticSamples));
+            return out;
+        }, "__rayactGetFrameDiagnostics", 0));
 
     JS_SetPropertyStr(ctx, global, "setRelayoutOnSurfaceResize",
         JS_NewCFunction(ctx, [](JSContext* ctx, JSValue, int argc, JSValueConst* argv) -> JSValue {
@@ -525,6 +560,12 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_createExternalView, "createExternalView", 2));
     JS_SetPropertyStr(ctx, global, "setExternalViewProps",
                       JS_NewCFunction(ctx, JS_setExternalViewProps, "setExternalViewProps", 2));
+    JS_SetPropertyStr(ctx, global, "focusTextInput",
+                      JS_NewCFunction(ctx, JS_focusTextInput, "focusTextInput", 2));
+    JS_SetPropertyStr(ctx, global, "__rayactSetAccessibilityFocus",
+                      JS_NewCFunction(ctx, JS_setAccessibilityFocus, "__rayactSetAccessibilityFocus", 1));
+    JS_SetPropertyStr(ctx, global, "__rayactGetReducedMotion",
+                      JS_NewCFunction(ctx, JS_getReducedMotion, "__rayactGetReducedMotion", 0));
     JS_SetPropertyStr(ctx, global, "createStatusBar",
                       JS_NewCFunction(ctx, JS_createStatusBar, "createStatusBar", 1));
     JS_SetPropertyStr(ctx, global, "createActivityIndicator",
@@ -634,6 +675,8 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_setText,      "setText",      2));
     JS_SetPropertyStr(ctx, global, "setValue",
                       JS_NewCFunction(ctx, JS_setValue,     "setValue",     2));
+    JS_SetPropertyStr(ctx, global, "setTextInputProps",
+                      JS_NewCFunction(ctx, JS_setTextInputProps, "setTextInputProps", 2));
     JS_SetPropertyStr(ctx, global, "disposeNode",
                       JS_NewCFunction(ctx, JS_disposeNode,  "disposeNode",  1));
     JS_SetPropertyStr(ctx, global, "__rayactRegisterAnimatedNode",
@@ -684,8 +727,9 @@ static void registerNativeFunctions(JSContext* ctx) {
 #ifndef RAYACT_NO_WORKERS
     registerWorkerBindings(ctx);
 #endif
-#ifndef RAYACT_NO_NET
+#ifndef RAYACT_PLATFORM_NET_BACKEND
     registerNetBindings(ctx);
+    netEnableFrameWake(ctx);  // wake idle frames on incoming fetch/SSE/WS events
 #endif
     rayact::installAsyncStorage(ctx, global);
 #ifndef RAYACT_ANDROID
@@ -699,11 +743,13 @@ static void registerNativeFunctions(JSContext* ctx) {
     }
 #endif
     rayact::installModuleBindings(ctx, global);
-#if !defined(RAYACT_NO_NET) || defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
+#if !RAYACT_RELEASE_HOST && (!defined(RAYACT_PLATFORM_NET_BACKEND) || defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB))
     JS_SetPropertyStr(ctx, global, "rayactDevFetch",
                       JS_NewCFunction(ctx, JS_rayactDevFetch, "rayactDevFetch", 1));
 #endif
+#if !RAYACT_RELEASE_HOST
     rayact::installDevClientBridge(ctx, global);
+#endif
     rayact::devtoolsInit(ctx);
     rayact::workletRuntimeInit();
 
@@ -714,6 +760,7 @@ static JSValue JS_keyboardCapture(JSContext* ctx, JSValue, int argc, JSValueCons
     std::string inputType = "text";
     bool autocorrect = false;
     std::string imeAction = "default";
+    std::string autoCapitalize = "none";
     if (argc > 0 && JS_IsObject(argv[0])) {
         JSValue keyboardType = JS_GetPropertyStr(ctx, argv[0], "keyboardType");
         if (JS_IsString(keyboardType)) {
@@ -727,6 +774,15 @@ static JSValue JS_keyboardCapture(JSContext* ctx, JSValue, int argc, JSValueCons
         JSValue autoCorrect = JS_GetPropertyStr(ctx, argv[0], "autoCorrect");
         if (JS_IsBool(autoCorrect)) autocorrect = JS_ToBool(ctx, autoCorrect) != 0;
         JS_FreeValue(ctx, autoCorrect);
+        JSValue autoCapitalizeValue = JS_GetPropertyStr(ctx, argv[0], "autoCapitalize");
+        if (JS_IsString(autoCapitalizeValue)) {
+            const char* value = JS_ToCString(ctx, autoCapitalizeValue);
+            if (value) {
+                autoCapitalize = value;
+                JS_FreeCString(ctx, value);
+            }
+        }
+        JS_FreeValue(ctx, autoCapitalizeValue);
         JSValue returnKeyType = JS_GetPropertyStr(ctx, argv[0], "returnKeyType");
         if (JS_IsString(returnKeyType)) {
             const char* value = JS_ToCString(ctx, returnKeyType);
@@ -737,8 +793,14 @@ static JSValue JS_keyboardCapture(JSContext* ctx, JSValue, int argc, JSValueCons
         }
         JS_FreeValue(ctx, returnKeyType);
     }
+    if (inputType == "email-address") inputType = "email";
+    else if (inputType == "numeric" || inputType == "number-pad" ||
+             inputType == "decimal-pad") inputType = "number";
+    else if (inputType == "phone-pad") inputType = "phone";
+    else if (inputType == "ascii-capable") inputType = "ascii";
 #if defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
-    AndroidKeyboard_ShowForNode(-2, inputType, autocorrect, false, imeAction);
+    AndroidKeyboard_ShowForNode(-2, inputType, autocorrect, false, imeAction,
+                                autoCapitalize, true);
 #endif
     return JS_UNDEFINED;
 }
@@ -1349,7 +1411,7 @@ static bool loadJavaScriptFile(JSContext* ctx, const char* filename) {
     return true;
 }
 
-#ifndef RAYACT_NO_NET
+#ifndef RAYACT_PLATFORM_NET_BACKEND
 static size_t writeHttpBody(char* ptr, size_t size, size_t nmemb, void* userdata) {
     auto* body = static_cast<std::string*>(userdata);
     body->append(ptr, size * nmemb);
@@ -1391,6 +1453,12 @@ static bool httpGetWithTimeout(const std::string& url, std::string& body, std::s
 }
 
 static bool httpGet(const std::string& url, std::string& body, std::string& error) {
+#if !RAYACT_RELEASE_HOST && !defined(__ANDROID__) && !defined(RAYACT_IOS) && !defined(RAYACT_WEB)
+    if (rayact::desktopTakePrefetchedResource(url, body)) {
+        fprintf(stderr, "[rayact-desktop] using prefetched startup file: %s\n", url.c_str());
+        return true;
+    }
+#endif
     return httpGetWithTimeout(url, body, error, 30000L, 5000L);
 }
 
@@ -1400,13 +1468,13 @@ static bool httpGetBytes(const std::string& url, std::vector<uint8_t>& body, std
     body.assign(text.begin(), text.end());
     return true;
 }
-#endif // RAYACT_NO_NET
+#endif // RAYACT_PLATFORM_NET_BACKEND
 
 // rayactDevFetch is the sync HTTP shim the module-HMR runtime uses. On Android,
 // networking goes through Java (androidDevFetch) so the binding must exist even
-// though RAYACT_NO_NET strips the curl path; otherwise the dev bootstrap calls
+// though RAYACT_PLATFORM_NET_BACKEND selects the mobile path; otherwise the dev bootstrap calls
 // an undefined rayactDevFetch and the project pane renders black.
-#if !defined(RAYACT_NO_NET) || defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
+#if !RAYACT_RELEASE_HOST && (!defined(RAYACT_PLATFORM_NET_BACKEND) || defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB))
 static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (argc < 1) return JS_UNDEFINED;
     const char* url = JS_ToCString(ctx, argv[0]);
@@ -1428,7 +1496,7 @@ static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst
     JS_FreeCString(ctx, url);
     return JS_NewString(ctx, body.c_str());
 }
-#endif // !RAYACT_NO_NET || __ANDROID__ || RAYACT_IOS || RAYACT_WEB
+#endif // !RAYACT_RELEASE_HOST && platform dev-fetch binding
 
 static std::string jsObjectString(JSContext* ctx, JSValue obj, const char* key) {
     JSValue value = JS_GetPropertyStr(ctx, obj, key);
@@ -1448,9 +1516,33 @@ static std::string assetUrlFromObject(JSContext* ctx, JSValue asset) {
     std::string id = jsObjectString(ctx, asset, "id");
     std::string name = jsObjectString(ctx, asset, "name");
     std::string outputName = jsObjectString(ctx, asset, "outputName");
-    if (!g_devServerUrl.empty() && !id.empty()) {
-        return g_devServerUrl + "/rayact/assets/" + id + "/" + name;
+#if !RAYACT_RELEASE_HOST
+    std::string devServerUrl = g_devServerUrl;
+    JSValue global = JS_GetGlobalObject(ctx);
+    if (devServerUrl.empty()) {
+        devServerUrl = jsObjectString(ctx, global, "__RAYACT_DEV_SERVER__");
     }
+    if (!devServerUrl.empty() && !id.empty()) {
+        std::string platform;
+        JSValue platformObject = JS_GetPropertyStr(ctx, global, "__rayactPlatform");
+        if (JS_IsObject(platformObject)) {
+            platform = jsObjectString(ctx, platformObject, "target");
+            if (platform.empty()) platform = jsObjectString(ctx, platformObject, "os");
+        }
+        JS_FreeValue(ctx, platformObject);
+        JS_FreeValue(ctx, global);
+
+        std::string url = devServerUrl + "/rayact/assets/" + id + "/" + name;
+        // Dev-server asset registries are per platform. Without this query an
+        // Android/iOS client is routed through the server's default target and
+        // receives a 404 whenever that registry has not seen the same asset.
+        if (!platform.empty()) url += "?platform=" + platform;
+        return url;
+    }
+    JS_FreeValue(ctx, global);
+#else
+    (void)ctx;
+#endif
     if (!outputName.empty()) {
         std::filesystem::path outputPath(outputName);
         if (!g_releaseAssetBaseDir.empty() && outputPath.is_relative()) {
@@ -1475,12 +1567,61 @@ static JSValue JS_resolveAssetPath(JSContext* ctx, JSValue, int argc, JSValueCon
 
     std::string id = jsObjectString(ctx, argv[0], "id");
     std::string name = jsObjectString(ctx, argv[0], "name");
-    std::filesystem::path cacheDir = std::filesystem::temp_directory_path() / "rayact-assets";
+    // Android's std::filesystem::temp_directory_path() resolves to a shared
+    // system temp directory that the app uid cannot write.  The engine's
+    // working directory is the app-private files directory on Android, so keep
+    // downloaded dev assets there.  Besides fonts/images, JS workers are
+    // materialized through this path before their QuickJS thread starts.
+#if defined(__ANDROID__)
+    rayact::EngineRuntime* activeRuntime = rayact::engineRuntimeActive();
+    std::filesystem::path cacheDir = activeRuntime && !activeRuntime->dataPath().empty()
+        ? std::filesystem::path(activeRuntime->dataPath()) / ".rayact" / "assets"
+        : std::filesystem::current_path() / ".rayact" / "assets";
+#else
+    std::filesystem::path cacheDir =
+        std::filesystem::temp_directory_path() / "rayact-assets";
+#endif
     std::error_code ec;
     std::filesystem::create_directories(cacheDir, ec);
+    if (ec) {
+        return JS_ThrowTypeError(ctx, "resolveAssetPath: failed to create cache directory: %s",
+                                 ec.message().c_str());
+    }
     std::filesystem::path outPath = cacheDir / (id.empty() ? name : (id + "-" + name));
     if (!std::filesystem::exists(outPath)) {
-#ifdef RAYACT_NO_NET
+#if defined(RAYACT_PLATFORM_NET_BACKEND) && defined(__ANDROID__)
+        std::vector<uint8_t> bytes = rayact::androidFetchBytes(url.c_str());
+        if (bytes.empty()) {
+            RAYACT_LOG_E("resolveAssetPath: Android fetch returned no bytes for %s", url.c_str());
+            return JS_ThrowTypeError(ctx, "resolveAssetPath: failed to fetch asset: %s", url.c_str());
+        }
+        FILE* file = fopen(outPath.string().c_str(), "wb");
+        if (!file) {
+            RAYACT_LOG_E("resolveAssetPath: failed to open Android cache file %s: %s",
+                         outPath.string().c_str(), strerror(errno));
+            return JS_ThrowTypeError(ctx, "resolveAssetPath: failed to open cache file");
+        }
+        fwrite(bytes.data(), 1, bytes.size(), file);
+        fclose(file);
+#elif defined(RAYACT_PLATFORM_NET_BACKEND) && defined(RAYACT_IOS)
+        std::vector<uint8_t> bytes = rayact::iosFetchBytes(url.c_str());
+        if (bytes.empty()) {
+            return JS_ThrowTypeError(ctx, "resolveAssetPath: failed to fetch asset: %s", url.c_str());
+        }
+        FILE* file = fopen(outPath.string().c_str(), "wb");
+        if (!file) return JS_ThrowTypeError(ctx, "resolveAssetPath: failed to open cache file");
+        fwrite(bytes.data(), 1, bytes.size(), file);
+        fclose(file);
+#elif defined(RAYACT_PLATFORM_NET_BACKEND) && defined(RAYACT_WEB)
+        std::vector<uint8_t> bytes = rayact::webFetchBytes(url);
+        if (bytes.empty()) {
+            return JS_ThrowTypeError(ctx, "resolveAssetPath: failed to fetch asset: %s", url.c_str());
+        }
+        FILE* file = fopen(outPath.string().c_str(), "wb");
+        if (!file) return JS_ThrowTypeError(ctx, "resolveAssetPath: failed to open cache file");
+        fwrite(bytes.data(), 1, bytes.size(), file);
+        fclose(file);
+#elif defined(RAYACT_PLATFORM_NET_BACKEND)
         return JS_ThrowTypeError(ctx, "resolveAssetPath: remote asset fetch needs the net subsystem (not built here)");
 #else
         std::string body;
@@ -1505,6 +1646,9 @@ static JSValue JS_readAssetBytes(JSContext* ctx, JSValue, int argc, JSValueConst
     JS_FreeValue(ctx, pathValue);
     if (!pathStr) return JS_ThrowTypeError(ctx, "readAssetBytes: invalid asset path");
     FILE* file = fopen(pathStr, "rb");
+    if (!file) {
+        RAYACT_LOG_E("readAssetBytes: failed to open %s: %s", pathStr, strerror(errno));
+    }
     JS_FreeCString(ctx, pathStr);
     if (!file) return JS_ThrowTypeError(ctx, "readAssetBytes: failed to open asset");
     fseek(file, 0, SEEK_END);
@@ -1516,6 +1660,7 @@ static JSValue JS_readAssetBytes(JSContext* ctx, JSValue, int argc, JSValueConst
     return JS_NewArrayBufferCopy(ctx, bytes.data(), bytes.size());
 }
 
+#if !RAYACT_RELEASE_HOST
 static std::string parseJsonStringField(const std::string& json, const std::string& field) {
     std::string key = "\"" + field + "\"";
     size_t pos = json.find(key);
@@ -1621,6 +1766,36 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
     // the browser WebSocket bridge (web_websocket.cpp).
     printf("Connecting to Rayact dev server: %s\n", devServer.c_str());
     setGlobalString(ctx, "__RAYACT_DEV_SERVER__", devServer);
+    std::string manifest = rayact::webDevFetch(
+        withDevPlatformQuery(devServer + "/rayact/manifest.json"));
+    if (manifest.empty()) {
+        showDevErrorOverlay(ctx, "Failed to fetch dev manifest from " + devServer);
+        return false;
+    }
+    g_devRevision = parseJsonIntField(manifest, "revision");
+    g_devServerUrl = devServer;
+    g_devModuleHmr = parseJsonStringField(manifest, "hmrMode") == "module";
+    rayact::webDevPrefetchValidate(g_devRevision);
+
+    const std::string webBundleFormat = parseJsonStringField(manifest, "bundleFormat");
+    g_devBundleFormat = webBundleFormat == "qjsbc" ? "qjsbc" : "js";
+    if (webBundleFormat == "qjsbc") {
+        std::vector<uint8_t> bytes = rayact::webDevFetchBytes(
+            withDevPlatformQuery(devServer + "/rayact/bundle.qjsbc"));
+        if (bytes.empty()) {
+            showDevErrorOverlay(ctx, "Failed to fetch dev bytecode from " + devServer);
+            return false;
+        }
+        injectMaterialIcons(ctx);
+        return evalBytecodeBuffer(ctx, bytes.data(), bytes.size(), "rayact_dev_bundle.qjsbc");
+    }
+
+    std::string bootstrapPath = "/rayact/bootstrap.js";
+    std::string bootstrapUrl = parseJsonStringField(manifest, "bootstrapUrl");
+    if (!bootstrapUrl.empty()) {
+        const auto pos = bootstrapUrl.find("/rayact/");
+        if (pos != std::string::npos) bootstrapPath = bootstrapUrl.substr(pos);
+    }
     {
         const char* devFetchSetup =
             "globalThis.__rayactDevFetch = function(url) { return rayactDevFetch(url); };";
@@ -1634,7 +1809,8 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
         JS_FreeValue(ctx, fetchSetup);
     }
     {
-        std::string bootstrap = rayact::webDevFetch(withDevPlatformQuery(devServer + "/rayact/bootstrap.js"));
+        std::string bootstrap = rayact::webDevFetch(
+            withDevPlatformQuery(devServer + bootstrapPath));
         if (bootstrap.empty()) {
             showDevErrorOverlay(ctx, "Failed to fetch dev bootstrap from " + devServer);
             return false;
@@ -1656,7 +1832,7 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
         printf("Successfully loaded Rayact dev bootstrap (web)\n");
     }
     return true;
-#elif defined(RAYACT_NO_NET)
+#elif defined(RAYACT_PLATFORM_NET_BACKEND)
     (void)ctx; (void)devServer;
     fprintf(stderr, "Rayact: dev-server load needs the net subsystem (not built here)\n");
     return false;
@@ -1675,6 +1851,8 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
     g_devServerUrl = devServer;
     g_devModuleHmr = parseJsonStringField(manifest, "hmrMode") == "module";
 
+    rayact::desktopPrefetchValidate(devServer, g_devRevision);
+
     std::string bootstrapPath = "/rayact/bootstrap.js";
     std::string bootstrapUrl = parseJsonStringField(manifest, "bootstrapUrl");
     if (!bootstrapUrl.empty()) {
@@ -1683,6 +1861,13 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
     }
 
     std::string bundleFormat = parseJsonStringField(manifest, "bundleFormat");
+    g_devBundleFormat = bundleFormat == "qjsbc" ? "qjsbc" : "js";
+    if (g_devBundleFormat == "qjsbc") {
+        // Debugger mode changes QuickJS execution semantics and carries a
+        // measurable runtime cost. Bytecode projects deliberately run without
+        // Rayact DevTools; the developer menu explains why the toggle is locked.
+        rayact::devtoolsDetachContext(ctx);
+    }
     bool loaded = false;
 
     if (g_devModuleHmr && bundleFormat != "qjsbc") {
@@ -1797,11 +1982,11 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
     }
 
     return true;
-#endif // RAYACT_NO_NET
+#endif // RAYACT_PLATFORM_NET_BACKEND
 }
 
 static void pollDevServer(JSContext* ctx) {
-#ifdef RAYACT_NO_NET
+#ifdef RAYACT_PLATFORM_NET_BACKEND
     (void)ctx;
     return;
 #else
@@ -1845,8 +2030,9 @@ static void pollDevServer(JSContext* ctx) {
     JS_FreeValue(ctx, result);
     g_devRevision = revision;
     printf("Rayact dev bundle reloaded (%zu bytes)\n", bundle.size());
-#endif // RAYACT_NO_NET
+#endif // RAYACT_PLATFORM_NET_BACKEND
 }
+#endif // !RAYACT_RELEASE_HOST
 // ---------------------------------------------------------------------------
 // Engine API (native/core/engine.hpp). Defined here so the wrappers can see the
 // file-static helpers + globals above. Both the desktop main() and the Android
@@ -1900,10 +2086,23 @@ void engineQueueKeyEvent(int type, const char* key, const char* code,
 }
 
 bool engineLoadDevServer(const std::string& devServerUrl) {
+#if RAYACT_RELEASE_HOST
+    (void)devServerUrl;
+    return false;
+#else
     return loadDevServerBundle(g_ctx, devServerUrl);
+#endif
+}
+
+const char* engineDevBundleFormat() {
+    return g_devBundleFormat.c_str();
 }
 
 bool engineApplyModuleUpdate(const std::string& path, const std::string& source) {
+#if RAYACT_RELEASE_HOST
+    (void)path; (void)source;
+    return false;
+#else
     JSContext* ctx = g_ctx;
     if (!ctx || source.empty()) return false;
     JSValue global = JS_GetGlobalObject(ctx);
@@ -1932,6 +2131,7 @@ bool engineApplyModuleUpdate(const std::string& path, const std::string& source)
     }
     JS_FreeValue(ctx, result);
     return true;
+#endif
 }
 
 // Asset base dir other translation units (css_bridge) consult so importCSS and
@@ -2070,9 +2270,32 @@ void engineFinishLoad() {
     engineStartJSThread();
 }
 
+static std::atomic<void (*)()> g_frameWaker{nullptr};
+
+void engineSetFrameWaker(void (*waker)()) { g_frameWaker.store(waker); }
+
+void engineRequestFrame() {
+    if (auto waker = g_frameWaker.load()) waker();
+}
+
 void enginePumpJS() {
     JSContext* ctx = g_ctx;
     if (!ctx) return;
+    // Record timing in the host render pump, never from a JavaScript timer.
+    const double measuredMs = g_hostFrameMs > 0.0 ? g_hostFrameMs : (double)GetFrameTime() * 1000.0;
+    g_hostFrameMs = -1.0;
+    // Long gaps are scheduler idleness, not rendered jank. Keep the last frame
+    // sample rather than reporting a 2 FPS app after a 500 ms timer wake-up.
+    if (measuredMs > 0.0 && measuredMs < 250.0) g_diagnosticFrameMs = measuredMs;
+    g_diagnosticRollingMs = g_diagnosticSamples == 0
+        ? g_diagnosticFrameMs
+        : g_diagnosticRollingMs * 0.9 + g_diagnosticFrameMs * 0.1;
+    ++g_diagnosticSamples;
+    const double refreshRate = g_hostRefreshRate > 0.0 ? g_hostRefreshRate : (g_targetFPS > 0 ? g_targetFPS : 60);
+    const double targetMs = 1000.0 / refreshRate;
+    if (g_diagnosticFrameMs > targetMs * 1.5) ++g_diagnosticJanky;
+    if (g_diagnosticFrameMs > targetMs * 2.0)
+        g_diagnosticDropped += (uint64_t)(g_diagnosticFrameMs / targetMs) - 1;
     // js_std_loop_once: drains pending jobs + fires expired QJS os.timers
     // without blocking. js_std_loop (infinite poll) must not be used here.
     js_std_loop_once(ctx);
@@ -2081,8 +2304,10 @@ void enginePumpJS() {
     tickAnimatedStyles(ctx);
     tickSystemAppearance(ctx);
     drainKeyEvents(ctx);
+#if !RAYACT_RELEASE_HOST
     pollDevServer(ctx);
-#ifndef RAYACT_NO_NET
+#endif
+#ifndef RAYACT_PLATFORM_NET_BACKEND
     drainNetEvents(ctx);      // deliver fetch responses / SSE / WS frames
 #endif
     rayact::drainModuleEvents(ctx);  // resolve async module-bus invocations
@@ -2129,6 +2354,11 @@ void enginePumpJS() {
     rayact::mutationBatchApplyPending();
     rayact::devtoolsPump(ctx);
 }
+
+void engineSetHostFrameTiming(double frameTimeMs, double targetRefreshRate) {
+    g_hostFrameMs = frameTimeMs;
+    if (targetRefreshRate > 0.0) g_hostRefreshRate = targetRefreshRate;
+}
 void engineDestroy() {
     if (!g_ctx) return;
     engineStopJSThread();
@@ -2142,7 +2372,7 @@ void engineDestroy() {
 #ifndef RAYACT_NO_WORKERS
     shutdownWorkers();          // join all worker threads, unload canvas textures
 #endif
-#ifndef RAYACT_NO_NET
+#ifndef RAYACT_PLATFORM_NET_BACKEND
     shutdownNetCtx(g_ctx);      // stop fetch/SSE/WS threads, free JS values
 #endif
     cleanupRaym3Bridge(g_ctx);
@@ -2188,6 +2418,21 @@ void engineRuntimeTeardown(EngineRuntime* runtime) {
         s.renderFrameFunction = JS_UNDEFINED;
     }
     if (ctx) {
+        // A mobile project reload replaces the entire runtime. Its teardown
+        // must be equivalent to engineDestroy(), not merely JS_FreeContext:
+        // workers retain WASM instances, canvas textures, and JS callbacks in
+        // process-global registries. Leaving them alive leaks the previous
+        // project's state into the next session and can crash its renderer.
+        rayact::devtoolsShutdown();
+        rayact::workletRuntimeShutdown();
+        rayact::shutdownAsyncStorage(ctx);
+        rayact::shutdownModuleBus(ctx);
+#ifndef RAYACT_NO_WORKERS
+        shutdownWorkers();
+#endif
+#ifndef RAYACT_PLATFORM_NET_BACKEND
+        shutdownNetCtx(ctx);
+#endif
         // Per-instance teardown: the process-global GPU caches belong to the
         // graphics device, which is either already closed or owned by another
         // live engine instance — never unload them here (see raym3_bridge.hpp).

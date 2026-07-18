@@ -1,0 +1,51 @@
+{
+  "name": "@rayact/react",
+  "version": "0.0.3",
+  "description": "React components, hooks, and themes for Rayact",
+  "type": "module",
+  "sideEffects": [
+    "./dist/index.js",
+    "./dist/avoid-keyboard.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && cp src/avoid-keyboard.css dist/avoid-keyboard.css",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@callstack/react-theme-provider": "^3.0.9",
+    "@rayact/renderer": "0.0.3",
+    "@rayact/runtime": "0.0.3",
+    "@rayact/shared": "0.0.3"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "license": "MIT",
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact-react"
+  }
+}

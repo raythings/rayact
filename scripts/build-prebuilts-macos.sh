@@ -13,9 +13,6 @@ fi
 ENGINE_VERSION="${ENGINE_VERSION:-$(node -p "require('./package.json').version")}"
 ABI_VERSION="${ABI_VERSION:-1}"
 BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-DESKTOP_BIN="$ROOT/build/bin/rayact_desktop"
-MODULES_DIR="$ROOT/build/modules"
-
 DO_DARWIN=0
 DO_IOS=0
 DO_DEV_APP=0
@@ -49,29 +46,36 @@ EOF
 
 if [[ "$DO_DARWIN" -eq 1 ]]; then
   echo "==> Building macOS desktop prebuilts..."
-  cmake -B build -S . -DENABLE_DESKTOP=ON -DCMAKE_BUILD_TYPE=Release
-  cmake --build build --parallel
-  cmake -B build/plugins -S native/plugins \
-    -DCMAKE_LIBRARY_OUTPUT_DIRECTORY="$MODULES_DIR" -DCMAKE_BUILD_TYPE=Release
-  cmake --build build/plugins --parallel
+  "$ROOT/scripts/build-macos-module-artifacts.sh"
 
-  for arch in arm64 x64; do
+  # macOS support is Apple Silicon only. Android and iOS simulator x86_64
+  # artifacts remain independent and are not affected by this policy.
+  for arch in arm64; do
+    cmake_arch="$arch"
+    [[ "$arch" == "x64" ]] && cmake_arch="x86_64"
+    quickjs_dir="$ROOT/build/quickjs-$arch"
+    build_dir="$ROOT/build/darwin-$arch"
+    release_dir="$ROOT/build/darwin-$arch-release"
+    cmake -B "$quickjs_dir" -S "$ROOT/third_party/quickjs" -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_OSX_ARCHITECTURES="$cmake_arch" -DQJS_BUILD_EXAMPLES=OFF -DQJS_BUILD_LIBC=ON
+    cmake --build "$quickjs_dir" --target qjs --parallel
+    cmake -B "$build_dir" -S . -DENABLE_DESKTOP=ON -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_OSX_ARCHITECTURES="$cmake_arch" -DQUICKJS_BUILD_DIR="$quickjs_dir"
+    cmake --build "$build_dir" --target rayact_desktop --parallel
+    cmake -B "$release_dir" -S . -DENABLE_DESKTOP=ON -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_OSX_ARCHITECTURES="$cmake_arch" \
+      -DQUICKJS_BUILD_DIR="$quickjs_dir" \
+      -DRAYACT_RELEASE_HOST=ON -DRAYACT_ENABLE_DEVTOOLS=OFF
+    cmake --build "$release_dir" --target rayact_desktop --parallel
     pkg="$ROOT/packages/prebuilt-darwin-$arch"
-    mkdir -p "$pkg/bin" "$pkg/modules"
-    cp "$DESKTOP_BIN" "$pkg/bin/"
+    rm -rf "$pkg/modules"
+    mkdir -p "$pkg/bin"
+    cp "$build_dir/bin/rayact_desktop" "$pkg/bin/"
+    cp "$release_dir/bin/rayact_desktop" "$pkg/bin/rayact_release"
     chmod +x "$pkg/bin/rayact_desktop"
-    cp "$MODULES_DIR"/librayact_*.dylib "$pkg/modules/" 2>/dev/null || true
+    chmod +x "$pkg/bin/rayact_release"
     write_manifest "$pkg" "darwin" "$arch"
     echo "  packed prebuilt-darwin-$arch"
-  done
-
-  for plugin_pair in "mmkv:rayact_mmkv" "secure-store:rayact_secure_store"; do
-    plugin="${plugin_pair%%:*}"
-    lib="${plugin_pair##*:}"
-    if [[ -f "$MODULES_DIR/lib${lib}.dylib" ]]; then
-      mkdir -p "$ROOT/packages/rayact-${plugin}/darwin-arm64"
-      cp "$MODULES_DIR/lib${lib}.dylib" "$ROOT/packages/rayact-${plugin}/darwin-arm64/"
-    fi
   done
 fi
 
@@ -85,6 +89,7 @@ if [[ "$DO_IOS" -eq 1 ]]; then
   mkdir -p "$IOS_PKG"
 
   "$ROOT/scripts/build-ios-xcframework.sh"
+  "$ROOT/scripts/build-ios-module-xcframeworks.sh"
   write_manifest "$IOS_PKG" "ios" "arm64"
 
   # Icon/emoji fonts: `rayact build --ios` stages these from this prebuilt

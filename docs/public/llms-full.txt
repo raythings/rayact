@@ -4,6 +4,53 @@
 
 
 ---
+# Source: accessibility.md
+
+# Accessibility
+
+Rayact components accept role, label, hint, state/value, actions, focusability, tab order, live-region, and text-scaling props. `useReducedMotion()` follows the host preference and `setAccessibilityFocus()` moves semantic focus programmatically.
+
+The renderer forwards semantic metadata into a synchronized accessibility snapshot. Android exposes virtual TalkBack nodes and actions, iOS exposes accessibility-container elements for VoiceOver, and Web maintains a hidden semantic DOM over the canvas.
+
+Stable promotion requires recorded results for keyboard/controller traversal, focus restoration, 200% text scaling, reduced motion, contrast, TalkBack, iOS and macOS VoiceOver, and the Web semantic DOM. A source implementation or local build does not satisfy that release gate by itself.
+
+
+---
+# Source: crash-reporting.md
+
+# Crash reporting and privacy
+
+`@rayact/crash-reporter` is local-only by default. Upload requires `mode: "upload"`, an HTTPS endpoint, and explicit runtime consent set to `granted`; unknown or denied consent sends no traffic.
+
+Envelopes use an allowlist and are capped at 64 KiB. Query strings, local user/project paths, emails, IP addresses, and token-like values are removed. Source text, logs, input values, and device/user identifiers are not envelope fields. Upload retries are bounded and stop at the first report that cannot be delivered.
+
+Native signal handling writes one fixed 16-byte marker to a descriptor opened before handlers are installed. The following launch consumes that marker and creates the local report.
+
+
+---
+# Source: deployment.md
+
+# Deployment
+
+Create immutable release output with `npx rayact build --release`. Release
+bundles use QuickJS bytecode and contain no development bootstrap. Generate a
+custom native client with `npx rayact prebuild --force`; only native modules
+declared by installed package manifests and enabled in `rayact.config.json` are
+copied into that client.
+
+For Web, serve the generated host in a secure context with HTTPS, WebGPU and
+hardware acceleration. Send `Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: require-corp`. Android production builds require
+your release signing key. Apple archives require the distribution certificate,
+provisioning profile, bundle identifier, and Xcode archive signing configured by
+your team.
+
+Keep `release-set.json`, its detached signature, `SHA256SUMS`, npm tarballs,
+native archives, SBOMs, and attestations together. The GitHub Release is the
+fallback source for the exact npm bits, not a separate rebuild.
+
+
+---
 # Source: guide/getting-started.md
 
 # Getting started
@@ -13,12 +60,12 @@ Scaffold a new app, run it in development, then build a release.
 ## Create an app
 
 ```sh
-npx github:raythings/rayact#v0.0.1 init my-app
+npx create-rayact-app@0.0.3 my-app
 cd my-app
 npm install
 ```
 
-The generated project has a `rayact.config.json` (see the [config reference](/reference/config)), a `src/App.tsx` entry, and the `@rayact/*` dependencies for your chosen template.
+The generated project has a `rayact.config.json` (see the [config reference](/reference/config)), a `src/App.tsx` entry, and only the public `rayact` and `react` dependencies.
 
 ## Develop
 
@@ -45,10 +92,10 @@ rayact run --ios               # build + launch on the iOS simulator
 rayact build --release             # desktop release (bytecode + .rayactpack)
 rayact build --release --android   # release APK
 rayact build --release --ios       # release iOS app
-rayact build --web --no-bytecode   # web bundle + WASM/WebGPU host
+rayact build --release --web       # bytecode web bundle + WASM/WebGPU host
 ```
 
-Native release builds compile the JS bundle to QuickJS bytecode and emit a single [`.rayactpack`](/reference/rayactpack) container. The native host needed to compile bytecode is fetched automatically — see [Installation](/guide/install). Web builds use the WASM/WebGPU host and must be served with COOP/COEP headers for SharedArrayBuffer/WebGPU isolation.
+All release builds compile the JS bundle to QuickJS bytecode. Native releases also emit a single [`.rayactpack`](/reference/rayactpack) container. The host needed to compile bytecode is fetched automatically — see [Installation](/guide/install). Web builds use the WASM/WebGPU host and must be served with COOP/COEP headers for SharedArrayBuffer/WebGPU isolation.
 
 
 ---
@@ -81,18 +128,21 @@ The desktop prebuilts are wired as `optionalDependencies` of `@rayact/cli` with
 machine. Android and iOS engine libraries are pulled per-project when you target
 those platforms (kept off desktop installs — the Android engine alone is ~80 MB).
 
-## Git now, npm later
+## npm installation
 
-Until the packages are on the npm registry, install the framework packages from
-GitHub refs and let the prebuilt resolver fetch native hosts from GitHub
-releases:
+Use npm for `0.0.3`. The prebuilt resolver prefers installed platform packages
+and falls back to the matching, checksummed GitHub Release artifact:
 
 ```sh
-npx github:raythings/rayact#v0.0.1 init my-app
+npx create-rayact-app@0.0.3 my-app
 ```
 
-The release also attaches an `npm pack` tarball for every publishable package, so
-generated templates can reference those tarball URLs in the interim.
+The release attaches the exact npm tarball for every publishable package. If npm
+is unavailable, run the scaffolder tarball directly:
+
+```sh
+npx https://github.com/raythings/rayact/releases/download/v0.0.3/create-rayact-app-0.0.3.tgz my-app
+```
 
 Override the download source with environment variables when needed:
 
@@ -122,7 +172,7 @@ Rayact is a cross-platform React renderer with a native raylib + QuickJS backend
 ## Quick start
 
 ```sh
-npx github:raythings/rayact#v0.0.1 init my-app
+npx create-rayact-app@0.0.3 my-app
 cd my-app && npm install
 npm run dev            # dev server + TUI
 ```
@@ -135,7 +185,9 @@ rayact run --android   # build + install + launch on a device
 rayact build --release # release bundle (bytecode + container)
 ```
 
-See [Getting started](/guide/getting-started), [Installation](/guide/install), and the [CLI reference](/reference/cli).
+See [Getting started](/guide/getting-started), [Installation](/guide/install),
+[native modules](/native-modules), [deployment](/deployment), and the
+[CLI reference](/reference/cli).
 
 
 ---
@@ -186,6 +238,57 @@ optimization, not basic Android/Web enablement.
 
 
 ---
+# Source: native-modules.md
+
+# Native modules
+
+Install optional capabilities as direct npm dependencies:
+
+```sh
+npm install @rayact/mmkv
+npm install @rayact/secure-store
+npm install @rayact/crash-reporter
+```
+
+Built-in KV remains available from `rayact/kv` and adds no optional binary. Each optional package owns `rayact.module.json`; autolinking follows declared installed dependencies and verifies artifact SHA-256 values. It never scans workspace folders or arbitrary `node_modules` directories.
+
+Installed modules autolink automatically. `rayact.config.json` can disable or configure one:
+
+```json
+{
+  "nativeModules": [
+    "@rayact/mmkv",
+    { "package": "@rayact/crash-reporter", "enabled": true, "configuration": { "mode": "local" } },
+    { "package": "@rayact/secure-store", "enabled": false }
+  ]
+}
+```
+
+Legacy `{ "name", "lib", "jsPackage" }` entries warn in 0.0.x. Run `rayact migrate`, then `npm install`, to update imports/config and regenerate native projects.
+
+
+---
+# Source: recovery.md
+
+# Recovery
+
+If development reload fails, Rayact keeps the last running revision. Restore
+network access, verify the dev-server URL, and wait for reconnect; a complete
+local reload should recover without reinstalling the client. If generated native
+files drift, remove only the application’s generated `android/` and `ios/`
+directories, then run `npx rayact prebuild --force`.
+
+For a broken upgrade, restore the previous lockfile and package version, run
+`npm install`, regenerate native projects, and rebuild. Never mix a previous
+engine binary with newer module artifacts. For crash recovery, inspect local
+reports with `listCrashReports()` / `exportCrashReport()` before deleting them;
+local mode never uploads.
+
+Keep the preceding signed release set available so operators can restore npm
+dist-tags and GitHub `latest` without deleting immutable artifacts.
+
+
+---
 # Source: reference/cli.md
 
 # CLI reference
@@ -205,6 +308,7 @@ The `rayact` command (from `@rayact/cli`) drives development, building, and runn
 | `rayact export` | Alias for `rayact build --release` |
 | `rayact compile <in> <out>` | Compile a JS bundle to QuickJS bytecode |
 | `rayact prebuild` | Ensure the native host + plugin shells are present |
+| `rayact doctor` | Check toolchains, prebuilt integrity/ABI, module support, signing, and Web hosting requirements |
 | `rayact init [name]` | Scaffold a new app (alias for `create-rayact-app`) |
 
 ## Common options
@@ -215,7 +319,7 @@ The `rayact` command (from `@rayact/cli`) drives development, building, and runn
 | `--install` | Install + launch on device after an Android/iOS build |
 | `--release` / `--debug` | Build mode |
 | `--minify` / `--no-minify` | Override the config's minify setting |
-| `--bytecode` / `--no-bytecode` | Override bytecode emission |
+| `--bytecode` / `--no-bytecode` | Override bytecode emission in development/debug; release always emits bytecode |
 | `--entry <path>` | App entry file |
 | `--out <dir>` | Output directory |
 | `--desktop-bin <path>` | Use a specific `rayact_desktop` host |
@@ -251,24 +355,26 @@ Add the `$schema` key for editor autocomplete:
 
 | Field | Type | Description |
 | --- | --- | --- |
+| `name` | string | Cross-platform display name used by generated clients and dev-server discovery. |
 | `rayactAppKey` | string | Stable app identifier. Also seeds the container-pack obfuscation key. |
 | `entry` | string | Entry source file (e.g. src/App.tsx), relative to the project root. |
-| `platform` | `desktop` \| `android` \| `ios` \| `web` | Default build/run target. |
+| `platform` | `desktop` \| `android` \| `ios` \| `web` | Deprecated. Use command flags such as --desktop, --android, --ios, or --web. |
 | `devServer` | object |  |
 | `devServer.host` | string |  |
 | `devServer.port` | integer |  |
 | `devServer.cdpPort` | integer |  |
+| `devServer.strictPort` | boolean | Fail if devServer.port is already in use instead of picking the next free port. |
 | `android` | object |  |
-| `android.package` | string |  |
+| `android.package` | string | Deprecated Android application id alias. Use packageName. |
 | `android.projectDir` | string | Gradle project dir (contains gradlew), relative to project root. |
-| `android.activity` | string |  |
-| `android.appName` | string |  |
-| `android.packageName` | string |  |
+| `android.activity` | string | Optional fully qualified Android activity class. Defaults to the prebuilt Rayact host activity. |
+| `android.appName` | string | Deprecated Android-only display name. Use top-level name. |
+| `android.packageName` | string | Android application id used by prebuild, install, and launch. |
 | `android.icon` | string |  |
 | `ios` | object |  |
 | `ios.projectDir` | string |  |
-| `ios.bundleId` | string |  |
-| `nativeModules` | object[] | Native plugin modules the host bundles / the project requires. |
+| `ios.bundleId` | string | iOS product bundle identifier used by prebuild, install, and launch. |
+| `nativeModules` | any[] | Installed native modules autolink automatically. Entries may disable or configure a package. Legacy name/lib/jsPackage objects are accepted with a warning through 0.0.x. |
 | `transform` | object | Per-build-mode transforms. Defaults: dev=false, debug=false, release=true. |
 | `transform.minify` | object |  |
 | `transform.minify.dev` | boolean |  |
@@ -283,55 +389,67 @@ Add the `$schema` key for editor autocomplete:
 | `pack.obfuscate` | boolean | XOR-obfuscate pack entries with a key derived from rayactAppKey. Default false. |
 | `pack.maxChunkSize` | integer | Max bytes per pack chunk before splitting. Default 104857600 (100 MB). |
 
-> Transforms default to `dev=false, debug=false, release=true`. Only record an
-> override — e.g. `"transform": { "bytecode": { "release": false } }`.
+> Transforms default to `dev=false, debug=false, release=true`. Development and
+> debug transforms can be overridden. Release bytecode is mandatory; a legacy
+> `transform.bytecode.release=false` value is accepted but ignored.
 
 
 ---
 # Source: reference/packages.md
 
-# Packages & platforms
+# Packages and platforms
 
-Rayact is a monorepo of small `@rayact/*` packages plus per-platform prebuilts.
+Rayact uses one private npm workspace root with independently publishable packages. All first-party packages in the `0.0.3` release set use exact lockstep versions.
 
-## JavaScript packages
+## Consumer and framework
 
 | Package | Role |
 | --- | --- |
-| `@rayact/cli` | `rayact` command — dev, build, run, prebuild |
-| `@rayact/dev-server` | Vite bundler, dev server, config loader + schema |
-| `@rayact/prebuild` | Prebuilt resolution, downloader, plugin autolinking |
-| `@rayact/react` | React adapter for the host runtime |
-| `@rayact/runtime` | Renderer-agnostic host runtime |
-| `@rayact/core` | React reconciler host config |
-| `@rayact/renderer` | raylib graphics backend bindings |
-| `@rayact/quickjs` | QuickJS engine integration |
-| `@rayact/navigation` | `react-navigation` bindings |
-| `@rayact/shared` / `@rayact/types` | Shared utilities + ambient types |
-| `@rayact/mmkv` / `@rayact/secure-store` | Native storage plugins |
-| `create-rayact-app` | Project scaffolder |
+| `rayact` | Consumer umbrella; React APIs plus built-in KV, crypto, workers, and CLI forwarding |
+| `@rayact/shared` | Shared protocol and utility types |
+| `@rayact/runtime` | Host bridge, lifecycle, capabilities, reload state, and diagnostics |
+| `@rayact/renderer` | Reconciler and native command protocol |
+| `@rayact/react` | Components, hooks, themes, accessibility, and rendering entry points |
 
-## Prebuilt native hosts
+There is no public `@rayact/core` or `@rayact/quickjs` package.
 
-| Package | Platform | Ships |
-| --- | --- | --- |
-| `@rayact/prebuilt-darwin-arm64` | macOS arm64 | `rayact_desktop` + plugin dylibs |
-| `@rayact/prebuilt-darwin-x64` | macOS x64 | `rayact_desktop` + plugin dylibs |
-| `@rayact/prebuilt-linux-x64` | Linux x64 | `rayact_desktop` + plugin `.so` |
-| `@rayact/prebuilt-android-arm64` | Android arm64 | engine + plugin `.so` (JNI) |
-| `@rayact/prebuilt-ios-arm64` | iOS arm64 | `RayactEngine.xcframework` |
+## Optional features
 
-Each prebuilt carries a `manifest.json` (`engineVersion`, `moduleAbiVersion`,
-platform, arch). The CLI gates on `moduleAbiVersion` before using a prebuilt.
-
-## Platform support
-
-| Target | Status |
+| Package | Role |
 | --- | --- |
-| Desktop (macOS / Linux / Windows) | macOS/Linux prebuilts in `v0.0.1`; Windows source/build path |
-| Android | Supported |
-| iOS | Supported |
-| Web (WASM) | Supported; requires COOP/COEP serving for SharedArrayBuffer/WebGPU |
+| `@rayact/navigation` | Navigation bindings |
+| `@rayact/worklets` | Worklet APIs |
+| `@rayact/mmkv` | Optional high-performance storage module |
+| `@rayact/secure-store` | Optional Keychain/Keystore storage module |
+| `@rayact/crash-reporter` | Local-first, consent-gated crash reporting |
+
+Each native module owns `rayact.module.json`, native source, platform artifacts, declarations, tests, README, and changelog. Installing only one optional module does not add the other modules' binaries or registrations.
+
+## Tooling and distribution
+
+| Package | Role |
+| --- | --- |
+| `@rayact/cli` | `rayact` command |
+| `@rayact/dev-server` | Bundler, HMR, discovery, debugger, and inspector transport |
+| `@rayact/prebuild` | Manifest-based autolinking and native project generation |
+| `@rayact/dev-client` / `@rayact/devtools` | Client launcher and developer tools |
+| `create-rayact-app` | npm-first project scaffolder |
+| `@rayact/template-*` | Thin Android and iOS templates |
+| `@rayact/prebuilt-*` | Platform-specific engine artifacts |
+| `@rayact/dev-app` | Publishable official client that explicitly includes supported first-party modules |
+
+## Platform matrix
+
+| Target | Artifact | Status |
+| --- | --- | --- |
+| Android arm64 / x86_64 | engine `.so` packages | Tier 1 |
+| iOS device arm64; simulator arm64/x86_64 | engine XCFramework | Tier 1 |
+| macOS Apple Silicon (arm64) | desktop host package | Tier 1 |
+| Web wasm32 | WebGPU host package | Tier 1 |
+| Linux x64 | desktop host package | Preview |
+| Windows | source build | Graduation target |
+
+Every prebuilt carries an engine/version/ABI manifest. The CLI rejects incompatible native ABI or platform selections before linking.
 
 
 ---
@@ -387,3 +505,143 @@ rayact_desktop --check  <out.rayactpack>     # boot it headlessly, then exit
 `.rayactpack` directly (extracting once to a scratch dir so existing CSS/font/
 image loaders work unchanged). Mobile hosts copy the pack out of app assets and
 call `engineLoadPackFile`.
+
+
+---
+# Source: releasing.md
+
+# Release process
+
+The `0.0.3` train uses three channels:
+
+- Canary builds are commit-specific prereleases published under `canary`.
+- Preview publishes final immutable tarballs under `preview` and attaches those exact bits to GitHub Releases.
+- Stable verifies the signed release set, then moves `stable` and `latest` to the already-tested versions without rebuilding.
+
+`release-set.json` records every package, artifact hash, engine ABI, Tier-1 platform, and dev-app version. `rayact` is ordered last for publication. npm provenance and GitHub artifact attestations are emitted by the release workflow.
+
+Rollback downloads and verifies the prior release set, restores npm `stable`/`latest`, and points GitHub `latest` at that release. Artifacts are never unpublished.
+
+
+---
+# Source: rollback.md
+
+# Release rollback
+
+Rayact does not unpublish a bad release. Choose the preceding verified
+`release-set.json`, verify its signature and checksums, then restore every npm
+package’s `stable` and `latest` dist-tags to the versions recorded in that set.
+Move GitHub’s `latest` marker to the matching immutable release.
+
+The release workflow’s `rollback` channel performs these dist-tag changes from
+an existing GitHub Release. It does not rebuild or replace tarballs. Confirm that
+the root `rayact` package and all first-party packages now resolve to one release
+train, then run the external create → prebuild → release smoke path against a
+clean registry/cache.
+
+Applications recover by restoring the previous lockfile, running `npm install`,
+regenerating native projects, and rebuilding with the previous signed bits.
+
+
+---
+# Source: security.md
+
+# Security
+
+Install only published `0.0.3` tarballs represented in the signed release set.
+Rayact verifies native artifact SHA-256 values during prebuild; release CI also
+checks provenance, SBOM/license policy, vulnerabilities, and reproducibility.
+Never bypass an ABI or checksum failure.
+
+Optional modules are least-privilege packages: generic engines contain no MMKV,
+Secure Store, or crash-reporter registrations. Crash uploads require HTTPS and
+explicit runtime consent. Secrets belong in `@rayact/secure-store`, not built-in
+plain KV, logs, config files, or crash messages.
+
+Report vulnerabilities privately through the repository security advisory
+channel. Rayact acknowledges reports within two business days, triages within
+five, and targets critical fixes within seven days. Avoid opening a public issue
+until a coordinated fix is available.
+
+
+---
+# Source: support.md
+
+# Support policy
+
+Rayact supports the latest two stable minor lines or twelve months, whichever is
+longer. Removing a deprecated public API requires at least one stable minor and
+90 days of notice. The `0.0.x` line retains the MMKV and Secure Store compatibility
+imports; they are scheduled for removal in `0.2.0`.
+
+Bug reports should include a minimal project, platform, Rayact version, Node
+version, toolchain versions, and reproducible commands. Tier 1 is Android, iOS,
+Apple Silicon macOS, and Web. Intel macOS and Rosetta are not supported targets. Linux x64 is preview; Windows is a graduation target. Safari and
+Firefox WebGPU remain experimental until they pass the same release matrix.
+
+Security reports follow the private process and response targets in the
+[security guide](/security).
+
+
+---
+# Source: toolchains.md
+
+# Supported toolchains for 0.0.3
+
+- Node.js 22 and 24 LTS.
+- Android API 26 minimum, compile/target API 36, AGP 8.9.1, JDK 17, NDK 27.3.13750724.
+- iOS 16 or newer and Apple Silicon macOS 13 or newer, using Xcode 26 and the iOS 26 SDK for distribution. Intel macOS and Rosetta are not supported targets.
+- Latest two stable Chrome and Edge releases in a secure context with WebGPU, hardware acceleration, and COOP/COEP. Safari and Firefox are experimental.
+
+Tier-1 release gates run ten controlled samples per target. They enforce first-interactive-frame, reload, frame-time/jank, CPU/RSS, reload/project-switch memory growth, lifecycle/resize endurance, and network-loss recovery budgets documented in the Phase 6 roadmap.
+
+
+---
+# Source: troubleshooting.md
+
+# Troubleshooting
+
+Start with `npx rayact doctor`, then verify Node 22 or 24 and the supported
+platform toolchain. Common failures:
+
+- **Module not found:** install the optional package directly; `rayact` does not
+  bundle MMKV, Secure Store, or crash reporting.
+- **ABI/engine mismatch:** align `rayact` and `@rayact/*` versions, run
+  `npx rayact migrate`, then regenerate native projects.
+- **Checksum mismatch:** clear the Rayact prebuilt cache and reinstall from npm
+  or the matching GitHub Release. Do not disable verification.
+- **WebGPU unavailable:** use current Chrome/Edge, HTTPS, hardware acceleration,
+  and COOP/COEP headers.
+- **Device cannot reach dev server:** put both devices on the same network or
+  use the documented adb forwarding path; confirm the printed host/port.
+- **Native module still linked after removal:** remove it from dependencies and
+  config, then run `npx rayact prebuild --force`.
+
+When reporting a problem, include Rayact/Node/toolchain versions and the failing
+command. Redact local paths, credentials, source, and user data.
+
+
+---
+# Source: upgrades.md
+
+# Upgrades and migration
+
+Commit the application before upgrading. Install the desired Rayact version and
+run:
+
+```sh
+npm install rayact@0.0.3
+npx rayact migrate
+npm install
+npx rayact prebuild --force
+```
+
+`rayact migrate` rewrites legacy package imports, converts legacy
+`{ name, lib, jsPackage }` native-module entries, updates npm dependencies, and
+regenerates existing native projects. Review the diff before building.
+
+When a module ABI or engine range does not match, prebuild stops with the host
+and package ranges and asks you to upgrade them together. Do not copy binaries
+manually to bypass that check. The `rayact/mmkv` and `rayact/secure-store` shims
+are deprecated for `0.0.x`; canonical imports are `@rayact/mmkv` and
+`@rayact/secure-store`.

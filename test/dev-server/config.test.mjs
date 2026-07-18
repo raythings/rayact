@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url';
 
 import {
   loadRayactConfig,
+  resolveAppName,
+  resolveAndroidActivityName,
+  resolveAndroidPackageName,
   resolveTransformFlag,
   validateRayactConfig,
   rayactConfigSchemaPath,
@@ -51,6 +54,22 @@ test('loadRayactConfig merges devServer overrides', () => {
   });
 });
 
+test('android.packageName is the canonical install and launch identity', () => {
+  assert.equal(resolveAndroidPackageName({ android: {
+    package: 'com.legacy.client',
+    packageName: 'com.current.client',
+  } }), 'com.current.client');
+  assert.equal(resolveAndroidPackageName({ android: { package: 'com.legacy.client' } }), 'com.legacy.client');
+  assert.equal(resolveAndroidActivityName({ android: { packageName: 'com.current.client' } }), 'com.rayact.app.DevLauncherActivity');
+  assert.equal(resolveAndroidActivityName({ android: { activity: 'com.example.CustomActivity' } }), 'com.example.CustomActivity');
+});
+
+test('top-level name is the canonical cross-platform display name', () => {
+  assert.equal(resolveAppName({ name: 'TermApp', android: { appName: 'Legacy Android Name' } }), 'TermApp');
+  assert.equal(resolveAppName({ android: { appName: 'Legacy Android Name' } }), 'Legacy Android Name');
+  assert.equal(resolveAppName({}), 'Rayact');
+});
+
 test('resolveTransformFlag defaults: release minify+bytecode true, dev false', () => {
   const empty = {};
   assert.equal(resolveTransformFlag(empty, 'bytecode', 'release'), true);
@@ -59,12 +78,11 @@ test('resolveTransformFlag defaults: release minify+bytecode true, dev false', (
   assert.equal(TRANSFORM_DEFAULTS.release, true);
 });
 
-test('resolveTransformFlag honors explicit override and CLI override', () => {
+test('resolveTransformFlag keeps release bytecode mandatory', () => {
   const cfg = { transform: { bytecode: { release: false } } };
-  assert.equal(resolveTransformFlag(cfg, 'bytecode', 'release'), false);
-  // CLI override wins over config + default
+  assert.equal(resolveTransformFlag(cfg, 'bytecode', 'release'), true);
   assert.equal(resolveTransformFlag(cfg, 'bytecode', 'release', true), true);
-  assert.equal(resolveTransformFlag({}, 'bytecode', 'release', false), false);
+  assert.equal(resolveTransformFlag({}, 'bytecode', 'release', false), true);
 });
 
 test('validateRayactConfig: clean config has no issues', () => {

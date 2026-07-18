@@ -2,6 +2,7 @@ package com.rayact.engine
 
 import android.os.Handler
 import android.os.Looper
+import com.rayact.app.BuildConfig
 import com.rayact.app.NavigationHost
 import com.rayact.app.RayactRenderScheduler
 import com.rayact.app.RayactScreenFragment
@@ -95,7 +96,7 @@ class RayactHost(
         // BuildConfig.RAYACT_DEV_CLIENT compile gate disabled this in release
         // builds, so the release dev-app exited (and crashed in the two-session
         // onDestroy teardown) instead of going back to the launcher.
-        if (DevClientBridge.tryShowLauncherFromFinishActivity()) {
+        if (BuildConfig.RAYACT_DEV_CLIENT && DevClientBridge.tryShowLauncherFromFinishActivity()) {
             return
         }
         val h = navigationHost?.get() ?: return
@@ -117,6 +118,10 @@ class RayactHost(
         renderScheduler.requestFrame()
     }
 
+    override fun sendDevtoolsMessage(message: String) {
+        session.sendDevtoolsMessage(message)
+    }
+
     override fun stopRenderScheduler() {
         renderScheduler.stopRendering()
     }
@@ -127,11 +132,13 @@ class RayactHost(
         inputType: String,
         autocorrect: Boolean,
         secure: Boolean,
-        imeAction: String
+        imeAction: String,
+        autoCapitalize: String,
+        contextMenuHidden: Boolean
     ) {
         val view = imeView ?: return
         Handler(Looper.getMainLooper()).post {
-            view.setupForIme(nodeId, value, inputType, autocorrect, secure, imeAction)
+            view.setupForIme(nodeId, value, inputType, autocorrect, secure, imeAction, autoCapitalize, contextMenuHidden)
         }
     }
 
@@ -141,11 +148,13 @@ class RayactHost(
         inputType: String,
         autocorrect: Boolean,
         secure: Boolean,
-        imeAction: String
+        imeAction: String,
+        autoCapitalize: String,
+        contextMenuHidden: Boolean
     ) {
         val view = imeView ?: return
         Handler(Looper.getMainLooper()).post {
-            view.switchIme(nodeId, value, inputType, autocorrect, secure, imeAction)
+            view.switchIme(nodeId, value, inputType, autocorrect, secure, imeAction, autoCapitalize, contextMenuHidden)
         }
     }
 

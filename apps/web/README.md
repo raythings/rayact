@@ -10,14 +10,14 @@ C++ shims live in `../../native/web`.
 
 ## Release verification
 
-Web is included in the `v0.0.1` launch. Maintainers should run:
+Web is included in the `v0.0.3` release set. Maintainers should run:
 
 ```bash
 npm run verify:web
 npm run pack:release
 ```
 
-The release asset packer includes the generic `build-web/bin` host as `rayact-web-0.0.1.tar.gz`
+The release asset packer includes the generic `build-web/bin` host as `rayact-web-0.0.3.tar.gz`
 and writes a top-level `SHA256SUMS` for upload to the replacement GitHub
 release. Browser testing must use the COOP/COEP server or proxy because the web
 host requires SharedArrayBuffer/WebGPU isolation.

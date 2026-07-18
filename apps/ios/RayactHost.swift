@@ -5,7 +5,9 @@ final class RayactHost: RayactEngineHostCallbacks {
     let renderScheduler: RayactRenderScheduler
 
     private weak var navigationHost: NavigationHost?
+#if !RAYACT_RELEASE
     private var devMenuOverlay: DevMenuOverlay?
+#endif
     private(set) weak var imeView: RayactSurfaceView?
 
     init(session: RayactEngineSession, renderScheduler: RayactRenderScheduler) {
@@ -76,7 +78,9 @@ final class RayactHost: RayactEngineHostCallbacks {
     }
 
     func finishActivity() {
+#if !RAYACT_RELEASE
         if DevClientBridge.tryShowLauncherFromFinishActivity() { return }
+#endif
         guard let nav = navigationHost else { return }
         DispatchQueue.main.async {
             nav.parentController?.dismiss(animated: true)
@@ -84,17 +88,27 @@ final class RayactHost: RayactEngineHostCallbacks {
     }
 
     func attachDevMenuOverlay(_ host: NavigationHost) {
+#if !RAYACT_RELEASE
         DispatchQueue.main.async {
             self.devMenuOverlay = DevMenuOverlay(host: host, session: self.session)
         }
+#else
+        _ = host
+#endif
     }
 
     func toggleDevMenu() {
+#if !RAYACT_RELEASE
         DispatchQueue.main.async { self.devMenuOverlay?.toggle() }
+#endif
     }
 
     func requestRenderFrame() {
         renderScheduler.requestFrame()
+    }
+
+    func sendDevtoolsMessage(_ message: String) {
+        session.sendDevtoolsMessage(message)
     }
 
     func stopRenderScheduler() {
@@ -107,7 +121,9 @@ final class RayactHost: RayactEngineHostCallbacks {
         inputType: String,
         autocorrect: Bool,
         secure: Bool,
-        imeAction: String
+        imeAction: String,
+        autoCapitalize: String,
+        contextMenuHidden: Bool
     ) {
         guard let view = imeView else { return }
         DispatchQueue.main.async {
@@ -117,7 +133,9 @@ final class RayactHost: RayactEngineHostCallbacks {
                 inputType: inputType,
                 autocorrect: autocorrect,
                 secure: secure,
-                imeAction: imeAction
+                imeAction: imeAction,
+                autoCapitalize: autoCapitalize,
+                contextMenuHidden: contextMenuHidden
             )
         }
     }
@@ -128,7 +146,9 @@ final class RayactHost: RayactEngineHostCallbacks {
         inputType: String,
         autocorrect: Bool,
         secure: Bool,
-        imeAction: String
+        imeAction: String,
+        autoCapitalize: String,
+        contextMenuHidden: Bool
     ) {
         guard let view = imeView else { return }
         DispatchQueue.main.async {
@@ -138,7 +158,9 @@ final class RayactHost: RayactEngineHostCallbacks {
                 inputType: inputType,
                 autocorrect: autocorrect,
                 secure: secure,
-                imeAction: imeAction
+                imeAction: imeAction,
+                autoCapitalize: autoCapitalize,
+                contextMenuHidden: contextMenuHidden
             )
         }
     }

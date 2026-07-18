@@ -1,0 +1,28 @@
+{
+  "name": "@rayact/prebuilt-android-x64",
+  "version": "0.0.3",
+  "description": "Prebuilt Rayact engine native libraries for Android x86_64",
+  "sideEffects": false,
+  "files": [
+    "jni/x86_64/libc++_shared.so",
+    "jni/x86_64/librayact.so",
+    "jni-debug/x86_64/libc++_shared.so",
+    "jni-debug/x86_64/librayact.so",
+    "include",
+    "manifest.json",
+    "resources"
+  ],
+  "license": "MIT",
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/prebuilt-android-x64"
+  }
+}

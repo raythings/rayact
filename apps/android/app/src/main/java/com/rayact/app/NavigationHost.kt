@@ -18,6 +18,9 @@ class NavigationHost @JvmOverloads constructor(
         private set
     private var rootSurfaceView: RayactSurfaceView? = null
     private val fragmentsBySurfaceId = LinkedHashMap<Int, RayactScreenFragment>()
+    // A fragment can be queued before its SurfaceView has a native id, so it
+    // must be tracked independently of fragmentsBySurfaceId for host teardown.
+    private val pushedFragments = LinkedHashSet<RayactScreenFragment>()
 
     val engineSession: RayactEngineSession get() = session
     val host: RayactHost get() = session.host
@@ -81,6 +84,7 @@ class NavigationHost @JvmOverloads constructor(
 
     fun pushScreen(): RayactScreenFragment {
         val frag = RayactScreenFragment(session)
+        pushedFragments.add(frag)
         val fm = fragmentManager()
         val tag = "rayact-screen-${System.nanoTime()}"
         fm.beginTransaction()
@@ -104,6 +108,7 @@ class NavigationHost @JvmOverloads constructor(
     fun releaseSurface(surfaceId: Int): Boolean {
         if (surfaceId <= 0 || surfaceId == rootSurfaceId) return false
         val fragment = fragmentsBySurfaceId.remove(surfaceId) ?: return false
+        pushedFragments.remove(fragment)
         fragmentManager().beginTransaction()
             .setReorderingAllowed(true)
             .remove(fragment)
@@ -121,4 +126,27 @@ class NavigationHost @JvmOverloads constructor(
     }
 
     fun topFragmentSurfaceId(): Int = fragmentsBySurfaceId.keys.lastOrNull() ?: 0
+
+    /**
+     * Remove every native navigation surface before its engine session dies.
+     * Removing this host view alone leaves FragmentManager-owned SurfaceViews
+     * alive; those stale views can cover a newly reloaded project and consume
+     * its input (notably worker/WASM canvas screens).
+     */
+    fun dispose() {
+        session.host.clearNavigationHost(this)
+        val fragments = pushedFragments.toList()
+        pushedFragments.clear()
+        fragmentsBySurfaceId.clear()
+        if (fragments.isNotEmpty()) {
+            runCatching {
+                fragmentManager().beginTransaction()
+                    .setReorderingAllowed(true)
+                    .apply { fragments.forEach { remove(it) } }
+                    .commitNowAllowingStateLoss()
+            }
+        }
+        rootSurfaceView = null
+        removeAllViews()
+    }
 }

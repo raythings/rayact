@@ -36,6 +36,11 @@ private func requestRenderFrameCb(_ ctx: UnsafeMutableRawPointer?) {
     hostBridge(from: ctx).host.requestRenderFrame()
 }
 
+private func sendDevtoolsMessageCb(_ ctx: UnsafeMutableRawPointer?, _ message: UnsafePointer<CChar>?) {
+    guard let message else { return }
+    hostBridge(from: ctx).host.sendDevtoolsMessage(String(cString: message))
+}
+
 private func toggleDevMenuCb(_ ctx: UnsafeMutableRawPointer?) {
     hostBridge(from: ctx).host.toggleDevMenu()
 }
@@ -63,7 +68,9 @@ private func showSoftKeyboardCb(
     _ inputType: UnsafePointer<CChar>?,
     _ autocorrect: Bool,
     _ secure: Bool,
-    _ imeAction: UnsafePointer<CChar>?
+    _ imeAction: UnsafePointer<CChar>?,
+    _ autoCapitalize: UnsafePointer<CChar>?,
+    _ contextMenuHidden: Bool
 ) {
     hostBridge(from: ctx).host.showSoftKeyboard(
         nodeId: Int(nodeId),
@@ -71,7 +78,9 @@ private func showSoftKeyboardCb(
         inputType: inputType.map { String(cString: $0) } ?? "text",
         autocorrect: autocorrect,
         secure: secure,
-        imeAction: imeAction.map { String(cString: $0) } ?? "done"
+        imeAction: imeAction.map { String(cString: $0) } ?? "done",
+        autoCapitalize: autoCapitalize.map { String(cString: $0) } ?? "sentences",
+        contextMenuHidden: contextMenuHidden
     )
 }
 
@@ -82,7 +91,9 @@ private func switchImeCb(
     _ inputType: UnsafePointer<CChar>?,
     _ autocorrect: Bool,
     _ secure: Bool,
-    _ imeAction: UnsafePointer<CChar>?
+    _ imeAction: UnsafePointer<CChar>?,
+    _ autoCapitalize: UnsafePointer<CChar>?,
+    _ contextMenuHidden: Bool
 ) {
     hostBridge(from: ctx).host.switchIme(
         nodeId: Int(nodeId),
@@ -90,7 +101,9 @@ private func switchImeCb(
         inputType: inputType.map { String(cString: $0) } ?? "text",
         autocorrect: autocorrect,
         secure: secure,
-        imeAction: imeAction.map { String(cString: $0) } ?? "done"
+        imeAction: imeAction.map { String(cString: $0) } ?? "done",
+        autoCapitalize: autoCapitalize.map { String(cString: $0) } ?? "sentences",
+        contextMenuHidden: contextMenuHidden
     )
 }
 
@@ -140,6 +153,7 @@ final class RayactHostCallbacksBridge {
             releaseSurface: releaseSurfaceCb,
             orderSurfaces: orderSurfacesCb,
             requestRenderFrame: requestRenderFrameCb,
+            sendDevtoolsMessage: sendDevtoolsMessageCb,
             toggleDevMenu: toggleDevMenuCb,
             performHapticFeedback: performHapticFeedbackCb,
             hideSoftKeyboard: hideSoftKeyboardCb,
