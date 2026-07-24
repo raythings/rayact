@@ -33,6 +33,10 @@
 // backend so these symbols resolve at link time).
 extern "C" {
 void rlwgAcquireDeviceAsync(const char *canvasSelector, void (*cb)(void *user), void *user);
+// rcore_web.c — refresh CORE (screen=CSS logical, render=backing device px),
+// reconfigure the WebGPU surface + viewport from the browser-owned canvas size.
+// The engine reads the canvas; it never resizes it.
+void rayactWebSyncCanvas(void);
 }
 
 // Browser-WebSocket bridge for the WASM runtime (native/web/web_websocket.cpp) —
@@ -176,7 +180,21 @@ static bool syncCanvasSizeAndPublish(void) {
     g_resizePending = false;
     g_canvasCssWidth = cssW;
     g_canvasCssHeight = cssH;
-    SetWindowSize(cssW, cssH);
+
+    // The browser owns the canvas resolution. Refresh CORE from it (screen=CSS
+    // logical, render=backing device px) and reconfigure the surface/viewport —
+    // we never resize the canvas ourselves.
+    rayactWebSyncCanvas();
+
+    // Density = render/screen = devicePixelRatio. Set it now so the dimensions
+    // published below (and the very next rendered frame, which recomputes the
+    // same ratio in getRenderScaleDpi) agree instead of racing a stale value.
+    const float dpr = GetWindowScaleDPI().x;
+    raym3::v2::Density::SetPlatformDensity(dpr);
+    raym3::v2::Density::SetLayoutDensity(dpr);
+
+    // Publish the LOGICAL window size to JS (dp == CSS px here): PxToDp(render) =
+    // render/dpr = CSS. Scenes relayout to the window the user actually sees.
     int renderW = GetRenderWidth() > 0 ? GetRenderWidth() : cssW;
     int renderH = GetRenderHeight() > 0 ? GetRenderHeight() : cssH;
     publishWindowDimensions(rayact::engineContext(), renderW, renderH);
@@ -185,6 +203,10 @@ static bool syncCanvasSizeAndPublish(void) {
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE void rayactWebNotifyResize(void) {
+    // The page owns the canvas resolution: let it resize the backing store to
+    // clientCSS x devicePixelRatio BEFORE the engine reads it. Never resize the
+    // canvas from native.
+    EM_ASM({ if (Module.__rayactResizeCanvas) Module.__rayactResizeCanvas(); });
     g_resizePending = true;
     if (g_engineReady && IsWindowReady())
         syncCanvasSizeAndPublish();
@@ -200,6 +222,10 @@ extern "C" EMSCRIPTEN_KEEPALIVE void rayactWebFinishBoot(void) {
     rayact::enginePrepareJSThread();
     rayact::engineFinishLoad();
     g_finished = true;
+    // Ensure the backing store matches the current viewport (page-owned) before
+    // the first published dimensions + render.
+    EM_ASM({ if (Module.__rayactResizeCanvas) Module.__rayactResizeCanvas(); });
+    g_resizePending = true;
     syncCanvasSizeAndPublish();
     rayact::engineRenderFrame(GetRenderWidth(), GetRenderHeight());
     syncWebAccessibility();
