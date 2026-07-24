@@ -253,11 +253,34 @@
         if (!canvas) return null;
         var rect = canvas.getBoundingClientRect();
         if (!rect.width || !rect.height) return null;
+        // Report CSS-logical pixels. The engine hit-tests in logical/dp space
+        // (dp == CSS px), while the canvas backing store is device px (CSS x dpr).
+        // Do NOT scale by canvas.width/rect.width or touches land off by dpr.
         return {
-          x: (eventLike.clientX - rect.left) * (canvas.width / rect.width),
-          y: (eventLike.clientY - rect.top) * (canvas.height / rect.height)
+          x: eventLike.clientX - rect.left,
+          y: eventLike.clientY - rect.top
         };
       }
+
+      // The PAGE owns the canvas resolution: size the backing store to the CSS box
+      // times devicePixelRatio so the engine renders crisply into real device
+      // pixels. The engine only READS this (it never resizes the canvas). Native's
+      // resize notification (rayactWebNotifyResize) calls this before re-reading,
+      // and we size once here so the very first InitPlatform reads a real backing.
+      function resizeCanvasBacking() {
+        if (!canvas) return false;
+        var dpr = window.devicePixelRatio || 1;
+        var cssW = Math.max(1, Math.round(canvas.clientWidth || window.innerWidth || 1));
+        var cssH = Math.max(1, Math.round(canvas.clientHeight || window.innerHeight || 1));
+        var bw = Math.max(1, Math.round(cssW * dpr));
+        var bh = Math.max(1, Math.round(cssH * dpr));
+        if (canvas.width === bw && canvas.height === bh) return false;
+        canvas.width = bw;
+        canvas.height = bh;
+        return true;
+      }
+      Module.__rayactResizeCanvas = resizeCanvasBacking;
+      resizeCanvasBacking();
 
       function sendPointer(action, eventLike) {
         if (!runtimeReady || typeof Module._rayactWebPointer !== 'function') return;
