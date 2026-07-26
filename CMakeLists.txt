@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(rayact VERSION 0.0.3 LANGUAGES CXX C)
+project(rayact VERSION 0.0.4 LANGUAGES CXX C)
 
 # C++ Standard
 set(CMAKE_CXX_STANDARD 17)

@@ -1,6 +1,6 @@
 {
   "name": "@rayact/dev-client",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Rayact custom development-client UI and diagnostics",
   "type": "module",
   "sideEffects": false,
@@ -21,10 +21,10 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rayact/navigation": "0.0.3",
-    "@rayact/react": "0.0.3",
-    "@rayact/runtime": "0.0.3",
-    "@rayact/shared": "0.0.3"
+    "@rayact/navigation": "0.0.4",
+    "@rayact/react": "0.0.4",
+    "@rayact/runtime": "0.0.4",
+    "@rayact/shared": "0.0.4"
   },
   "peerDependencies": {
     "react": "^19.0.0"

@@ -30,7 +30,7 @@ import { getOfficialApp, getBundledModules } from './officialApp.js';
 
 type Tab = 'connect' | 'about';
 
-const DEV_CLIENT_VERSION = '0.0.3';
+const DEV_CLIENT_VERSION = '0.0.4';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'connect', label: 'Connect', icon: 'link' },

@@ -1,6 +1,6 @@
 {
   "name": "@rayact/dev-server",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Rayact development server, bundler, and terminal UI",
   "type": "module",
   "sideEffects": false,
@@ -22,8 +22,8 @@
     "clean": "rm -rf dist schema"
   },
   "dependencies": {
-    "@rayact/devtools": "0.0.3",
-    "@rayact/prebuild": "0.0.3",
+    "@rayact/devtools": "0.0.4",
+    "@rayact/prebuild": "0.0.4",
     "@vitejs/plugin-react": "^5.1.1",
     "bonjour-service": "^1.3.0",
     "chokidar": "^4.0.3",

@@ -1,6 +1,6 @@
 # Maintainer: native prebuilts
 
-Application developers do not run these scripts. They consume npm packages at `0.0.3`; GitHub Releases carry the exact same tarballs and native artifacts as a fallback.
+Application developers do not run these scripts. They consume npm packages at `0.0.4`; GitHub Releases carry the exact same tarballs and native artifacts as a fallback.
 
 ## Reproducible inputs
 
@@ -45,15 +45,15 @@ The package gate packs every workspace, installs only candidate tarballs into a 
 ## Dev-app installers
 
 ```bash
-npx @rayact/dev-app@0.0.3 install --platform android
-npx @rayact/dev-app@0.0.3 install --platform ios-device
-npx @rayact/dev-app@0.0.3 install --platform ios-simulator
+npx @rayact/dev-app@0.0.4 install --platform android
+npx @rayact/dev-app@0.0.4 install --platform ios-device
+npx @rayact/dev-app@0.0.4 install --platform ios-simulator
 ```
 
 GitHub fallback:
 
 ```bash
-npx https://github.com/raythings/rayact/releases/download/v0.0.3/rayact-dev-app-0.0.3.tgz install --platform android
+npx https://github.com/raythings/rayact/releases/download/v0.0.4/rayact-dev-app-0.0.4.tgz install --platform android
 ```
 
 ## Release channels

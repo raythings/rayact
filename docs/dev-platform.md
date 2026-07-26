@@ -3,7 +3,7 @@
 ## Create a new app
 
 ```bash
-npx create-rayact-app@0.0.3 my-app
+npx create-rayact-app@0.0.4 my-app
 cd my-app && npm install
 npm run dev
 ```

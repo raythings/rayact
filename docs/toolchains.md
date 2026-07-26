@@ -1,4 +1,4 @@
-# Supported toolchains for 0.0.3
+# Supported toolchains for 0.0.4
 
 - Node.js 22 and 24 LTS.
 - Android API 26 minimum, compile/target API 36, AGP 8.9.1, JDK 17, NDK 27.3.13750724.

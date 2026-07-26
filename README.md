@@ -2,12 +2,12 @@
 
 Rayact is a cross-platform React renderer backed by raylib/raym3 and QuickJS. It runs React applications on Android, iOS, macOS, and the Web without a DOM or platform WebView.
 
-The first npm stable candidate is `0.0.3`. npm is the supported installation path; the same package tarballs and native artifacts are attached to the matching GitHub Release as a verified fallback.
+The first npm stable candidate is `0.0.4`. npm is the supported installation path; the same package tarballs and native artifacts are attached to the matching GitHub Release as a verified fallback.
 
 ## Quick start
 
 ```bash
-npx create-rayact-app@0.0.3 my-app
+npx create-rayact-app@0.0.4 my-app
 cd my-app
 npm install
 npm run dev
@@ -16,7 +16,7 @@ npm run dev
 GitHub fallback:
 
 ```bash
-npx https://github.com/raythings/rayact/releases/download/v0.0.3/create-rayact-app-0.0.3.tgz my-app
+npx https://github.com/raythings/rayact/releases/download/v0.0.4/create-rayact-app-0.0.4.tgz my-app
 ```
 
 ## Package model
@@ -32,9 +32,9 @@ Rayact follows the Expo monorepo model: one private workspace root and independe
 Legacy `rayact/mmkv` and `rayact/secure-store` imports remain deprecated compatibility shims for `0.0.x`. New applications install and import the scoped packages directly.
 
 ```bash
-npm install @rayact/mmkv@0.0.3
+npm install @rayact/mmkv@0.0.4
 # or
-npm install @rayact/secure-store@0.0.3
+npm install @rayact/secure-store@0.0.4
 ```
 
 Installed packages with a valid `rayact.module.json` autolink automatically. `rayact.config.json` can disable a module or provide configuration without scanning arbitrary `node_modules` directories.

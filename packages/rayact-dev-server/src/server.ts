@@ -1026,7 +1026,7 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname;
     if (pathname === '/json/version') {
       sendJson(response, 200, {
-        Browser: 'Rayact/0.0.3',
+        Browser: 'Rayact/0.0.4',
         'Protocol-Version': '1.3',
         'User-Agent': 'Rayact',
         'V8-Version': 'QuickJS'

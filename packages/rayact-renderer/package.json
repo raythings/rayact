@@ -1,6 +1,6 @@
 {
   "name": "@rayact/renderer",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Rayact React reconciler and native command protocol",
   "type": "module",
   "sideEffects": false,
@@ -33,8 +33,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rayact/runtime": "0.0.3",
-    "@rayact/shared": "0.0.3",
+    "@rayact/runtime": "0.0.4",
+    "@rayact/shared": "0.0.4",
     "react-reconciler": "^0.31.0"
   },
   "peerDependencies": {

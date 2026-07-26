@@ -1,6 +1,6 @@
 {
   "name": "@rayact/navigation",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Navigation primitives for Rayact applications",
   "type": "module",
   "sideEffects": false,
@@ -37,7 +37,7 @@
     "@react-navigation/routers": "^7.0.0"
   },
   "peerDependencies": {
-    "@rayact/react": "0.0.3",
+    "@rayact/react": "0.0.4",
     "react": "^19.0.0"
   },
   "engines": {

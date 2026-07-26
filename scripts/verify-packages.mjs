@@ -17,6 +17,7 @@ const packages = candidates.map(directory => ({
 })).filter(item => !item.manifest.private);
 const byName = new Map(packages.map(item => [item.manifest.name, item]));
 const failures = [];
+const releaseVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const OPTIONAL_MODULE_BINARY = /^librayact_(?:mmkv|secure_store|crash_reporter)(?:[-.].*)?$/;
 const OPTIONAL_REGISTRATION_SYMBOL = /(?:^|\n)[^\n]*\s[A-TV-Z]\s+_?rayact_(?:mmkv|secure_store|crash_reporter)_register(?:\s|$)/m;
 const GENERIC_ENGINE_BINARY = /^(?:librayact\.so|rayact_desktop|libRayactEngine\.a|rayact\.wasm)$/;
@@ -75,7 +76,7 @@ function artifactDigest(target) {
 
 for (const { directory, manifest } of packages) {
   const rel = path.relative(root, directory);
-  if (manifest.version !== '0.0.3') failures.push(`${manifest.name}: version must be 0.0.3`);
+  if (manifest.version !== releaseVersion) failures.push(`${manifest.name}: version must be ${releaseVersion}`);
   for (const key of ['license', 'repository', 'files']) {
     if (!manifest[key]) failures.push(`${manifest.name}: missing ${key}`);
   }

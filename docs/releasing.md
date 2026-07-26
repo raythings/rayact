@@ -1,6 +1,6 @@
 # Release process
 
-The `0.0.3` train uses three channels:
+The `0.0.4` train uses three channels:
 
 - Canary builds are commit-specific prereleases published under `canary`.
 - Preview publishes final immutable tarballs under `preview` and attaches those exact bits to GitHub Releases.

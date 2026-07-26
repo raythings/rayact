@@ -32,6 +32,7 @@ export default defineConfig({
         text: 'Reference',
         items: [
           { text: 'CLI', link: '/reference/cli' },
+          { text: 'Components', link: '/reference/components' },
           { text: 'Configuration', link: '/reference/config' },
           { text: 'Packages & platforms', link: '/reference/packages' },
           { text: 'Container format', link: '/reference/rayactpack' }

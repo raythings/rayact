@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(rayact_quickjs_desktop VERSION 0.0.3 LANGUAGES CXX C)
+project(rayact_quickjs_desktop VERSION 0.0.4 LANGUAGES CXX C)
 if(APPLE)
     enable_language(OBJC)
     enable_language(OBJCXX)
