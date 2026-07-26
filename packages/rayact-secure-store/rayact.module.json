@@ -31,13 +31,13 @@
       "platform": "android",
       "architecture": "arm64",
       "path": "android/arm64-v8a/librayact_secure_store.so",
-      "sha256": "73f283283151a72d2da4d85b3c2109a79320614a266a0ce3a17916577a6187d3"
+      "sha256": "f526a84dc65d33b4e7ae64a45af4d7e2450a53e5b71fa3975115cf202d27574a"
     },
     {
       "platform": "android",
       "architecture": "x86_64",
       "path": "android/x86_64/librayact_secure_store.so",
-      "sha256": "9dd279fc9435138b6aecbb5f969d3d98f11ccfa203a0668bd326bac454bb3112"
+      "sha256": "6d536d425f620c3de3d1445e91730394ec22019880d9d2f2fc64594ef2d974c5"
     },
     {
       "platform": "darwin",
@@ -55,7 +55,7 @@
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_secure_store.xcframework",
-      "sha256": "0bcf8d02e4045ea5785b4030d59a5d2143adf2be7833a71504d6eecd816f57b6"
+      "sha256": "8259f5164082f3bf2389c27fa7020f66c346901f825260cc835dbdea3d40aebf"
     }
   ]
 }
