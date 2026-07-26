@@ -151,6 +151,28 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# raysvg vector renderer (third_party submodule) — compiled against this
+# build's raylib headers so its rl* calls bind to the web backend in use
+# (rlwg WebGPU by default, GLES3 with RAYACT_WEB_WEBGL).
+# ---------------------------------------------------------------------------
+set(RAYSVG_DIR "${THIRD_PARTY}/raysvg")
+add_library(raysvg STATIC
+    ${RAYSVG_DIR}/src/raysvg.cpp
+    ${RAYSVG_DIR}/src/rsvg_xml.cpp
+    ${RAYSVG_DIR}/src/rsvg_parse.cpp
+    ${RAYSVG_DIR}/src/rsvg_path.cpp
+    ${RAYSVG_DIR}/src/rsvg_paint.cpp
+    ${RAYSVG_DIR}/src/rsvg_transform.cpp
+    ${RAYSVG_DIR}/src/rsvg_flatten.cpp
+    ${RAYSVG_DIR}/src/rsvg_tess_fill.cpp
+    ${RAYSVG_DIR}/src/rsvg_stroke.cpp
+    ${RAYSVG_DIR}/src/rsvg_clip.cpp
+    ${RAYSVG_DIR}/src/rsvg_render.cpp
+)
+target_include_directories(raysvg PUBLIC ${RAYSVG_DIR}/include ${RAYLIB_DIR}/src)
+target_include_directories(raysvg PRIVATE ${RAYSVG_DIR}/src ${RAYSVG_DIR}/third_party/earcut)
+
+# ---------------------------------------------------------------------------
 # raym3 (+ Yoga from source) — built for the WebGPU backend (skip the ES3 default).
 # ---------------------------------------------------------------------------
 set(RAYM3_DIR "${THIRD_PARTY}/raym3")
@@ -245,12 +267,14 @@ target_include_directories(rayact PRIVATE
     ${CORE_DIR}
     ${QUICKJS_DIR}
     ${RAYM3_DIR}/include
+    ${RAYSVG_DIR}/include
     ${YOGA_DIR}
     ${THIRD_PARTY}/cssparser
     ${WASM3_DIR}/source
 )
 target_link_libraries(rayact PRIVATE
     qjs_web
+    raysvg
     raylib
     raym3
     m3

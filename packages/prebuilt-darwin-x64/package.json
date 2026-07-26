@@ -5,7 +5,8 @@
   "sideEffects": false,
   "files": [
     "bin",
-    "manifest.json"
+    "manifest.json",
+    "resources"
   ],
   "license": "MIT",
   "publishConfig": {

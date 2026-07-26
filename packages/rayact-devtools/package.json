@@ -26,7 +26,8 @@
   "files": [
     "*.js",
     "*.d.ts",
-    "native"
+    "native",
+    "README.md"
   ],
   "dependencies": {
     "@react-native/debugger-frontend": "0.86.0",
