@@ -8,7 +8,7 @@ if [[ ! -d "$RAYACT_ROOT/apps/android" ]]; then
   RAYACT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 fi
 
-ENGINE_VERSION="${ENGINE_VERSION:-0.0.3}"
+ENGINE_VERSION="${ENGINE_VERSION:-$(node -p "require('$RAYACT_ROOT/package.json').version" 2>/dev/null || echo 0.0.0)}"
 ABI_VERSION="${ABI_VERSION:-1}"
 NDK_VERSION="${NDK_VERSION:-27.3.13750724}"
 BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -103,6 +103,13 @@ pack_plugin() {
 pack_plugin "mmkv" "rayact_mmkv"
 pack_plugin "secure-store" "rayact_secure_store"
 pack_plugin "crash-reporter" "rayact_crash_reporter"
-node "$RAYACT_ROOT/scripts/update-module-artifact-hashes.mjs"
+# Module-manifest hash refresh needs node, which the build image doesn't ship.
+# The host-side driver (scripts/build-prebuilts.mjs) runs it after docker run;
+# still run it here when node exists (host-gradle fallback path).
+if command -v node >/dev/null 2>&1; then
+  node "$RAYACT_ROOT/scripts/update-module-artifact-hashes.mjs"
+else
+  echo "  (node not in image — module hashes refreshed by the host driver)"
+fi
 
 echo "==> Android prebuilts packed."
