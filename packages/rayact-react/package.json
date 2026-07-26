@@ -1,6 +1,6 @@
 {
   "name": "@rayact/react",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "React components, hooks, and themes for Rayact",
   "type": "module",
   "sideEffects": [
@@ -25,9 +25,9 @@
   },
   "dependencies": {
     "@callstack/react-theme-provider": "^3.0.9",
-    "@rayact/renderer": "0.0.3",
-    "@rayact/runtime": "0.0.3",
-    "@rayact/shared": "0.0.3"
+    "@rayact/renderer": "0.0.4",
+    "@rayact/runtime": "0.0.4",
+    "@rayact/shared": "0.0.4"
   },
   "peerDependencies": {
     "react": "^19.0.0"

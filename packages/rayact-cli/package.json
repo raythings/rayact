@@ -1,6 +1,6 @@
 {
   "name": "@rayact/cli",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Rayact command-line interface",
   "type": "module",
   "sideEffects": false,
@@ -25,9 +25,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rayact/dev-server": "0.0.3",
-    "@rayact/prebuild": "0.0.3",
-    "create-rayact-app": "0.0.3"
+    "@rayact/dev-server": "0.0.4",
+    "@rayact/prebuild": "0.0.4",
+    "create-rayact-app": "0.0.4"
   },
   "engines": {
     "node": ">=22 <25"

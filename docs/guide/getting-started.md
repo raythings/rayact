@@ -5,12 +5,16 @@ Scaffold a new app, run it in development, then build a release.
 ## Create an app
 
 ```sh
-npx create-rayact-app@0.0.3 my-app
+npx create-rayact-app@0.0.4 my-app
 cd my-app
 npm install
 ```
 
-The generated project has a `rayact.config.json` (see the [config reference](/reference/config)), a `src/App.tsx` entry, and only the public `rayact` and `react` dependencies.
+The generated project has a `rayact.config.json` (see the [config reference](/reference/config)), a `src/App.tsx` entry, and the `rayact` + `react` runtime dependencies alongside the tooling packages the CLI needs (`@rayact/dev-server`, `@rayact/dev-client`, and the `@rayact/template-android` / `@rayact/template-ios` prebuild templates). See [Installation](/guide/install#required-packages) for what each one is for.
+
+::: tip Node version
+Rayact requires **Node >=22 <25**. The CLI checks this on every command and exits with an error outside that range — npm's `EBADENGINE` warning alone is easy to miss. Use `nvm use 24` if you are on a newer Node.
+:::
 
 ## Develop
 

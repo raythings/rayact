@@ -1,6 +1,6 @@
 {
   "name": "@rayact/prebuilt-android-x64",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Prebuilt Rayact engine native libraries for Android x86_64",
   "sideEffects": false,
   "files": [

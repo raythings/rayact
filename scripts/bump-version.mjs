@@ -75,6 +75,22 @@ edit('packages/rayact-dev-client/src/DevLauncherUI.tsx', (s) => s.replace(/DEV_C
 edit('packages/rayact-dev-server/src/server.ts', (s) => s.replace(/Browser: 'Rayact\/[^']*'/, `Browser: 'Rayact/${version}'`));
 edit('native/desktop/main.cpp', (s) => s.replace(/Version \d+\.\d+\.\d+/, `Version ${version}`));
 edit('native/desktop/CMakeLists.txt', (s) => s.replace(/(project\(rayact_quickjs_desktop VERSION )\d+\.\d+\.\d+/, `$1${version}`));
+// Root CMake project version feeds RAYACT_TOOL_VERSION (rayact_tool --version).
+edit('CMakeLists.txt', (s) => s.replace(/(project\(rayact VERSION )\d+\.\d+\.\d+/, `$1${version}`));
+
+// Docs + READMEs: every occurrence of the previous release version is a pin
+// (install commands, download URLs, tarball names) — rewrite them wholesale.
+// docs/public/** is generated and refreshed by the docs build, so skip it.
+const docFiles = [
+  'README.md',
+  'docs/package.json',
+  ...execSync("find docs -name '*.md' -not -path 'docs/public/*' -not -path 'docs/node_modules/*' -not -path 'docs/.vitepress/*'", { cwd: ROOT, encoding: 'utf8' }).trim().split('\n'),
+].filter(Boolean);
+if (current !== version || check) {
+  for (const f of docFiles) {
+    edit(f, (s) => s.split(current).join(version));
+  }
+}
 
 if (check) {
   if (changes) { console.error(`\n${changes} file(s) disagree with ${version}.`); process.exit(1); }

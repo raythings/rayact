@@ -1,6 +1,6 @@
 {
   "name": "@rayact/mmkv",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Optional high-performance MMKV-style storage for Rayact",
   "type": "module",
   "sideEffects": false,

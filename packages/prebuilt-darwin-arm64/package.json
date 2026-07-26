@@ -1,6 +1,6 @@
 {
   "name": "@rayact/prebuilt-darwin-arm64",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Prebuilt Rayact desktop host for macOS arm64",
   "sideEffects": false,
   "files": [

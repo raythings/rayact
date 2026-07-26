@@ -47,7 +47,8 @@ const packages = packageTarballs.map(filename => {
     } : {}),
   };
 }).sort((a, b) => a.name === 'rayact' ? 1 : b.name === 'rayact' ? -1 : a.name.localeCompare(b.name));
-const version = packages.find(item => item.name === 'rayact')?.version ?? '0.0.3';
+const version = packages.find(item => item.name === 'rayact')?.version
+  ?? JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 if (packages.some(item => item.version !== version)) throw new Error('Release-set package versions are not lockstep');
 const artifacts = fs.readdirSync(assetsDir)
   .filter(name => !name.endsWith('.tgz') && name !== 'SHA256SUMS' && name !== 'release-set.json' && name !== 'release-set.sig' && fs.statSync(path.join(assetsDir, name)).isFile())
