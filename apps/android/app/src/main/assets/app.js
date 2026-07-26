@@ -24115,7 +24115,7 @@ ${stack}` : message;
       }
     };
   }
-  function useColorScheme() {
+  function useIsDarkColorScheme() {
     initColorSchemeStore();
     return reactExports.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   }
@@ -24170,7 +24170,7 @@ ${stack}` : message;
     const {
       children
     } = t0;
-    const isDark2 = useColorScheme();
+    const isDark2 = useIsDarkColorScheme();
     let t1;
     if ($[0] !== isDark2) {
       t1 = getNativeTheme(isDark2);
@@ -29652,12 +29652,29 @@ ${stack}` : message;
     }
     return React.createElement("rayact-text-input", wire);
   }
+  function flattenStyleProp(style) {
+    if (!style) return {};
+    if (Array.isArray(style)) return Object.assign({}, ...style.map(flattenStyleProp));
+    return style;
+  }
   function ScrollView(props) {
     const {
       ref,
+      contentContainerStyle,
+      children,
       ...rest
     } = props;
-    if (!ref) return React.createElement("rayact-scroll-view", rest);
+    const contentStyle = {
+      flexDirection: props.horizontal ? "row" : "column",
+      flexGrow: 0,
+      flexShrink: 0,
+      alignSelf: "stretch",
+      ...flattenStyleProp(contentContainerStyle)
+    };
+    const content = React.createElement("rayact-view", {
+      style: contentStyle
+    }, children);
+    if (!ref) return React.createElement("rayact-scroll-view", rest, content);
     const wire = {
       ...rest
     };
@@ -29682,7 +29699,7 @@ ${stack}` : message;
         }
       });
     };
-    return React.createElement("rayact-scroll-view", wire);
+    return React.createElement("rayact-scroll-view", wire, content);
   }
   function createMaterialComponent(tag) {
     return function MaterialComponent(props) {

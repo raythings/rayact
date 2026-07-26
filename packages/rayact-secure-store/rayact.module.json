@@ -55,7 +55,7 @@
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_secure_store.xcframework",
-      "sha256": "8259f5164082f3bf2389c27fa7020f66c346901f825260cc835dbdea3d40aebf"
+      "sha256": "dda6bfd7afaaa9ab10409796057cec15d7f0e5ddc431a4ddb7d157a9720ad80f"
     }
   ]
 }
