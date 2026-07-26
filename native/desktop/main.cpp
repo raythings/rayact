@@ -11,6 +11,7 @@
 #include "../shared/rayactpack.h"
 
 #include <raym3/raym3.h>
+#include <raym3/styles/Stylesheet.h>
 #include <raym3/v2/Density.h>
 #include <raym3/v2/View.h>
 
@@ -45,6 +46,12 @@ static void publishWindowDimensions(JSContext* ctx, int widthPx, int heightPx) {
     if (!ctx) return;
     const float w = raym3::v2::Density::PxToDp((float)widthPx);
     const float h = raym3::v2::Density::PxToDp((float)heightPx);
+    // Publish the new size to the CSS engine so width/height/orientation @media
+    // features evaluate against it, then re-resolve className styles on every
+    // node (nodes that don't re-render in JS still need their responsive rules
+    // recomputed — same mechanism used for dark-mode / CSS-variable changes).
+    raym3::Stylesheet::Global().SetViewport(w, h);
+    refreshClassNameStyles(ctx);
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue obj = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, obj, "width", JS_NewFloat64(ctx, w));
