@@ -9,7 +9,7 @@ import { runInit } from './commands/init.js';
 import { runDevApp } from './commands/devApp.js';
 import { runPrebuildCommand } from './commands/prebuild.js';
 import { runServe } from './commands/serve.js';
-import { runDoctor } from './commands/doctor.js';
+import { runDoctor, checkNodeVersion } from './commands/doctor.js';
 import { runMigrate } from './commands/migrate.js';
 
 async function main(): Promise<void> {
@@ -22,6 +22,18 @@ async function main(): Promise<void> {
   if (flags.help || flags.command === 'help') {
     printHelp();
     return;
+  }
+
+  // Enforce the supported Node range at the one point every command passes
+  // through. npm's `engines` check is only a passive EBADENGINE warning that's
+  // easy to miss, and it doesn't catch a Node switch after install.
+  const node = checkNodeVersion();
+  if (!node.ok) {
+    console.error(
+      `✗ Node.js ${node.version} is unsupported. Rayact requires Node >=22 <25 ` +
+        `(e.g. \`nvm use 24\`).`
+    );
+    process.exit(1);
   }
 
   try {

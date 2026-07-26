@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { RAYACT_ASSETS_DIR } from './constants.js';
+import { RAYACT_ASSETS_DIR, RAYACT_ENGINE_VERSION } from './constants.js';
 import {
   mergeNativeModules,
   resolveRayactPlugins,
@@ -291,7 +291,11 @@ export async function runPrebuild(options: PrebuildOptions): Promise<{
 
   const templateAndroid = resolveTemplateAndroidDir(projectRoot);
   if (!templateAndroid) {
-    throw new Error('Missing @rayact/template-android package.');
+    throw new Error(
+      `Missing @rayact/template-android (required for \`rayact prebuild --android\`).\n` +
+        `Add it to your project's package.json dependencies at version ${RAYACT_ENGINE_VERSION}, ` +
+        `matching your other @rayact/* packages, then reinstall.`
+    );
   }
 
   const packageName = options.android?.packageName ?? 'com.rayact.app';
@@ -351,6 +355,15 @@ export async function runPrebuild(options: PrebuildOptions): Promise<{
     }
     copyIosPluginArtifacts(iosDir, enabledPlugins);
     writeIosModuleRegistry(iosDir, enabledPlugins);
+  } else {
+    // iOS scaffolding is optional (Android-only / desktop-only builds are
+    // valid), so warn rather than throw — but don't skip silently, or a
+    // missing dependency looks like the iOS project just never generated.
+    console.warn(
+      `warning: skipping iOS project — missing @rayact/template-ios. ` +
+        `Add it to your project's package.json dependencies at version ${RAYACT_ENGINE_VERSION}, ` +
+        `matching your other @rayact/* packages, if you need \`rayact prebuild --ios\`.`
+    );
   }
 
   writeNativeModulesManifest(projectRoot, nativeModules);

@@ -8,6 +8,8 @@ import {
   resolveDesktopBinPrebuilt,
   resolvePrebuiltAndroidDir,
   resolvePackageDir,
+  resolveTemplateAndroidDir,
+  resolveTemplateIosDir,
   readPrebuiltManifest,
   resolveRayactPlugins,
   mergeNativeModules
@@ -20,9 +22,33 @@ export interface DoctorCheck {
   detail: string;
 }
 
+/**
+ * Supported Node range, kept in lockstep with the `engines` field in every
+ * package.json (`>=22 <25`). Shared so `rayact doctor` and the CLI entry point
+ * enforce the same version instead of relying on npm's passive EBADENGINE warn.
+ */
+export function checkNodeVersion(version = process.versions.node): {
+  ok: boolean;
+  major: number;
+  version: string;
+} {
+  const major = Number(version.split('.')[0]);
+  return { ok: major >= 22 && major < 25, major, version };
+}
+
 function commandExists(command: string): boolean {
   const probe = process.platform === 'win32' ? 'where' : 'which';
   return spawnSync(probe, [command], { stdio: 'ignore' }).status === 0;
+}
+
+function checkPackagePresent(label: string, dir: string | null, purpose: string): DoctorCheck {
+  return dir
+    ? { name: label, status: 'pass', detail: 'installed' }
+    : {
+        name: label,
+        status: 'warn',
+        detail: `not installed — add it to your project's dependencies at version ${RAYACT_ENGINE_VERSION} for ${purpose}`
+      };
 }
 
 function checkManifest(label: string, dir: string | null): DoctorCheck {
@@ -44,11 +70,12 @@ function checkManifest(label: string, dir: string | null): DoctorCheck {
 
 export function collectDoctorChecks(root = process.cwd()): DoctorCheck[] {
   const config = loadRayactConfig(root);
+  const node = checkNodeVersion();
   const checks: DoctorCheck[] = [
     {
       name: 'Node.js',
-      status: [22, 24].includes(Number(process.versions.node.split('.')[0])) ? 'pass' : 'fail',
-      detail: process.version
+      status: node.ok ? 'pass' : 'fail',
+      detail: node.ok ? process.version : `${process.version} — Rayact requires Node >=22 <25`
     },
     {
       name: 'CMake',
@@ -65,6 +92,9 @@ export function collectDoctorChecks(root = process.cwd()): DoctorCheck[] {
     : { name: 'Desktop host', status: 'warn', detail: 'not installed or built' });
   checks.push(checkManifest('Android prebuilt', resolvePrebuiltAndroidDir(root)));
   checks.push(checkManifest('iOS prebuilt', resolvePackageDir(root, '@rayact/prebuilt-ios-arm64')));
+  checks.push(checkPackagePresent('@rayact/template-android', resolveTemplateAndroidDir(root), '`rayact prebuild --android`'));
+  checks.push(checkPackagePresent('@rayact/template-ios', resolveTemplateIosDir(root), '`rayact prebuild --ios`'));
+  checks.push(checkPackagePresent('@rayact/dev-client', resolvePackageDir(root, '@rayact/dev-client'), 'the Android/iOS dev-client overlay'));
 
   const resolvedPlugins = resolveRayactPlugins(root);
   const plugins = new Map(resolvedPlugins.map(plugin => [plugin.name, plugin]));
