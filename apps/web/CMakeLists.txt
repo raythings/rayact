@@ -35,7 +35,9 @@ option(RAYACT_WEB_PTHREADS "Enable Emscripten pthreads (workers); incompatible w
 option(RAYACT_RELEASE_HOST "Build an app-only Web host without development bootstrap/HMR" OFF)
 if(RAYACT_WEB_PTHREADS)
     add_compile_options(-pthread)
-    add_link_options(-pthread -sPTHREAD_POOL_SIZE=4)
+    # 320MB initial: growing a SharedArrayBuffer is expensive/limited, and WASM
+    # worker canvases allocate aggressively — start big instead of growing.
+    add_link_options(-pthread -sPTHREAD_POOL_SIZE=4 -sINITIAL_MEMORY=320MB)
 endif()
 
 # C++ exceptions: engine parse paths (CSS numeric tokens, colors, transitions)
