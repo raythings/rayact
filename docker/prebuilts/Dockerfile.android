@@ -23,6 +23,10 @@ RUN mkdir -p "$ANDROID_HOME/cmdline-tools" \
         "build-tools;36.0.0" \
         "ndk;27.3.13750724"
 
+# apps/android pins externalNativeBuild cmake version 4.0.2 — AGP looks it up
+# in the SDK, not on PATH. Separate layer so the NDK layer above stays cached.
+RUN yes | sdkmanager "cmake;4.0.2" >/dev/null
+
 WORKDIR /workspace
 COPY build-android.sh pack-android.sh /scripts/
 RUN chmod +x /scripts/*.sh
