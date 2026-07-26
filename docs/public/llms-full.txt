@@ -1,6 +1,6 @@
 # Rayact — full documentation
 
-> Rayact is a cross-platform React renderer with a native raylib + QuickJS backend. You write React (with react-navigation, CSS, Material components) and it renders natively on desktop, Android, iOS, and the web — no DOM, no platform WebView.
+> Rayact is a cross-platform React renderer with a native raylib + QuickJS backend.
 
 
 ---
@@ -51,21 +51,487 @@ fallback source for the exact npm bits, not a separate rebuild.
 
 
 ---
+# Source: dev-platform.md
+
+# Rayact Dev Platform
+
+## Create a new app
+
+```bash
+npx create-rayact-app@0.0.4 my-app
+cd my-app && npm install
+npm run dev
+```
+
+Or from the monorepo:
+
+```bash
+rayact init my-app
+cd my-app && npm install
+```
+
+## Quick start (monorepo)
+
+```bash
+# Start dev server + Ink TUI
+npm run dev
+
+# With Android adb reverse for the development server (8081)
+npm run rayact -- dev --android
+
+# Build debug APK with embedded dev launcher
+npm run rayact -- build --debug --android --install
+
+# Build release with minify + bytecode
+npm run rayact -- build --release --android
+
+# Verify desktop / Android / Web
+npm run verify
+npm run verify:android
+npm run verify:web
+```
+
+## Configuration
+
+Project settings live in `rayact.config.json`:
+
+- `rayactAppKey` — manifest identity for pairing
+- `devServer.host` / `devServer.port` / `devServer.cdpPort`
+- `transform.minify` / `transform.bytecode` per mode (dev, debug, release)
+
+CLI flags override config in development/debug: `--minify`, `--no-minify`, `--bytecode`, `--no-bytecode`. Release bytecode cannot be disabled.
+
+## Dev client
+
+Debug Android, iOS, and desktop custom dev-client builds embed `@rayact/dev-client`; the prebuilt dev app uses the same launcher UI:
+
+- **Connect** — enter dev server URL or scan QR
+- **Recent** — persisted URLs with reachability
+- **Discover** — mDNS `_rayact._tcp` (Android NSD, Apple Bonjour, and Avahi's DNS-SD compatibility API on Linux)
+
+When discovery resolves a server, native clients prefetch its revision-tagged
+bootstrap, entry module, and bounded startup assets. The project transition
+keeps a loading surface visible while the runtime swaps, and cached files are
+only consumed when the current manifest revision still matches.
+
+Web browsers cannot open raw mDNS sockets. The web dev URL therefore carries
+the already-resolved server in `?dev=<origin>`; the shell starts the equivalent
+manifest-first prefetch immediately, before WASM initialization. Only the
+bootstrap and entry module gate startup, while bounded asset warming continues
+in the background.
+
+Native bridge: global `devCall(method, data, callback)` is wired to the platform dev-client bridge on Android/iOS.
+
+### Native-module selection
+
+`packages/first-party-modules.json` is the canonical catalog for the official
+Dev App. Its capability/config files are generated from that catalog, and the
+publication workflow invokes every catalog smoke test on an iOS simulator.
+Publication fails if a wrapper/artifact is missing or the recorded on-device
+evidence is stale or incomplete.
+
+`rayact prebuild` follows the project's installed dependency graph and resolves
+packages that declare `package.json#rayact.manifest` and a `rayact.module.json` manifest. Android
+`.so` files, iOS `.xcframework`/`.framework`/`.a` files, and macOS/Linux shared
+libraries are copied into the generated client automatically. Explicit
+`nativeModules` entries in `rayact.config.json` can add configuration or narrow
+the generated capability manifest.
+
+Web/WASM cannot load mobile or desktop dynamic libraries. A module selected for
+Web must list `web` in `platforms` and provide a JS/WASM implementation already
+linked into the Web host; builds fail when a selected module does not advertise
+Web support.
+
+## Release mode
+
+Release Android and iOS builds use dedicated embedded-project entry points.
+They do not start the launcher or register discovery, HMR, inspector, or remote
+debug transports. Android additionally removes local-network/cleartext
+permissions and its QR-scanner dependency. Web release hosts are built with
+`npm run build:web-release-host`; the dev loader, manifest/HMR fetches, URL
+bootstrap, and fallback demo are compiled out, while static exports also fail
+closed if their generated HTML contains a development marker. Desktop release
+hosts are built separately without discovery/dev-loader sources and start the
+embedded project bundle directly.
+
+Run `rayact doctor` before prebuilding or releasing to check native toolchains,
+prebuilt manifests and module ABI compatibility, signing prerequisites, and
+WebGPU/COOP/COEP hosting requirements.
+
+## HMR
+
+- WebSocket `/rayact/hmr` — primary transport
+- HTTP `/rayact/status` poll — fallback
+- Bytecode incompatible with React Fast Refresh; dev server serves JS when HMR clients are connected
+
+## Chrome DevTools (CDP)
+
+The development server binds its InspectorProxy to `127.0.0.1:9229` (falling
+back to Chrome's other default discovery port, `9222`). Android and iOS project
+sessions connect outbound to `/rayact/devtools/device`; no device-side CDP port
+or ADB forward/reverse for 9229 is used.
+
+Open `chrome://inspect` with **Discover network targets** enabled. Rayact serves
+`/json/list` and `/json/version` from the loopback InspectorProxy, and every
+connected project session appears as a separate target.
+
+## Rayact DevTools
+
+The dev server exposes a pinned React-Native-derived DevTools frontend at
+`/rayact/devtools/rn_fusebox.html`. The dev TUI opens it with `t` and the
+development manifest publishes `devtoolsFrontendUrl`. It connects to the same
+loopback CDP target as `chrome://inspect`, but is the supported frontend for
+Rayact's non-browser renderer.
+
+Elements contains native Rayact host nodes only; the developer overlay is
+excluded. Sources shows the exact transformed modules currently evaluated by
+QuickJS (including HMR revisions) and is read-only until QuickJS gains real
+breakpoint/step support. Performance exposes live frame and QuickJS heap
+metrics rather than a sampling flame chart.
+
+## Inspector
+
+In-app element tree via `getNodeTree()` native API. Toggle from dev menu. Selected nodes highlight with a magenta border.
+
+
+---
+# Source: guide/android.md
+
+# Android
+
+Rayact apps run on Android as a native activity rendering through Vulkan
+(rlvk backend). The engine ships prebuilt — `rayact prebuild` generates a
+Gradle project that links `librayact.so`; your machine never compiles C++.
+
+## Prerequisites
+
+- Android SDK with platform tools (`adb` on PATH).
+- JDK 17+ for Gradle.
+- A device or emulator running **Android 8.0+ (API 26)**. 0.0.4 ships
+  `arm64-v8a` engine binaries — use a physical device or an arm64 emulator
+  image.
+
+`rayact doctor` checks all of this and names anything missing.
+
+## Fastest loop: the prebuilt dev app
+
+No local Android build at all — install the release's dev app (Expo Go-style
+host) and point it at your dev server:
+
+```sh
+npm run dev        # start the dev server (QR code in the TUI)
+npm run android    # rayact dev --android: installs the dev app + connects over USB
+```
+
+The dev app scans the QR (or uses `adb reverse`, set up for you) and hot-reloads
+your project. Shake the device for the dev menu.
+
+## Your own dev client
+
+When you add native modules or need your own application id, generate the
+native shell once and build a debug **dev client** (expo-dev-client style):
+
+```sh
+npm run prebuild             # rayact prebuild: generates android/ from @rayact/template-android
+npm run android:dev-client   # rayact build --debug --android --install
+```
+
+`android/` is plain Gradle — commit it. Prebuild substitutes your app name/id,
+drops the prebuilt `librayact.so` + `libc++_shared.so` into
+`app/src/{debug,release}/jniLibs/arm64-v8a/`, and writes
+`rayact-assets/runtime/native-modules.json` for module autolinking.
+
+## Release build
+
+```sh
+npm run build:android            # rayact build --release --android
+npm run build:android:install    # …and install to the connected device
+```
+
+Produces a release APK with the bundle compiled to QuickJS bytecode and staged
+into APK assets (`app.qjsbc` + your CSS under `assets/runtime/`).
+
+::: warning Debug-signed releases
+0.0.4 release APKs are signed with the debug keystore — fine for sideloading
+and testing, not for Play submission. Configure your own `signingConfig` in
+`android/app/build.gradle` before shipping to a store.
+:::
+
+## Debugging
+
+- `adb logcat -s rayact` — engine + JS console output.
+- Chrome DevTools: `rayact dev` exposes CDP on port 9229;
+  `adb forward tcp:9229 tcp:9229`, then add `localhost:9229` in
+  `chrome://inspect`. Element tree, styles and console work against the native
+  node tree. See the [dev platform guide](/dev-platform).
+
+
+---
+# Source: guide/animation.md
+
+# Animation
+
+Three layers, cheapest first: **CSS transitions/animations** (declarative, run
+entirely on the native render thread), **`SharedValue`** (imperative, zero-copy
+into the render loop), and **React-state hooks** (`useAnimatedValue` /
+`useSpring`, re-render per frame — fine for small UI, avoid for large trees).
+
+## CSS transitions
+
+Any supported property change animates when the matched rule declares a
+transition. The native transition engine ticks on the render thread — no JS
+per frame:
+
+```css
+.card {
+  background-color: var(--surface);
+  transition: background-color 150ms ease, transform 200ms ease-out;
+}
+.card:hover { background-color: var(--surface-2); }
+```
+
+Shorthand (`transition: <prop> <duration> <easing> [delay]`) and multiple
+comma-separated transitions are supported; easing keywords: `linear`, `ease`,
+`ease-in`, `ease-out`, `ease-in-out`.
+
+## CSS `@keyframes` animations
+
+```css
+@keyframes pulse {
+  from { scale: 1; opacity: 1; }
+  50%  { scale: 1.06; opacity: 0.85; }
+  to   { scale: 1; opacity: 1; }
+}
+.badge { animation: pulse 1.2s ease-in-out infinite; }
+```
+
+`animation` shorthand supports duration, easing, delay, iteration count
+(`infinite`), `alternate`/`alternate-reverse`/`reverse` direction, and
+fill modes (`forwards`, `backwards`, `both`). Animations run natively; setting
+the same property from JS cancels the native track for that node (JS wins).
+Offscreen nodes are paint-culled but animation state keeps ticking, so
+scrolling back reveals the correct frame.
+
+## SharedValue — imperative, render-thread driven
+
+`SharedValue` writes into a shared float buffer the renderer reads every frame
+— no reconciliation, no bridge traffic per frame. Animatable properties:
+`translateX`, `translateY`, `scale`, `opacity`, `rotation`.
+
+```tsx
+import { useSharedValue, withTiming, withSpring, View } from 'rayact/react';
+
+function Sheet({ open }: { open: boolean }) {
+  const y = useSharedValue(300);
+
+  React.useEffect(() => {
+    y.value = open ? withSpring(0, 170, 26) : withTiming(300, 250);
+  }, [open]);
+
+  return <View style={{ translateY: y }}>{/* … */}</View>;
+}
+```
+
+- Assign a **number** for an immediate jump, or a `withTiming(target, duration)` /
+  `withSpring(target, stiffness?, damping?)` config to animate.
+- Read `sv.value` for the live value.
+- Pass the SharedValue directly in `style`; the reconciler binds it to the
+  node's animated-style slot.
+
+## React-state hooks
+
+```tsx
+import { useAnimatedValue, useSpring, easeInOutCubic } from 'rayact/react';
+
+const width = useAnimatedValue(expanded ? 320 : 96, { duration: 300, easing: easeInOutCubic });
+const scale = useSpring(pressed ? 0.96 : 1, { stiffness: 170, damping: 26 });
+```
+
+Both return a plain number that updates through React state each frame —
+simple and composable, at re-render cost. `useAnimatedValue` options:
+`duration`, `easing`, `from`, `onSettled`.
+
+## Reduced motion
+
+```ts
+import { useReducedMotion } from 'rayact/react';
+const reduce = useReducedMotion();   // respect the OS setting
+```
+
+## Choosing a layer
+
+| Use case | Reach for |
+| --- | --- |
+| Hover/press feedback, theme fades | CSS transitions + `:hover`/`:active` |
+| Looping decorations, attention pulses | CSS `@keyframes` |
+| Gestures, sheets, drag-follow, 60fps guarantees | `SharedValue` |
+| Small one-off UI morphs | `useAnimatedValue` / `useSpring` |
+
+
+---
+# Source: guide/desktop.md
+
+# Desktop (macOS & Linux)
+
+The desktop host is a prebuilt native binary (`rayact_desktop`) — Metal-backed on
+macOS, Vulkan on Linux — that runs your bundle directly. No Electron, no
+webview: the window is a raylib surface painted by the raym3 renderer.
+
+Supported hosts in 0.0.4: **macOS arm64** and **Linux x64** (preview). macOS
+x64 is not shipped this release.
+
+## Develop
+
+```sh
+npm run desktop        # rayact dev --desktop: dev server + native window, HMR
+npm run start:dev      # rayact start --dev: window against an already-running dev server
+```
+
+The dev host connects to the dev server, hot-reloads on edit, and exposes the
+[dev platform](/dev-platform) overlay (dev menu, element inspector, console).
+
+## Debug build
+
+```sh
+rayact build --debug --desktop --out dist-debug
+```
+
+Produces a runnable app directory without release stripping — useful when you
+want a build artifact but still readable stack traces.
+
+## Release build
+
+```sh
+npm run build:desktop        # rayact build --release --desktop
+```
+
+Output (in `dist/` by default):
+
+| File | Purpose |
+| --- | --- |
+| `rayact_desktop` (or `rayact_release`) | The host binary, copied next to your app |
+| `app.rayactpack` | Single-file container: bytecode bundle + CSS + fonts + images ([format](/reference/rayactpack)) |
+| `app.qjsbc` / `bundle.qjsbc` | The QuickJS bytecode bundle (also inside the pack) |
+| `native-modules.json` | Which native modules the host should load |
+| `modules/` | Bundled native plugin dylibs/sos (mmkv, secure-store, …) if the app uses them |
+| `resources/fonts/` | Icon + emoji fonts the host loads at startup |
+
+Run it:
+
+```sh
+cd dist && ./rayact_desktop app.rayactpack
+```
+
+The bytecode compile and packing steps run through the headless `rayact_tool`
+binary (shipped in the host prebuilt since 0.0.4), so CI machines without a
+display or GPU can produce desktop releases; only *running* the app needs one.
+
+## Distribution notes
+
+- The release host (`rayact_release`) strips every development entry point —
+  no dev-server discovery, no HMR, no CDP inspector.
+- Ship the whole output directory; the host resolves `app.rayactpack`,
+  `modules/` and `resources/` relative to its own location.
+- macOS: the binary is not notarized by the build; sign/notarize with your own
+  identity before distributing outside your machine.
+
+
+---
+# Source: guide/fonts-and-icons.md
+
+# Fonts & icons
+
+## Built-in fonts
+
+Every host bundles Roboto (text), Material Symbols (icons) and Noto Color
+Emoji. Full-color emoji render everywhere — including inside `Text` runs —
+via the engine's CBDT/GSUB pipeline. Glyph coverage includes extended
+punctuation; if a codepoint is missing from the baked atlas you'll see `?`
+tofu, which is a signal to load a custom font that covers it.
+
+## Icons
+
+```tsx
+import { Icon, IconButton } from 'rayact/react';
+
+<Icon name="alarm" size={28} color={0xFFF176FF} />
+<IconButton icon="settings" onPress={openSettings} />
+```
+
+Icon names are Material Symbols identifiers. The lookup table ships as
+`rayact/shared/material-icons` and is imported automatically by dev clients;
+release builds stage it into the app (desktop copies it under
+`resources/fonts/`).
+
+```ts
+import 'rayact/shared/material-icons';   // ensure the name → glyph map is registered
+```
+
+## Custom fonts with `@font-face`
+
+Declare fonts in CSS; the engine loads them at runtime from your staged assets:
+
+```css
+@font-face {
+  font-family: "Inter";
+  src: url("./rayact-assets/Inter-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+}
+
+.body { font-family: "Inter"; }
+```
+
+- Supported formats: `truetype` / `opentype`.
+- Put the font file under your project (conventionally `rayact-assets/`) so
+  release builds stage it with the referenced CSS.
+- Custom fonts are not ASCII-limited: the loader bakes the glyphs your locale
+  needs, extending the atlas on demand.
+
+## Typography properties
+
+`font-family`, `font-size`, `font-weight` (100–900), `font-style`,
+`letter-spacing`, `line-height` and `text-align` are all supported from CSS and
+the `style` prop.
+
+Default line-height is `max(fontSize + 4, fontSize * 1.43)` — set `lineHeight`
+explicitly when packing text tightly, or glyph ascenders/descenders may clip
+(see [components: Text](/reference/components#text)).
+
+
+---
 # Source: guide/getting-started.md
 
 # Getting started
 
-Scaffold a new app, run it in development, then build a release.
+Scaffold a new app from a Rayact release, run it with hot reload, then build a release for any platform. Rayact renders real React (React 19, `react-reconciler`) through a native C++ engine — QuickJS for JS, the raym3 renderer for layout/paint, and a raylib backend per platform (Metal on macOS/iOS, Vulkan on Android/Linux, WebGPU on the web).
+
+## Requirements
+
+- **Node >= 22 < 25** — the CLI checks on every command and exits outside that range (npm's `EBADENGINE` warning is easy to miss). On a newer Node, `nvm use 24`.
+- Per-platform toolchains only when you target them: Xcode + [xcodegen](https://github.com/yonaskolb/XcodeGen) for iOS, the Android SDK/NDK for Android. Desktop and web need nothing beyond Node — the native hosts come prebuilt.
 
 ## Create an app
 
+Rayact is distributed as **GitHub release tarballs**, not through the npm registry. The scaffolder vendors the release into your project so plain `npm install` never needs the registry for `@rayact/*` packages:
+
 ```sh
-npx create-rayact-app@0.0.3 my-app
+npx https://github.com/raythings/rayact/releases/download/v0.0.4/create-rayact-app-0.0.4.tgz \
+  my-app --release-url https://github.com/raythings/rayact/releases/download/v0.0.4
 cd my-app
-npm install
 ```
 
-The generated project has a `rayact.config.json` (see the [config reference](/reference/config)), a `src/App.tsx` entry, and only the public `rayact` and `react` dependencies.
+Already downloaded the release (or working from a local checkout's `release1/`)? Point at the directory instead:
+
+```sh
+npx ./create-rayact-app-0.0.4.tgz my-app --release-dir ~/Downloads/rayact-v0.0.4
+```
+
+What this produces:
+
+- `src/App.tsx` + `src/app.css` — the app entry and a starter stylesheet wired through `className`.
+- `rayact.config.json` — app name, key, dev-server ports ([config reference](/reference/config)).
+- `vendor/rayact_pkgs/*.tgz` — the vendored release packages, referenced by `file:` dependencies **and** an `overrides` block so every transitive `@rayact/*` pin resolves locally, never from the npm registry. Commit `vendor/` — it is your project's toolchain.
+- `--vendor-prebuilts` (optional) also vendors the native engine tarballs for fully-offline installs; otherwise `rayact prebuild` streams the right prebuilt from the GitHub release on first use.
 
 ## Develop
 
@@ -73,29 +539,37 @@ The generated project has a `rayact.config.json` (see the [config reference](/re
 npm run dev
 ```
 
-`rayact dev` starts the Vite-powered dev server and a terminal UI. The desktop host hot-reloads as you edit; a device running the dev app connects over the same dev server (scan the QR code).
+`rayact dev` bundles with Vite, starts the dev server (default port 8081), and opens a terminal UI with a QR code. Edits hot-reload. From here:
 
-## Run
+- `npm run desktop` — native desktop window with HMR.
+- `npm run android` / `npm run ios` — install + launch the prebuilt **dev app** (Expo Go-style) on a USB device / simulator and connect it to your dev server.
+- `npm run web` — the same app in a browser via the WASM/WebGPU host.
 
-```sh
-rayact run --desktop          # build + launch on desktop
-rayact run --desktop --dev     # launch against the running dev server
-rayact run --android           # build + install + launch on a device
-rayact run --ios               # build + launch on the iOS simulator
-```
+Your first edit: open `src/App.tsx`, change the title text, and watch every connected surface update. Component state (the tap counter) survives reloads.
 
-`rayact run` replaces the old `run.sh` / `run-android.sh` shell scripts — there are no user-facing shell scripts.
-
-## Build a release
+## Build for release
 
 ```sh
-rayact build --release             # desktop release (bytecode + .rayactpack)
-rayact build --release --android   # release APK
-rayact build --release --ios       # release iOS app
-rayact build --release --web       # bytecode web bundle + WASM/WebGPU host
+npm run build:desktop   # rayact build --release --desktop
+npm run build:android   # release APK
+npm run build:ios       # iOS app (simulator-ready)
+npm run build:web       # static web bundle + WASM host
 ```
 
-All release builds compile the JS bundle to QuickJS bytecode. Native releases also emit a single [`.rayactpack`](/reference/rayactpack) container. The host needed to compile bytecode is fetched automatically — see [Installation](/guide/install). Web builds use the WASM/WebGPU host and must be served with COOP/COEP headers for SharedArrayBuffer/WebGPU isolation.
+Release builds compile the bundle to QuickJS bytecode with the headless `rayact_tool` and pack native desktop releases into a single [`.rayactpack`](/reference/rayactpack) container. Each platform's guide covers running and shipping the output:
+
+- [Desktop (macOS & Linux)](/guide/desktop)
+- [Android](/guide/android)
+- [iOS](/guide/ios)
+- [Web](/guide/web)
+- [Linux specifics](/guide/linux)
+
+## Where next
+
+- [Styling](/guide/styling) — `style` props, `className`, importing CSS files.
+- [Animation](/guide/animation) — animation hooks, CSS transitions and `@keyframes`.
+- [Navigation](/guide/navigation) — react-navigation stacks and tabs.
+- [Components reference](/reference/components) — every exported component and its sharp edges.
 
 
 ---
@@ -107,51 +581,672 @@ Rayact splits into small `@rayact/*` JavaScript packages plus per-platform
 **prebuilt native hosts**. App builds never compile C++ — the right prebuilt is
 resolved or downloaded for you.
 
+## Requirements
+
+**Node >=22 <25.** Every `rayact` command checks the running Node version and
+exits with an error outside that range. npm only emits a passive `EBADENGINE`
+warning at install time, which is easy to miss and does not catch switching Node
+after install — so the CLI enforces it directly. On a newer Node, run
+`nvm use 24`.
+
+## Distribution model
+
+Rayact ships as **GitHub release assets** — the `@rayact/*` packages are not on
+the npm registry. Each release (`https://github.com/raythings/rayact/releases`)
+attaches:
+
+- the npm tarball for every publishable package (`rayact-*.tgz`),
+- the prebuilt native engines (`rayact-prebuilt-*.tgz`),
+- the web hosts (`rayact-web-<version>.tar.gz`, plus a
+  `rayact-web-pthreads-<version>.tar.gz` variant for WASM workers),
+- the dev apps (`rayact-dev-app.apk`, simulator zip, unsigned device ipa),
+- `release-set.json` (canonical index with per-file SHA-256) and a
+  `release-set.sig` ed25519 signature, plus `SHA256SUMS`.
+
+New projects vendor the JS tarballs via `create-rayact-app --release-dir` /
+`--release-url` — see [Getting started](/guide/getting-started). The generated
+`package.json` uses `file:` dependencies plus an `overrides` block so npm never
+consults the public registry for lockstep packages.
+
+## Required packages {#required-packages}
+
+`create-rayact-app` puts all of these in a new project's `package.json`. If you
+are wiring a project by hand or upgrading an older one, add them yourself — each
+is needed by a specific command, and missing ones only surface when you run it:
+
+| Package | Needed by |
+| --- | --- |
+| `rayact`, `react` | The app itself (runtime + component APIs) |
+| `@rayact/dev-server` | `rayact dev` and the Vite config |
+| `@rayact/template-android`, `@rayact/template-ios` | `rayact prebuild` — **both** are required even for a desktop-only build, because prebuild materializes the native project templates up front |
+| `@rayact/dev-client` | The mobile dev-client overlay served at `entry.js?platform=android` / `?platform=ios` |
+
+`rayact doctor` verifies these are installed and resolvable, and names any that
+are missing.
+
 ## Prebuilt resolution
 
-The CLI resolves the desktop host (`rayact_desktop`) in this order:
+Two binaries matter on the host machine: **`rayact_desktop`** (the runtime that
+opens a window) and **`rayact_tool`** (the headless build toolchain that
+compiles bytecode and writes `.rayactpack` containers — new in 0.0.4). Both ship
+inside the host prebuilt package.
 
-1. an explicit `--desktop-bin` / `RAYACT_DESKTOP_BIN`,
+The CLI resolves them in this order:
+
+1. an explicit `--desktop-bin` / `RAYACT_DESKTOP_BIN` (runtime) or
+   `--tool-bin` / `RAYACT_TOOL_BIN` (toolchain),
 2. an installed `@rayact/prebuilt-<platform>-<arch>` package in `node_modules`,
 3. the per-user cache `~/.rayact/prebuilts/<version>/<platform>-<arch>/`,
-4. a source-tree `build/bin/rayact_desktop` fallback for maintainers.
+4. a source-tree `build/bin/` fallback for maintainers.
 
 If none are present, `rayact prebuild` downloads the matching prebuilt from the
 GitHub release for your engine version and verifies it against `SHA256SUMS`.
+Pre-0.0.4 prebuilt caches have no `rayact_tool`; builds fall back to
+`rayact_desktop --compile` with a deprecation warning.
 
 ```sh
-rayact prebuild   # ensure the host binary is available (resolve or download)
+rayact prebuild   # ensure the host binaries are available (resolve or download)
 ```
 
-The desktop prebuilts are wired as `optionalDependencies` of `@rayact/cli` with
-`os`/`cpu` fields, so a package manager installs only the one matching your
-machine. Android and iOS engine libraries are pulled per-project when you target
-those platforms (kept off desktop installs — the Android engine alone is ~80 MB).
+Android and iOS engine libraries are pulled per-project when you target those
+platforms (kept off desktop installs — the Android engine alone is ~80 MB).
 
-## npm installation
-
-Use npm for `0.0.3`. The prebuilt resolver prefers installed platform packages
-and falls back to the matching, checksummed GitHub Release artifact:
-
-```sh
-npx create-rayact-app@0.0.3 my-app
-```
-
-The release attaches the exact npm tarball for every publishable package. If npm
-is unavailable, run the scaffolder tarball directly:
-
-```sh
-npx https://github.com/raythings/rayact/releases/download/v0.0.3/create-rayact-app-0.0.3.tgz my-app
-```
-
-Override the download source with environment variables when needed:
+## Environment overrides
 
 | Variable | Purpose |
 | --- | --- |
-| `RAYACT_DESKTOP_BIN` | Use a specific host binary |
+| `RAYACT_DESKTOP_BIN` | Use a specific desktop host binary |
+| `RAYACT_TOOL_BIN` | Use a specific build-tool binary |
 | `RAYACT_CACHE_DIR` | Where downloaded prebuilts are cached |
-| `RAYACT_PREBUILT_BASE_URL` | Alternate release/CDN base URL |
+| `RAYACT_PREBUILT_BASE_URL` | Alternate release/CDN base URL (e.g. an internal mirror) |
 | `RAYACT_PREBUILT_TAG` | Release tag to download from |
+| `RAYACT_WEB_HOST_DIR` | Directory containing `rayact.html/js/wasm` for web builds |
+
+## Verifying a download
+
+Every release ships `SHA256SUMS` and a signed `release-set.json`:
+
+```sh
+node node_modules/@rayact/cli/dist/../../scripts/verify-release-set.mjs <release-dir>   # from a checkout: node scripts/verify-release-set.mjs <release-dir>
+shasum -a 256 -c SHA256SUMS
+```
+
+The ed25519 public key is committed at `scripts/release-public-key.pem` in the
+repository; `verify-release-set.mjs` uses it automatically (override with
+`RAYACT_RELEASE_PUBLIC_KEY`).
+
+
+---
+# Source: guide/ios.md
+
+# iOS
+
+Rayact renders on iOS through Metal (rlmt backend). The engine ships as a
+prebuilt `RayactEngine.xcframework`; `rayact prebuild` generates an Xcode
+project around it — no C++ compilation on your machine.
+
+## Prerequisites
+
+- Xcode with the iOS platform installed.
+- [xcodegen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`) —
+  the generated project is defined by `ios/project.yml`.
+- A booted iOS Simulator, or a device with your own signing set up.
+
+`rayact doctor` verifies xcodebuild, xcodegen and signing availability.
+
+## Fastest loop: the prebuilt dev app
+
+```sh
+npm run dev     # dev server with QR
+npm run ios     # rayact dev --ios: installs the dev app on the simulator + connects
+```
+
+The dev app (Expo Go-style) loads your project over the dev server with hot
+reload. Shake gesture (⌃⌘Z in the simulator) opens the dev menu.
+
+## Your own dev client
+
+```sh
+npm run prebuild          # generates ios/ from @rayact/template-ios
+npm run ios:dev-client    # rayact build --debug --ios --install
+```
+
+`ios/` contains `project.yml` (source of truth — regenerate the `.xcodeproj`
+with `xcodegen generate` after editing it), the Swift host sources, and
+`Frameworks/RayactEngine.xcframework` copied from the prebuilt. Commit it.
+
+## Release build
+
+```sh
+npm run build:ios    # rayact build --release --ios
+```
+
+Builds the release configuration with the bundle compiled to bytecode and
+staged into the app bundle. Install on a booted simulator:
+
+```sh
+xcrun simctl install booted <output>.app
+xcrun simctl launch booted <bundle-id>
+```
+
+::: warning Signing
+Rayact does not manage signing. Simulator builds need none; device builds
+require your team/provisioning in Xcode (edit `ios/project.yml` settings or the
+generated project). The release pipeline's device `.ipa` artifacts are
+unsigned sideload builds.
+:::
+
+## Debugging
+
+- Console output lands in the Xcode console / `xcrun simctl spawn booted log stream --predicate 'process == "<app>"'`.
+- The dev client exposes the same CDP inspector as other platforms via the dev
+  server (`chrome://inspect` → `localhost:9229`). See [dev platform](/dev-platform).
+
+
+---
+# Source: guide/linux.md
+
+# Linux
+
+Linux is a **preview platform** in 0.0.4: the x64 host prebuilt is built and
+released, but gets less routine testing than macOS.
+
+## Using the prebuilt
+
+Nothing Linux-specific: `rayact prebuild` resolves
+`@rayact/prebuilt-linux-x64` (or downloads it from the release), and every
+command from the [desktop guide](/guide/desktop) works the same. The host
+renders through Vulkan (rlvk); install your distribution's Vulkan loader
+(`libvulkan1`) and up-to-date GPU drivers.
+
+Optional: `libdns_sd` (Avahi's compatibility package) enables dev-server
+discovery; without it, enter the dev-server URL manually in the dev client.
+
+## Building the host reproducibly
+
+Maintainers build the Linux prebuilt in Docker — the container pins the
+toolchain so builds are reproducible on any machine (including macOS):
+
+```sh
+node scripts/build-prebuilts.mjs --target linux
+```
+
+This drives `docker/prebuilts/Dockerfile.linux` + `build-linux.sh`: QuickJS,
+then the engine (`rayact_desktop` + the headless `rayact_tool`), then packs
+`packages/prebuilt-linux-x64`. The same container is the release gate for the
+platform — if it builds there, it ships.
+
+## Known gaps
+
+- x64 only; no arm64 Linux prebuilt yet.
+- Wayland runs through the host's compatibility path; X11 is the tested route.
+
+
+---
+# Source: guide/navigation.md
+
+# Navigation
+
+`@rayact/navigation` runs **real react-navigation** (`@react-navigation/core`)
+on Rayact — same mental model and hooks as React Native, with Rayact-native
+navigators for stacks and tabs (screen transitions render through the native
+animation system).
+
+```sh
+# already vendored in scaffolded projects; add the dependency like any other @rayact package
+```
+
+## Stack
+
+```tsx
+import {
+  NavigationContainer,
+  createStackNavigator,
+  useNavigation,
+} from '@rayact/navigation';
+import { View, Text, Button, render } from 'rayact/react';
+
+type RootParams = { Home: undefined; Details: { id: string } };
+const Stack = createStackNavigator<RootParams>();
+
+function Home() {
+  const nav = useNavigation();
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+      <Button label="Open details" onPress={() => nav.navigate('Details', { id: '42' })} />
+    </View>
+  );
+}
+
+function Details({ route }: { route: { params: { id: string } } }) {
+  return <Text>{`Details for ${route.params.id}`}</Text>;
+}
+
+render(
+  <NavigationContainer>
+    <Stack.Navigator>
+      <Stack.Screen name="Home" component={Home} options={{ title: 'Home' }} />
+      <Stack.Screen name="Details" component={Details} />
+    </Stack.Navigator>
+  </NavigationContainer>
+);
+```
+
+`createNativeStackNavigator` is an alias of `createStackNavigator` — there is
+one native-backed stack implementation. Screen `options` support `title`,
+header visibility, and a Rayact `animation` option
+(`'slide' | 'fade' | 'none'`-style stack transitions).
+
+## Tabs
+
+```tsx
+import { createBottomTabNavigator } from '@rayact/navigation';
+
+const Tabs = createBottomTabNavigator();
+
+<Tabs.Navigator>
+  <Tabs.Screen name="Feed" component={Feed} options={{ tabBarIcon: 'home' }} />
+  <Tabs.Screen name="Settings" component={Settings} options={{ tabBarIcon: 'settings' }} />
+</Tabs.Navigator>
+```
+
+Tab bars render with the Material `NavigationBar` component; icons are
+Material Symbols names. `createMaterialTopTabNavigator` is currently an alias
+of the bottom-tab navigator.
+
+## Hooks & actions
+
+Re-exported straight from react-navigation, identical semantics:
+
+`useNavigation`, `useRoute`, `useFocusEffect`, `useIsFocused`,
+`useNavigationState`, `CommonActions`, `StackActions`, `TabActions`.
+
+## Back handling
+
+Android hardware back (and desktop Escape) integrates through `BackHandler`:
+
+```ts
+import { useBackHandler } from '@rayact/navigation';   // re-export of rayact/react's
+
+useBackHandler(() => {
+  if (canGoBack) { goBack(); return true; }   // handled
+  return false;                                // let the platform close/minimize
+});
+```
+
+Navigation containers pop the stack on back automatically; register handlers
+only for custom behavior (dismissing sheets, guarding unsaved state).
+
+## Rotation & resize
+
+Navigators re-layout on window resize and device rotation — scenes are not
+fixed-size. No configuration needed.
+
+
+---
+# Source: guide/styling.md
+
+# Styling
+
+Rayact has two styling inputs that compose: the **`style` prop** (React-side,
+per-node) and **CSS stylesheets** matched via **`className`** (parsed and
+resolved natively by the engine). Both feed the same style system; `style`
+wins over matched CSS for the same property.
+
+## The `style` prop
+
+`Style = ViewStyle & TextStyle`. Text properties can be written **flat** or
+**nested** under `text:` — both are supported everywhere:
+
+```tsx
+<Text style={{ color: 0xFFFFFFFF, fontSize: 22 }}>flat</Text>
+<Text style={{ text: { color: 0xFFFFFFFF, fontSize: 22 } }}>nested</Text>
+```
+
+Colors in the `style` prop are `0xRRGGBBAA` numbers (**alpha last**) or CSS
+color strings (`'#fff'`, `'oklch(70% 0.1 250)'`); an unparseable string renders
+opaque black. Layout is Yoga flexbox — `flex`, `flexDirection`, `gap`,
+`padding`/`margin` (+ per-edge variants), `position: 'absolute'`, etc.
+
+## Stylesheets and `className`
+
+Import a CSS file; classes match the `className` prop on any component:
+
+```tsx
+import './app.css';
+
+<View className="card elevated">
+  <Text className="title">Hello</Text>
+</View>
+```
+
+```css
+.card { padding: 16px; border-radius: 12px; background-color: var(--surface); }
+.card.elevated { elevation: 2; }
+.title { font-size: 22px; font-weight: 700; color: var(--ink); }
+```
+
+Under the hood `import './app.css'` becomes a call to
+`globalThis.importCSS('./src/app.css')` — the engine parses the file natively
+(cssparser + the raym3 stylesheet engine) and re-resolves matches when classes
+or media conditions change.
+
+::: warning Literal paths in release bundles
+Release builds statically scan the bundle for **literal** `importCSS('...')`
+string arguments to know which CSS files to stage. Import CSS with plain
+`import './x.css'` statements (or literal `importCSS` calls) — a path built at
+runtime from variables cannot be discovered and will be missing from the
+packaged app.
+:::
+
+Staging is automatic per platform: CSS files travel inside `app.rayactpack`
+(desktop), APK assets (Android), the app bundle (iOS), and `app-assets.json`
+MEMFS preload (web).
+
+## Selectors and state
+
+Supported: class selectors, compound classes (`.a.b`), descendant matching,
+and the state pseudo-classes `:hover`, `:active` (pressed), `:focused`,
+`:disabled`:
+
+```css
+.button { background-color: var(--accent); transition: background-color 120ms ease; }
+.button:hover { state-layer-color: rgb(255 255 255 / 8%); }
+.button:active { ripple-color: rgb(255 255 255 / 12%); }
+```
+
+`state-layer-color` and `ripple-color` are Rayact extensions that drive the
+Material-style hover dim and press ripple on any pressable view. Child (`>`)
+and sibling combinators are not supported (mirroring native-platform CSS
+subsets like NativeWind's).
+
+## CSS variables
+
+`--custom-properties` and `var()` (with fallback) work, including `:root`
+scope. There is **no custom-property inheritance cascade** between arbitrary
+nodes — variables resolve against `:root` and the matched rule's own scope.
+
+Set them from JS for instant re-theming (every match re-resolves natively, no
+React re-render needed):
+
+```ts
+import { setCSSVariable, setCSSVariables, useCSSVariable } from 'rayact/react';
+
+setCSSVariable('--accent', 'oklch(70% 0.12 250)');
+setCSSVariables({ '--surface': '#111', '--ink': '#eee' });
+const accent = useCSSVariable('--accent');   // reactive read
+```
+
+## Color, values, functions
+
+- **CSS Color 4**: hex, `rgb()`, `hsl()`, `hwb()`, `lab()`, `lch()`,
+  `oklab()`, `oklch()`, `color-mix()`, named colors, `transparent`.
+- **`calc()`** with `px` / `%` / `rem` / viewport units.
+- **Media queries**: `@media (prefers-color-scheme: dark)`,
+  `min-/max-width/height`, `orientation` — re-evaluated live on resize,
+  rotation and theme change.
+- **Transitions & animations**: see the [animation guide](/guide/animation).
+- **`@font-face`**: see [fonts & icons](/guide/fonts-and-icons).
+
+The full supported-property table lives in the
+[CSS reference](/reference/css).
+
+## `color` inheritance
+
+CSS `color` cascades to descendant `Text` nodes, so one rule re-themes whole
+subtrees:
+
+```css
+.surface { color: var(--ink); }   /* every Text below .surface uses it */
+```
+
+## Tailwind
+
+Tailwind v4 utilities work through the same pipeline — see the
+[Tailwind guide](/guide/tailwind).
+
+
+---
+# Source: guide/tailwind.md
+
+# Tailwind CSS
+
+Tailwind v4 utilities work in Rayact: the Tailwind CLI generates plain CSS, the
+engine parses it natively, and `className` matches the generated classes. No
+Babel plugin, no runtime — it is just CSS.
+
+## Setup
+
+```sh
+npm install -D tailwindcss @tailwindcss/cli
+```
+
+Create `tailwind/input.css`:
+
+```css
+@import "tailwindcss";
+@source "./content.html";
+```
+
+Tailwind v4 tree-shakes by scanning source files. Rayact apps are TSX, which
+the scanner reads fine — point `@source` at your `src/` directory, or (like the
+raycalc reference app) maintain an explicit safelist file `tailwind/content.html`
+containing every utility you use:
+
+```html
+<div class="flex flex-col items-center gap-4 p-6 rounded-xl bg-slate-900 text-slate-100"></div>
+```
+
+## Generate the stylesheet
+
+```sh
+npx @tailwindcss/cli -i tailwind/input.css -o rayact-assets/tailwind.css
+```
+
+Add it as an npm script (`"tailwind": "tailwindcss -i tailwind/input.css -o rayact-assets/tailwind.css --watch"`)
+and import the output once from your app:
+
+```tsx
+import '../rayact-assets/tailwind.css';
+
+<View className="flex-1 items-center justify-center gap-4 bg-slate-900">
+  <Text className="text-2xl font-bold text-slate-100">Styled by Tailwind</Text>
+</View>
+```
+
+Commit the generated `tailwind.css` — builds stage it like any other stylesheet
+and don't run Tailwind for you.
+
+## What works
+
+Tailwind v4's palette is OKLCH-based, which Rayact's CSS Color 4 parser handles
+natively. Utilities that compile to supported properties all work: layout/flex
+(`flex`, `items-*`, `justify-*`, `gap-*`), spacing (`p-*`, `m-*`), sizing
+(`w-*`, `h-*`, `min/max-*`), typography (`text-*`, `font-*`, `leading-*`,
+`tracking-*`), color (`bg-*`, `text-*`, `border-*`), borders + radius,
+`opacity-*`, `shadow-*`/`elevation`, `transition-*`, `animate-*`, state
+variants (`hover:`, `active:`, `disabled:`) and responsive/dark variants
+(`md:`, `dark:`).
+
+## What doesn't
+
+Utilities relying on selectors Rayact doesn't implement are no-ops — notably
+`space-x-*` / `space-y-*` and `divide-*` (they compile to child combinators,
+unsupported on native; use `gap-*` and `Divider` instead), plus anything
+grid-based (`grid`, `col-span-*`). See the
+[CSS reference](/reference/css) for the exact property support table.
+
+
+---
+# Source: guide/web.md
+
+# Web
+
+The entire engine — QuickJS, the raym3 renderer, and the rlwg WebGPU raylib
+backend — compiles to a single WebAssembly module. Your app runs unchanged in
+the browser, painted onto a canvas with WebGPU (4× MSAA), falling back to a
+WebGL2 host build where WebGPU is unavailable.
+
+## Develop
+
+```sh
+npm run web    # rayact dev --web
+```
+
+Starts the dev server plus a COOP/COEP proxy (default port 8768) and opens the
+dev host. Edits hot-reload like every other platform.
+
+## Release build
+
+```sh
+npm run build:web    # rayact build --release --web
+```
+
+Output in `dist/web/`:
+
+| File | Purpose |
+| --- | --- |
+| `rayact.html` / `index.html` | Host page (release-sanitized: no dev bootstrap) |
+| `rayact.js` + `rayact.wasm` | The engine |
+| `app.qjsbc` (or `app.js`) | Your bundle, compiled to QuickJS bytecode |
+| `app-assets.json` | Manifest of runtime files the host preloads into MEMFS |
+| `rayact-assets/…`, `assets/…` | Staged CSS and bundled assets (worker `.wasm`, images) |
+
+The host fetches `app-assets.json` before boot and copies every listed file
+into the WASM filesystem, so `importCSS(...)`, `spawnWorker(...)` and asset
+reads behave exactly as they do natively.
+
+## Serving — COOP/COEP required
+
+WebGPU + SharedArrayBuffer require a **cross-origin isolated** page. Serve with:
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+`rayact serve` does this for you:
+
+```sh
+rayact serve dist/web --web-port 8771
+```
+
+For production, set the two headers in your web server/CDN config. Everything
+is static files — any host works once the headers are right.
+
+## Canvas sizing
+
+The browser owns the canvas resolution: the page sets the backing store to
+CSS size × devicePixelRatio and the engine treats it as read-only, so zoom,
+resize and fractional-DPI displays stay crisp. Mouse-wheel events scroll
+`ScrollView`s natively.
+
+## WASM workers need the pthreads host
+
+`spawnWorker()` with a `.wasm` worker runs the worker on a real thread, which on
+the web requires SharedArrayBuffer — a **pthreads-enabled host build**. The
+release attaches `rayact-web-pthreads-<version>.tar.gz`; point builds at it:
+
+```sh
+RAYACT_WEB_HOST_DIR=/path/to/pthreads-host npm run build:web
+```
+
+The default host stays non-pthreads (the dev module loader is incompatible with
+pthreads), so apps without WASM workers need nothing special. JS-side code and
+worker *views* work on both hosts; only spawning WASM/native workers needs the
+pthreads variant.
+
+## Limitations on web
+
+- `@rayact/mmkv` / `@rayact/secure-store` native modules are stubbed to
+  in-memory/`localStorage`-backed KV.
+- File-system paths refer to the in-memory MEMFS staged from `app-assets.json`.
+
+
+---
+# Source: guide/workers.md
+
+# Workers & WASM components
+
+Rayact runs app-supplied workers off the JS thread: **WASM workers** (any
+language compiling to freestanding wasm32 — C, Rust, Zig), **native C++
+workers** (compiled into your host), and worker **views** — nodes whose content
+a worker drives directly, bypassing React reconciliation entirely. This is the
+escape hatch for simulations, visualizations and per-frame workloads.
+
+## Platform support
+
+| Platform | WASM workers | Native workers |
+| --- | --- | --- |
+| Desktop (mac/linux) | ✅ (wasm3 interpreter, own thread) | ✅ |
+| Android / iOS | ✅ | ✅ |
+| Web | ✅ **pthreads host required** (see [web guide](/guide/web)) | ✅ (same requirement) |
+
+## Spawning a WASM worker
+
+The worker API is host globals (typed declarations ship in `rayact/worker`):
+
+```ts
+declare global {
+  function spawnWorker(path: string, initialData?: unknown): number;
+  function postToWorker(workerId: number, data: unknown): void;
+  function terminateWorker(workerId: number): void;
+  function createWorkerView(
+    workerId: number, width: number, height: number, viewportNodeId?: number
+  ): number;
+}
+
+const id = spawnWorker('./rayact-assets/sim.wasm', { mode: 1 });
+postToWorker(id, { tick: true });
+```
+
+Reference the `.wasm` by project-relative path; builds stage it per platform
+(APK assets, app bundle, `.rayactpack`, web `app-assets.json`) automatically.
+
+## Worker views: workers that render
+
+`createWorkerView(workerId, w, h, viewportNodeId?)` gives the worker a surface.
+Two protocols, chosen by the worker:
+
+- **Draw protocol** — immediate-mode command stream (clear/rect/line/circle/
+  text…). `WorkerCanvas` in `rayact/worker` builds the byte stream if your
+  worker is JS/TS; a wasm32 worker emits the same opcodes directly.
+- **Node protocol** — the worker creates/updates retained raym3 nodes
+  (`WorkerNodeTree`), so its output participates in layout and styling.
+
+Anchor the view inside your React tree by passing the host node's id:
+
+```tsx
+const hostRef = useRef<ViewHandle>(null);
+useEffect(() => {
+  const id = spawnWorker('./rayact-assets/sim.wasm');
+  createWorkerView(id, 320, 260, hostRef.current?.node?.id);
+  return () => terminateWorker(id);
+}, []);
+<View ref={hostRef} style={{ height: 260 }} />
+```
+
+## Writing a wasm32 worker
+
+Any freestanding wasm32 module works — no libc, no WASI. Export the entry
+points the host calls (`init`, `frame`, `on_message`), import the host's
+draw/node functions, and compile with your toolchain's freestanding target
+(`clang --target=wasm32 -nostdlib`, Rust `wasm32-unknown-unknown`, Zig
+`wasm32-freestanding`). Keep the module self-contained; the engine runs it in
+the embedded wasm3 interpreter on its own thread.
+
+## Native C++ workers
+
+Drop `.cpp` files under `native/workers/<name>/` in your project and register
+with `RAYACT_REGISTER_NATIVE_WORKER`. They compile into the host at prebuild
+time and use the same message/view API at full native speed.
+
+## Worklets
+
+`@rayact/worklets` (`useWorklet`, `useAnimatedStyle`, `registerWorkletNode`)
+is an early UI-thread-worklet surface aimed at gesture-driven styles; prefer
+[`SharedValue`](/guide/animation#sharedvalue--imperative-render-thread-driven)
+for production animation today.
 
 
 ---
@@ -171,10 +1266,14 @@ Rayact is a cross-platform React renderer with a native raylib + QuickJS backend
 
 ## Quick start
 
+Rayact ships as GitHub release tarballs (not on the npm registry) — the
+scaffolder vendors everything your project needs:
+
 ```sh
-npx create-rayact-app@0.0.3 my-app
-cd my-app && npm install
-npm run dev            # dev server + TUI
+npx https://github.com/raythings/rayact/releases/download/v0.0.4/create-rayact-app-0.0.4.tgz \
+  my-app --release-url https://github.com/raythings/rayact/releases/download/v0.0.4
+cd my-app
+npm run dev            # dev server + TUI + QR
 ```
 
 Then build and run:
@@ -186,8 +1285,9 @@ rayact build --release # release bundle (bytecode + container)
 ```
 
 See [Getting started](/guide/getting-started), [Installation](/guide/install),
-[native modules](/native-modules), [deployment](/deployment), and the
-[CLI reference](/reference/cli).
+the platform guides ([desktop](/guide/desktop), [Android](/guide/android),
+[iOS](/guide/ios), [web](/guide/web)), and the
+[components reference](/reference/components).
 
 
 ---
@@ -242,17 +1342,28 @@ optimization, not basic Android/Web enablement.
 
 # Native modules
 
-Install optional capabilities as direct npm dependencies:
+Native modules are optional native capabilities shipped as separate packages —
+each carries its own prebuilt binaries per platform and autolinks into your
+app. The engine's module bus loads them at startup (`dlopen` on desktop,
+packaged libraries on Android/iOS, built-in stubs on web).
 
-```sh
-npm install @rayact/mmkv
-npm install @rayact/secure-store
-npm install @rayact/crash-reporter
-```
+## Installing
 
-Built-in KV remains available from `rayact/kv` and adds no optional binary. Each optional package owns `rayact.module.json`; autolinking follows declared installed dependencies and verifies artifact SHA-256 values. It never scans workspace folders or arbitrary `node_modules` directories.
+Add them like any other `@rayact/*` package (vendored from the release set in
+a scaffolded project):
 
-Installed modules autolink automatically. `rayact.config.json` can disable or configure one:
+- `@rayact/mmkv` — fast persistent key-value storage (MMKV)
+- `@rayact/secure-store` — Keychain/Keystore-backed secret storage
+- `@rayact/crash-reporter` — native crash capture with local reports
+
+Each package owns a `rayact.module.json` manifest; autolinking follows your
+declared dependencies and verifies artifact SHA-256s. It never scans arbitrary
+`node_modules` folders. After adding one, re-run `rayact prebuild` so native
+projects pick it up; `rayact doctor` shows what's linked.
+
+## Configuring
+
+`rayact.config.json` can disable or configure a module:
 
 ```json
 {
@@ -264,7 +1375,66 @@ Installed modules autolink automatically. `rayact.config.json` can disable or co
 }
 ```
 
-Legacy `{ "name", "lib", "jsPackage" }` entries warn in 0.0.x. Run `rayact migrate`, then `npm install`, to update imports/config and regenerate native projects.
+Legacy `{ "name", "lib", "jsPackage" }` entries warn in 0.0.x. Run
+`rayact migrate`, then `npm install`, to update imports/config and regenerate
+native projects.
+
+## APIs
+
+### Built-in KV (`rayact/kv`) — no extra binary
+
+```ts
+import { KV } from 'rayact/kv';
+
+KV.set('theme', 'dark');
+KV.get('theme');      // 'dark' | undefined
+KV.has('theme');      // boolean
+KV.delete('theme');
+```
+
+Synchronous, string-valued, persisted in the app's data directory. Backed by
+`localStorage` on web.
+
+### `@rayact/mmkv`
+
+```ts
+import { MMKV } from '@rayact/mmkv';
+
+const storage = new MMKV('settings');        // instance id, 'default' if omitted
+storage.set('count', 3);                     // string | number | boolean
+storage.getString('name'); storage.getNumber('count'); storage.getBoolean('flag');
+storage.contains('count'); storage.delete('count'); storage.clearAll();
+```
+
+Same surface shape as react-native-mmkv's core API — synchronous and fast
+enough for hot paths.
+
+### `@rayact/secure-store`
+
+```ts
+import * as SecureStore from '@rayact/secure-store';
+
+await SecureStore.setItemAsync('token', jwt);
+const token = await SecureStore.getItemAsync('token');   // string | null
+await SecureStore.deleteItemAsync('token');
+```
+
+Values land in the platform keystore (macOS/iOS Keychain, Android Keystore).
+Expo-secure-store-compatible signature.
+
+### `@rayact/crash-reporter`
+
+Captures native crashes and stores reports locally; see
+[crash privacy](/crash-reporting) for what is (and is not) collected.
+
+## Writing your own module
+
+A module is a shared library exporting the Rayact module-bus entry point
+(`rayact_module_register`) plus a package with `rayact.module.json` declaring
+its artifacts per platform/architecture (path + sha256, ABI and engine ranges).
+Study `@rayact/mmkv` in the repo as the reference implementation — the JS side
+talks to native through the byte-oriented `sys_invoke` bus, which also reaches
+WASM workers.
 
 
 ---
@@ -289,6 +1459,146 @@ dist-tags and GitHub `latest` without deleting immutable artifacts.
 
 
 ---
+# Source: reference/api.md
+
+# API reference (`rayact/react`)
+
+Everything `rayact/react` exports beyond the [components](/reference/components):
+rendering entry points, hooks, theming, keyboard/back handling, and the CSS
+variable API. Subpath exports of the umbrella `rayact` package are listed at
+the end.
+
+## Rendering
+
+```ts
+render(element): RayactRoot          // render into the host's root container
+createRoot(container?): RayactRoot   // explicit root (advanced/multi-root)
+getOrCreateRoot(): RayactRoot        // the app-level singleton root
+RayactReconciler                     // the react-reconciler instance (advanced)
+createRuntime() / getDefaultRuntime()// runtime bridge management (advanced)
+```
+
+A scaffolded app guards `render(<App />)` behind the host's `initRaylib`
+global so the same entry runs under dev clients (which own the window) and
+release hosts.
+
+## Hooks
+
+| Hook | Returns |
+| --- | --- |
+| `useTheme()` | The active `RayactTheme` (M3 tokens); `withTheme(Component)` HOC form |
+| `useColorScheme()` | `'light' \| 'dark'` — resolved scheme, reactive |
+| `useColorSchemePreference()` | `'system' \| 'light' \| 'dark'` preference |
+| `useKeyboard()` | `KeyboardInsets` — live IME inset (height, visible) |
+| `useSafeAreaInsets()` | `SafeAreaInsets` `{ top, right, bottom, left }` |
+| `useBackHandler(fn)` | Register a back-press handler (return `true` = handled) |
+| `useKeyboardEvents(opts)` | Raw key/text events (desktop/web keyboards) |
+| `useCSSVariable(name)` | Reactive CSS variable value |
+| `useReducedMotion()` | OS reduce-motion setting |
+| `useAnimatedValue` / `useSpring` / `useSharedValue` | [Animation guide](/guide/animation) |
+
+## Color scheme
+
+```ts
+import { setColorSchemePreference, cycleColorSchemePreference } from 'rayact/react';
+
+setColorSchemePreference('dark');     // 'system' | 'light' | 'dark'
+cycleColorSchemePreference();         // system → light → dark → system
+```
+
+Changing the scheme re-themes natively: Material tokens update, CSS
+`@media (prefers-color-scheme)` blocks re-resolve, and scheme-variant CSS
+variables swap — no remount.
+
+## Theming
+
+`RayactThemeProvider` overrides Material 3 tokens for a subtree; `useTheme()`
+reads the merged `RayactTheme` (color roles, typography, shape). Component
+color overrides accept any [`ColorValue`](/reference/components#colors-colorvalue).
+
+## CSS variables
+
+Custom properties declared in an imported stylesheet resolve anywhere a value
+is expected, including inside functional colors, and can be re-pointed at
+runtime:
+
+```tsx
+import {
+  useCSSVariable, getCSSVariable,
+  setCSSVariable, setCSSVariables, resetCSSVariables
+} from 'rayact/react';
+
+const brand = useCSSVariable('--brand');   // re-renders on change
+getCSSVariable('--brand');                 // one-shot read, resolved to a literal
+
+setCSSVariable('--brand', 'lime');         // null clears the override
+setCSSVariables({ '--brand': 'hsl(300 100% 50%)', '--bg': '#111' });  // batched
+resetCSSVariables();                       // back to the stylesheet's values
+```
+
+- Values set from JS override the stylesheet's declarations (including
+  dark/light variants) until cleared.
+- Setting a variable re-resolves every mounted node's `className` styles
+  natively and schedules a frame — live theming without remounting. Prefer
+  `setCSSVariables` for several at once (one restyle instead of per variable).
+- Variables are keyed by name and color-scheme variant, not by selector; names
+  are case-sensitive; the leading `--` is optional in these calls;
+  `getCSSVariable` returns `undefined` when undeclared.
+- There is no custom-property *inheritance* down the element tree — `var()`
+  resolves against the global declarations, not an ancestor's value.
+
+## Keyboard
+
+```ts
+import { Keyboard, useKeyboardEvents } from 'rayact/react';
+
+Keyboard.dismiss();
+useKeyboardEvents({ capture: true }, (e) => { /* KeyboardKeyEvent | KeyboardTextInputEvent */ });
+```
+
+`useKeyboard()` gives IME insets for manual layouts; `AvoidKeyboard` handles
+the common case declaratively.
+
+## BackHandler
+
+```ts
+import { BackHandler, useBackHandler } from 'rayact/react';
+
+const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
+sub.remove();
+```
+
+Android hardware back and desktop Escape route through the same handler stack;
+`@rayact/navigation` integrates automatically.
+
+## Accessibility
+
+```ts
+import { setAccessibilityFocus, useReducedMotion } from 'rayact/react';
+```
+
+Move platform accessibility focus to a node; respect reduce-motion. See
+[accessibility](/accessibility) for the current surface.
+
+## Umbrella package subpaths
+
+| Import | Contents |
+| --- | --- |
+| `rayact/react` | Components + this API surface |
+| `rayact/runtime` | Bridge/runtime internals (`createBridge`, `createDevClient`, `createAsset`) |
+| `rayact/shared` | `Platform` (`Platform.OS`: `'android' \| 'ios' \| 'macos' \| 'linux' \| 'windows' \| 'web'`), shared utilities |
+| `rayact/shared/material-icons` | Icon name → glyph registration |
+| `rayact/kv` | Built-in key-value store ([native modules](/native-modules#apis)) |
+| `rayact/crypto` | Hashing/random backed by the host |
+| `rayact/worker` | Worker protocol helpers (`WorkerCanvas`, `WorkerNodeTree`, `DRAW`) — [workers guide](/guide/workers) |
+
+Sibling packages: [`@rayact/navigation`](/guide/navigation),
+[`@rayact/worklets`](/guide/workers#worklets), `@rayact/mmkv`,
+`@rayact/secure-store`, `@rayact/crash-reporter`
+([native modules](/native-modules)).
+
+
+---
 # Source: reference/cli.md
 
 # CLI reference
@@ -307,28 +1617,432 @@ The `rayact` command (from `@rayact/cli`) drives development, building, and runn
 | `rayact build --release` | Release build: minify + bytecode + `.rayactpack` |
 | `rayact export` | Alias for `rayact build --release` |
 | `rayact compile <in> <out>` | Compile a JS bundle to QuickJS bytecode |
+| `rayact start` | Launch the packaged desktop app from the last build (`--dev` to attach to the dev server) |
+| `rayact serve <dir>` | Static server with the COOP/COEP headers web builds require (`--web-port <n>`) |
+| `rayact verify <file>` | Inspect a `.rayactpack` / validate a build artifact |
+| `rayact dev-app` | Install + launch the prebuilt dev app on a device/simulator, wired to the dev server |
 | `rayact prebuild` | Ensure the native host + plugin shells are present |
 | `rayact doctor` | Check toolchains, prebuilt integrity/ABI, module support, signing, and Web hosting requirements |
+| `rayact migrate` | Rewrite legacy config/import forms to the current ones |
 | `rayact init [name]` | Scaffold a new app (alias for `create-rayact-app`) |
 
 ## Common options
 
 | Flag | Effect |
 | --- | --- |
-| `--android` / `--ios` / `--desktop` | Target platform |
+| `--android` / `--ios` / `--desktop` / `--web` | Target platform |
 | `--install` | Install + launch on device after an Android/iOS build |
 | `--release` / `--debug` | Build mode |
 | `--minify` / `--no-minify` | Override the config's minify setting |
 | `--bytecode` / `--no-bytecode` | Override bytecode emission in development/debug; release always emits bytecode |
 | `--entry <path>` | App entry file |
 | `--out <dir>` | Output directory |
-| `--desktop-bin <path>` | Use a specific `rayact_desktop` host |
+| `--desktop-bin <path>` | Use a specific `rayact_desktop` host (runtime) |
+| `--tool-bin <path>` | Use a specific `rayact_tool` binary (bytecode compile + pack); env `RAYACT_TOOL_BIN` |
+| `--web-port <n>` | Port for `rayact serve` / the web dev proxy |
+
+## Dev loop {#dev-loop}
+
+`rayact dev` runs an interactive terminal UI (Ink) that reads single keypresses
+(`c`/`d`/`a`/`i`/`w`/`r`/`t`/`q`) from an attached TTY. When stdin is not a TTY —
+piped, backgrounded, or run under an agent/CI — those keys never register. Use
+the non-interactive primitives below instead of driving the TUI.
+
+### Non-interactive / scripted dev loop
+
+None of these need the TUI:
+
+```bash
+# Start the dev server and auto-run `adb reverse` (no keypress needed):
+rayact dev --android
+rayact dev --ios
+
+# One-shot: install the dev-client, set up adb reverse, and launch — fully
+# standalone, no TUI:
+rayact dev-app --android
+
+# Point the app at a specific dev-server URL (also honoured by `dev-app`):
+RAYACT_DEV_SERVER=http://127.0.0.1:8081 rayact dev-app --android
+
+# Raw equivalent: launch the installed dev-client already connected, skipping
+# the manual "Connect to dev server" screen. The Android app reads the
+# RAYACT_DEV_SERVER intent extra and auto-connects:
+adb shell am start -n com.rayact.app/.DevLauncherActivity \
+  --es RAYACT_DEV_SERVER "http://127.0.0.1:8081"
+
+# Trigger a full reload of every connected client without the TUI or a
+# websocket client:
+curl -X POST http://127.0.0.1:8081/rayact/reload
+```
+
+Launching an installed APK directly with `am start` does **not** set up
+`adb reverse` — go through `rayact dev --android` / `rayact dev-app --android`,
+or run `adb reverse tcp:8081 tcp:8081` yourself, or the device can't reach the
+dev server on its own loopback.
 
 ## No shell scripts
 
 Everything end users need is a `rayact` subcommand — there are no `.sh` / `.bat`
 / `.ps1` scripts in the user-facing flow. The maintainer-only native build
 scripts live under `tools/dev/`.
+
+
+---
+# Source: reference/components.md
+
+# Components reference
+
+Every component exported from `rayact/react`, grouped by role, with the sharp
+edges called out where behaviour differs from React Native. Shared conventions
+first — most components are thin wrappers over the same native node props.
+
+## Shared conventions
+
+- **`style`** — `ViewStyle & TextStyle`; text properties accepted flat or
+  nested under `text:` (both work; pick one per codebase).
+- **`className`** — matches imported CSS ([styling guide](/guide/styling)).
+- **Press events on anything** — `onPress`, `onPressIn`, `onPressOut`,
+  `onLongPress` are `BaseProps`: valid on any element, not just `Pressable`.
+- **`ref`** — components with imperative handles (`ScrollView`, `TextInput`,
+  `View`) expose them via ordinary refs; every handle carries
+  `node: { id: number }` for advanced host APIs (worker views, etc.).
+- **Material 3** — the Material components render through raym3's M3 system:
+  they follow the ambient theme (colors, shape, elevation, state layers) and
+  accept style overrides. See [Theming](/reference/api#theming).
+
+## Core
+
+### View
+
+The flexbox container. Layout via Yoga: `flex`, `flexDirection`, `gap`,
+`padding`/`margin` (+ per-edge), `position: 'absolute'`, `overflow`. Paint:
+`backgroundColor` (solid/gradient), `borderRadius`, `borderWidth`/`Color`,
+`opacity`, `boxShadow`/`elevation`. Transform: `translateX/Y`, `scale`,
+`rotation` (also animatable via [SharedValue](/guide/animation)).
+
+### Text
+
+Text run with full emoji + Material-symbol fallback.
+
+Props: `style` text keys (`color`, `fontSize`, `fontWeight` 100–900,
+`fontStyle`, `fontFamily`, `letterSpacing`, `lineHeight`, `textAlign`),
+`numberOfLines`-style clipping via `overflow`, press events.
+
+**`lineHeight` caveat**: the glyph box is taller than the nominal `fontSize`
+(ascenders/descenders), and font metrics are **not** added as extra padding
+around the measured box. When `lineHeight` is unset it defaults to
+`max(fontSize + 4, fontSize * 1.43)`. Large text stacked tightly against a
+sibling can clip or overlap — set an explicit `lineHeight` (roughly
+`fontSize * 1.3`) and a little margin for display-size text:
+
+```tsx
+<Text style={{ fontSize: 48, lineHeight: 62 }}>1,234.56</Text>
+```
+
+CSS `color` set on an ancestor cascades to descendant `Text` nodes.
+
+### ScrollView
+
+Scrollable container (vertical by default; `horizontal` prop). Mouse-wheel
+scrolls on desktop and web; touch flings elsewhere. `contentContainerStyle`
+styles the inner content node.
+
+Imperative handle (react-native parity):
+
+```tsx
+import { ScrollView, type ScrollViewHandle } from 'rayact/react';
+
+const ref = React.useRef<ScrollViewHandle>(null);
+<ScrollView ref={ref} autoScrollToEnd>{/* … */}</ScrollView>
+
+ref.current?.scrollTo({ y: 0 });   // absolute offset; omitted axes unchanged
+ref.current?.scrollToEnd();        // jump to the bottom (or right, if horizontal)
+```
+
+- `scrollTo({ x?, y?, animated? })` — jump to an absolute offset; calling it
+  clears `autoScrollToEnd` follow on the axis you set.
+- `scrollToEnd({ animated? })` — scroll to the end of the content.
+- `animated` is accepted for parity but currently performs an instant jump.
+- `autoScrollToEnd` keeps the view pinned to the end as content grows (lands in
+  the same layout pass a child is appended).
+
+**`flex: 1` caveat**: `flex: 1` expands to
+`flexGrow: 1; flexShrink: 1; flexBasis: 0` (standard Yoga meaning). On a
+`ScrollView` — or rows inside one — the implicit `flexShrink: 1` lets
+overflowing content be squeezed instead of scrolling. If rows overlap instead
+of scrolling, opt out of shrinking:
+
+```tsx
+<ScrollView style={{ flexGrow: 1, flexShrink: 0 }}>
+```
+
+### Pressable
+
+A `View` that tracks pressed state and exposes it to `style` and `children`
+render-prop callbacks (`PressableStateCallbackType`). There is no separate
+`TouchableOpacity`.
+
+```tsx
+<Pressable
+  onPress={submit}
+  onLongPress={showMenu}
+  style={({ pressed }) => ({ backgroundColor: pressed ? 0x1565c0ff : 0x1976d2ff })}
+>
+  {({ pressed }) => <Text>{pressed ? 'Pressing…' : 'Submit'}</Text>}
+</Pressable>
+```
+
+`onLongPress` fires once past ~500 ms held within the touch slop; the trailing
+`onPress` on release is then suppressed (react-native parity). CSS
+`:hover`/`:active` + `state-layer-color`/`ripple-color` style the same states
+declaratively.
+
+### Image
+
+Bitmap display: `source` (staged asset or URL), `resizeMode`-style fit via
+width/height + `overflow`, corner rounding via `borderRadius`.
+
+### Icon
+
+Material Symbols glyph: `name`, `size`, `color`. Names come from
+`rayact/shared/material-icons` ([fonts & icons](/guide/fonts-and-icons)).
+
+### Svg
+
+Vector graphics via the raysvg engine (retained scene graph, tessellated fills
+and strokes, id-keyed animation channels):
+
+```tsx
+<Svg src="./rayact-assets/pet-rig.svg" style={{ width: 240, height: 240 }} />
+```
+
+Accepts either `src` (staged asset path) or inline `content` markup. Rendered
+natively on every platform, web included. Large documents parse once and
+retain their scene graph; per-frame channel updates don't re-parse.
+
+### SafeArea / SafeAreaView
+
+Insets content away from notches, status and home-indicator areas.
+`SafeAreaView` is the RN-compatible alias. For raw numbers use
+`useSafeAreaInsets()`.
+
+### StatusBar
+
+Declarative status-bar appearance on mobile: bar style (light/dark) and
+background. Render anywhere in the tree; last mounted wins.
+
+### Modal
+
+Full-screen overlay layer: `visible`, `onRequestClose`, transparent backdrop
+support. Content mounts above the app in the native overlay layer.
+
+### AvoidKeyboard
+
+Wraps content that should slide out of the IME's way. Uses native keyboard
+insets and animates with the CSS transition engine. Pair with `useKeyboard()`
+for custom behavior.
+
+### ExternalView / NativeTextInput
+
+Platform-view escape hatches: `ExternalView` composites an OS-native view
+(Android `AHardwareBuffer` texture path) into the render tree;
+`NativeTextInput` is the raw platform text field the higher-level `TextInput`
+drives. Reach for these only when the built-ins can't express something.
+
+## Forms & input
+
+### TextInput (alias `Input`; Material-styled `TextField`)
+
+React-native `TextInput` prop surface mapped onto the native editing engine
+(Flutter-style editing model — real caret, selection, IME):
+
+| RN prop | Behaviour |
+| --- | --- |
+| `value` / `defaultValue` / `onChangeText` | Controlled or uncontrolled text |
+| `placeholder`, `placeholderTextColor` | Hint text |
+| `keyboardType` | `email-address`, `numeric`, `number-pad`, `decimal-pad`, `phone-pad`, `url`, `ascii-capable`, `visible-password` |
+| `secureTextEntry` | Password dots (forces password input type) |
+| `multiline` | Multi-line editing; `blurOnSubmit` defaults false when set |
+| `returnKeyType` → IME action | `done` default; `go`/`next`/`search`/`send` |
+| `autoCapitalize` (`sentences` default), `autoCorrect` | IME behaviour |
+| `editable={false}` | Read-only |
+| `maxLength`, `onSubmitEditing`, `onFocus`, `onBlur` | Parity semantics |
+| `selection` / `onSelectionChange` | Controlled selection range |
+| `caretHidden`, `selectionColor` | Caret/selection appearance |
+
+Refs receive a `TextInputHandle`: `focus()`, `blur()`, `node`.
+
+`TextField` is the Material 3 outlined/filled field (label, supporting text,
+leading/trailing icons) over the same engine.
+
+### Checkbox / RadioButton / Switch
+
+Controlled boolean inputs: `checked`/`value` (Switch), `onChange`, `disabled`.
+Material state layers + ripples included.
+
+### Slider / RangeSlider
+
+`value` (`[low, high]` for Range), `min`, `max`, `step`, `onChange`,
+`onChangeEnd`. Continuous or stepped.
+
+### DatePicker / TimePicker
+
+Material date/time selection dialogs: `value`, `onChange`, `open`/trigger
+props.
+
+### SegmentedButton
+
+Single or multi-select segmented control: `segments`, `selected`,
+`onChange`.
+
+### Search / SearchBar
+
+Material search entry with leading icon and clear affordance; `value`,
+`onChangeText`, `onSubmit`.
+
+## Buttons
+
+### Button
+
+`label`, `onPress`, `disabled`, `icon`, Material variants (filled default;
+tonal/outlined/text via props). Ripple + state layers built in.
+
+### IconButton / Fab / ExtendedFab / FabMenu / SplitButton / ButtonGroup
+
+Material button family: icon-only buttons, floating action buttons
+(`icon`, `label` for Extended, expanding action `FabMenu`), split primary +
+menu buttons, and grouped button rows. All take `onPress` (+ per-item for
+menus/groups) and `disabled`.
+
+### Chip
+
+Compact labeled element: `label`, `icon`, `selected`, `onPress`,
+assist/filter/input styles.
+
+## Communication
+
+### ActivityIndicator / LoadingIndicator / ProgressIndicator
+
+Spinners and progress: `ActivityIndicator` (RN-compatible spinner),
+`LoadingIndicator` (Material loader), `ProgressIndicator`
+(`value` 0–1 determinate or indeterminate, linear/circular).
+
+### Badge
+
+Small count/status marker attached to icons or items: `value`, dot form.
+
+### Banner / Snackbar
+
+Inline prominent messages (`Banner`: content + actions, dismissable) and
+transient toasts (`Snackbar`: `message`, `action`, `visible`, auto-dismiss
+duration).
+
+### Tooltip
+
+Hover/long-press label for any child: `content`, positioning handled natively.
+
+### Dialog
+
+Modal Material dialog: `open`, `onClose`, title/content/actions slots. Renders
+in the overlay layer with scrim.
+
+## Containment
+
+### Card
+
+Material surface container: elevation variants, press support when `onPress`
+given.
+
+### List / MaterialList / MenuItem
+
+`List` renders rows efficiently; `MaterialList` provides M3 list items
+(leading/trailing icons, overline/supporting text). `MenuItem` is the
+menu-row variant used inside `Menu`.
+
+### DataTable
+
+Column-configured table with header + rows; cell content is arbitrary
+children.
+
+### Divider
+
+Hairline separator (horizontal/vertical) — the supported replacement for CSS
+`divide-*` utilities.
+
+### BottomSheet / SideSheet
+
+Sliding sheets: `open`, `onClose`, drag-to-dismiss (Bottom), standard/modal
+side panels (Side).
+
+### Menu
+
+Anchored popup menu: `open`, `anchor` position, `MenuItem` children.
+
+### Carousel
+
+Horizontally paged content with snap; page indicators via props.
+
+## Navigation chrome
+
+### AppBar / BottomAppBar / Toolbar / DockedToolbar / FloatingToolbar
+
+Top/bottom app bars and toolbar variants: `title`, leading/trailing actions,
+custom background (`style.backgroundColor` is preserved across partial
+updates), scroll-elevation behavior.
+
+### NavigationBar / NavigationBarItem / NavigationRail / NavigationDrawer
+
+Material navigation surfaces: bottom bar items (`icon`, `label`, `selected`,
+`onPress`), side rail, and drawer. `@rayact/navigation`'s tab navigator drives
+`NavigationBar` for you ([navigation guide](/guide/navigation)).
+
+### TabBar / Tabs
+
+Tab strips (fixed/scrollable): `tabs`, `selected`, `onChange`.
+
+## Colors: `ColorValue`
+
+`ColorValue` is `number | string`. Both forms are accepted anywhere a color is
+expected:
+
+- Packed 32-bit `0xRRGGBBAA` number — e.g. `0x1976d2ff` (opaque blue). The
+  alpha is the **last** byte; a fully opaque color ends in `ff`.
+- Any **CSS Color 4** string.
+
+```tsx
+<View style={{ backgroundColor: 0x1976d2ff }} />
+<View style={{ backgroundColor: '#1976d2' }} />
+<View style={{ backgroundColor: 'oklch(0.637 0.237 25.331)' }} />
+```
+
+| Form | Examples |
+| --- | --- |
+| Hex | `#f00`, `#f00a`, `#1976d2`, `#1976d2cc` |
+| Named | all 148 CSS names, plus `transparent` |
+| `rgb()` / `rgba()` | `rgb(255 0 0)`, `rgb(255, 0, 0)`, `rgb(100% 0% 0%)`, `rgb(255 0 0 / 50%)` |
+| `hsl()` / `hsla()` | `hsl(0 100% 50%)`, `hsl(0.5turn 100% 50% / 0.5)` |
+| `hwb()` | `hwb(0 20% 10%)` |
+| `lab()` / `lch()` | `lab(54.29% 80.8 69.89)`, `lch(54.29% 106.84 40.85)` |
+| `oklab()` / `oklch()` | `oklch(0.637 0.237 25.331)` |
+| `color()` | `color(srgb 1 0 0)`, `color(srgb-linear …)`, `color(display-p3 1 0 0)` |
+| `color-mix()` | `color-mix(in oklab, red 50%, transparent)` |
+
+Both legacy comma syntax and modern space syntax are accepted, along with `/`
+alpha, percentage channels, angle units (`deg`/`rad`/`grad`/`turn`), and the
+`none` keyword. This is what makes a Tailwind-style palette work unchanged —
+Tailwind v4's default colors are all `oklch()`, and shadcn-style themes are
+`hsl()`. Colors out of the sRGB gamut are clipped into it; unsupported
+`color()` spaces (`rec2020`, `a98-rgb`, `prophoto-rgb`, `xyz`) are read as
+sRGB rather than failing. `currentColor` is **not** resolved.
+
+An unparseable color resolves to opaque black rather than throwing, so a typo
+shows up as a black box.
+
+## See also
+
+- [CSS variables & theming API](/reference/api#css-variables) — reading and
+  setting `--custom-properties` from JS.
+- [CSS reference](/reference/css) — the supported-property table.
 
 
 ---
@@ -395,11 +2109,108 @@ Add the `$schema` key for editor autocomplete:
 
 
 ---
+# Source: reference/css.md
+
+# CSS reference
+
+The engine parses CSS natively (cssparser + the raym3 stylesheet engine) and
+resolves matches against `className` props. This page is the authoritative
+support table. Usage patterns live in the [styling guide](/guide/styling).
+
+## Selectors
+
+| Supported | Notes |
+| --- | --- |
+| `.class`, `.a.b` compound | Primary matching mechanism |
+| Descendant (`.card .title`) | Matches through the node tree |
+| `:root` | CSS-variable scope |
+| `:hover`, `:active`, `:focused`, `:disabled` | Interaction state styles (`:active` = pressed) |
+
+Not supported: child (`>`) and sibling (`+`, `~`) combinators, attribute
+selectors, `:nth-*`. (Utilities that compile to them — Tailwind `space-x`,
+`divide-*` — are no-ops; use `gap` and `Divider`.)
+
+## At-rules
+
+| Rule | Support |
+| --- | --- |
+| `@media (prefers-color-scheme: dark)` | ✅ live re-resolve on theme change |
+| `@media (min-width/max-width/min-height/max-height/orientation)` | ✅ live re-resolve on resize/rotation |
+| `@keyframes` + `animation` | ✅ native render-thread engine ([guide](/guide/animation)) |
+| `@font-face` | ✅ truetype/opentype ([guide](/guide/fonts-and-icons)) |
+| `@import`, `@supports`, `@container` | ❌ |
+
+## Properties
+
+**Layout (Yoga flexbox)** — `display` (`flex`/`none`), `flex`, `flex-direction`,
+`flex-wrap`, `flex-grow`, `flex-shrink`, `flex-basis`, `align-items`,
+`align-self`, `justify-content`, `gap`, `row-gap`, `column-gap`, `position`
+(`relative`/`absolute`), `top`/`right`/`bottom`/`left`, `overflow`.
+
+**Box** — `width`, `height`, `min-/max-width`, `min-/max-height`, `padding`
+(+ `padding-top/right/bottom/left`), `margin` (+ per-edge), `border-width`
+(+ per-edge), `border-color`, `border-radius`, `border` shorthand.
+
+**Paint** — `background`/`background-color` (solid + linear gradients),
+`color` (cascades to descendant `Text`), `opacity`, `box-shadow`, `elevation`
+(Material elevation levels), `backdrop-filter` (blur), `state-layer-color`,
+`ripple-color` (Rayact extensions for hover/press feedback).
+
+**Text** — `font-family`, `font-size`, `font-weight`, `font-style`,
+`letter-spacing`, `line-height`, `text-align`.
+
+**Transform** — `translate-x`, `translate-y`, `scale`, `rotation`.
+
+**Interaction** — `pointer-events`.
+
+**Motion** — `transition` (shorthand, multiple comma-separated),
+`animation` (shorthand: name, duration, easing, delay, iteration count /
+`infinite`, direction `normal`/`reverse`/`alternate`/`alternate-reverse`,
+fill `none`/`forwards`/`backwards`/`both`).
+
+Unknown properties are ignored with a parse warning — they never abort
+rendering.
+
+## Values
+
+- **Lengths**: `px` (density-independent), `%`, `rem`, viewport units;
+  **`calc()`** over all of them.
+- **Colors (CSS Color 4)**:
+
+| Format | Example |
+| --- | --- |
+| Hex (3/4/6/8) | `#09c`, `#0099ccff` |
+| `rgb()` / `rgba()` | `rgb(255 255 255 / 8%)` |
+| `hsl()` / `hwb()` | `hsl(210 80% 60%)` |
+| `lab()` / `lch()` | `lch(70% 40 250)` |
+| `oklab()` / `oklch()` | `oklch(70% 0.12 250)` — Tailwind v4's palette space |
+| `color-mix()` | `color-mix(in oklch, var(--accent), black 20%)` |
+| Named + `transparent` | `rebeccapurple` |
+
+An unparseable color yields opaque black (and a console warning) — treat black
+UI as a color-typo signal. `currentColor` is not supported.
+
+## CSS variables
+
+`--custom-properties` on `:root` and rules; `var(--x, fallback)`. No arbitrary
+inheritance cascade between nodes — resolution is `:root` + the matched rule's
+scope. Runtime JS API: `setCSSVariable`, `setCSSVariables`,
+`resetCSSVariables`, `getCSSVariable`, `useCSSVariable`
+([API reference](/reference/api#css-variables)).
+
+## Interaction with the `style` prop
+
+`style` and matched CSS feed the same resolved style; `style` wins per
+property. JS style animation (`SharedValue`, animated styles) cancels a running
+native CSS animation on the same node property.
+
+
+---
 # Source: reference/packages.md
 
 # Packages and platforms
 
-Rayact uses one private npm workspace root with independently publishable packages. All first-party packages in the `0.0.3` release set use exact lockstep versions.
+Rayact uses one private npm workspace root with independently publishable packages. All first-party packages in the `0.0.4` release set use exact lockstep versions.
 
 ## Consumer and framework
 
@@ -512,7 +2323,7 @@ call `engineLoadPackFile`.
 
 # Release process
 
-The `0.0.3` train uses three channels:
+The `0.0.4` train uses three channels:
 
 - Canary builds are commit-specific prereleases published under `canary`.
 - Preview publishes final immutable tarballs under `preview` and attaches those exact bits to GitHub Releases.
@@ -548,7 +2359,7 @@ regenerating native projects, and rebuilding with the previous signed bits.
 
 # Security
 
-Install only published `0.0.3` tarballs represented in the signed release set.
+Install only published `0.0.4` tarballs represented in the signed release set.
 Rayact verifies native artifact SHA-256 values during prebuild; release CI also
 checks provenance, SBOM/license policy, vulnerabilities, and reproducibility.
 Never bypass an ABI or checksum failure.
@@ -586,7 +2397,7 @@ Security reports follow the private process and response targets in the
 ---
 # Source: toolchains.md
 
-# Supported toolchains for 0.0.3
+# Supported toolchains for 0.0.4
 
 - Node.js 22 and 24 LTS.
 - Android API 26 minimum, compile/target API 36, AGP 8.9.1, JDK 17, NDK 27.3.13750724.
@@ -630,7 +2441,7 @@ Commit the application before upgrading. Install the desired Rayact version and
 run:
 
 ```sh
-npm install rayact@0.0.3
+npm install rayact@0.0.4
 npx rayact migrate
 npm install
 npx rayact prebuild --force

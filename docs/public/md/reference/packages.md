@@ -1,6 +1,6 @@
 # Packages and platforms
 
-Rayact uses one private npm workspace root with independently publishable packages. All first-party packages in the `0.0.3` release set use exact lockstep versions.
+Rayact uses one private npm workspace root with independently publishable packages. All first-party packages in the `0.0.4` release set use exact lockstep versions.
 
 ## Consumer and framework
 

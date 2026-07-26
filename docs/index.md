@@ -12,10 +12,14 @@ Rayact is a cross-platform React renderer with a native raylib + QuickJS backend
 
 ## Quick start
 
+Rayact ships as GitHub release tarballs (not on the npm registry) — the
+scaffolder vendors everything your project needs:
+
 ```sh
-npx create-rayact-app@0.0.4 my-app
-cd my-app && npm install
-npm run dev            # dev server + TUI
+npx https://github.com/raythings/rayact/releases/download/v0.0.4/create-rayact-app-0.0.4.tgz \
+  my-app --release-url https://github.com/raythings/rayact/releases/download/v0.0.4
+cd my-app
+npm run dev            # dev server + TUI + QR
 ```
 
 Then build and run:
@@ -27,5 +31,6 @@ rayact build --release # release bundle (bytecode + container)
 ```
 
 See [Getting started](/guide/getting-started), [Installation](/guide/install),
-[native modules](/native-modules), [deployment](/deployment), and the
-[CLI reference](/reference/cli).
+the platform guides ([desktop](/guide/desktop), [Android](/guide/android),
+[iOS](/guide/ios), [web](/guide/web)), and the
+[components reference](/reference/components).
