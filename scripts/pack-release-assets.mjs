@@ -138,11 +138,14 @@ function hasValidNativePayload(pkg) {
   if (pkg === 'prebuilt-darwin-arm64') {
     const binary = path.join(ROOT, 'packages', pkg, 'bin', 'rayact_desktop');
     if (!fs.existsSync(binary)) return false;
+    // 0.0.4+: the headless build toolchain must ship next to the host.
+    if (!fs.existsSync(path.join(ROOT, 'packages', pkg, 'bin', 'rayact_tool'))) return false;
     const result = spawnSync('file', [binary], { encoding: 'utf8' });
     return result.status === 0 && /arm64/.test(result.stdout) && !containsOptionalRegistration([binary]);
   }
   if (pkg === 'prebuilt-linux-x64') {
     const binary = path.join(ROOT, 'packages', pkg, 'bin', 'rayact_desktop');
+    if (!fs.existsSync(path.join(ROOT, 'packages', pkg, 'bin', 'rayact_tool'))) return false;
     return fs.existsSync(binary) && !containsOptionalRegistration([binary]);
   }
   return true;

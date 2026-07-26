@@ -6,7 +6,7 @@ export async function runCompile(flags: CliFlags): Promise<void> {
   const src = flags.positional[0] ?? 'dist/bundle.js';
   const out = flags.positional[1] ?? 'dist/bundle.qjsbc';
   const js = await fs.readFile(src, 'utf8');
-  const bc = await compileToBytecode(js, { root: process.cwd(), desktopBin: flags.desktopBin });
+  const bc = await compileToBytecode(js, { root: process.cwd(), desktopBin: flags.desktopBin, toolBin: flags.toolBin });
   await fs.writeFile(out, bc);
   console.log(`Compiled ${src} → ${out} (${bc.length} bytes)`);
 }
