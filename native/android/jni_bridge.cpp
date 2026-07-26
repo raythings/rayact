@@ -53,6 +53,7 @@
 #include "../desktop/accessibility_bridge.hpp"
 #include "engine_runtime.hpp"
 #include <raym3/fonts/FontManager.h>
+#include <raym3/styles/Stylesheet.h>
 #include <raym3/v2/Density.h>
 #include <raym3/v2/IconRenderer.h>
 #include <raym3/v2/EmojiFont.h>
@@ -70,7 +71,13 @@ int   GetRenderWidth(void);
 int   GetRenderHeight(void);
 bool  IsWindowReady(void);
 void  SetTargetFPS(int fps);
+void  SetConfigFlags(unsigned int flags);
 }
+
+// Matches raylib.h ConfigFlags — this TU doesn't include raylib.h.
+#ifndef FLAG_MSAA_4X_HINT
+#define FLAG_MSAA_4X_HINT 0x00000020
+#endif
 
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  "RayactJNI", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "RayactJNI", __VA_ARGS__)
@@ -1586,6 +1593,7 @@ Java_com_rayact_engine_RayactEngineSession_nativeCreateSurface(JNIEnv* env, jcla
                 LOGI("nativeCreateSurface: resume fast path unavailable, re-initializing");
                 RcoreAndroidSurface_SetWindow(win);
                 SetTargetFPS(0);
+                SetConfigFlags(FLAG_MSAA_4X_HINT); // 4x MSAA on the swapchain pass (standard raylib opt-in)
                 InitWindow(0, 0, "Rayact");
                 if (!IsWindowReady()) {
                     LOGE("nativeCreateSurface: resume InitWindow failed");
@@ -1659,6 +1667,7 @@ Java_com_rayact_engine_RayactEngineSession_nativeCreateSurface(JNIEnv* env, jcla
         layoutDensity = androidLayoutDensityForSurface(win, density);
         RcoreAndroidSurface_SetDensity(layoutDensity);
         SetTargetFPS(0);
+        SetConfigFlags(FLAG_MSAA_4X_HINT); // 4x MSAA on the swapchain pass (standard raylib opt-in)
         InitWindow(0, 0, "Rayact");
         if (!IsWindowReady()) { LOGE("nativeCreateSurface: InitWindow failed"); ANativeWindow_release(win); return 0; }
         setRaym3AndroidDensity(density, layoutDensity);
@@ -1887,6 +1896,11 @@ static void publishWindowDimensions(int widthPx, int heightPx) {
     if (!ctx) return;
     const float w = raym3::v2::Density::PxToDp((float)widthPx);
     const float h = raym3::v2::Density::PxToDp((float)heightPx);
+    // Feed live viewport to the CSS engine (width/height/orientation @media) and
+    // re-resolve className styles so responsive rules apply on rotation/resize
+    // even for nodes that don't re-render in JS.
+    raym3::Stylesheet::Global().SetViewport(w, h);
+    refreshClassNameStyles(ctx);
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue obj = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, obj, "width", JS_NewFloat64(ctx, w));

@@ -76,6 +76,7 @@ struct WorkerCanvasEntry {
     std::shared_ptr<Rectangle> layoutRect;     // written by render lambda, read by input
     std::shared_ptr<WorkerDrawReplay> replay;  // render-thread draw state
     raym3::v2::NodePtr viewportNode;           // existing React/raym3 host view
+    int        viewportNodeId = -1;            // its node id (node-lane mount point)
 };
 
 // workerId → canvas entry
@@ -184,6 +185,17 @@ static JSValue JS_spawnWorker(JSContext* ctx, JSValue,
     if (!isWasm && !isJS)
         return JS_ThrowTypeError(ctx,
             "spawnWorker: unsupported file type (.js/.ts/.jsx/.tsx/.wasm)");
+
+#if defined(RAYACT_WEB) && !defined(__EMSCRIPTEN_PTHREADS__)
+    // A WASM worker runs on its own std::thread. Without -pthread that thread
+    // never starts, so the worker would sit there dead while the app kept
+    // posting to it (unbounded inbox growth, no output). Fail loudly instead of
+    // half-succeeding — callers can catch this and fall back.
+    if (isWasm)
+        return JS_ThrowTypeError(ctx,
+            "spawnWorker: WASM workers need threads; rebuild the web host with "
+            "-DRAYACT_WEB_PTHREADS=ON");
+#endif
 
     int id = g_nextWorkerId.fetch_add(1);
     auto entry = std::make_shared<WorkerEntry>();
@@ -393,7 +405,10 @@ static JSValue JS_createWorkerView(JSContext* ctx, JSValue,
     ce.texture    = tex;
     ce.layoutRect = layoutRect;
     ce.replay     = replay;
-    if (viewportIt != g_nodes.end()) ce.viewportNode = viewportIt->second;
+    if (viewportIt != g_nodes.end()) {
+        ce.viewportNode = viewportIt->second;
+        ce.viewportNodeId = viewportNodeId;
+    }
     g_workerCanvases[workerId] = std::move(ce);
     g_canvasNodeToWorker[node.get()] = workerId;
 
@@ -441,9 +456,19 @@ void drainWorkerOutbox(JSContext* ctx) {
         // raym3 node mutations recorded in the worker — apply on this (JS)
         // thread where the node tree is owned. No JS callback.
         if (msg.type == WorkerMsgType::NodeCommands) {
+            // Mount point for SET_ROOT. Prefer the viewport host (the app's own
+            // View passed to createWorkerView): it is parented in the real tree,
+            // so the worker's subtree participates in normal Yoga layout. The
+            // canvas Custom node is only a compositing target for the draw lane
+            // and is intentionally never appended anywhere, so rooting a node
+            // subtree under it would render nothing.
             int viewNodeId = -1;
             auto cit = g_workerCanvases.find(msg.workerId);
-            if (cit != g_workerCanvases.end()) viewNodeId = cit->second.nodeId;
+            if (cit != g_workerCanvases.end()) {
+                viewNodeId = cit->second.viewportNodeId >= 0
+                    ? cit->second.viewportNodeId
+                    : cit->second.nodeId;
+            }
             rayactApplyWorkerNodeCommands(
                 msg.workerId, viewNodeId,
                 reinterpret_cast<const uint8_t*>(msg.payload.data()),
