@@ -292,6 +292,20 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
         }
         case 'image':
           return registerAnimatedHostNode(asHostNode(requireFunction(native.createImage, 'createImage')(resolveImageSource(props.source ?? props.src, native), style), type), style);
+        case 'svg': {
+          // `source` may be a bundler asset, a path, or inline markup.
+          const raw = props.source ?? props.src ?? '';
+          const source =
+            typeof raw === 'string' ? raw : resolveImageSource(raw, native);
+          return registerAnimatedHostNode(asHostNode(
+            requireFunction(native.createSvg, 'createSvg')(String(source), style, {
+              vars: props.vars,
+              channels: props.channels,
+              outline: props.outline,
+            }),
+            type
+          ), style);
+        }
         case 'icon':
           return registerAnimatedHostNode(asHostNode(
             requireFunction(native.createIcon, 'createIcon')(
@@ -357,6 +371,16 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
 
       if (node.type === 'externalView' && typeof native.setExternalViewProps === 'function') {
         native.setExternalViewProps(node.id, { ...props });
+      }
+
+      if (node.type === 'svg' && typeof native.setSvgProps === 'function') {
+        if ('vars' in props || 'channels' in props || 'outline' in props) {
+          native.setSvgProps(node.id, {
+            vars: props.vars,
+            channels: props.channels,
+            outline: props.outline,
+          });
+        }
       }
 
       if (node.type === 'icon' && typeof native.setIconProps === 'function') {
@@ -432,6 +456,12 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
     setEventHandler(node, eventName: HostEventName, handler) {
       if (eventName === 'press' || eventName === 'click') {
         requireFunction(native.setOnPress, 'setOnPress')(node.id, (handler ?? null) as (() => void) | null);
+      } else if (eventName === 'pressIn' && typeof native.setOnPressIn === 'function') {
+        native.setOnPressIn(node.id, (handler ?? null) as (() => void) | null);
+      } else if (eventName === 'pressOut' && typeof native.setOnPressOut === 'function') {
+        native.setOnPressOut(node.id, (handler ?? null) as (() => void) | null);
+      } else if (eventName === 'longPress' && typeof native.setOnLongPress === 'function') {
+        native.setOnLongPress(node.id, (handler ?? null) as (() => void) | null);
       } else if (eventName === 'changeText' && typeof native.setOnChangeText === 'function') {
         native.setOnChangeText(node.id, handler as ((value: string) => void) | null);
       } else if (eventName === 'changeValue' && typeof native.setOnChangeValue === 'function') {

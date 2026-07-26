@@ -8,11 +8,14 @@ import type {
   ButtonProps,
   ColorValue,
   IconProps,
+  SvgProps,
   ImageProps,
   ListProps,
   MaterialComponentProps,
   ModalProps,
   NavigationBarProps,
+  PressableProps,
+  PressableStateCallbackType,
   SafeAreaProps,
   ScrollViewProps,
   SearchBarProps,
@@ -76,6 +79,28 @@ export const View = React.forwardRef<any, ViewProps>((props, ref) => {
   return React.createElement('rayact-view', { ...props, ref });
 });
 
+/**
+ * react-native Pressable. A View that tracks pressed state and exposes it to
+ * `style` and `children` render-prop callbacks. Press feedback is driven by the
+ * native onPressIn/onPressOut edges; onPress/onLongPress pass through.
+ */
+export const Pressable = React.forwardRef<any, PressableProps>((props, ref) => {
+  const { style, children, onPressIn, onPressOut, ...rest } = props;
+  const [pressed, setPressed] = React.useState(false);
+  const state: PressableStateCallbackType = { pressed };
+  return React.createElement(
+    'rayact-view',
+    {
+      ...rest,
+      ref,
+      style: typeof style === 'function' ? style(state) : style,
+      onPressIn: () => { setPressed(true); onPressIn?.(); },
+      onPressOut: () => { setPressed(false); onPressOut?.(); },
+    },
+    typeof children === 'function' ? children(state) : children,
+  );
+});
+
 export function Text(props: TextProps): React.ReactElement {
   return React.createElement('rayact-text', props);
 }
@@ -90,6 +115,10 @@ export function Image(props: ImageProps): React.ReactElement {
 
 export function Icon(props: IconProps): React.ReactElement {
   return React.createElement('rayact-icon', props);
+}
+
+export function Svg(props: SvgProps): React.ReactElement {
+  return React.createElement('rayact-svg', props);
 }
 
 // RN keyboardType → raym3 wire inputType. The engine masks (password) and the
@@ -191,8 +220,55 @@ export function TextInput(props: TextInputProps): React.ReactElement {
 
 export const Input = TextInput;
 
+/** Imperative handle exposed on ScrollView refs (react-native parity). */
+export interface ScrollViewHandle {
+  /**
+   * Scroll to an absolute offset. Omitted axes are left unchanged. `animated`
+   * is accepted for react-native parity but currently performs an instant jump.
+   */
+  scrollTo(options?: { x?: number; y?: number; animated?: boolean }): void;
+  /** Scroll to the end of the content (bottom for vertical, right for horizontal). */
+  scrollToEnd(options?: { animated?: boolean }): void;
+  /** Underlying host node id (advanced). */
+  node: { id: number };
+}
+
+declare const setScrollOffset:
+  | ((nodeId: number, x: number, y: number) => void)
+  | undefined;
+
+/**
+ * react-native ScrollView. Refs receive a ScrollViewHandle with imperative
+ * scrollTo()/scrollToEnd(). The native offset is clamped on the next layout
+ * pass, so scrollToEnd() passes a large offset and lets the clamp cap it.
+ */
 export function ScrollView(props: ScrollViewProps): React.ReactElement {
-  return React.createElement('rayact-scroll-view', props);
+  const { ref, ...rest } = props as ScrollViewProps & { ref?: React.Ref<ScrollViewHandle> };
+  if (!ref) return React.createElement('rayact-scroll-view', rest);
+
+  const wire: Record<string, unknown> = { ...rest };
+  wire.ref = (inst: { node?: { id: number } } | null) => {
+    if (!inst || inst.node == null) {
+      assignRef(ref, null);
+      return;
+    }
+    const id = inst.node.id;
+    const horizontal = props.horizontal === true;
+    const END = Number.MAX_SAFE_INTEGER;
+    assignRef(ref, {
+      node: inst.node,
+      scrollTo: (options = {}) => {
+        if (typeof setScrollOffset !== 'function') return;
+        setScrollOffset(id, options.x ?? Number.NaN, options.y ?? Number.NaN);
+      },
+      scrollToEnd: () => {
+        if (typeof setScrollOffset !== 'function') return;
+        if (horizontal) setScrollOffset(id, END, Number.NaN);
+        else setScrollOffset(id, Number.NaN, END);
+      },
+    } satisfies ScrollViewHandle);
+  };
+  return React.createElement('rayact-scroll-view', wire);
 }
 
 export function List<T>(props: ListProps<T>): React.ReactElement {

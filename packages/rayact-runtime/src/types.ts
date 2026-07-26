@@ -16,6 +16,7 @@ export type HostNodeType =
   | 'button'
   | 'image'
   | 'icon'
+  | 'svg'
   | 'textInput'
   | 'scrollView'
   | 'modal'
@@ -80,6 +81,9 @@ export type HostPointerEvent = { x: number; y: number };
 
 export type HostEventName =
   | 'press'
+  | 'pressIn'
+  | 'pressOut'
+  | 'longPress'
   | 'click'
   | 'changeText'
   | 'changeValue'
@@ -160,6 +164,8 @@ export interface RayactGlobal {
   createText?: (text: string, props?: Record<string, unknown>) => number;
   createButton?: (label: string, props?: Record<string, unknown>) => number;
   createImage?: (src: string | RayactAsset, props?: Record<string, unknown>) => number | null;
+  createSvg?: (source: string, style?: unknown, props?: unknown) => number;
+  setSvgProps?: (nodeId: number, props: unknown) => void;
   createIcon?: (name: string, size?: number, color?: number | string, props?: Record<string, unknown>, variant?: string, filled?: boolean, set?: string) => number;
   setIconProps?: (nodeId: number, size?: number, color?: number | string, variant?: string, name?: string, filled?: boolean, set?: string) => void;
   registerFont?: (name: string, path: string) => void;
@@ -204,6 +210,9 @@ export interface RayactGlobal {
   setValue?: (nodeId: number, value: string) => void;
   setTextInputProps?: (nodeId: number, props: Record<string, unknown>) => void;
   setOnPress?: (nodeId: number, handler?: (() => void) | null) => void;
+  setOnPressIn?: (nodeId: number, handler?: (() => void) | null) => void;
+  setOnPressOut?: (nodeId: number, handler?: (() => void) | null) => void;
+  setOnLongPress?: (nodeId: number, handler?: (() => void) | null) => void;
   setOnChangeText?: (nodeId: number, handler?: ((value: string) => void) | null) => void;
   setOnChangeValue?: (nodeId: number, handler?: ((value: number) => void) | null) => void;
   setOnScroll?: (nodeId: number, handler?: ((event: unknown) => void) | null) => void;
