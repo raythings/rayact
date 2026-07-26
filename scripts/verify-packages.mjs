@@ -107,7 +107,10 @@ for (const { directory, manifest } of packages) {
           failures.push(`${manifest.name}: binary architecture does not match package name: ${path.relative(root, binary)}`);
         }
       }
-      if (manifest.name.startsWith('@rayact/prebuilt-android-')) {
+      // Architectures this release doesn't ship (e.g. android-x64) have no
+      // release binary either — skip the debug-engine checks along with it
+      // rather than demanding a debug build for a package with no payload.
+      if (manifest.name.startsWith('@rayact/prebuilt-android-') && fs.existsSync(binary)) {
         const debugRelativeBinary = relativeBinary.replace(/^jni\//, 'jni-debug/');
         const debugBinary = path.join(directory, debugRelativeBinary);
         if (!fs.existsSync(debugBinary)) {
