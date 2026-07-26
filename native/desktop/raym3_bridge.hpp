@@ -37,6 +37,7 @@ JSValue JS_createSafeArea(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createExternalView(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setExternalViewProps(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_focusTextInput(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_setScrollOffset(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setAccessibilityFocus(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_getReducedMotion(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createStatusBar(JSContext*, JSValue, int, JSValueConst*);
@@ -50,6 +51,9 @@ JSValue JS_insertBefore(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setRootNode(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_clearRootNode(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setOnPress(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_setOnPressIn(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_setOnPressOut(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_setOnLongPress(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setOnChangeText(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setOnFocus(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setOnBlur(JSContext*, JSValue, int, JSValueConst*);
@@ -77,6 +81,8 @@ JSValue JS_rayactBatchMutations(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createImage(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_createIcon(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_setIconProps(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_createSvg(JSContext*, JSValue, int, JSValueConst*);
+JSValue JS_setSvgProps(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_registerFont(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_loadFont(JSContext*, JSValue, int, JSValueConst*);
 JSValue JS_loadIcons(JSContext*, JSValue, int, JSValueConst*);
@@ -134,6 +140,10 @@ void raym3BridgeImportRuntimeStorage(const Raym3RuntimeStorage& in);
 void raym3BridgeClearRuntimeGlobals();
 #endif
 void refreshStylesForColorScheme(JSContext* ctx);
+
+// Re-resolve every node's className against the current stylesheet state. Used
+// after CSS custom properties change so var()-derived styles pick up new values.
+void refreshClassNameStyles(JSContext* ctx);
 void setSafeAreaInsets(float top, float right, float bottom, float left);
 void resolvePopoverAnchors();
 void installAnimatedStyleBuffer(JSContext* ctx, JSValue global);

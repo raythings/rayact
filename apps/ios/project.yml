@@ -19,10 +19,10 @@ _engineSettings: &engineSettings
   USE_HEADERMAP: NO
   CLANG_CXX_LANGUAGE_STANDARD: "gnu++20"
   CLANG_CXX_LIBRARY: "libc++"
-  HEADER_SEARCH_PATHS: "$(inherited) ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser"
-  USER_HEADER_SEARCH_PATHS: "$(inherited) ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser"
+  HEADER_SEARCH_PATHS: "$(inherited) ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser"
+  USER_HEADER_SEARCH_PATHS: "$(inherited) ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser"
   OTHER_CFLAGS: "$(inherited) -D_GNU_SOURCE"
-  GCC_PREPROCESSOR_DEFINITIONS: "$(inherited) RAYACT_PLATFORM_NET_BACKEND=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1"
+  GCC_PREPROCESSOR_DEFINITIONS: "$(inherited) $(RAYSVG_SMOKE_DEFINE) RAYACT_PLATFORM_NET_BACKEND=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1"
 
 targets:
   RayactIOS:
@@ -114,6 +114,10 @@ targets:
         excludes:
           - main.cpp
           - "*.h"
+      # raysvg vector renderer, built from the third_party submodule.
+      - path: ../../third_party/raysvg/src
+        excludes:
+          - "*.hpp"
       - path: ../../third_party/quickjs
         excludes:
           - "*.h"
@@ -315,6 +319,11 @@ targets:
         excludes:
           - main.cpp
           - "*.h"
+      # raysvg vector renderer, built from the third_party submodule.
+      - path: ../../third_party/raysvg/src
+        headerVisibility: project
+        excludes:
+          - "*.hpp"
       - path: ../../third_party/quickjs
         headerVisibility: project
         excludes:

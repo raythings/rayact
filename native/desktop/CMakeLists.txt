@@ -242,6 +242,25 @@ set(RAYM3_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(RAYM3_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(RAYM3_USE_YOGA ON CACHE BOOL "" FORCE)
 set(RAYM3_USE_INPUT_LAYERS 0 CACHE BOOL "" FORCE)
+# raysvg vector renderer (third_party submodule). Compiled against this build's raylib
+# headers so its rl* calls bind to whichever backend the target links.
+set(RAYSVG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/raysvg" CACHE PATH "Path to the raysvg checkout")
+add_library(raysvg STATIC
+    ${RAYSVG_DIR}/src/raysvg.cpp
+    ${RAYSVG_DIR}/src/rsvg_xml.cpp
+    ${RAYSVG_DIR}/src/rsvg_parse.cpp
+    ${RAYSVG_DIR}/src/rsvg_path.cpp
+    ${RAYSVG_DIR}/src/rsvg_paint.cpp
+    ${RAYSVG_DIR}/src/rsvg_transform.cpp
+    ${RAYSVG_DIR}/src/rsvg_flatten.cpp
+    ${RAYSVG_DIR}/src/rsvg_tess_fill.cpp
+    ${RAYSVG_DIR}/src/rsvg_stroke.cpp
+    ${RAYSVG_DIR}/src/rsvg_clip.cpp
+    ${RAYSVG_DIR}/src/rsvg_render.cpp
+)
+target_include_directories(raysvg PUBLIC ${RAYSVG_DIR}/include ${RAYLIB_DIR}/src)
+target_include_directories(raysvg PRIVATE ${RAYSVG_DIR}/src ${RAYSVG_DIR}/third_party/earcut)
+
 add_subdirectory("${RAYM3_DIR}" "${CMAKE_BINARY_DIR}/raym3" EXCLUDE_FROM_ALL)
 if(PLATFORM_MACOS AND RAYACT_DESKTOP_USE_METAL)
     target_include_directories(raym3 BEFORE PRIVATE "${RAYLIB_BACKENDS_DIR}/backends/rlmt")
@@ -343,6 +362,7 @@ else()
     target_compile_definitions(rayact_desktop PRIVATE RAYACT_ENABLE_DEVTOOLS=0)
 endif()
 target_include_directories(rayact_desktop PRIVATE
+    ${RAYSVG_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../core
     ${CMAKE_CURRENT_SOURCE_DIR}/../shared
@@ -361,6 +381,7 @@ target_link_directories(rayact_desktop PRIVATE
 
 # Link dependencies
 target_link_libraries(rayact_desktop
+    raysvg
     Threads::Threads
     ${QUICKJS_LIBC_LIBRARY}
     ${QUICKJS_LIBRARY}

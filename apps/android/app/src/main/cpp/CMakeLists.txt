@@ -23,6 +23,10 @@ option(RAYACT_ANDROID_USE_RAYLIB_BACKEND "Build Android with the raylib-backends
 # time to re-enable the in-process probe (FBO + grid + cube + lines). Default
 # is OFF so the engine renders the real QuickJS app.js path.
 option(RAYACT_ANDROID_3D_SMOKE "Render the temporary 3D smoke test scene on Android" OFF)
+# raysvg vector renderer (third_party submodule). The smoke scene that draws the
+# pet rig through it is opt-in (./gradlew :app:assembleDebug -PsvgSmoke=ON).
+option(RAYACT_SVG_SMOKE "Render the raysvg pet-rig smoke scene instead of the JS tree" OFF)
+set(RAYSVG_DIR "${RAYACT}/third_party/raysvg" CACHE PATH "Path to the raysvg checkout")
 option(RAYACT_ENABLE_DEVTOOLS "Link the development-only CDP inspector" OFF)
 option(RAYACT_RELEASE_HOST "Build an embedded-project-only host without development entry points" OFF)
 
@@ -119,6 +123,29 @@ add_library(cssparser STATIC
 )
 target_include_directories(cssparser PUBLIC ${THIRD_PARTY}/cssparser)
 
+# raysvg: compiled from source against this build's raylib headers, so the rl* calls bind
+# to the rlvk backend rather than to a second raylib copy.
+add_library(raysvg STATIC
+    ${RAYSVG_DIR}/src/raysvg.cpp
+    ${RAYSVG_DIR}/src/rsvg_xml.cpp
+    ${RAYSVG_DIR}/src/rsvg_parse.cpp
+    ${RAYSVG_DIR}/src/rsvg_path.cpp
+    ${RAYSVG_DIR}/src/rsvg_paint.cpp
+    ${RAYSVG_DIR}/src/rsvg_transform.cpp
+    ${RAYSVG_DIR}/src/rsvg_flatten.cpp
+    ${RAYSVG_DIR}/src/rsvg_tess_fill.cpp
+    ${RAYSVG_DIR}/src/rsvg_stroke.cpp
+    ${RAYSVG_DIR}/src/rsvg_clip.cpp
+    ${RAYSVG_DIR}/src/rsvg_render.cpp
+)
+target_include_directories(raysvg PUBLIC
+    ${RAYSVG_DIR}/include
+    PRIVATE ${RAYSVG_DIR}/src ${RAYSVG_DIR}/third_party/earcut)
+target_include_directories(raysvg PUBLIC ${RAYLIB_DIR}/src)
+if (RAYACT_ANDROID_USE_RAYLIB_BACKEND)
+    target_include_directories(raysvg PUBLIC ${RAYLIB_BACKENDS_DIR}/backends/rlvk)
+endif()
+
 # ---------------------------------------------------------------------------
 # Rayact engine (shared core, compiled with RAYACT_ANDROID so main() is excluded)
 # + Android platform/system-appearance variants + JNI bridge.
@@ -199,6 +226,7 @@ target_compile_definitions(rayact PRIVATE
     RAYACT_RELEASE_HOST=$<BOOL:${RAYACT_RELEASE_HOST}>
     RL_DEFAULT_BATCH_BUFFER_ELEMENTS=8192
     $<$<BOOL:${RAYACT_ANDROID_3D_SMOKE}>:RAYACT_ANDROID_3D_SMOKE>
+    $<$<BOOL:${RAYACT_SVG_SMOKE}>:RAYACT_SVG_SMOKE>
 )
 # Select the Android network implementation. This does not disable networking;
 # JNI installs the fetch and WebSocket bindings for every engine context.
@@ -213,7 +241,7 @@ target_include_directories(rayact PRIVATE
     ${YOGA_DIR}
 )
 target_link_libraries(rayact
-    raylib qjs raym3 cssparser
+    raylib qjs raym3 cssparser raysvg
     ${RAYLIB_LIBS} android log m dl
 )
 

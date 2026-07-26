@@ -21,7 +21,10 @@ android {
             cmake {
                 arguments '-DANDROID_STL=c++_shared',
                           '-DBUILD_TESTING=OFF',
-                          '-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384'
+                          '-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384',
+                          // -PsvgSmoke=ON renders the raysvg pet-rig scene instead of the
+                          // JS tree, for exercising the vector renderer on rlvk.
+                          "-DRAYACT_SVG_SMOKE=${project.findProperty('svgSmoke') ?: 'OFF'}"
                 cppFlags '-std=c++17'
                 // Engine + bundled native plugins (Expo-Go-style host). Plugins
                 // land in jniLibs and are dlopen'd by the module bus at runtime.
