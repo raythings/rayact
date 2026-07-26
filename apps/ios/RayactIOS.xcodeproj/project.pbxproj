@@ -249,6 +249,7 @@
 		B063B63DAF0AE710F05A3B08 /* engine_thread.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7D6CD8BB50B297A17E45231F /* engine_thread.cpp */; };
 		B163052AB462F707A3531F83 /* YGValue.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5636239CF32FB134C77058DE /* YGValue.cpp */; };
 		B20E9499A79EB3FFF1377EDF /* engine_runtime.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 74DBCA3944A8B9E724BFB3DC /* engine_runtime.cpp */; };
+		B2EBC1561F8685ED0EF0D771 /* qjs_compile.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 27A1634508D7D5B513C6F602 /* qjs_compile.cpp */; };
 		B31D98AA1304428D32A17532 /* Dialog.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 364E7ADD53511EAAD220CE0C /* Dialog.cpp */; };
 		B3CDA4E49203E1A34EE4392E /* RayactNativeBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA3C7D1E2BC8A5A32056664A /* RayactNativeBridge.swift */; };
 		B41A1BAB1F083D8548230FAB /* raym3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F9A1AF35922E1BA96BE97CBE /* raym3.cpp */; };
@@ -347,6 +348,7 @@
 		F2FED92558BF715FE5DBB2AB /* RayactHostCallbacksBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 554DA2B057F68DE0276086F2 /* RayactHostCallbacksBridge.swift */; };
 		F36B7AAF73A44ED7CAAB5B6F /* mmkv_plugin.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 40C2E0E3155F9F9850D10FFF /* mmkv_plugin.cpp */; };
 		F379F0CC178E0EE511674758 /* js_stdlib.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 20F92CF43B7F1D037FF2CC55 /* js_stdlib.cpp */; };
+		F4332F3E887B1E396CD1A283 /* qjs_compile.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 27A1634508D7D5B513C6F602 /* qjs_compile.cpp */; };
 		F637DEE432114820CBAF51E2 /* Card.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 729BCF3CAF33A83E39CAA174 /* Card.cpp */; };
 		F72DA144DD8122736D94D156 /* ios_bridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = FD79277A49A59E148C2863ED /* ios_bridge.mm */; };
 		F734AA2AE1B0356832AFDC72 /* YGValue.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5636239CF32FB134C77058DE /* YGValue.cpp */; };
@@ -413,6 +415,7 @@
 		25205A3983407A326A8FA64A /* quickjs_bridge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = quickjs_bridge.cpp; sourceTree = "<group>"; };
 		25B7FE4A12BC024FA7A69E8D /* tree-sitter-typescript.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "tree-sitter-typescript.h"; sourceTree = "<group>"; };
 		26A2363B4CBAC90587376E4F /* View3D.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = View3D.cpp; sourceTree = "<group>"; };
+		27A1634508D7D5B513C6F602 /* qjs_compile.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = qjs_compile.cpp; sourceTree = "<group>"; };
 		28017968BFB09359F4901F61 /* CachedMeasurement.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CachedMeasurement.h; sourceTree = "<group>"; };
 		2946B84A4A7FF9FF1C43DFC2 /* rtextures.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rtextures.c; sourceTree = "<group>"; };
 		2A205E331E0AEB99ED3C10A5 /* accessibility_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = accessibility_bridge.hpp; sourceTree = "<group>"; };
@@ -732,20 +735,13 @@
 		21F9B6E3C413E7F26E2D2A61 /* src */ = {
 			isa = PBXGroup;
 			children = (
-				0D64A69A148C5022990C6411 /* raysvg.cpp */,
-				3C76BCB0EA862114A65CFFF8 /* rsvg_clip.cpp */,
-				562B0EE3A489A95B644FBCC1 /* rsvg_flatten.cpp */,
-				74EEDD69FF3345CB00E5B58E /* rsvg_paint.cpp */,
-				2EAFD22B4DA486F88C9F8EEC /* rsvg_parse.cpp */,
-				9D725F3FBB09FA17ECF4B7D2 /* rsvg_path.cpp */,
-				0222954B96DFCCF6BF6C8980 /* rsvg_render.cpp */,
-				D21268951C914A952F7FE5EC /* rsvg_stroke.cpp */,
-				D03DDDC3CAD0DA5DFC0D1AF4 /* rsvg_tess_fill.cpp */,
-				C10626F16DBF164665455168 /* rsvg_transform.cpp */,
-				B01133E2ACF7BF58A9A63AB9 /* rsvg_xml.cpp */,
+				62D5F1BAB64A9A455402D29E /* rmodels.c */,
+				D4F92D27F9383E1B90D2AB1F /* rshapes.c */,
+				033D06CBD69C1A750204C7F1 /* rtext.c */,
+				2946B84A4A7FF9FF1C43DFC2 /* rtextures.c */,
 			);
 			name = src;
-			path = ../../third_party/raysvg/src;
+			path = ../../third_party/raylib/src;
 			sourceTree = "<group>";
 		};
 		2299435D3EDEFE92AB4CD6F2 /* native */ = {
@@ -996,6 +992,7 @@
 		AF2C61CF981800432F054C4B /* shared */ = {
 			isa = PBXGroup;
 			children = (
+				27A1634508D7D5B513C6F602 /* qjs_compile.cpp */,
 				77FCB5613F3516AB0744BDE9 /* rayactpack.cpp */,
 			);
 			name = shared;
@@ -1162,13 +1159,18 @@
 		DC5ADB45C711D52BCF5C2139 /* src */ = {
 			isa = PBXGroup;
 			children = (
-				62D5F1BAB64A9A455402D29E /* rmodels.c */,
-				D4F92D27F9383E1B90D2AB1F /* rshapes.c */,
-				033D06CBD69C1A750204C7F1 /* rtext.c */,
-				2946B84A4A7FF9FF1C43DFC2 /* rtextures.c */,
+				F9A1AF35922E1BA96BE97CBE /* raym3.cpp */,
+				BDBC7B30D49E2AB9A7B224F8 /* components */,
+				D1FA6A0474596C9B966084DF /* fonts */,
+				F4DDDDA81E51E9DC2FD9467B /* input */,
+				A32AD65D1EEE8D20BB6B7593 /* layout */,
+				FBE34C0E60F46EB5CB306C0B /* platform */,
+				2EAA334E8DF6C07DD27BAB5B /* rendering */,
+				1E2351CA2D01F0C72C45695E /* styles */,
+				9CB6A374AE66C43E81EA24DB /* v2 */,
 			);
 			name = src;
-			path = ../../third_party/raylib/src;
+			path = ../../third_party/raym3/src;
 			sourceTree = "<group>";
 		};
 		E4259D8BF16E3E412BBC27A5 /* quickjs */ = {
@@ -1272,18 +1274,20 @@
 		FC7630ACE27BDFD5C4818BE3 /* src */ = {
 			isa = PBXGroup;
 			children = (
-				F9A1AF35922E1BA96BE97CBE /* raym3.cpp */,
-				BDBC7B30D49E2AB9A7B224F8 /* components */,
-				D1FA6A0474596C9B966084DF /* fonts */,
-				F4DDDDA81E51E9DC2FD9467B /* input */,
-				A32AD65D1EEE8D20BB6B7593 /* layout */,
-				FBE34C0E60F46EB5CB306C0B /* platform */,
-				2EAA334E8DF6C07DD27BAB5B /* rendering */,
-				1E2351CA2D01F0C72C45695E /* styles */,
-				9CB6A374AE66C43E81EA24DB /* v2 */,
+				0D64A69A148C5022990C6411 /* raysvg.cpp */,
+				3C76BCB0EA862114A65CFFF8 /* rsvg_clip.cpp */,
+				562B0EE3A489A95B644FBCC1 /* rsvg_flatten.cpp */,
+				74EEDD69FF3345CB00E5B58E /* rsvg_paint.cpp */,
+				2EAFD22B4DA486F88C9F8EEC /* rsvg_parse.cpp */,
+				9D725F3FBB09FA17ECF4B7D2 /* rsvg_path.cpp */,
+				0222954B96DFCCF6BF6C8980 /* rsvg_render.cpp */,
+				D21268951C914A952F7FE5EC /* rsvg_stroke.cpp */,
+				D03DDDC3CAD0DA5DFC0D1AF4 /* rsvg_tess_fill.cpp */,
+				C10626F16DBF164665455168 /* rsvg_transform.cpp */,
+				B01133E2ACF7BF58A9A63AB9 /* rsvg_xml.cpp */,
 			);
 			name = src;
-			path = ../../third_party/raym3/src;
+			path = ../../third_party/raysvg/src;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -1586,6 +1590,7 @@
 				587149023A8B3C82FE6993A4 /* module_bus.cpp in Sources */,
 				96962E57BF045D889E3AAEDA /* platform_ios.cpp in Sources */,
 				0398FB8BB5F0A35AB3A0BBDE /* plugin_loader.cpp in Sources */,
+				F4332F3E887B1E396CD1A283 /* qjs_compile.cpp in Sources */,
 				9DCB48FEF9126013AE4A4EC8 /* quickjs-libc.c in Sources */,
 				E3089CBD9ABA5AFDF8B28701 /* quickjs.c in Sources */,
 				1BCA7FAED4BC3B515D74A6DD /* quickjs_bridge.cpp in Sources */,
@@ -1755,6 +1760,7 @@
 				BD8D1CF27329927B935827C6 /* module_bus.cpp in Sources */,
 				69C313BEE54637A6C8E10ADB /* platform_ios.cpp in Sources */,
 				0DCCFC0F0DC082373825C5FE /* plugin_loader.cpp in Sources */,
+				B2EBC1561F8685ED0EF0D771 /* qjs_compile.cpp in Sources */,
 				39DE2399E8AC558B5522990F /* quickjs-libc.c in Sources */,
 				E80780F2507C821276DDF3AB /* quickjs.c in Sources */,
 				32349FFF5A169B6309CD46F7 /* quickjs_bridge.cpp in Sources */,
