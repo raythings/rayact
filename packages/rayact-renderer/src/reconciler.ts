@@ -89,7 +89,8 @@ const fiberByHostInstance = new WeakMap<object, unknown>();
 // JS, but consumers may pass it; strip it from the payload so the bridge
 // doesn't try to apply it as a style/attribute.
 const eventProps = [
-  'onPress', 'onClick', 'onChangeText', 'onValueChange', 'onScroll', 'onRequestClose',
+  'onPress', 'onPressIn', 'onPressOut', 'onLongPress',
+  'onClick', 'onChangeText', 'onValueChange', 'onScroll', 'onRequestClose',
   'onFocus', 'onBlur', 'onLayout', 'onDragStart', 'onDragMove', 'onDragEnd',
   // TextInput (react-native parity). keyPress/contentSizeChange are accepted and
   // stripped from the payload but not yet fired by the host.
@@ -111,6 +112,7 @@ const hostNodeTypes = new Set<string>([
   'button',
   'image',
   'icon',
+  'svg',
   'textInput',
   'scrollView',
   'modal',
@@ -344,6 +346,9 @@ function updateEvents(instance: RayactHostInstance, oldProps: Record<string, unk
 
 function eventNameForProp(prop: typeof eventProps[number]): HostEventName {
   if (prop === 'onClick') return 'click';
+  if (prop === 'onPressIn') return 'pressIn';
+  if (prop === 'onPressOut') return 'pressOut';
+  if (prop === 'onLongPress') return 'longPress';
   if (prop === 'onChangeText') return 'changeText';
   if (prop === 'onValueChange') return 'changeValue';
   if (prop === 'onScroll') return 'scroll';

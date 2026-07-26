@@ -63,7 +63,7 @@ export const SK = {
   backgroundColor: 50, borderColor: 51, color: 52,
   // enums (int)
   flexDirection: 60, justifyContent: 61, alignItems: 62, alignSelf: 63,
-  display: 64, position: 65, overflow: 66, pointerEvents: 67,
+  display: 64, position: 65, overflow: 66, pointerEvents: 67, flexWrap: 68,
 } as const;
 
 export type StyleKey = keyof typeof SK;
@@ -86,6 +86,7 @@ export const COLOR_KEYS = new Set<string>(['backgroundColor', 'borderColor', 'co
 // Enum string → int. MUST match native applyStyleKeyBinary.
 export const ENUM_VALUES: Record<string, Record<string, number>> = {
   flexDirection: { row: 0, column: 1, 'row-reverse': 2, 'column-reverse': 3 },
+  flexWrap: { nowrap: 0, wrap: 1, 'wrap-reverse': 2 },
   justifyContent: { 'flex-start': 0, 'flex-end': 1, center: 2, 'space-between': 3, 'space-around': 4, 'space-evenly': 5 },
   alignItems: { 'flex-start': 0, 'flex-end': 1, center: 2, stretch: 3, baseline: 4 },
   alignSelf: { 'flex-start': 0, 'flex-end': 1, center: 2, stretch: 3 },

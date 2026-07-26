@@ -24,6 +24,8 @@ export type {
   MaterialComponentProps,
   ModalProps,
   NavigationBarProps,
+  PressableProps,
+  PressableStateCallbackType,
   RayactContainer,
   RayactRoot,
   SafeAreaEdge,
@@ -48,7 +50,7 @@ export type {
 } from './types.js';
 
 export { ExternalView, NativeTextInput } from './components.js';
-export type { TextInputHandle } from './components.js';
+export type { TextInputHandle, ScrollViewHandle } from './components.js';
 export {
   ActivityIndicator,
   AppBar,
@@ -73,6 +75,7 @@ export {
   Fab,
   FabMenu,
   Icon,
+  Svg,
   IconButton,
   Image,
   List,
@@ -85,6 +88,7 @@ export {
   NavigationBarItem,
   NavigationDrawer,
   NavigationRail,
+  Pressable,
   ProgressIndicator,
   RadioButton,
   RangeSlider,
@@ -120,6 +124,13 @@ export { useSafeAreaInsets } from './hooks/useSafeAreaInsets.js';
 export type { SafeAreaInsets } from './hooks/useSafeAreaInsets.js';
 export { useColorScheme, useColorSchemePreference, setColorSchemePreference, cycleColorSchemePreference } from './theme/colorSchemeStore.js';
 export type { ColorSchemePreference } from './theme/colorSchemeStore.js';
+export {
+  useCSSVariable,
+  getCSSVariable,
+  setCSSVariable,
+  setCSSVariables,
+  resetCSSVariables
+} from './theme/cssVariableStore.js';
 export { RayactThemeProvider } from './theme/RayactThemeProvider.js';
 export type { RayactTheme } from './theme/tokens.js';
 export { useAnimatedValue, easeInOutCubic } from './anim/useAnimatedValue.js';

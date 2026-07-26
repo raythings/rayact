@@ -250,6 +250,12 @@ export interface BaseProps {
   /** Internal: marks the AppBar title slot so the renderer can recenter it. */
   appBarTitle?: boolean;
   onPress?: () => void;
+  /** Fired on touch-down, before the press is confirmed (react-native parity). */
+  onPressIn?: () => void;
+  /** Fired on touch-release/cancel (react-native parity). */
+  onPressOut?: () => void;
+  /** Fired once when the press is held past the long-press threshold. */
+  onLongPress?: () => void;
   onClick?: () => void;
   onDragStart?: (event: { x: number; y: number }) => void;
   onDragMove?: (event: { x: number; y: number }) => void;
@@ -267,6 +273,18 @@ export interface BaseProps {
 export interface ViewProps extends BaseProps {
   /** Keep a focused TextInput/IME active while this view (or a child) is tapped. */
   keyboardShouldPersistTaps?: 'always' | 'handled' | 'never';
+}
+
+/** State passed to Pressable's `style`/`children` render-prop callbacks. */
+export interface PressableStateCallbackType {
+  pressed: boolean;
+}
+
+export interface PressableProps extends Omit<ViewProps, 'style' | 'children'> {
+  /** A style value, or a callback receiving `{ pressed }` (react-native parity). */
+  style?: StyleProp | ((state: PressableStateCallbackType) => StyleProp);
+  /** Children, or a callback receiving `{ pressed }` (react-native parity). */
+  children?: React.ReactNode | ((state: PressableStateCallbackType) => React.ReactNode);
 }
 
 export interface AvoidKeyboardProps extends BaseProps {
@@ -307,6 +325,24 @@ export interface IconProps extends BaseProps {
   filled?: boolean;
   /** Named icon set to resolve `name` against. Default: `"material"` (built in, zero setup). Register custom sets with `loadIcons()`. */
   set?: string;
+}
+
+/**
+ * Vector artwork rendered by raysvg. The parsed document is retained natively, so
+ * animating it means writing channels rather than reparsing: `channels` maps an element id
+ * to [translateX, translateY, rotationDeg, scaleX, scaleY] in the document's own user
+ * units, applied about that element's transform-origin.
+ */
+export interface SvgProps extends ViewProps {
+  /** Asset, file path, or inline SVG markup. */
+  source?: unknown;
+  src?: unknown;
+  /** CSS custom properties the document references via var(), e.g. { '--skin': '#ffe76a' }. */
+  vars?: Record<string, string | number>;
+  /** Per-element transforms, keyed by element id. */
+  channels?: Record<string, [number, number, number, number, number] | number[]>;
+  /** Groups to draw a synthesized dilate-style outline beneath. */
+  outline?: Array<string | { id: string; color?: string | number; radius?: number }>;
 }
 
 /** react-native TextInput.keyboardType (cross-platform subset + common iOS/Android values). */
@@ -609,6 +645,7 @@ declare global {
       Button: ButtonProps;
       Image: ImageProps;
       Icon: IconProps;
+      Svg: SvgProps;
       TextInput: TextInputProps;
       ScrollView: ScrollViewProps;
       Modal: ModalProps;
@@ -657,6 +694,7 @@ declare global {
       'rayact-button': ButtonProps;
       'rayact-image': ImageProps;
       'rayact-icon': IconProps;
+      'rayact-svg': SvgProps;
       'rayact-text-input': TextInputProps;
       'rayact-scroll-view': ScrollViewProps;
       'rayact-modal': ModalProps;
