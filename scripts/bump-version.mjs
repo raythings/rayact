@@ -46,6 +46,7 @@ for (const f of [
   'package.json',
   ...execSync('find packages -mindepth 2 -maxdepth 2 -name package.json', { cwd: ROOT, encoding: 'utf8' }).trim().split('\n'),
   'apps/dev-app/package.json',
+  'test-projects/release-consumer-smoke/package.json',
 ].filter(Boolean)) {
   edit(f, (raw) => {
     const p = JSON.parse(raw);
