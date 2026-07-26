@@ -52,8 +52,12 @@ CSS `color` set on an ancestor cascades to descendant `Text` nodes.
 ### ScrollView
 
 Scrollable container (vertical by default; `horizontal` prop). Mouse-wheel
-scrolls on desktop and web; touch flings elsewhere. `contentContainerStyle`
-styles the inner content node.
+scrolls on desktop and web; touch flings elsewhere. Children render inside an
+implicit **content container** (react-native parity) that defaults to
+`flexShrink: 0` and stretches on the cross axis, so content sizes to its
+children and overflows into scroll range instead of being squeezed to the
+viewport. `contentContainerStyle` styles that node — padding, `gap`,
+`alignItems` and friends go there, not on the ScrollView itself.
 
 Imperative handle (react-native parity):
 
@@ -75,14 +79,12 @@ ref.current?.scrollToEnd();        // jump to the bottom (or right, if horizonta
   the same layout pass a child is appended).
 
 **`flex: 1` caveat**: `flex: 1` expands to
-`flexGrow: 1; flexShrink: 1; flexBasis: 0` (standard Yoga meaning). On a
-`ScrollView` — or rows inside one — the implicit `flexShrink: 1` lets
-overflowing content be squeezed instead of scrolling. If rows overlap instead
-of scrolling, opt out of shrinking:
-
-```tsx
-<ScrollView style={{ flexGrow: 1, flexShrink: 0 }}>
-```
+`flexGrow: 1; flexShrink: 1; flexBasis: 0` (standard Yoga meaning). The
+implicit content container ships with `flexShrink: 0`, so ScrollView children
+are not squeezed by default — but if you set `flexShrink: 1` (or `flex: 1`) on
+the content container or on rows inside your own nested containers, they can
+be compressed to fit instead of scrolling. Opt back out with
+`flexGrow: 1, flexShrink: 0` on the offending row.
 
 ### Pressable
 

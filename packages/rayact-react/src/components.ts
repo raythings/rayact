@@ -242,9 +242,31 @@ declare const setScrollOffset:
  * scrollTo()/scrollToEnd(). The native offset is clamped on the next layout
  * pass, so scrollToEnd() passes a large offset and lets the clamp cap it.
  */
+/** Flatten a StyleProp (nested arrays / falsy entries) into one object. */
+function flattenStyleProp(style: unknown): Record<string, unknown> {
+  if (!style) return {};
+  if (Array.isArray(style)) return Object.assign({}, ...style.map(flattenStyleProp));
+  return style as Record<string, unknown>;
+}
+
 export function ScrollView(props: ScrollViewProps): React.ReactElement {
-  const { ref, ...rest } = props as ScrollViewProps & { ref?: React.Ref<ScrollViewHandle> };
-  if (!ref) return React.createElement('rayact-scroll-view', rest);
+  const { ref, contentContainerStyle, children, ...rest } =
+    props as ScrollViewProps & { ref?: React.Ref<ScrollViewHandle>; children?: React.ReactNode };
+
+  // react-native parity: children live in an implicit content container that
+  // sizes to its content along the scroll axis. Without it, children are laid
+  // out directly in the viewport-sized scroll node and Yoga's default
+  // flexShrink squeezes them to fit instead of overflowing into scroll range.
+  const contentStyle: Record<string, unknown> = {
+    flexDirection: props.horizontal ? 'row' : 'column',
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: 'stretch',
+    ...flattenStyleProp(contentContainerStyle)
+  };
+  const content = React.createElement('rayact-view', { style: contentStyle }, children);
+
+  if (!ref) return React.createElement('rayact-scroll-view', rest, content);
 
   const wire: Record<string, unknown> = { ...rest };
   wire.ref = (inst: { node?: { id: number } } | null) => {
@@ -268,7 +290,7 @@ export function ScrollView(props: ScrollViewProps): React.ReactElement {
       },
     } satisfies ScrollViewHandle);
   };
-  return React.createElement('rayact-scroll-view', wire);
+  return React.createElement('rayact-scroll-view', wire, content);
 }
 
 export function List<T>(props: ListProps<T>): React.ReactElement {
