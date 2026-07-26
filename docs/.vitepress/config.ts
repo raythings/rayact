@@ -8,7 +8,10 @@ export default defineConfig({
   cleanUrls: true,
   lastUpdated: true,
   // Maintainer-only notes stay in the repo but out of the published site.
-  srcExclude: ['maintainer/**', 'README.md', '**/tools/**'],
+  // public/** is VitePress's verbatim static dir — the generated raw-markdown
+  // copies under public/md are served as .md for LLM consumers and must not
+  // also be compiled into duplicate HTML routes.
+  srcExclude: ['maintainer/**', 'public/**', 'README.md', '**/tools/**'],
   themeConfig: {
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
