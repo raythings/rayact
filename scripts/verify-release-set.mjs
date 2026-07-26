@@ -12,8 +12,17 @@ for (const item of [...release.packages, ...release.artifacts]) {
   const actual = crypto.createHash('sha256').update(fs.readFileSync(path.join(directory, filename))).digest('hex');
   if (actual !== item.sha256) throw new Error(`Release-set checksum mismatch: ${filename}`);
 }
-if (process.env.RAYACT_RELEASE_PUBLIC_KEY) {
-  const signature = Buffer.from(fs.readFileSync(path.join(directory, 'release-set.sig'), 'utf8').trim(), 'base64');
-  if (!crypto.verify(null, contents, process.env.RAYACT_RELEASE_PUBLIC_KEY, signature)) throw new Error('Invalid release-set signature');
+// Public key: env override, else the key committed with the repo.
+import { fileURLToPath } from 'node:url';
+const defaultKeyPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'release-public-key.pem');
+const publicKey = process.env.RAYACT_RELEASE_PUBLIC_KEY
+  ?? (fs.existsSync(defaultKeyPath) ? fs.readFileSync(defaultKeyPath, 'utf8') : null);
+const sigPath = path.join(directory, 'release-set.sig');
+if (publicKey && fs.existsSync(sigPath)) {
+  const signature = Buffer.from(fs.readFileSync(sigPath, 'utf8').trim(), 'base64');
+  if (!crypto.verify(null, contents, publicKey, signature)) throw new Error('Invalid release-set signature');
+  console.log('Signature: OK');
+} else if (process.argv.includes('--require-signature')) {
+  throw new Error('release-set.sig missing or no public key available');
 }
 console.log(`Verified release set ${release.version}.`);

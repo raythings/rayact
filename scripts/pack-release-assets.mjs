@@ -184,6 +184,17 @@ add(copyIfExists(path.join(ROOT, 'apps/dev-app/dist/rayact-dev-app-simulator.zip
 const webBin = path.join(ROOT, 'build-web/bin');
 add(packWebHost(webBin, `rayact-web-${VERSION}.tar.gz`), `rayact-web-${VERSION}.tar.gz`);
 
+// Optional pthreads-enabled host (SharedArrayBuffer workers). Built separately
+// because -pthread is incompatible with the sync-XHR dev loader; consumers that
+// use WASM workers on web point RAYACT_WEB_HOST_DIR at this host.
+const webPthreadsBin = path.join(ROOT, 'build-web-pthreads/bin');
+if (fs.existsSync(path.join(webPthreadsBin, 'rayact.html'))) {
+  add(packWebHost(webPthreadsBin, `rayact-web-pthreads-${VERSION}.tar.gz`),
+    `rayact-web-pthreads-${VERSION}.tar.gz`);
+} else {
+  console.warn('note: build-web-pthreads/bin not present — skipping the pthreads web host asset');
+}
+
 run('node', ['scripts/generate-release-set.mjs', '--assets', OUT], { cwd: ROOT });
 
 const releasable = fs.readdirSync(OUT)
