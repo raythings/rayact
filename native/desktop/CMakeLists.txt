@@ -321,8 +321,10 @@ set(SOURCES
     # shared library via apps/android/app/src/main/cpp/CMakeLists.txt.
     ../core/config_loader.cpp
     # shared/ provides the .rayactpack container reader/writer (also linked by
-    # the Android/iOS engine libs).
+    # the Android/iOS engine libs) and the QuickJS bytecode compiler shared
+    # with rayact_tool.
     ../shared/rayactpack.cpp
+    ../shared/qjs_compile.cpp
     ${TS_TYPESCRIPT_SOURCES}
     ${CSSPARSER_SOURCES}
 )
@@ -443,6 +445,29 @@ if(PLATFORM_MACOS)
                 ${BREW}/lib/libspirv-cross-core.a)
         endif()
     endif()
+endif()
+
+# rayact_tool — headless build toolchain (bytecode compile + rayactpack).
+# Deliberately links QuickJS only: no raylib/raym3/GL, so it runs in headless
+# CI containers and ships alongside rayact_desktop in the host prebuilts.
+add_executable(rayact_tool
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tools/tool_main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../shared/qjs_compile.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../shared/rayactpack.cpp
+)
+target_include_directories(rayact_tool PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../shared
+)
+target_compile_definitions(rayact_tool PRIVATE
+    RAYACT_TOOL_VERSION="${CMAKE_PROJECT_VERSION}"
+)
+target_link_libraries(rayact_tool
+    Threads::Threads
+    ${QUICKJS_LIBRARY}
+    ${CMAKE_DL_LIBS}
+)
+if(PLATFORM_LINUX)
+    target_link_libraries(rayact_tool m)
 endif()
 
 # Compile options

@@ -14,6 +14,8 @@ export {
   prebuiltTarballName,
   checkPrebuiltAbi,
   resolveDesktopBin as resolveDesktopBinPrebuilt,
+  toolBinName,
+  resolveToolBin,
   downloadReleaseAsset,
   downloadPrebuilt,
   ensureDesktopPrebuilt,
@@ -21,7 +23,7 @@ export {
   ensureDevApp,
   ensureWebHost
 } from './prebuiltHost.js';
-export type { DesktopHostKey, ResolvedDesktop, DevAppPlatform } from './prebuiltHost.js';
+export type { DesktopHostKey, ResolvedDesktop, ResolvedTool, DevAppPlatform } from './prebuiltHost.js';
 
 export type {
   RayactModuleManifest,

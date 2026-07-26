@@ -15,6 +15,7 @@ import {
 import type { RayactBuildMode, RayactConfig } from '@rayact/dev-server';
 import {
   ensureDesktopPrebuilt,
+  resolveToolBin,
   applyAndroidProjectIdentity,
   resolvePrebuiltAndroidDir,
   resolvePackageDir,
@@ -163,14 +164,35 @@ export async function runBuild(flags: CliFlags): Promise<void> {
   );
   const outDir = path.resolve(process.cwd(), flags.outDir);
 
-  // Bytecode compile runs through the rayact_desktop host. Ensure it's present
-  // (source build → installed prebuilt → cache → download) before bundling, so
-  // a consumer with no native checkout still gets a working release build.
+  // Bytecode compile runs through the headless rayact_tool binary. Resolve it
+  // first (env → source build → installed prebuilt → cache); only when nothing
+  // is present at all do we download the host prebuilt (which ships rayact_tool
+  // next to rayact_desktop from 0.0.4 on), so a consumer with no native
+  // checkout still gets a working release build.
   let desktopBin = flags.desktopBin;
+  let toolBin = flags.toolBin;
   if (bytecode) {
-    const host = await ensureDesktopPrebuilt(process.cwd(), flags.desktopBin);
-    desktopBin = host.bin;
-    console.log(`Bytecode host: ${host.bin} (${host.source})`);
+    let tool = resolveToolBin(process.cwd(), flags.toolBin);
+    if (!tool) {
+      const host = await ensureDesktopPrebuilt(process.cwd(), flags.desktopBin);
+      desktopBin = host.bin;
+      tool = resolveToolBin(process.cwd(), flags.toolBin);
+    }
+    if (!tool) {
+      console.error('rayact_tool not found — cannot compile bytecode.');
+      console.error('Run `rayact prebuild` to fetch the prebuilt, or set RAYACT_TOOL_BIN.');
+      process.exitCode = 1;
+      return;
+    }
+    toolBin = tool.bin;
+    if (tool.fallbackDesktopHost) {
+      console.warn(
+        `Bytecode tool: falling back to the rayact_desktop host at ${tool.bin} ` +
+          '(pre-0.0.4 prebuilt; works, but pulls in the GUI runtime).'
+      );
+    } else {
+      console.log(`Bytecode tool: ${tool.bin} (${tool.source})`);
+    }
   }
 
   const output = await writeRayactBuild({
@@ -181,7 +203,8 @@ export async function runBuild(flags: CliFlags): Promise<void> {
     outDir,
     minify,
     bytecode,
-    desktopBin
+    desktopBin,
+    toolBin
   });
 
   console.log(`Rayact ${output.mode} build written to ${outDir}`);
@@ -725,7 +748,11 @@ async function packageDesktopApp(
   }
 
   const pack = path.join(outDir, 'app.rayactpack');
-  const packResult = spawnSync(destBin, ['--pack', outDir, pack], { cwd: outDir, stdio: 'inherit' });
+  // Pack via the headless rayact_tool when available; the copied host binary
+  // accepts the same flags and covers pre-0.0.4 prebuilts.
+  const tool = resolveToolBin(cwd, flags.toolBin);
+  const packBin = tool && !tool.fallbackDesktopHost ? tool.bin : destBin;
+  const packResult = spawnSync(packBin, ['--pack', outDir, pack], { cwd: outDir, stdio: 'inherit' });
   if (packResult.status !== 0) process.exit(packResult.status ?? 1);
 
   console.log(`Desktop app packaged: ${outDir}`);

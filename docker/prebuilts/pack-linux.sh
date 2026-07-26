@@ -37,5 +37,15 @@ fi
 cp "$DESKTOP_BIN" "$LINUX_PKG/bin/"
 chmod +x "$LINUX_PKG/bin/rayact_desktop"
 
+# Headless build toolchain (bytecode compile + rayactpack) — ships next to the
+# host so consumer builds never need the GUI binary.
+TOOL_BIN="$RAYACT_ROOT/build-linux/bin/rayact_tool"
+if [[ ! -f "$TOOL_BIN" ]]; then
+  echo "ERROR: $TOOL_BIN not found (build the rayact_tool target)" >&2
+  exit 1
+fi
+cp "$TOOL_BIN" "$LINUX_PKG/bin/"
+chmod +x "$LINUX_PKG/bin/rayact_tool"
+
 write_manifest "$LINUX_PKG" "linux" "x86_64"
 echo "==> Linux prebuilts packed."

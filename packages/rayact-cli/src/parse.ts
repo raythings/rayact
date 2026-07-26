@@ -10,6 +10,7 @@ export interface CliFlags {
   entry: string;
   platform: string;
   desktopBin: string;
+  toolBin: string;
   mode: RayactBuildMode;
   outDir: string;
   minify: boolean | null;
@@ -46,6 +47,7 @@ export function parseCli(argv: string[]): CliFlags {
     // desktop for commands that need a single release target.
     platform: config.platform ?? 'desktop',
     desktopBin: process.env.RAYACT_DESKTOP_BIN ?? '',
+    toolBin: process.env.RAYACT_TOOL_BIN ?? '',
     mode: 'development',
     outDir: 'dist',
     minify: null,
@@ -105,6 +107,7 @@ export function parseCli(argv: string[]): CliFlags {
     else if (arg === '--entry' && next) { flags.entry = next; i++; }
     else if (arg === '--platform' && next) { flags.platform = next; i++; }
     else if (arg === '--desktop-bin' && next) { flags.desktopBin = next; i++; }
+    else if (arg === '--tool-bin' && next) { flags.toolBin = next; i++; }
     else if (arg === '--mode' && next) {
       if (!['development', 'dev-client', 'release'].includes(next)) {
         throw new Error(`Invalid --mode ${next}`);
@@ -160,6 +163,7 @@ export function toDevServerArgs(flags: CliFlags) {
     entry: flags.entry,
     platform: flags.platform,
     desktopBin: flags.desktopBin,
+    toolBin: flags.toolBin,
     mode: flags.mode,
     outDir: flags.outDir,
     minify: flags.minify ?? false,

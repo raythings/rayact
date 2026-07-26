@@ -61,7 +61,7 @@ if [[ "$DO_DARWIN" -eq 1 ]]; then
     cmake --build "$quickjs_dir" --target qjs --parallel
     cmake -B "$build_dir" -S . -DENABLE_DESKTOP=ON -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_OSX_ARCHITECTURES="$cmake_arch" -DQUICKJS_BUILD_DIR="$quickjs_dir"
-    cmake --build "$build_dir" --target rayact_desktop --parallel
+    cmake --build "$build_dir" --target rayact_desktop rayact_tool --parallel
     cmake -B "$release_dir" -S . -DENABLE_DESKTOP=ON -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_OSX_ARCHITECTURES="$cmake_arch" \
       -DQUICKJS_BUILD_DIR="$quickjs_dir" \
@@ -72,8 +72,12 @@ if [[ "$DO_DARWIN" -eq 1 ]]; then
     mkdir -p "$pkg/bin"
     cp "$build_dir/bin/rayact_desktop" "$pkg/bin/"
     cp "$release_dir/bin/rayact_desktop" "$pkg/bin/rayact_release"
+    # Headless build toolchain (bytecode compile + rayactpack) — ships next to
+    # the host so consumer builds never need the GUI binary.
+    cp "$build_dir/bin/rayact_tool" "$pkg/bin/"
     chmod +x "$pkg/bin/rayact_desktop"
     chmod +x "$pkg/bin/rayact_release"
+    chmod +x "$pkg/bin/rayact_tool"
     write_manifest "$pkg" "darwin" "$arch"
     echo "  packed prebuilt-darwin-$arch"
   done

@@ -125,6 +125,67 @@ export function resolveDesktopBin(
   return null;
 }
 
+// --- Build tool (rayact_tool) ------------------------------------------------
+
+export function toolBinName(): string {
+  return process.platform === 'win32' ? 'rayact_tool.exe' : 'rayact_tool';
+}
+
+export interface ResolvedTool {
+  /** Absolute path to the binary that accepts --compile/--pack. */
+  bin: string;
+  /** Where the binary came from. */
+  source: 'configured' | 'env' | 'source' | 'package' | 'cache';
+  /**
+   * True when no rayact_tool was found and we fell back to the rayact_desktop
+   * host (pre-0.0.4 prebuilt cache). The flags are compatible; the fallback
+   * just drags in the GUI runtime.
+   */
+  fallbackDesktopHost: boolean;
+}
+
+/**
+ * Locate the headless rayact_tool build binary. Same resolution order as
+ * resolveDesktopBin (explicit/env → source tree → package → cache), falling
+ * back to the rayact_desktop host when only a pre-0.0.4 prebuilt is present.
+ */
+export function resolveToolBin(projectRoot: string, configured?: string): ResolvedTool | null {
+  const explicit = configured || process.env.RAYACT_TOOL_BIN;
+  if (explicit) {
+    const abs = path.isAbsolute(explicit) ? explicit : path.resolve(projectRoot, explicit);
+    if (fs.existsSync(abs)) {
+      return { bin: abs, source: configured ? 'configured' : 'env', fallbackDesktopHost: false };
+    }
+  }
+
+  if (fs.existsSync(path.join(projectRoot, 'native/desktop/CMakeLists.txt'))) {
+    const bin = path.resolve(projectRoot, `build/bin/${toolBinName()}`);
+    if (fs.existsSync(bin)) return { bin, source: 'source', fallbackDesktopHost: false };
+  }
+
+  const key = hostDesktopKey();
+  if (key) {
+    const pkgDir = resolvePackageDir(projectRoot, PREBUILT_PACKAGES[key]);
+    if (pkgDir) {
+      const bin = path.join(pkgDir, 'bin', toolBinName());
+      if (fs.existsSync(bin)) return { bin, source: 'package', fallbackDesktopHost: false };
+    }
+    const bin = path.join(prebuiltCacheDir(RAYACT_ENGINE_VERSION, key), 'bin', toolBinName());
+    if (fs.existsSync(bin)) return { bin, source: 'cache', fallbackDesktopHost: false };
+  }
+
+  for (const rel of ['build/bin', '../../build/bin', '../../../build/bin']) {
+    const bin = path.join(path.resolve(projectRoot, rel), toolBinName());
+    if (fs.existsSync(bin)) return { bin, source: 'source', fallbackDesktopHost: false };
+  }
+
+  const desktop = resolveDesktopBin(projectRoot, undefined);
+  if (desktop) {
+    return { bin: desktop.bin, source: desktop.source, fallbackDesktopHost: true };
+  }
+  return null;
+}
+
 // --- Download ---------------------------------------------------------------
 
 function releaseBaseUrl(version: string): string {

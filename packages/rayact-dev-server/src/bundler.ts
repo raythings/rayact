@@ -47,6 +47,7 @@ export interface BundleOptions {
   minify?: boolean;
   bytecode?: boolean;
   desktopBin?: string;
+  toolBin?: string;
 }
 
 export interface RayactAssetRecord {
@@ -919,7 +920,11 @@ export async function buildRayactBundle(options: BundleOptions): Promise<RayactB
 
   if (useBytecode) {
     const { compileToBytecode } = await import('./compile.js');
-    bytecode = await compileToBytecode(code, { root, desktopBin: options.desktopBin });
+    bytecode = await compileToBytecode(code, {
+      root,
+      desktopBin: options.desktopBin,
+      toolBin: options.toolBin
+    });
     bundleFormat = 'qjsbc';
   }
 
