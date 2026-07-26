@@ -34,3 +34,6 @@
 [submodule "third_party/WGVK"]
 	path = third_party/WGVK
 	url = https://github.com/manuel5975p/WGVK.git
+[submodule "third_party/raysvg"]
+	path = third_party/raysvg
+	url = https://github.com/raythings/raysvg.git

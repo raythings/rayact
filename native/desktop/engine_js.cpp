@@ -562,6 +562,8 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_setExternalViewProps, "setExternalViewProps", 2));
     JS_SetPropertyStr(ctx, global, "focusTextInput",
                       JS_NewCFunction(ctx, JS_focusTextInput, "focusTextInput", 2));
+    JS_SetPropertyStr(ctx, global, "setScrollOffset",
+                      JS_NewCFunction(ctx, JS_setScrollOffset, "setScrollOffset", 3));
     JS_SetPropertyStr(ctx, global, "__rayactSetAccessibilityFocus",
                       JS_NewCFunction(ctx, JS_setAccessibilityFocus, "__rayactSetAccessibilityFocus", 1));
     JS_SetPropertyStr(ctx, global, "__rayactGetReducedMotion",
@@ -643,6 +645,12 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_clearRootNode, "clearRootNode", 0));
     JS_SetPropertyStr(ctx, global, "setOnPress",
                       JS_NewCFunction(ctx, JS_setOnPress,   "setOnPress",   2));
+    JS_SetPropertyStr(ctx, global, "setOnPressIn",
+                      JS_NewCFunction(ctx, JS_setOnPressIn,  "setOnPressIn",  2));
+    JS_SetPropertyStr(ctx, global, "setOnPressOut",
+                      JS_NewCFunction(ctx, JS_setOnPressOut, "setOnPressOut", 2));
+    JS_SetPropertyStr(ctx, global, "setOnLongPress",
+                      JS_NewCFunction(ctx, JS_setOnLongPress, "setOnLongPress", 2));
     JS_SetPropertyStr(ctx, global, "setOnChangeText",
                       JS_NewCFunction(ctx, JS_setOnChangeText, "setOnChangeText", 2));
     JS_SetPropertyStr(ctx, global, "setOnFocus",
@@ -701,6 +709,10 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_createIcon,   "createIcon",   4));
     JS_SetPropertyStr(ctx, global, "setIconProps",
                       JS_NewCFunction(ctx, JS_setIconProps, "setIconProps", 4));
+    JS_SetPropertyStr(ctx, global, "createSvg",
+                      JS_NewCFunction(ctx, JS_createSvg,   "createSvg",   3));
+    JS_SetPropertyStr(ctx, global, "setSvgProps",
+                      JS_NewCFunction(ctx, JS_setSvgProps, "setSvgProps", 2));
     JS_SetPropertyStr(ctx, global, "registerFont",
                       JS_NewCFunction(ctx, JS_registerFont, "registerFont", 2));
     JS_SetPropertyStr(ctx, global, "loadFont",
@@ -721,6 +733,9 @@ static void registerNativeFunctions(JSContext* ctx) {
     // CSS import bridge
     JS_SetPropertyStr(ctx, global, "importCSS",
                       JS_NewCFunction(ctx, JS_importCSS,    "importCSS",    1));
+    JS_SetPropertyStr(ctx, global, "importCSSText",
+                      JS_NewCFunction(ctx, JS_importCSSText, "importCSSText", 2));
+    registerCSSVariableBindings(ctx);
 
     registerThemeBindings(ctx);
 
@@ -2066,6 +2081,14 @@ void engineQueueTouch(int action, int id, float x, float y) {
         }
         g_queuedTouch.down = false;
     }
+}
+
+void engineQueueWheel(float delta, float x, float y) {
+    std::lock_guard<std::mutex> lock(g_touchMutex);
+    // Point the pointer at the cursor so the scroll targets the ScrollView under
+    // it, and accumulate the delta (multiple wheel events can arrive per frame).
+    g_queuedTouch.position = {x, y};
+    g_queuedTouch.wheel += delta;
 }
 
 void engineQueueKeyEvent(int type, const char* key, const char* code,

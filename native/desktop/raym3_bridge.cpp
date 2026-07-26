@@ -1,4 +1,6 @@
 #include "raym3_bridge.hpp"
+#include "raysvg.h"
+#include "../core/engine.hpp"
 #include "css_bridge.hpp"
 #include "workers.hpp"
 #include "color_parse.hpp"
@@ -18,6 +20,7 @@
 #include <raym3/v2/MaterialTokens.h>
 #include <raym3/v2/TextInput.h>
 #include <raym3/v2/Transitions.h>
+#include <raym3/v2/Animations.h>
 #include <raym3/fonts/FontManager.h>
 #include <raym3/components/Checkbox.h>
 #include <raym3/components/ProgressIndicator.h>
@@ -125,11 +128,21 @@ static std::vector<int> g_screenStack;
 std::map<int, raym3::v2::NodePtr> g_nodes;
 raym3::v2::NodePtr g_root;
 std::map<int, JSValue> g_pressCallbacks;
+// onPressIn/onPressOut/onLongPress (Pressable). Same queued-dispatch model as
+// onPress: the native touch state machine invokes node->onPressIn() etc., which
+// defer the JS call to the next drain so a handler that replaces the scene can't
+// invalidate the input frame mid-dereference.
+static std::map<int, JSValue> g_pressInCallbacks;
+static std::map<int, JSValue> g_pressOutCallbacks;
+static std::map<int, JSValue> g_longPressCallbacks;
 JSContext* g_bridge_ctx = nullptr;
 
 static std::map<int, std::string> g_nodeClassNames;
 static std::map<int, int> g_nodeParents;
 static std::vector<int> g_deferredPressCallbacks;
+static std::vector<int> g_deferredPressInCallbacks;
+static std::vector<int> g_deferredPressOutCallbacks;
+static std::vector<int> g_deferredLongPressCallbacks;
 static std::vector<int> g_deferredRequestCloseCallbacks;
 // Native-allocated node ids are ODD; JS-owned (command-buffer) ids are EVEN
 // (allocNodeId in commandBuffer.ts). Disjoint by parity so the two id spaces
@@ -423,6 +436,121 @@ struct IconRenderState {
 };
 
 static std::map<int, IconRenderState> g_iconRenderStates;
+
+static std::optional<Color> jsToColor(JSContext* ctx, JSValueConst v);
+
+// <Svg>: one raysvg document per node. Channels are per-instance animation state, so
+// documents are not shared between nodes even when two nodes name the same file.
+struct SvgRenderState {
+    std::string source;
+    RaysvgDoc* doc = nullptr;
+    // Outlines currently enabled, so the prop can stay declarative: an id dropped from the
+    // array is turned back off rather than lingering.
+    std::vector<std::string> outlineIds;
+};
+static std::map<int, SvgRenderState> g_svgRenderStates;
+
+// Reads the { vars, channels, outline } prop bag onto a document. Every field is
+// optional; absent fields leave the current state alone.
+static void applySvgProps(JSContext* ctx, SvgRenderState& state, JSValueConst props) {
+    RaysvgDoc* doc = state.doc;
+    if (!doc || !JS_IsObject(props)) return;
+
+    JSValue vars = JS_GetPropertyStr(ctx, props, "vars");
+    if (JS_IsObject(vars)) {
+        JSPropertyEnum* names = nullptr;
+        uint32_t count = 0;
+        if (JS_GetOwnPropertyNames(ctx, &names, &count, vars, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) == 0) {
+            for (uint32_t i = 0; i < count; i++) {
+                const char* name = JS_AtomToCString(ctx, names[i].atom);
+                JSValue value = JS_GetProperty(ctx, vars, names[i].atom);
+                if (name) {
+                    if (auto c = jsToColor(ctx, value)) RaysvgSetVar(doc, name, *c);
+                    JS_FreeCString(ctx, name);
+                }
+                JS_FreeValue(ctx, value);
+                JS_FreeAtom(ctx, names[i].atom);
+            }
+            js_free(ctx, names);
+        }
+    }
+    JS_FreeValue(ctx, vars);
+
+    // channels: { "element-id": [translateX, translateY, rotationDeg, scaleX, scaleY] }
+    JSValue channels = JS_GetPropertyStr(ctx, props, "channels");
+    if (JS_IsObject(channels)) {
+        JSPropertyEnum* names = nullptr;
+        uint32_t count = 0;
+        if (JS_GetOwnPropertyNames(ctx, &names, &count, channels, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) == 0) {
+            for (uint32_t i = 0; i < count; i++) {
+                const char* id = JS_AtomToCString(ctx, names[i].atom);
+                JSValue value = JS_GetProperty(ctx, channels, names[i].atom);
+                if (id) {
+                    const RaysvgHandle h = RaysvgGetElementById(doc, id);
+                    if (h != RAYSVG_INVALID_HANDLE && JS_IsArray(value)) {
+                        double v[5] = {0.0, 0.0, 0.0, 1.0, 1.0};
+                        for (int k = 0; k < 5; k++) {
+                            JSValue item = JS_GetPropertyUint32(ctx, value, (uint32_t)k);
+                            if (!JS_IsUndefined(item)) JS_ToFloat64(ctx, &v[k], item);
+                            JS_FreeValue(ctx, item);
+                        }
+                        RaysvgSetTransform(doc, h, (float)v[0], (float)v[1], (float)v[2],
+                                           (float)v[3], (float)v[4]);
+                    }
+                    JS_FreeCString(ctx, id);
+                }
+                JS_FreeValue(ctx, value);
+                JS_FreeAtom(ctx, names[i].atom);
+            }
+            js_free(ctx, names);
+        }
+    }
+    JS_FreeValue(ctx, channels);
+
+    // outline: array of element ids, or of { id, color?, radius? }.
+    JSValue outline = JS_GetPropertyStr(ctx, props, "outline");
+    if (JS_IsArray(outline)) {
+        for (const std::string& prev : state.outlineIds) {
+            const RaysvgHandle h = RaysvgGetElementById(doc, prev.c_str());
+            if (h != RAYSVG_INVALID_HANDLE) RaysvgSetOutline(doc, h, false, Color{0, 0, 0, 255}, 0.0f);
+        }
+        state.outlineIds.clear();
+        uint32_t len = 0;
+        JSValue lenVal = JS_GetPropertyStr(ctx, outline, "length");
+        JS_ToUint32(ctx, &len, lenVal);
+        JS_FreeValue(ctx, lenVal);
+        for (uint32_t i = 0; i < len; i++) {
+            JSValue entry = JS_GetPropertyUint32(ctx, outline, i);
+            std::string id;
+            Color color{26, 26, 26, 255};
+            double radius = 4.5;
+            if (JS_IsString(entry)) {
+                const char* s = JS_ToCString(ctx, entry);
+                if (s) { id = s; JS_FreeCString(ctx, s); }
+            } else if (JS_IsObject(entry)) {
+                JSValue idVal = JS_GetPropertyStr(ctx, entry, "id");
+                const char* s = JS_ToCString(ctx, idVal);
+                if (s) { id = s; JS_FreeCString(ctx, s); }
+                JS_FreeValue(ctx, idVal);
+                JSValue colorVal = JS_GetPropertyStr(ctx, entry, "color");
+                if (auto c = jsToColor(ctx, colorVal)) color = *c;
+                JS_FreeValue(ctx, colorVal);
+                JSValue radiusVal = JS_GetPropertyStr(ctx, entry, "radius");
+                if (!JS_IsUndefined(radiusVal)) JS_ToFloat64(ctx, &radius, radiusVal);
+                JS_FreeValue(ctx, radiusVal);
+            }
+            if (!id.empty()) {
+                const RaysvgHandle h = RaysvgGetElementById(doc, id.c_str());
+                if (h != RAYSVG_INVALID_HANDLE) {
+                    RaysvgSetOutline(doc, h, true, color, (float)radius);
+                    state.outlineIds.push_back(id);
+                }
+            }
+            JS_FreeValue(ctx, entry);
+        }
+    }
+    JS_FreeValue(ctx, outline);
+}
 
 static void DrawSliderTrackSegment(Rectangle r, float leftRadius,
                                    float rightRadius, Color color) {
@@ -810,6 +938,7 @@ static raym3::v2::Style preserveLayoutStyle(const raym3::v2::Style& visualStyle,
     result.backgroundGradient = previousStyle.backgroundGradient;
     result.display = previousStyle.display;
     result.flexDirection = previousStyle.flexDirection;
+    result.flexWrap = previousStyle.flexWrap;
     result.justifyContent = previousStyle.justifyContent;
     result.alignItems = previousStyle.alignItems;
     result.alignSelf = previousStyle.alignSelf;
@@ -1040,6 +1169,24 @@ static void queuePressCallback(int id) {
     g_deferredPressCallbacks.push_back(id);
 }
 
+static void invokeStoredVoidCallbackNow(int id, std::map<int, JSValue>& callbacks, const char* label) {
+    auto it = callbacks.find(id);
+    if (it == callbacks.end() || !g_bridge_ctx) return;
+    JSValue result = JS_Call(g_bridge_ctx, it->second, JS_UNDEFINED, 0, nullptr);
+    if (JS_IsException(result)) {
+        JSValue exc = JS_GetException(g_bridge_ctx);
+        const char* s = JS_ToCString(g_bridge_ctx, exc);
+        fprintf(stderr, "%s error: %s\n", label, s ? s : "(unknown)");
+        if (s) JS_FreeCString(g_bridge_ctx, s);
+        JS_FreeValue(g_bridge_ctx, exc);
+    }
+    JS_FreeValue(g_bridge_ctx, result);
+}
+
+static void queuePressInCallback(int id) { g_deferredPressInCallbacks.push_back(id); }
+static void queuePressOutCallback(int id) { g_deferredPressOutCallbacks.push_back(id); }
+static void queueLongPressCallback(int id) { g_deferredLongPressCallbacks.push_back(id); }
+
 static void queueRequestCloseCallback(int id) {
     g_deferredRequestCloseCallbacks.push_back(id);
 }
@@ -1056,18 +1203,34 @@ static void clearTransientInputCapture() {
 void rayactDrainDeferredInputCallbacks() {
     if (!g_bridge_ctx) {
         g_deferredPressCallbacks.clear();
+        g_deferredPressInCallbacks.clear();
+        g_deferredPressOutCallbacks.clear();
+        g_deferredLongPressCallbacks.clear();
         g_deferredRequestCloseCallbacks.clear();
         clearTransientInputCapture();
         return;
     }
     std::vector<int> requestCloseIds;
     std::vector<int> pressIds;
+    std::vector<int> pressInIds;
+    std::vector<int> pressOutIds;
+    std::vector<int> longPressIds;
     requestCloseIds.swap(g_deferredRequestCloseCallbacks);
     pressIds.swap(g_deferredPressCallbacks);
+    pressInIds.swap(g_deferredPressInCallbacks);
+    pressOutIds.swap(g_deferredPressOutCallbacks);
+    longPressIds.swap(g_deferredLongPressCallbacks);
 
     for (int id : requestCloseIds) invokeRequestCloseNow(id);
+    // pressIn before pressOut/longPress/press so a Pressable that sets pressed
+    // state on the way down observes it before the release clears it.
+    for (int id : pressInIds) invokeStoredVoidCallbackNow(id, g_pressInCallbacks, "onPressIn");
+    for (int id : longPressIds) invokeStoredVoidCallbackNow(id, g_longPressCallbacks, "onLongPress");
+    for (int id : pressOutIds) invokeStoredVoidCallbackNow(id, g_pressOutCallbacks, "onPressOut");
     for (int id : pressIds) invokePressCallbackNow(id);
-    if (!requestCloseIds.empty() || !pressIds.empty()) clearTransientInputCapture();
+    if (!requestCloseIds.empty() || !pressIds.empty() || !pressInIds.empty() ||
+        !pressOutIds.empty() || !longPressIds.empty())
+        clearTransientInputCapture();
 }
 
 static std::map<int, JSValue> g_changeValueCallbacks;
@@ -1272,7 +1435,7 @@ static std::optional<raym3::v2::LinearGradient> parseLinearGradientCss(const std
     for (size_t i = colorStart; i < args.size(); i++) {
         std::string stop = trimCss(args[i]);
         std::smatch match;
-        std::regex colorRe(R"(rgba?\([^)]+\)|#[0-9A-Fa-f]{3,8})");
+        static const std::regex colorRe(CssColorTokenPattern(), std::regex::icase);
         if (std::regex_search(stop, match, colorRe)) {
             float pos = colorCount <= 1 ? 0.0f : (float)(i - colorStart) / (float)(colorCount - 1);
             gradient.stops.push_back({parseCssColorString(match.str()), pos});
@@ -1283,7 +1446,7 @@ static std::optional<raym3::v2::LinearGradient> parseLinearGradientCss(const std
 
 static std::vector<raym3::v2::BoxShadow> parseBoxShadowCss(const std::string& css) {
     std::vector<raym3::v2::BoxShadow> shadows;
-    std::regex colorRe(R"(rgba?\([^)]+\)|#[0-9A-Fa-f]{3,8})");
+    static const std::regex colorRe(CssColorTokenPattern(), std::regex::icase);
     for (std::string part : splitCssTopLevel(css, ',')) {
         raym3::v2::BoxShadow shadow;
         part = trimCss(part);
@@ -1440,6 +1603,8 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
             if (auto gradient = parseLinearGradientCss(gradientCss)) s.backgroundGradient = *gradient;
         }
     }
+    if (auto v = jsGetColor(ctx, obj, "stateLayerColor")) s.stateLayerColor = v;
+    if (auto v = jsGetColor(ctx, obj, "rippleColor"))     s.rippleColor     = v;
     if (auto v = jsGetColor(ctx, obj, "borderColor"))     s.borderColor     = v;
     if (auto v = jsGetFloat(ctx, obj, "borderWidth"))     s.borderWidth     = v;
     if (auto v = jsGetFloat(ctx, obj, "borderRadius"))    s.borderRadius    = v;
@@ -1470,6 +1635,12 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
     else if (fd == "column")         s.flexDirection = raym3::v2::FlexDirection::Column;
     else if (fd == "row-reverse")    s.flexDirection = raym3::v2::FlexDirection::RowReverse;
     else if (fd == "column-reverse") s.flexDirection = raym3::v2::FlexDirection::ColumnReverse;
+
+    // Enum: flexWrap
+    std::string fw = jsGetString(ctx, obj, "flexWrap");
+    if      (fw == "wrap")         s.flexWrap = raym3::v2::FlexWrap::Wrap;
+    else if (fw == "nowrap")       s.flexWrap = raym3::v2::FlexWrap::NoWrap;
+    else if (fw == "wrap-reverse") s.flexWrap = raym3::v2::FlexWrap::WrapReverse;
 
     // Enum: display
     std::string display = jsGetString(ctx, obj, "display");
@@ -1573,6 +1744,19 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
                 hasNestedWeight = true;
             }
         }
+        // CSS `text-align` / `font-style`. The renderer already honours
+        // text.alignment; nothing populated it before.
+        {
+            std::string ta = jsGetString(ctx, textObj, "textAlign");
+            if (!ta.empty()) {
+                if (ta == "center")      s.text.alignment = raym3::TextAlignment::Center;
+                else if (ta == "right")  s.text.alignment = raym3::TextAlignment::Right;
+                else if (ta == "left")   s.text.alignment = raym3::TextAlignment::Left;
+            }
+            std::string fs = jsGetString(ctx, textObj, "fontStyle");
+            if (fs == "italic" || fs == "oblique") s.text.fontStyle = raym3::FontStyle::Italic;
+            else if (fs == "normal")               s.text.fontStyle = raym3::FontStyle::Normal;
+        }
         JSValue fv = JS_GetPropertyStr(ctx, textObj, "fontFamily");
         if (!JS_IsUndefined(fv)) {
             const char* fname = JS_ToCString(ctx, fv);
@@ -1618,6 +1802,18 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
         if (auto v = jsGetFontWeight(ctx, obj, "weight")) s.text.weight = v;
         else if (auto v = jsGetFontWeight(ctx, obj, "fontWeight")) s.text.weight = v;
     }
+    // Flat RN-style props: style={{ textAlign: 'center', fontStyle: 'italic' }}
+    if (!s.text.alignment) {
+        std::string ta = jsGetString(ctx, obj, "textAlign");
+        if (ta == "center")     s.text.alignment = raym3::TextAlignment::Center;
+        else if (ta == "right") s.text.alignment = raym3::TextAlignment::Right;
+        else if (ta == "left")  s.text.alignment = raym3::TextAlignment::Left;
+    }
+    if (!s.text.fontStyle) {
+        std::string fs = jsGetString(ctx, obj, "fontStyle");
+        if (fs == "italic" || fs == "oblique") s.text.fontStyle = raym3::FontStyle::Italic;
+        else if (fs == "normal")               s.text.fontStyle = raym3::FontStyle::Normal;
+    }
     if (!hasNestedFontFamily) {
         JSValue fv = JS_GetPropertyStr(ctx, obj, "fontFamily");
         if (!JS_IsUndefined(fv)) {
@@ -1659,6 +1855,14 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
         if (s.transitions)
             for (auto& e : *s.transitions) e.durationMs = *v;
     }
+
+    // CSS animations: `animation` shorthand string (class rule or inline).
+    // 'none' cancels. Names reference @keyframes registered from the stylesheet.
+    std::string animationStr = jsGetString(ctx, obj, "animation");
+    if (!animationStr.empty()) {
+        if (auto spec = parseAnimationShorthand(animationStr))
+            s.animations = std::move(*spec);
+    }
 }
 
 static raym3::v2::Style parseStyle(JSContext* ctx, JSValue obj) {
@@ -1682,6 +1886,80 @@ static raym3::v2::Style parseStyle(JSContext* ctx, JSValue obj) {
     applyStyleProps(ctx, obj, style);
 
     return style;
+}
+
+// Pseudo-class variants parsed by the most recent parseStyle() call.
+//
+// StateStyles lives on the Node, not on Style, and parseStyle is called from a
+// dozen places that only care about the Style. Rather than change every
+// signature, the variants are stashed here and picked up by the handful of
+// call sites that actually own a node (create / setStyle / className refresh).
+// Single-threaded with respect to the JS context, and always consumed
+// immediately after the parseStyle that produced it.
+static thread_local raym3::v2::StateStyles g_lastStateStyles;
+static thread_local bool g_lastStateStylesValid = false;
+
+// Layer a pseudo-class declaration set over the node's base style so partial
+// state rules (`.btn:hover { opacity: .8 }`) inherit everything else.
+static void parseStateVariant(JSContext* ctx, JSValue statesObj, const char* key,
+                              const raym3::v2::Style& base,
+                              std::optional<raym3::v2::Style>& out) {
+    JSValue v = JS_GetPropertyStr(ctx, statesObj, key);
+    if (JS_IsObject(v)) {
+        raym3::v2::Style variant = base;
+        applyStyleProps(ctx, v, variant);
+        out = variant;
+    }
+    JS_FreeValue(ctx, v);
+}
+
+// Collect `stateStyles` from a resolved className object and/or inline props.
+static void captureStateStyles(JSContext* ctx, JSValue obj, const raym3::v2::Style& base) {
+    g_lastStateStyles = {};
+    g_lastStateStylesValid = false;
+    if (!JS_IsObject(obj)) return;
+
+    JSValue states = JS_UNDEFINED;
+    JSValue classVal = JS_GetPropertyStr(ctx, obj, "className");
+    if (JS_IsString(classVal)) {
+        const char* classStr = JS_ToCString(ctx, classVal);
+        if (classStr && classStr[0]) {
+            JSValue resolved = resolveClassNames(ctx, classStr);
+            states = JS_GetPropertyStr(ctx, resolved, "stateStyles");
+            JS_FreeValue(ctx, resolved);
+        }
+        JS_FreeCString(ctx, classStr);
+    }
+    JS_FreeValue(ctx, classVal);
+    if (!JS_IsObject(states)) {
+        JS_FreeValue(ctx, states);
+        states = JS_GetPropertyStr(ctx, obj, "stateStyles");   // inline escape hatch
+    }
+    if (!JS_IsObject(states)) { JS_FreeValue(ctx, states); return; }
+
+    parseStateVariant(ctx, states, "hovered",  base, g_lastStateStyles.hovered);
+    parseStateVariant(ctx, states, "pressed",  base, g_lastStateStyles.pressed);
+    parseStateVariant(ctx, states, "focused",  base, g_lastStateStyles.focused);
+    parseStateVariant(ctx, states, "disabled", base, g_lastStateStyles.disabled);
+    g_lastStateStylesValid = g_lastStateStyles.hovered || g_lastStateStyles.pressed ||
+                             g_lastStateStyles.focused || g_lastStateStyles.disabled;
+    JS_FreeValue(ctx, states);
+}
+
+// Parse a style object AND its pseudo-class variants in one go.
+static raym3::v2::Style parseStyleWithStates(JSContext* ctx, JSValue obj) {
+    raym3::v2::Style style = parseStyle(ctx, obj);
+    captureStateStyles(ctx, obj, style);
+    return style;
+}
+
+// Apply the variants captured by the last parseStyleWithStates to a node.
+// Leaves existing stateStyles untouched when the style declared none, so a
+// material component's own state styles are not clobbered.
+static void applyCapturedStateStyles(const raym3::v2::NodePtr& node) {
+    if (!node || !g_lastStateStylesValid) return;
+    node->stateStyles = g_lastStateStyles;
+    g_lastStateStylesValid = false;
 }
 
 static void syncNavItemIconFill(const raym3::v2::NodePtr& node, bool selected);
@@ -1717,18 +1995,24 @@ void refreshStylesForColorScheme(JSContext* ctx) {
         }
     }
 
+    refreshClassNameStyles(ctx);
+}
+
+void refreshClassNameStyles(JSContext* ctx) {
+    if (!ctx) return;
     for (auto& [id, node] : g_nodes) {
         auto cn = g_nodeClassNames.find(id);
         if (cn == g_nodeClassNames.end() || cn->second.empty()) continue;
 
         JSValue styleObj = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, styleObj, "className", JS_NewString(ctx, cn->second.c_str()));
-        raym3::v2::Style parsed = parseStyle(ctx, styleObj);
+        raym3::v2::Style parsed = parseStyleWithStates(ctx, styleObj);
         JS_FreeValue(ctx, styleObj);
 
         // Re-resolve CSS but keep inline layout props (width, height, margin, etc.)
         // that were set on createView/setStyle alongside className.
         node->style = raym3::v2::MergeStyles(node->style, parsed);
+        applyCapturedStateStyles(node);
     }
 }
 
@@ -1936,7 +2220,11 @@ void applyAnimatedStylesToNodes() {
 JSValue JS_createView(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst* argv) {
     raym3::v2::ViewProps props;
     if (argc >= 1 && JS_IsObject(argv[0])) {
-        props.style = parseStyle(ctx, argv[0]);
+        props.style = parseStyleWithStates(ctx, argv[0]);
+        if (g_lastStateStylesValid) {
+            props.stateStyles = g_lastStateStyles;   // CSS :hover/:active/... variants
+            g_lastStateStylesValid = false;
+        }
         if (auto z = jsGetFloat(ctx, argv[0], "zIndex")) props.zIndex = (int)roundf(*z);
         if (jsHasProperty(ctx, argv[0], "capturesInput"))
             props.capturesInput = jsGetBool(ctx, argv[0], "capturesInput", false);
@@ -1960,6 +2248,10 @@ JSValue JS_createView(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
     g_nodes[id] = node;
     rayact::shadowTree().createNode((uint32_t)id, props.style);
     if (argc >= 1 && JS_IsObject(argv[0])) captureNodeClassName(ctx, id, argv[0]);
+    // Start any CSS animation declared on the node at mount (the create style is
+    // fully explicit, so Rule 1 in ApplyStyleWithAnimations starts it).
+    if (node->style.animations)
+        raym3::v2::ApplyStyleWithAnimations(node, node->style, node->style);
     return JS_NewInt32(ctx, id);
 }
 
@@ -2471,6 +2763,34 @@ JSValue JS_focusTextInput(JSContext* ctx, JSValue, int argc, JSValueConst* argv)
         }
     } else if (raym3::v2::GetFocusedId() == nid) {
         raym3::v2::SetFocusedId(0);
+    }
+    workerRequestRenderFrame();
+    return JS_UNDEFINED;
+}
+
+// setScrollOffset(nodeId, x, y) — imperative ScrollView ref.scrollTo()/
+// scrollToEnd(). NaN on an axis leaves that axis unchanged. The offset is
+// clamped to valid range on the next StoreYogaLayout pass, so scrollToEnd can
+// pass a huge y and rely on the clamp. Setting an explicit offset cancels any
+// in-flight fling and (for a y set) auto-scroll-to-end follow, matching a
+// user-initiated scroll.
+JSValue JS_setScrollOffset(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 3) return JS_ThrowTypeError(ctx, "setScrollOffset: expected (nodeId, x, y)");
+    int id = 0;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto it = g_nodes.find(id);
+    if (it == g_nodes.end() || !it->second) return JS_UNDEFINED;
+    double x = 0.0, y = 0.0;
+    JS_ToFloat64(ctx, &x, argv[1]);
+    JS_ToFloat64(ctx, &y, argv[2]);
+    if (!std::isnan(x)) {
+        it->second->scrollOffsetX = static_cast<float>(x);
+        it->second->scrollVelocityX = 0.0f;
+    }
+    if (!std::isnan(y)) {
+        it->second->scrollOffsetY = static_cast<float>(y);
+        it->second->scrollVelocityY = 0.0f;
+        it->second->scrollFollowEnd = false;
     }
     workerRequestRenderFrame();
     return JS_UNDEFINED;
@@ -3063,7 +3383,7 @@ JSValue JS_setMaterialComponentProps(JSContext* ctx, JSValue, int argc, JSValueC
             }
         }
     } else if (jsHasProperty(ctx, argv[1], "className") || jsHasProperty(ctx, argv[1], "style")) {
-        auto parsed = parseStyle(ctx, argv[1]);
+        auto parsed = parseStyleWithStates(ctx, argv[1]);
         if (g_nativeControlStates.count(id)) {
             // Merge: preserve M3 default dimensions (height/minHeight etc.) set at creation.
             it->second->style = raym3::v2::MergeStyles(it->second->style, parsed);
@@ -3071,6 +3391,7 @@ JSValue JS_setMaterialComponentProps(JSContext* ctx, JSValue, int argc, JSValueC
         } else {
             it->second->style = parsed;
         }
+        applyCapturedStateStyles(it->second);
     }
     if (g_nativeControlStates.find(id) != g_nativeControlStates.end()) {
         enforceNativeControlLayoutDefaults(id, it->second->style);
@@ -3311,6 +3632,60 @@ JSValue JS_setOnPress(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
 
     g_pressCallbacks[id] = JS_DupValue(ctx, argv[1]);
     it->second->onPress = [id]() { queuePressCallback(id); };
+    return JS_UNDEFINED;
+}
+
+JSValue JS_setOnPressIn(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setOnPressIn: expected (nodeId, fn)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto it = g_nodes.find(id);
+    if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnPressIn: invalid node id");
+    auto cit = g_pressInCallbacks.find(id);
+    if (cit != g_pressInCallbacks.end()) JS_FreeValue(ctx, cit->second);
+    g_pressInCallbacks.erase(id);
+    if (!JS_IsFunction(ctx, argv[1])) {
+        it->second->onPressIn = nullptr;
+        return JS_UNDEFINED;
+    }
+    g_pressInCallbacks[id] = JS_DupValue(ctx, argv[1]);
+    it->second->onPressIn = [id]() { queuePressInCallback(id); };
+    return JS_UNDEFINED;
+}
+
+JSValue JS_setOnPressOut(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setOnPressOut: expected (nodeId, fn)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto it = g_nodes.find(id);
+    if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnPressOut: invalid node id");
+    auto cit = g_pressOutCallbacks.find(id);
+    if (cit != g_pressOutCallbacks.end()) JS_FreeValue(ctx, cit->second);
+    g_pressOutCallbacks.erase(id);
+    if (!JS_IsFunction(ctx, argv[1])) {
+        it->second->onPressOut = nullptr;
+        return JS_UNDEFINED;
+    }
+    g_pressOutCallbacks[id] = JS_DupValue(ctx, argv[1]);
+    it->second->onPressOut = [id]() { queuePressOutCallback(id); };
+    return JS_UNDEFINED;
+}
+
+JSValue JS_setOnLongPress(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setOnLongPress: expected (nodeId, fn)");
+    int id;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto it = g_nodes.find(id);
+    if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnLongPress: invalid node id");
+    auto cit = g_longPressCallbacks.find(id);
+    if (cit != g_longPressCallbacks.end()) JS_FreeValue(ctx, cit->second);
+    g_longPressCallbacks.erase(id);
+    if (!JS_IsFunction(ctx, argv[1])) {
+        it->second->onLongPress = nullptr;
+        return JS_UNDEFINED;
+    }
+    g_longPressCallbacks[id] = JS_DupValue(ctx, argv[1]);
+    it->second->onLongPress = [id]() { queueLongPressCallback(id); };
     return JS_UNDEFINED;
 }
 
@@ -3559,6 +3934,9 @@ JSValue JS_setStyle(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst
     // `parsed` when the target carries a transition spec; plain assignment
     // otherwise.
     raym3::v2::ApplyStyleWithTransitions(it->second, target, parsed);
+    // Starts/cancels CSS @keyframes animations; a property written explicitly in
+    // `parsed` cancels its running animation so the JS/explicit value wins.
+    raym3::v2::ApplyStyleWithAnimations(it->second, target, parsed);
     if (jsHasProperty(ctx, argv[1], "capturesInput"))
         it->second->capturesInput = jsGetBool(ctx, argv[1], "capturesInput", false);
     captureNodeClassName(ctx, id, argv[1]);
@@ -3753,7 +4131,8 @@ JSValue JS_disposeNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
         JS_FreeValue(ctx, blurCb->second);
         g_blurCallbacks.erase(blurCb);
     }
-    for (auto* m : {&g_submitEditingCallbacks, &g_endEditingCallbacks, &g_selectionChangeCallbacks}) {
+    for (auto* m : {&g_submitEditingCallbacks, &g_endEditingCallbacks, &g_selectionChangeCallbacks,
+                    &g_pressInCallbacks, &g_pressOutCallbacks, &g_longPressCallbacks}) {
         auto cb = m->find(id);
         if (cb != m->end()) { JS_FreeValue(ctx, cb->second); m->erase(cb); }
     }
@@ -3797,6 +4176,10 @@ JSValue JS_disposeNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     g_safeAreaBaseStyles.erase(id);
     g_scrollViewIds.erase(id);
     g_iconRenderStates.erase(id);
+    if (auto svgIt = g_svgRenderStates.find(id); svgIt != g_svgRenderStates.end()) {
+        if (svgIt->second.doc) RaysvgUnload(svgIt->second.doc);
+        g_svgRenderStates.erase(svgIt);
+    }
     g_nodeClassNames.erase(id);
     g_nodeParents.erase(id);
     for (auto it = g_nodeParents.begin(); it != g_nodeParents.end();) {
@@ -3895,6 +4278,58 @@ JSValue JS_createIcon(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
     g_nodes[id] = node;
     if (argc >= 2 && JS_IsObject(argv[1])) captureNodeClassName(ctx, id, argv[1]);
     return JS_NewInt32(ctx, id);
+}
+
+// <Svg source=... /> — a Custom node that hands its laid-out rect to raysvg. raysvg
+// keeps the parsed scene graph, so animating it is a channel write rather than a reparse.
+JSValue JS_createSvg(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "createSvg: expected (source, style?, props?)");
+
+    const char* src = JS_ToCString(ctx, argv[0]);
+    if (!src) return JS_ThrowTypeError(ctx, "createSvg: source must be a string");
+    std::string source(src);
+    JS_FreeCString(ctx, src);
+
+    raym3::v2::ViewProps props;
+    if (argc >= 2) props.style = parseStyle(ctx, argv[1]);
+
+    // Inline markup is accepted directly so a caller can build SVG at runtime; anything
+    // else is a path resolved by the caller through the normal asset pipeline.
+    RaysvgDoc* doc = nullptr;
+    if (source.size() > 4 && source.find('<') != std::string::npos) {
+        doc = RaysvgLoadFromString(source.c_str(), -1);
+    } else {
+        doc = RaysvgLoadFromFile(source.c_str());
+    }
+    if (!doc) TraceLog(LOG_WARNING, "createSvg: %s", RaysvgGetLastError());
+
+    int id = nextNativeNodeId();
+    SvgRenderState& state = g_svgRenderStates[id];
+    state.source = source;
+    state.doc = doc;
+    if (doc && argc >= 3) applySvgProps(ctx, state, argv[2]);
+
+    auto node = raym3::v2::Custom(props, [id](Rectangle layout) {
+        auto it = g_svgRenderStates.find(id);
+        if (it == g_svgRenderStates.end() || !it->second.doc) return;
+        RaysvgDraw(it->second.doc, layout);
+    });
+
+    g_nodes[id] = node;
+    if (argc >= 2 && JS_IsObject(argv[1])) captureNodeClassName(ctx, id, argv[1]);
+    return JS_NewInt32(ctx, id);
+}
+
+JSValue JS_setSvgProps(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "setSvgProps: expected (nodeId, props)");
+    int id = 0;
+    JS_ToInt32(ctx, &id, argv[0]);
+    auto it = g_svgRenderStates.find(id);
+    if (it == g_svgRenderStates.end() || !it->second.doc) return JS_UNDEFINED;
+    applySvgProps(ctx, it->second, argv[1]);
+    // Channel writes only dirty the document; ask for a frame so the change is drawn.
+    if (RaysvgNeedsRedraw(it->second.doc)) rayact::engineRequestFrame();
+    return JS_UNDEFINED;
 }
 
 JSValue JS_setIconProps(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
@@ -4798,6 +5233,9 @@ struct Raym3RuntimeStorage {
     std::map<int, raym3::v2::NodePtr> nodes;
     raym3::v2::NodePtr root;
     std::map<int, JSValue> pressCallbacks;
+    std::map<int, JSValue> pressInCallbacks;
+    std::map<int, JSValue> pressOutCallbacks;
+    std::map<int, JSValue> longPressCallbacks;
     std::map<int, std::string> nodeClassNames;
     std::map<int, int> nodeParents;
     std::vector<float> animatedStyleBuffer;
@@ -4851,6 +5289,9 @@ void raym3BridgeExportRuntimeStorage(Raym3RuntimeStorage& out) {
     out.nodes = std::move(g_nodes);
     out.root = std::move(g_root);
     out.pressCallbacks = std::move(g_pressCallbacks);
+    out.pressInCallbacks = std::move(g_pressInCallbacks);
+    out.pressOutCallbacks = std::move(g_pressOutCallbacks);
+    out.longPressCallbacks = std::move(g_longPressCallbacks);
     out.nodeClassNames = std::move(g_nodeClassNames);
     out.nodeParents = std::move(g_nodeParents);
     out.animatedStyleBuffer = std::move(g_animatedStyleBuffer);
@@ -4887,6 +5328,9 @@ void raym3BridgeImportRuntimeStorage(const Raym3RuntimeStorage& in) {
     g_nodes = in.nodes;
     g_root = in.root;
     g_pressCallbacks = in.pressCallbacks;
+    g_pressInCallbacks = in.pressInCallbacks;
+    g_pressOutCallbacks = in.pressOutCallbacks;
+    g_longPressCallbacks = in.longPressCallbacks;
     g_nodeClassNames = in.nodeClassNames;
     g_nodeParents = in.nodeParents;
     if (!in.animatedStyleBuffer.empty()) {
@@ -4926,6 +5370,9 @@ void raym3BridgeClearRuntimeGlobals() {
     g_nodes.clear();
     g_root = nullptr;
     g_pressCallbacks.clear();
+    g_pressInCallbacks.clear();
+    g_pressOutCallbacks.clear();
+    g_longPressCallbacks.clear();
     g_nodeClassNames.clear();
     g_nodeParents.clear();
     g_animatedStyleBuffer.assign(
@@ -4949,6 +5396,10 @@ void raym3BridgeClearRuntimeGlobals() {
     g_scrollViewIds.clear();
     g_safeAreaInsets = SafeAreaInsets{};
     g_safeAreaBaseStyles.clear();
+    for (auto& kv : g_svgRenderStates) {
+        if (kv.second.doc) RaysvgUnload(kv.second.doc);
+    }
+    g_svgRenderStates.clear();
     g_iconRenderStates.clear();
     raym3UnloadGpuCaches();
 }
@@ -4976,6 +5427,12 @@ void cleanupRaym3Bridge(JSContext* ctx, bool unloadGpuCaches) {
     }
     for (auto& [id, fn] : g_pressCallbacks) JS_FreeValue(ctx, fn);
     g_pressCallbacks.clear();
+    for (auto& [id, fn] : g_pressInCallbacks) JS_FreeValue(ctx, fn);
+    g_pressInCallbacks.clear();
+    for (auto& [id, fn] : g_pressOutCallbacks) JS_FreeValue(ctx, fn);
+    g_pressOutCallbacks.clear();
+    for (auto& [id, fn] : g_longPressCallbacks) JS_FreeValue(ctx, fn);
+    g_longPressCallbacks.clear();
     for (auto& [id, fn] : g_dragStartCallbacks) JS_FreeValue(ctx, fn);
     for (auto& [id, fn] : g_dragMoveCallbacks) JS_FreeValue(ctx, fn);
     for (auto& [id, fn] : g_dragEndCallbacks) JS_FreeValue(ctx, fn);
@@ -5008,6 +5465,10 @@ void cleanupRaym3Bridge(JSContext* ctx, bool unloadGpuCaches) {
     g_safeAreaBaseStyles.clear();
     g_scrollViewIds.clear();
     g_safeAreaInsets = SafeAreaInsets{};
+    for (auto& kv : g_svgRenderStates) {
+        if (kv.second.doc) RaysvgUnload(kv.second.doc);
+    }
+    g_svgRenderStates.clear();
     g_iconRenderStates.clear();
     g_nodeClassNames.clear();
     g_changeTextCallbacks.clear();
@@ -6439,6 +6900,11 @@ size_t applyStyleEntryBinary(int32_t keyId, const uint8_t* val, raym3::v2::Style
         case 67: switch (cmdReadI32(val)) {
             case 0: s.pointerEvents = raym3::v2::PointerEvents::None; break;
             case 1: s.pointerEvents = raym3::v2::PointerEvents::Auto; break;
+        } return 4;
+        case 68: switch (cmdReadI32(val)) {
+            case 0: s.flexWrap = raym3::v2::FlexWrap::NoWrap; break;
+            case 1: s.flexWrap = raym3::v2::FlexWrap::Wrap; break;
+            case 2: s.flexWrap = raym3::v2::FlexWrap::WrapReverse; break;
         } return 4;
         default: return 0;  // unknown key — desync guard (JS validates before emit)
     }
