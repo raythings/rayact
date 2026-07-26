@@ -18,6 +18,7 @@
 #include "../desktop/theme_bridge.hpp"
 
 #include <raym3/fonts/FontManager.h>
+#include <raym3/styles/Stylesheet.h>
 #include <raym3/styles/Theme.h>
 #include <raym3/v2/Density.h>
 #include <raym3/v2/EmojiFont.h>
@@ -42,6 +43,15 @@ void CloseWindow(void);
 int GetRenderWidth(void);
 int GetRenderHeight(void);
 bool IsWindowReady(void);
+void SetConfigFlags(unsigned int flags);
+}
+
+// Matches raylib.h ConfigFlags — this TU doesn't include raylib.h.
+#ifndef FLAG_MSAA_4X_HINT
+#define FLAG_MSAA_4X_HINT 0x00000020
+#endif
+
+extern "C" {
 void SetTargetFPS(int fps);
 void RcoreIosMetal_SetLayer(void* metalLayer, int widthPx, int heightPx, float scale);
 void RcoreIosMetal_ResizeLayer(int widthPx, int heightPx, float scale);
@@ -585,6 +595,11 @@ static void publishWindowDimensions(int widthPx, int heightPx) {
     if (!ctx) return;
     const float w = raym3::v2::Density::PxToDp((float)widthPx);
     const float h = raym3::v2::Density::PxToDp((float)heightPx);
+    // Feed live viewport to the CSS engine (width/height/orientation @media) and
+    // re-resolve className styles so responsive rules apply on rotation/resize
+    // even for nodes that don't re-render in JS.
+    raym3::Stylesheet::Global().SetViewport(w, h);
+    refreshClassNameStyles(ctx);
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue obj = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, obj, "width", JS_NewFloat64(ctx, w));
@@ -905,6 +920,7 @@ extern "C" int RayactIOSSessionCreateSurface(RayactIOSHandle handle, void* metal
         setRaym3Density(density, layoutDensity);
         if (!IsWindowReady()) {
             SetTargetFPS(0);
+            SetConfigFlags(FLAG_MSAA_4X_HINT); // 4x MSAA on the main pass (standard raylib opt-in)
             InitWindow(0, 0, "Rayact");
             if (!IsWindowReady()) return 0;
             raym3::FontManager::ResetDeviceCache();
@@ -946,6 +962,7 @@ extern "C" int RayactIOSSessionCreateSurface(RayactIOSHandle handle, void* metal
         setRaym3Density(density, layoutDensity);
         if (!executePendingScript()) return 0;
         SetTargetFPS(0);
+        SetConfigFlags(FLAG_MSAA_4X_HINT); // 4x MSAA on the main pass (standard raylib opt-in)
         InitWindow(0, 0, "Rayact");
         if (!IsWindowReady()) return 0;
         raym3::FontManager::Initialize();

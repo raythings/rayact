@@ -188,22 +188,22 @@ export async function runBuild(flags: CliFlags): Promise<void> {
   console.log(`Bundle: ${output.bundleFormat === 'qjsbc' ? 'bundle.qjsbc' : 'bundle.js'}`);
   console.log(`Assets: ${output.assets.length}`);
 
-  if (flags.platform === 'web' && !flags.android && !flags.ios) {
-    if (process.env.RAYACT_SKIP_WEB_HOST_ASSEMBLY === '1') {
-      console.log('Skipping web host assembly (RAYACT_SKIP_WEB_HOST_ASSEMBLY=1)');
-      return;
-    }
-    await assembleWebApp(output.bundleFormat, output.bytecode, output.code, outDir, isRelease);
-    return;
-  }
-
-  if (!flags.android && !flags.ios && !flags.desktopApp) return;
-
   const { code, cssFiles } = normalizeCssRefs(output.code, process.cwd());
   if (output.bundleFormat === 'qjsbc' && code !== output.code) {
     console.warn('warning: bundle references CSS outside the project root; those paths cannot');
     console.warn('be rewritten inside a bytecode bundle — build with --no-bytecode to fix.');
   }
+
+  if (flags.platform === 'web' && !flags.android && !flags.ios) {
+    if (process.env.RAYACT_SKIP_WEB_HOST_ASSEMBLY === '1') {
+      console.log('Skipping web host assembly (RAYACT_SKIP_WEB_HOST_ASSEMBLY=1)');
+      return;
+    }
+    await assembleWebApp(output.bundleFormat, output.bytecode, code, cssFiles, outDir, isRelease);
+    return;
+  }
+
+  if (!flags.android && !flags.ios && !flags.desktopApp) return;
   if (code !== output.code) {
     const bundleName = output.mode === 'dev-client' ? 'dev-client.js' : 'bundle.js';
     await fs.writeFile(path.join(outDir, bundleName), code);
@@ -364,6 +364,7 @@ async function assembleWebApp(
   bundleFormat: 'js' | 'qjsbc',
   bytecode: Buffer | undefined,
   code: string,
+  cssFiles: CssRef[],
   outDir: string,
   isRelease: boolean
 ): Promise<void> {
@@ -397,6 +398,19 @@ async function assembleWebApp(
   } else {
     await fs.writeFile(path.join(webDir, 'app.js'), code);
   }
+  // CSS the bundle reads at runtime: stage under webDir/<rel> and list in
+  // app-assets.json — the host shell fetches each entry into MEMFS before boot
+  // (web analog of the Android assets/runtime/<rel> staging).
+  const assetList: string[] = [];
+  for (const ref of cssFiles) {
+    if (!existsSync(ref.src)) {
+      console.warn(`warning: bundle references missing CSS file: ${ref.src}`);
+      continue;
+    }
+    await copyInto(ref.src, path.join(webDir, ref.rel));
+    assetList.push(ref.rel);
+  }
+  await fs.writeFile(path.join(webDir, 'app-assets.json'), JSON.stringify(assetList));
   console.log(`Web app assembled: ${webDir}`);
   console.log('Serve with COOP/COEP headers (required for WebGPU):');
   console.log(`  rayact serve ${path.relative(process.cwd(), webDir) || 'dist/web'}`);
@@ -405,7 +419,7 @@ async function assembleWebApp(
 }
 
 export function sanitizeReleaseWebHtml(input: string): string {
-  const releasePreRun = 'preRun:[function(){addRunDependency("rayact-app-bundle");var load=function(name,fallback){fetch(name).then(function(response){if(!response.ok)throw new Error(String(response.status));return response.arrayBuffer()}).then(function(bytes){FS.writeFile("/"+name,new Uint8Array(bytes));removeRunDependency("rayact-app-bundle")}).catch(function(){if(fallback)fallback();else removeRunDependency("rayact-app-bundle")})};load("app.qjsbc",function(){load("app.js",null)})}],';
+  const releasePreRun = 'preRun:[function(){addRunDependency("rayact-app-bundle");var load=function(name,fallback){fetch(name).then(function(response){if(!response.ok)throw new Error(String(response.status));return response.arrayBuffer()}).then(function(bytes){FS.writeFile("/"+name,new Uint8Array(bytes));removeRunDependency("rayact-app-bundle")}).catch(function(){if(fallback)fallback();else removeRunDependency("rayact-app-bundle")})};load("app.qjsbc",function(){load("app.js",null)});addRunDependency("rayact-app-assets");fetch("app-assets.json").then(function(response){if(!response.ok)throw new Error(String(response.status));return response.json()}).then(function(list){if(!Array.isArray(list))return;return Promise.all(list.map(function(rel){return fetch(rel).then(function(response){if(!response.ok)throw new Error(String(response.status));return response.arrayBuffer()}).then(function(bytes){var dir="/"+rel.split("/").slice(0,-1).join("/");if(dir!=="/")FS.mkdirTree(dir);FS.writeFile("/"+rel,new Uint8Array(bytes))})}))}).catch(function(){}).then(function(){removeRunDependency("rayact-app-assets")})}],';
   let html = input.replace(
     /preRun\s*:\s*\[[\s\S]*?\]\s*,\s*__rayactPrefetchCache\s*:\s*[^,]+,\s*__rayactActiveRevision\s*:\s*[^,]+,/,
     releasePreRun
