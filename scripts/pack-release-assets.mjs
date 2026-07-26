@@ -197,8 +197,20 @@ if (fs.existsSync(path.join(webPthreadsBin, 'rayact.html'))) {
 
 run('node', ['scripts/generate-release-set.mjs', '--assets', OUT], { cwd: ROOT });
 
+// Release notes live in releases/v<version>.md (version-controlled); the
+// replace-github-release step reads them from release1/RELEASE_NOTES.md, which
+// is gitignored. Copy them across so a release never silently falls back to
+// the generic one-line body. Excluded from SHA256SUMS below as a non-asset.
+const notesSource = path.join(ROOT, 'releases', `v${VERSION}.md`);
+if (fs.existsSync(notesSource)) {
+  fs.copyFileSync(notesSource, path.join(OUT, 'RELEASE_NOTES.md'));
+  console.log(`Release notes: releases/v${VERSION}.md`);
+} else {
+  console.warn(`WARNING: no releases/v${VERSION}.md — the GitHub release will get a generic one-line body.`);
+}
+
 const releasable = fs.readdirSync(OUT)
-  .filter((f) => f !== 'SHA256SUMS' && fs.statSync(path.join(OUT, f)).isFile())
+  .filter((f) => f !== 'SHA256SUMS' && f !== 'RELEASE_NOTES.md' && fs.statSync(path.join(OUT, f)).isFile())
   .sort();
 
 const sums = releasable.map((file) => {
