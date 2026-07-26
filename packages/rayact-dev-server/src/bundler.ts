@@ -568,7 +568,15 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
       if (id === DEV_CLIENT_ENTRY_ID) return `\0${DEV_CLIENT_ENTRY_ID}`;
       if (id === REACT_DEVTOOLS_BACKEND_SETUP_ID) return `\0${REACT_DEVTOOLS_BACKEND_SETUP_ID}`;
       if (id === PROJECT_DEV_OVERLAY_ID) {
-        return resolveRayactSubsystem(root, 'dev-client', 'ProjectDevOverlay.tsx', 'dev-client/ProjectDevOverlay.js');
+        try {
+          return resolveRayactSubsystem(root, 'dev-client', 'ProjectDevOverlay.tsx', 'dev-client/ProjectDevOverlay.js');
+        } catch (err) {
+          throw new Error(
+            `The Android/iOS dev-client overlay needs @rayact/dev-client, which is not installed. ` +
+              `Add it to your project's package.json dependencies (matching your other @rayact/* packages) and reinstall. ` +
+              `See docs/reference/cli.md#dev-loop.\n\nOriginal resolution error: ${(err as Error).message}`
+          );
+        }
       }
 
       const cssFile = resolveCssFile(id, importer, root);

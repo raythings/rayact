@@ -14,8 +14,11 @@
 
 #include "../core/engine.hpp"
 #include "../desktop/accessibility_bridge.hpp"
+#include "../desktop/raym3_bridge.hpp"
 
 #include <raylib.h>
+#include <raym3/fonts/FontManager.h>
+#include <raym3/styles/Stylesheet.h>
 #include <raym3/v2/Density.h>
 
 #include <emscripten/emscripten.h>
@@ -129,6 +132,11 @@ static void publishWindowDimensions(JSContext *ctx, int widthPx, int heightPx) {
     if (!ctx || widthPx <= 0 || heightPx <= 0) return;
     const float w = raym3::v2::Density::PxToDp((float)widthPx);
     const float h = raym3::v2::Density::PxToDp((float)heightPx);
+    // Feed the live viewport to the CSS engine (width/height/orientation @media)
+    // and re-resolve className styles across the tree so responsive rules apply
+    // even to nodes that don't re-render in JS on resize.
+    raym3::Stylesheet::Global().SetViewport(w, h);
+    refreshClassNameStyles(ctx);
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue obj = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, obj, "width", JS_NewFloat64(ctx, w));
@@ -191,7 +199,12 @@ static bool syncCanvasSizeAndPublish(void) {
     // same ratio in getRenderScaleDpi) agree instead of racing a stale value.
     const float dpr = GetWindowScaleDPI().x;
     raym3::v2::Density::SetPlatformDensity(dpr);
-    raym3::v2::Density::SetLayoutDensity(dpr);
+    // Route the layout-density change through FontManager (not Density directly)
+    // so a dpr change invalidates the glyph-atlas cache and fonts re-bake at the
+    // new device-pixel size — otherwise atlases stay baked at the old density
+    // and get magnified (blurry text). Mirrors the desktop path
+    // (engine_js.cpp FontManager::SetDpiScale(getRenderScaleDpi())).
+    raym3::FontManager::SetDpiScale(dpr);
 
     // Publish the LOGICAL window size to JS (dp == CSS px here): PxToDp(render) =
     // render/dpr = CSS. Scenes relayout to the window the user actually sees.
@@ -240,6 +253,16 @@ static void tick(void) {
     // runtime stays alive without ASYNCIFY). Do nothing until the async device
     // acquisition has booted the engine.
     if (!g_engineReady) return;
+
+    // Two schedulers drive tick(): an rAF loop (smooth, display-synced, full speed
+    // while the tab is visible) and a low-rate setTimeout main loop (keeps the runtime
+    // alive without ASYNCIFY and keeps pumping when the tab is hidden — browsers throttle
+    // BOTH rAF and setTimeout to ~1Hz in background tabs, so hidden ⇒ ~1fps by policy).
+    // When visible, both fire each frame; dedupe so we don't pump+render twice per frame.
+    static double g_lastTickMs = 0.0;
+    double nowMs = emscripten_get_now();
+    if (nowMs - g_lastTickMs < 5.0) return;  // ~200fps ceiling; real rate is display-bound
+    g_lastTickMs = nowMs;
 
     rayact::enginePrepareJSThread();
     rayact::enginePumpJS();
@@ -389,6 +412,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE void rayactWebPointer(int action, int id, float 
     rayact::engineQueueTouch(action, id, x, y);
 }
 
+extern "C" EMSCRIPTEN_KEEPALIVE void rayactWebWheel(float delta, float x, float y) {
+    rayact::engineQueueWheel(delta, x, y);
+    rayact::engineRequestFrame();
+}
+
 extern "C" EMSCRIPTEN_KEEPALIVE void rayactWebAccessibilityActivate(uint32_t id) {
     if (rayact::accessibilityBridge().activate(id)) {
         rayact::engineRequestSurfaceRelayout(1);
@@ -439,10 +467,22 @@ int main(void) {
         })();
     });
 
-    // Register the main loop now. simulate_infinite_loop=1 keeps the runtime alive
-    // (no ASYNCIFY) so the IDBFS/WebGPU callbacks resolve and tick() keeps firing.
-    // fps=60 selects setTimeout scheduling (vs rAF when fps<=0); setTimeout keeps
-    // running in hidden/headless tabs where rAF is throttled to zero.
-    emscripten_set_main_loop(tick, 60, 1);
+    // Rendering is driven by TWO schedulers (tick() dedupes so they never double up):
+    //
+    // 1. requestAnimationFrame — the primary render clock. Display-synced, so a VISIBLE
+    //    tab renders at the monitor's full refresh rate (60/120Hz), smooth and tear-free.
+    //    rAF throttles to ~0 in hidden/backgrounded tabs, which is why it can't stand
+    //    alone (boot/liveness would stall while the tab is offscreen).
+    // 2. emscripten_set_main_loop at a LOW fps — a setTimeout chain that (a) keeps the
+    //    runtime alive with simulate_infinite_loop=1 (no ASYNCIFY) and (b) keeps pumping
+    //    JS/HMR/storage when the tab is hidden. It runs at a low rate on purpose: when
+    //    the tab is visible, rAF does the real work and this mostly dedupes out; when
+    //    hidden, browsers clamp setTimeout to ~1Hz anyway, so ~1fps is the platform
+    //    ceiling regardless. (The previous code used fps=60 here as the SOLE loop — that
+    //    made a foregrounded tab render via setTimeout instead of rAF, and any tab that
+    //    lost foreground dropped to the 1Hz background-throttle: "very slow / stuck".)
+    emscripten_request_animation_frame_loop(
+        [](double, void*) -> EM_BOOL { tick(); return EM_TRUE; }, nullptr);
+    emscripten_set_main_loop(tick, 10, 1);
     return 0;
 }

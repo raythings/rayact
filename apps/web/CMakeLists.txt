@@ -38,6 +38,15 @@ if(RAYACT_WEB_PTHREADS)
     add_link_options(-pthread -sPTHREAD_POOL_SIZE=4)
 endif()
 
+# C++ exceptions: engine parse paths (CSS numeric tokens, colors, transitions)
+# guard std::stof/stod with try/catch and rely on the catch for fallback values.
+# Emscripten disables exceptions by default, turning ANY throw into abort() — a
+# single unparsable CSS token kills the page ("stof: no conversion"). Native WASM
+# exception handling is cheap and supported by every WebGPU-capable browser.
+# Directory-wide so all C++ TUs share the same EH ABI.
+add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fwasm-exceptions>)
+add_link_options(-fwasm-exceptions)
+
 # Repo layout: this file lives in <repo>/apps/web.
 get_filename_component(RAYACT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 set(THIRD_PARTY "${RAYACT_ROOT}/third_party")
@@ -86,33 +95,59 @@ target_compile_features(m3 PRIVATE c_std_99)
 target_compile_options(m3 PRIVATE -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter -Wno-sign-compare)
 
 # ---------------------------------------------------------------------------
-# raylib with the rlwg WebGPU backend (rcore overlay + backend attach).
+# raylib: rlwg WebGPU backend (default), or stock WebGL2/GLES3 when
+# RAYACT_WEB_WEBGL=ON (for browsers without WebGPU; MSAA comes from the WebGL
+# context's antialias attribute via FLAG_MSAA_4X_HINT → GLFW_SAMPLES).
 # ---------------------------------------------------------------------------
+option(RAYACT_WEB_WEBGL "Build the web host on WebGL2 (GLES3) instead of WebGPU" OFF)
 set(RAYLIB_DIR "${THIRD_PARTY}/raylib")
 set(RAYLIB_BACKENDS_DIR "${THIRD_PARTY}/raylib-backends")
 include("${RAYLIB_BACKENDS_DIR}/cmake/RaylibBackend.cmake")
 
-raylib_backend_prepare_rcore_overlay(
-    OUT_VAR RAYLIB_RCORE_SRC
-    RAYLIB_DIR "${RAYLIB_DIR}"
-    RAYLIB_BACKENDS_DIR "${RAYLIB_BACKENDS_DIR}"
-)
-add_library(raylib STATIC
-    ${RAYLIB_RCORE_SRC}
-    ${RAYLIB_DIR}/src/rshapes.c
-    ${RAYLIB_DIR}/src/rtextures.c
-    ${RAYLIB_DIR}/src/rtext.c
-    ${RAYLIB_DIR}/src/rmodels.c
-    ${RAYLIB_DIR}/src/raudio.c
-)
-target_include_directories(raylib PUBLIC ${RAYLIB_DIR}/src ${RAYLIB_DIR}/src/platforms)
-target_compile_options(raylib PRIVATE -Wno-unknown-pragmas)
-raylib_backend_attach(TARGET raylib BACKEND WEBGPU RAYLIB_BACKENDS_DIR ${RAYLIB_BACKENDS_DIR})
-get_target_property(_rayact_raylib_link_options raylib INTERFACE_LINK_OPTIONS)
-if(_rayact_raylib_link_options)
+if(RAYACT_WEB_WEBGL)
+    # Stock raylib web platform: rcore.c → platforms/rcore_web.c, GLES3 rlgl.
+    add_library(raylib STATIC
+        ${RAYLIB_DIR}/src/rcore.c
+        ${RAYLIB_DIR}/src/rshapes.c
+        ${RAYLIB_DIR}/src/rtextures.c
+        ${RAYLIB_DIR}/src/rtext.c
+        ${RAYLIB_DIR}/src/rmodels.c
+        ${RAYLIB_DIR}/src/raudio.c
+    )
+    target_compile_definitions(raylib PUBLIC PLATFORM_WEB GRAPHICS_API_OPENGL_ES3)
     set(RAYACT_WEB_STACK_SIZE "256MB" CACHE STRING "Emscripten stack size for the Rayact web host")
-    list(TRANSFORM _rayact_raylib_link_options REPLACE "^-sSTACK_SIZE=16MB$" "-sSTACK_SIZE=${RAYACT_WEB_STACK_SIZE}")
-    set_property(TARGET raylib PROPERTY INTERFACE_LINK_OPTIONS ${_rayact_raylib_link_options})
+    target_link_options(raylib INTERFACE
+        -sUSE_GLFW=3
+        -sMIN_WEBGL_VERSION=2
+        -sMAX_WEBGL_VERSION=2
+        -sALLOW_MEMORY_GROWTH=1
+        "-sSTACK_SIZE=${RAYACT_WEB_STACK_SIZE}"
+    )
+    target_include_directories(raylib PUBLIC ${RAYLIB_DIR}/src ${RAYLIB_DIR}/src/platforms)
+    target_compile_options(raylib PRIVATE -Wno-unknown-pragmas)
+else()
+    raylib_backend_prepare_rcore_overlay(
+        OUT_VAR RAYLIB_RCORE_SRC
+        RAYLIB_DIR "${RAYLIB_DIR}"
+        RAYLIB_BACKENDS_DIR "${RAYLIB_BACKENDS_DIR}"
+    )
+    add_library(raylib STATIC
+        ${RAYLIB_RCORE_SRC}
+        ${RAYLIB_DIR}/src/rshapes.c
+        ${RAYLIB_DIR}/src/rtextures.c
+        ${RAYLIB_DIR}/src/rtext.c
+        ${RAYLIB_DIR}/src/rmodels.c
+        ${RAYLIB_DIR}/src/raudio.c
+    )
+    target_include_directories(raylib PUBLIC ${RAYLIB_DIR}/src ${RAYLIB_DIR}/src/platforms)
+    target_compile_options(raylib PRIVATE -Wno-unknown-pragmas)
+    raylib_backend_attach(TARGET raylib BACKEND WEBGPU RAYLIB_BACKENDS_DIR ${RAYLIB_BACKENDS_DIR})
+    get_target_property(_rayact_raylib_link_options raylib INTERFACE_LINK_OPTIONS)
+    if(_rayact_raylib_link_options)
+        set(RAYACT_WEB_STACK_SIZE "256MB" CACHE STRING "Emscripten stack size for the Rayact web host")
+        list(TRANSFORM _rayact_raylib_link_options REPLACE "^-sSTACK_SIZE=16MB$" "-sSTACK_SIZE=${RAYACT_WEB_STACK_SIZE}")
+        set_property(TARGET raylib PROPERTY INTERFACE_LINK_OPTIONS ${_rayact_raylib_link_options})
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
@@ -270,7 +305,7 @@ set(_rayact_dbg "")
 if(RAYACT_WEB_DEBUG)
     set(_rayact_dbg " --profiling-funcs -sASSERTIONS=2 -sSTACK_OVERFLOW_CHECK=2")
 endif()
-set(_rayact_exports " -sEXPORTED_FUNCTIONS=['_main','_rayactWebStart','_rayactWebFinishBoot','_rayactWebPointer','_rayactWebKey','_rayactWebImeUpdate','_rayactWebImeSubmit','_rayactWebJsWorkerMessage','_rayactWebJsWorkerClosed','_malloc','_free']")
+set(_rayact_exports " -sEXPORTED_FUNCTIONS=['_main','_rayactWebStart','_rayactWebFinishBoot','_rayactWebPointer','_rayactWebWheel','_rayactWebKey','_rayactWebImeUpdate','_rayactWebImeSubmit','_rayactWebJsWorkerMessage','_rayactWebJsWorkerClosed','_malloc','_free']")
 # The rlwg backend propagates a 16 MB stack, which is enough for simple demos but
 # the full smoke app (React navigation + large Material tree) can exhaust it while
 # QuickJS evaluates and mounts the bundle. Keep this above the web QuickJS guard in

@@ -652,6 +652,17 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     })().catch(() => {});
   }
 
+  // Rebuild every platform bundle and push a full-reload to connected HMR
+  // clients. Shared between the returned server object's `reload()` method and
+  // the `POST /rayact/reload` HTTP route, so scripts/agents can trigger a
+  // reload without an attached TUI or a raw websocket client.
+  const reload = async (): Promise<void> => {
+    await Promise.all([...contexts.values()].map(context =>
+      options.bytecode ? rebuildBytecode(context) : rebuildBootstrap(context)
+    ));
+    if (!options.bytecode) broadcastModuleHmr({ type: 'full-reload' });
+  };
+
   server.on('request', (request, response) => {
     void handleRequest(request, response);
   });
@@ -724,6 +735,20 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
         binaryCommands: RAYACT_BINARY_COMMANDS,
         error: context.bootstrapError?.message
       });
+      return;
+    }
+
+    if (requestUrl.pathname === '/rayact/reload') {
+      if (request.method !== 'POST') {
+        sendJson(response, 405, { error: 'Use POST to trigger a reload' });
+        return;
+      }
+      try {
+        await reload();
+        sendJson(response, 200, { ok: true });
+      } catch (error) {
+        sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
       return;
     }
 
@@ -851,7 +876,14 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
         }
         sendText(response, 200, wrapRayactModule(`/rayact/entry.js?${platformSuffix}`, result.code, RAYACT_ENTRY_ID), 'application/javascript; charset=utf-8');
       } catch (error) {
-        sendText(response, 500, error instanceof Error ? error.message : String(error));
+        const message = error instanceof Error ? error.message : String(error);
+        // Structured body so the dev-client's error overlay (and humans reading
+        // the network tab) get a hint instead of a bare Vite stack trace. The
+        // most common cause here is a missing @rayact/dev-client dependency.
+        const hint = /@rayact\/dev-client/.test(message)
+          ? 'Add @rayact/dev-client to your project dependencies and reinstall. See docs/reference/cli.md#dev-loop.'
+          : undefined;
+        sendJson(response, 500, { error: message, ...(hint ? { hint } : {}) });
       }
       return;
     }
@@ -1235,12 +1267,7 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     broadcastHmr,
     broadcastDebugger,
     broadcastInspector,
-    async reload() {
-      await Promise.all([...contexts.values()].map(context =>
-        options.bytecode ? rebuildBytecode(context) : rebuildBootstrap(context)
-      ));
-      if (!options.bytecode) broadcastModuleHmr({ type: 'full-reload' });
-    },
+    reload,
     async close() {
       mdns.stop();
       clearInterval(heartbeat);
