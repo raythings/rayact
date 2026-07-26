@@ -48,6 +48,9 @@ struct QueuedTouch {
     bool released = false;
     bool down = false;
     Vector2 position = {0.0f, 0.0f};
+    // Accumulated mouse-wheel notches since the last consumed frame (web feeds
+    // this via engineQueueWheel; raylib's GetMouseWheelMove is bypassed there).
+    float wheel = 0.0f;
 };
 
 // The engine's JS context (owned by engine_js.cpp; read by main.cpp).

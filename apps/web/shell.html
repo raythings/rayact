@@ -215,6 +215,28 @@
           });
         };
         tryLoad('app.qjsbc', function() { tryLoad('app.js', null); });
+        // Runtime assets (CSS the bundle importCSS()es): `rayact build --web`
+        // stages the files next to the bundle and lists them in app-assets.json;
+        // mirror that tree into MEMFS so filesystem loads resolve at boot.
+        addRunDependency('rayact-app-assets');
+        fetch('app-assets.json').then(function(res) {
+          if (!res.ok) throw new Error(String(res.status));
+          return res.json();
+        }).then(function(list) {
+          if (!Array.isArray(list)) return;
+          return Promise.all(list.map(function(rel) {
+            return fetch(rel).then(function(res) {
+              if (!res.ok) throw new Error(rel + ': ' + res.status);
+              return res.arrayBuffer();
+            }).then(function(buf) {
+              var dir = '/' + rel.split('/').slice(0, -1).join('/');
+              if (dir !== '/') FS.mkdirTree(dir);
+              FS.writeFile('/' + rel, new Uint8Array(buf));
+            });
+          }));
+        }).catch(function() {}).then(function() {
+          removeRunDependency('rayact-app-assets');
+        });
       }],
       __rayactPrefetchCache: rayactPrefetchCache,
       __rayactActiveRevision: null,
@@ -333,6 +355,17 @@
           sendPointer(1, event);
           event.preventDefault();
         });
+        canvas.addEventListener('wheel', function(event) {
+          if (!runtimeReady || typeof Module._rayactWebWheel !== 'function') return;
+          var point = canvasPoint(event);
+          if (!point) return;
+          // Normalize deltaY to pixels (deltaMode 0=pixel, 1=line, 2=page), then
+          // to raylib wheel notches (+1 = scroll up). Browser deltaY>0 = scroll
+          // down, so negate. The engine scrolls the ScrollView under the cursor.
+          var unit = event.deltaMode === 1 ? 16 : (event.deltaMode === 2 ? (canvas.clientHeight || 800) : 1);
+          Module._rayactWebWheel(-(event.deltaY * unit) / 100, point.x, point.y);
+          event.preventDefault();
+        }, { passive: false });
         canvas.addEventListener('keydown', function(event) {
           if (activeNode !== -1) return;
           sendKey(0, event, '');

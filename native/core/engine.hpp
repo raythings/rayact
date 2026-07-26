@@ -93,6 +93,12 @@ void engineRequestSurfaceRelayout(int screenId);
 // pointer here so the render thread can dispatch press handlers on release.
 void engineQueueTouch(int action, int id, float x, float y);
 
+// Queue a mouse-wheel scroll (web: from the canvas 'wheel' handler). `delta` is
+// in raylib GetMouseWheelMove units (+1 per notch up); x/y is the cursor in the
+// same coordinate space as engineQueueTouch, so the ScrollView under the cursor
+// is the one that scrolls.
+void engineQueueWheel(float delta, float x, float y);
+
 // Queue a global keyboard event for delivery to rayact/react Keyboard.
 // type: 0=keyDown, 1=keyUp, 2=textInput.
 void engineQueueKeyEvent(int type, const char* key, const char* code,
