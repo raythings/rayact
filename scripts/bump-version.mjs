@@ -78,6 +78,7 @@ edit('native/desktop/main.cpp', (s) => s.replace(/Version \d+\.\d+\.\d+/, `Versi
 edit('native/desktop/CMakeLists.txt', (s) => s.replace(/(project\(rayact_quickjs_desktop VERSION )\d+\.\d+\.\d+/, `$1${version}`));
 // Root CMake project version feeds RAYACT_TOOL_VERSION (rayact_tool --version).
 edit('CMakeLists.txt', (s) => s.replace(/(project\(rayact VERSION )\d+\.\d+\.\d+/, `$1${version}`));
+edit('packages/template-android/app/build.gradle', (s) => s.replace(/versionName '\d+\.\d+\.\d+'/, `versionName '${version}'`));
 
 // Docs + READMEs: every occurrence of the previous release version is a pin
 // (install commands, download URLs, tarball names) — rewrite them wholesale.
