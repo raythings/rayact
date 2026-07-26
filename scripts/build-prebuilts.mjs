@@ -92,6 +92,10 @@ function buildDocker(target) {
     '-e', `ENGINE_VERSION=${process.env.ENGINE_VERSION || JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version}`,
     tag
   ]);
+  if (target === 'android') {
+    // The build image has no node; refresh module-artifact hashes host-side.
+    run('node', [path.join(ROOT, 'scripts/update-module-artifact-hashes.mjs')]);
+  }
 }
 
 function buildMacos(targets) {
