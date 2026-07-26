@@ -172,6 +172,58 @@ log "=== dev server manifest ==="
   test -s /tmp/rayact_release_smoke_bundle/bundle.js
 ) && pass "dev-server bundle" || fail "dev-server bundle"
 
+log "=== toolchain split (rayact_tool, not the GUI host) ==="
+if grep -q "Bytecode tool: .*rayact_tool" "$OUT/smoke-desktop-build.log" 2>/dev/null; then
+  pass "bytecode compiled by rayact_tool"
+elif grep -q "falling back to the rayact_desktop host" "$OUT/smoke-desktop-build.log" 2>/dev/null; then
+  fail "bytecode fell back to the rayact_desktop host (prebuilt missing rayact_tool)"
+else
+  fail "bytecode tool line missing from smoke-desktop-build.log"
+fi
+
+log "=== desktop DEBUG build ==="
+(
+  cd "$SMOKE"
+  npx rayact build --debug --desktop --out dist-desktop-debug-check >"$OUT/smoke-desktop-debug.log" 2>&1
+  test -f dist-desktop-debug-check/bundle.js || test -f dist-desktop-debug-check/bundle.qjsbc
+) && pass "desktop debug build" || fail "desktop debug build"
+
+log "=== web asset staging (app-assets.json lists every staged asset) ==="
+(
+  cd "$SMOKE"
+  python3 - <<'PYEOF'
+import json, os, sys
+web = 'dist-web-check/web'
+listed = set(json.load(open(os.path.join(web, 'app-assets.json'))))
+missing = []
+for sub in ('assets', 'rayact-assets'):
+    root = os.path.join(web, sub)
+    for dirpath, _, files in os.walk(root) if os.path.isdir(root) else []:
+        for f in files:
+            rel = os.path.relpath(os.path.join(dirpath, f), web).replace(os.sep, '/')
+            if rel not in listed:
+                missing.append(rel)
+for rel in listed:
+    if not os.path.exists(os.path.join(web, rel)):
+        missing.append(f'listed-but-absent: {rel}')
+sys.exit(1 if missing else 0)
+PYEOF
+) && pass "web asset staging manifest" || fail "web asset staging manifest"
+
+log "=== scaffold from release set (create-rayact-app --release-dir) ==="
+SCAFFOLD_DIR="$OUT/scaffold"
+(
+  mkdir -p "$SCAFFOLD_DIR"
+  cd "$SCAFFOLD_DIR"
+  node "$ROOT/packages/create-rayact-app/dist/index.js" MatrixApp \
+    --release-dir "$ROOT/release1" --no-install >"$OUT/scaffold-create.log" 2>&1
+  cd MatrixApp
+  npm install --no-audit --no-fund >"$OUT/scaffold-install.log" 2>&1
+  # Lockstep packages must never resolve from the public registry.
+  ! grep -q "registry.npmjs.org/@rayact" package-lock.json
+  test -f node_modules/rayact/package.json
+) && pass "scaffold + registry-free install" || fail "scaffold + registry-free install"
+
 if command -v adb >/dev/null 2>&1 && adb devices | awk 'NR>1 && $2=="device"{found=1} END{exit !found}'; then
   log "=== android release (device present) ==="
   (
