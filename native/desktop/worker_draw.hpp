@@ -36,7 +36,10 @@ enum RayactDrawOp : uint32_t {
 
 // Replays a command stream. Must be called on the render thread with the GL/VK
 // context current (i.e. from a raym3 Custom node render lambda). `layout` is
-// the worker view's absolute layout rect in dp.
+// the worker view's absolute layout rect in dp. The replay joins raym3's
+// scissor stack (PushScissor/PopScissor), so it inherits and restores the
+// ambient scroll/overflow clip exactly like any component painter (View3D
+// pattern).
 void rayactReplayWorkerDraw(const uint8_t* data, size_t len, Rectangle layout);
 
 // Frees the path→Texture2D cache used by WDRAW_IMAGE. Render thread only.
