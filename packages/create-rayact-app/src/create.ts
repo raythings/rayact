@@ -65,6 +65,9 @@ function depBlock(options: CreateOptions): {
     const dependencies: Record<string, string> = {
       rayact: `file:${rel}/packages/rayact`,
       '@rayact/dev-server': `file:${rel}/packages/rayact-dev-server`,
+      '@rayact/template-android': `file:${rel}/packages/template-android`,
+      '@rayact/template-ios': `file:${rel}/packages/template-ios`,
+      '@rayact/dev-client': `file:${rel}/packages/rayact-dev-client`,
       react: '^19.0.0'
     };
     const prebuilt = hostPrebuiltFolder();
@@ -78,6 +81,9 @@ function depBlock(options: CreateOptions): {
     dependencies: {
       rayact: RAYACT_VERSION,
       '@rayact/dev-server': RAYACT_VERSION,
+      '@rayact/template-android': RAYACT_VERSION,
+      '@rayact/template-ios': RAYACT_VERSION,
+      '@rayact/dev-client': RAYACT_VERSION,
       react: '^19.0.0'
     },
     devDependencies

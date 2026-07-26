@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import { PREBUILT_PACKAGES } from './constants.js';
 import type { PrebuiltManifest } from './types.js';
 
@@ -50,23 +49,12 @@ export function resolvePrebuiltDarwinDir(projectRoot: string, arch: 'arm64' | 'x
   return resolvePackageDir(projectRoot, PREBUILT_PACKAGES[key]);
 }
 
-/**
- * Native project templates bundled with this package (templates/android,
- * templates/ios beside dist/). Fallback for consumers that don't have the
- * monorepo @rayact/template-* packages installed.
- */
-function bundledTemplateDir(name: 'android' | 'ios'): string | null {
-  const here = path.dirname(fileURLToPath(import.meta.url)); // dist/ at runtime
-  const dir = path.resolve(here, '..', 'templates', name);
-  return fs.existsSync(dir) ? dir : null;
-}
-
 export function resolveTemplateAndroidDir(projectRoot: string): string | null {
-  return resolvePackageDir(projectRoot, '@rayact/template-android') ?? bundledTemplateDir('android');
+  return resolvePackageDir(projectRoot, '@rayact/template-android');
 }
 
 export function resolveTemplateIosDir(projectRoot: string): string | null {
-  return resolvePackageDir(projectRoot, '@rayact/template-ios') ?? bundledTemplateDir('ios');
+  return resolvePackageDir(projectRoot, '@rayact/template-ios');
 }
 
 export function copyDirRecursive(src: string, dest: string): void {
