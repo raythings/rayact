@@ -2173,8 +2173,10 @@ rendering.
 
 ## Values
 
-- **Lengths**: `px` (density-independent), `%`, `rem`, viewport units;
-  **`calc()`** over all of them.
+- **Lengths**: `px` (density-independent), `rem`; **`calc()`** over them.
+  **Percentage dimensions are not supported yet** — `width: 50%` (and
+  Tailwind's fractional `w-1/2`-style utilities) parse as pixel values.
+  Use flex (`flex-grow`/`flex-basis`), `gap`, or fixed sizes instead.
 - **Colors (CSS Color 4)**:
 
 | Format | Example |

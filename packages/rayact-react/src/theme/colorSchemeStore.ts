@@ -63,7 +63,15 @@ export function initColorSchemeStore(): void {
   };
 }
 
-export function useColorScheme(): boolean {
+/** Resolved scheme, react-native parity: 'light' | 'dark'. */
+export function useColorScheme(): 'light' | 'dark' {
+  initColorSchemeStore();
+  const dark = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return dark ? 'dark' : 'light';
+}
+
+/** Boolean form used internally (theme provider, CSS variable store). */
+export function useIsDarkColorScheme(): boolean {
   initColorSchemeStore();
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

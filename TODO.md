@@ -13,6 +13,7 @@ Chrome DevTools (CDP) inspection, headless `rayact_tool` build toolchain.
 - [ ] Windows host via the rld12 (D3D12) raylib backend
 - [ ] macOS x64 + Linux arm64 prebuilts
 - [ ] Android release signing config passthrough (release APKs are debug-signed today)
+- [ ] Percentage dimensions (`width: 50%`, Tailwind `w-1/2`) — the CSS and style pipelines currently read the number and drop the `%`
 - [ ] `ScrollView.scrollTo({ animated: true })` easing (currently instant)
 - [ ] Play-store/App-store packaging guides (AAB, notarization)
 - [ ] api-extractor-generated API reference (hand-written today, drift-gated by docs/scripts/check-api-coverage.mjs)
