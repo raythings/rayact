@@ -8,11 +8,11 @@ export default defineConfig({
   cleanUrls: true,
   lastUpdated: true,
   // Maintainer-only notes stay in the repo but out of the published site.
-  srcExclude: ['maintainer-prebuilts.md', 'dev-platform.md', 'README.md', '**/tools/**'],
+  srcExclude: ['maintainer/**', 'README.md', '**/tools/**'],
   themeConfig: {
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
-      { text: 'Reference', link: '/reference/cli' },
+      { text: 'Reference', link: '/reference/components' },
       { text: 'llms.txt', link: '/llms.txt', target: '_blank' }
     ],
     sidebar: [
@@ -21,21 +21,48 @@ export default defineConfig({
         items: [
           { text: 'Getting started', link: '/guide/getting-started' },
           { text: 'Installation', link: '/guide/install' },
+          { text: 'Styling', link: '/guide/styling' },
+          { text: 'Tailwind CSS', link: '/guide/tailwind' },
+          { text: 'Animation', link: '/guide/animation' },
+          { text: 'Navigation', link: '/guide/navigation' },
+          { text: 'Fonts & icons', link: '/guide/fonts-and-icons' },
+          { text: 'Workers & WASM', link: '/guide/workers' },
           { text: 'Native modules', link: '/native-modules' },
-          { text: 'Deployment', link: '/deployment' },
-          { text: 'Upgrades', link: '/upgrades' },
-          { text: 'Recovery', link: '/recovery' },
-          { text: 'Troubleshooting', link: '/troubleshooting' }
+          { text: 'Dev platform', link: '/dev-platform' }
+        ]
+      },
+      {
+        text: 'Platforms',
+        items: [
+          { text: 'Desktop (macOS & Linux)', link: '/guide/desktop' },
+          { text: 'Android', link: '/guide/android' },
+          { text: 'iOS', link: '/guide/ios' },
+          { text: 'Web', link: '/guide/web' },
+          { text: 'Linux', link: '/guide/linux' }
         ]
       },
       {
         text: 'Reference',
         items: [
-          { text: 'CLI', link: '/reference/cli' },
           { text: 'Components', link: '/reference/components' },
+          { text: 'API (rayact/react)', link: '/reference/api' },
+          { text: 'CSS support', link: '/reference/css' },
+          { text: 'CLI', link: '/reference/cli' },
           { text: 'Configuration', link: '/reference/config' },
           { text: 'Packages & platforms', link: '/reference/packages' },
           { text: 'Container format', link: '/reference/rayactpack' }
+        ]
+      },
+      {
+        text: 'Operations',
+        items: [
+          { text: 'Deployment', link: '/deployment' },
+          { text: 'Upgrades', link: '/upgrades' },
+          { text: 'Recovery', link: '/recovery' },
+          { text: 'Rollback', link: '/rollback' },
+          { text: 'Troubleshooting', link: '/troubleshooting' },
+          { text: 'Security', link: '/security' },
+          { text: 'Support policy', link: '/support' }
         ]
       },
       {
@@ -43,9 +70,6 @@ export default defineConfig({
         items: [
           { text: 'Accessibility', link: '/accessibility' },
           { text: 'Crash privacy', link: '/crash-reporting' },
-          { text: 'Security', link: '/security' },
-          { text: 'Support policy', link: '/support' },
-          { text: 'Rollback', link: '/rollback' },
           { text: 'Multi-window system', link: '/multi-window-system' }
         ]
       }

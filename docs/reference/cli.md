@@ -14,22 +14,29 @@ The `rayact` command (from `@rayact/cli`) drives development, building, and runn
 | `rayact build --release` | Release build: minify + bytecode + `.rayactpack` |
 | `rayact export` | Alias for `rayact build --release` |
 | `rayact compile <in> <out>` | Compile a JS bundle to QuickJS bytecode |
+| `rayact start` | Launch the packaged desktop app from the last build (`--dev` to attach to the dev server) |
+| `rayact serve <dir>` | Static server with the COOP/COEP headers web builds require (`--web-port <n>`) |
+| `rayact verify <file>` | Inspect a `.rayactpack` / validate a build artifact |
+| `rayact dev-app` | Install + launch the prebuilt dev app on a device/simulator, wired to the dev server |
 | `rayact prebuild` | Ensure the native host + plugin shells are present |
 | `rayact doctor` | Check toolchains, prebuilt integrity/ABI, module support, signing, and Web hosting requirements |
+| `rayact migrate` | Rewrite legacy config/import forms to the current ones |
 | `rayact init [name]` | Scaffold a new app (alias for `create-rayact-app`) |
 
 ## Common options
 
 | Flag | Effect |
 | --- | --- |
-| `--android` / `--ios` / `--desktop` | Target platform |
+| `--android` / `--ios` / `--desktop` / `--web` | Target platform |
 | `--install` | Install + launch on device after an Android/iOS build |
 | `--release` / `--debug` | Build mode |
 | `--minify` / `--no-minify` | Override the config's minify setting |
 | `--bytecode` / `--no-bytecode` | Override bytecode emission in development/debug; release always emits bytecode |
 | `--entry <path>` | App entry file |
 | `--out <dir>` | Output directory |
-| `--desktop-bin <path>` | Use a specific `rayact_desktop` host |
+| `--desktop-bin <path>` | Use a specific `rayact_desktop` host (runtime) |
+| `--tool-bin <path>` | Use a specific `rayact_tool` binary (bytecode compile + pack); env `RAYACT_TOOL_BIN` |
+| `--web-port <n>` | Port for `rayact serve` / the web dev proxy |
 
 ## Dev loop {#dev-loop}
 

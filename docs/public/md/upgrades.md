@@ -4,7 +4,7 @@ Commit the application before upgrading. Install the desired Rayact version and
 run:
 
 ```sh
-npm install rayact@0.0.3
+npm install rayact@0.0.4
 npx rayact migrate
 npm install
 npx rayact prebuild --force

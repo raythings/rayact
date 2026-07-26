@@ -8,7 +8,7 @@
     "gen:config": "node scripts/gen-config-reference.mjs",
     "gen:llms": "node scripts/gen-llms.mjs",
     "gen": "npm run gen:config && npm run gen:llms",
-    "check": "node scripts/gen-config-reference.mjs --check && node scripts/gen-llms.mjs --check",
+    "check": "node scripts/gen-config-reference.mjs --check && node scripts/gen-llms.mjs --check && node scripts/check-api-coverage.mjs",
     "predev": "npm run gen",
     "dev": "vitepress dev",
     "prebuild": "npm run gen",

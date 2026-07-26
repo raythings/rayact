@@ -1,211 +1,80 @@
 # Development Setup Guide
 
-## Quick Start
+Building the Rayact **framework** from source (contributors/maintainers).
+Consumers never need any of this — apps use prebuilt hosts
+([docs/guide/install.md](docs/guide/install.md)).
 
-### 1. Install Prerequisites
+## Prerequisites
 
-```bash
-# Linux/macOS
-sudo apt-get install cmake g++ git  # Ubuntu/Debian
-# or
-brew install cmake git  # macOS
+- Node **>= 22 < 25** (`nvm use 24`)
+- CMake 3.20+, a C++17 compiler
+- macOS: Xcode + `brew install xcodegen pkg-config curl libwebsockets openssl`
+- Android: SDK + NDK r27, JDK 17 (or use the Docker path below)
+- Web: Emscripten 4.x (`brew install emscripten`)
 
-# For Android development
-# Install Android Studio with NDK r23+
-# https://developer.android.com/studio
-
-# For Web development
-# Install Emscripten 3.0+
-# https://emscripten.org/
-```
-
-### 2. Build QuickJS and Raylib
-
-The project includes QuickJS and raylib in subdirectories. Build them first:
+## Clone
 
 ```bash
-# Build QuickJS
-cd quickjs
-meson setup build --default-library=static
-meson compile -C build
-
-# Build Raylib (Desktop)
-cd ../raylib
-cmake -B build -DPLATFORM=Desktop -DOPENGL_VERSION=4.3
-cmake --build build
-
-# Return to project root
-cd ../..
+git clone --recursive https://github.com/raythings/rayact
+cd rayact && nvm use 24 && npm ci && npm run build
 ```
 
-### 3. Build Rayact Core
+Native dependencies are submodules under `third_party/` (quickjs, raylib,
+raylib-backends, raym3, raysvg, rlvk, wasm3, cssparser, yoga, …). A plain
+`--recursive` clone gets everything.
+
+## Desktop host
 
 ```bash
-cd packages/rayact-quickjs
-npm install
-npm run build
+# One-time: build QuickJS static lib
+cmake -B build/quickjs-arm64 -S third_party/quickjs -DCMAKE_BUILD_TYPE=Release -DQJS_BUILD_LIBC=ON
+cmake --build build/quickjs-arm64 --target qjs --parallel
 
-cd ../rayact-core
-npm install
-npm run build
-
-cd ../rayact-renderer
-npm install
-npm run build
-
-cd ../rayact-shared
-npm install
-npm run build
+# Engine: rayact_desktop (GUI runtime) + rayact_tool (headless build toolchain)
+cmake -B build -S . -DENABLE_DESKTOP=ON -DCMAKE_BUILD_TYPE=Release \
+  -DQUICKJS_BUILD_DIR=$PWD/build/quickjs-arm64
+cmake --build build --target rayact_desktop rayact_tool --parallel
 ```
 
-### 4. Build Desktop Application
+Outputs land in `build/bin/`; the CLI's source-tree resolution finds them
+automatically when you run a test project inside the repo.
+
+## Other hosts
+
+| Target | Command |
+| --- | --- |
+| All macOS prebuilts + iOS xcframework + dev apps | `scripts/build-prebuilts-macos.sh` (or `node scripts/build-prebuilts.mjs --target darwin\|ios\|dev-app`) |
+| Android (reproducible) | `node scripts/build-prebuilts.mjs --target android` (Docker) |
+| Linux (reproducible) | `node scripts/build-prebuilts.mjs --target linux` (Docker) |
+| Web dev host | `emcmake cmake -S . -B build-web -DENABLE_DESKTOP=OFF -DENABLE_WEB=ON && cmake --build build-web --target rayact` |
+| Web release host | `sh scripts/build-web-release-host.sh` |
+| Web pthreads host (WASM workers) | same as dev host + `-DRAYACT_WEB_PTHREADS=ON` into `build-web-pthreads` |
+
+Engine-building app shells live in `apps/android` and `apps/ios` (these compile
+the C++ from source); consumer projects instead link prebuilts through
+`packages/template-android` / `template-ios`.
+
+## Day-to-day loop
 
 ```bash
-# Create build directory and configure
-cmake -B build -S . -DENABLE_DESKTOP=ON
-
-# Build the desktop executable
-cmake --build build
-
-# Run the application
-./build/bin/rayact_desktop
-
-# Or specify custom JavaScript file
-./build/bin/rayact_desktop apps/desktop/app.js
+npm run dev            # dev server against test-projects/release-consumer-smoke
+npm run desktop        # + native window
+npm test               # node --test unit suites
+npm run test:packages  # workspace pack/verify gate
+npm run test:native    # desktop smoke test
 ```
 
-## Development Workflow
-
-### Running with Dev Mode
+## Release (maintainers)
 
 ```bash
-# Watch TypeScript files
-npm run dev
-
-# Or use specific workspace
-cd packages/rayact-core && npm run dev
+node scripts/bump-version.mjs <version> && node scripts/bump-version.mjs --check
+npm run build && npm test && npm run test:packages
+# build all prebuilts (see table above), then:
+RAYACT_RELEASE_PRIVATE_KEY="$(cat ~/.rayact-release/rayact-release-key.pem)" npm run pack:release
+npm run verify:release                 # full consumer matrix against release1/
+RAYACT_CONFIRM_REPLACE_RELEASE=v<version> npm run release:replace
 ```
 
-### Testing Native Builds
-
-```bash
-# Build and test
-cmake -B build -S . -DENABLE_TESTS=ON
-cmake --build build
-
-# Run tests
-./build/bin/rayact_test
-```
-
-## Platform-Specific Setup
-
-### Windows
-
-```powershell
-# Install prerequisites
-choco install cmake git
-
-# Build QuickJS
-cd quickjs
-.\win\build_mingw.ps1
-cd ..
-
-# Build project
-cmake -B build -S . -G "MinGW Makefiles"
-cmake --build build
-
-# Run
-.\build\bin\rayact_desktop.exe
-```
-
-### Linux
-
-```bash
-# Install dependencies
-sudo apt-get install cmake build-essential libx11-dev libgl1-mesa-dev
-
-# Build
-cmake -B build -S . -DENABLE_DESKTOP=ON
-cmake --build build
-
-# Run
-./build/bin/rayact_desktop
-```
-
-### macOS
-
-```bash
-# Install dependencies
-brew install cmake
-
-# Build
-cmake -B build -S . -DENABLE_DESKTOP=ON
-cmake --build build
-
-# Run
-./build/bin/rayact_desktop
-```
-
-## Common Issues and Solutions
-
-### Issue: QuickJS not found
-```bash
-# Solution: Set QUICKJS_DIR
-export QUICKJS_DIR=/path/to/rayact/quickjs
-```
-
-### Issue: Raylib not found
-```bash
-# Solution: Set RAYLIB_DIR
-export RAYLIB_DIR=/path/to/rayact/raylib
-```
-
-### Issue: Permission denied on macOS
-```bash
-# Solution: Make executable
-chmod +x build/bin/rayact_desktop
-```
-
-### Issue: OpenGL context creation failed
-```bash
-# Solution: Install system OpenGL libraries
-sudo apt-get install libgl1-mesa-dev  # Linux
-# or
-brew install mesa  # macOS
-```
-
-## Code Structure
-
-### Packages
-
-- `packages/rayact-quickjs`: QuickJS runtime integration
-- `packages/rayact-core`: React reconciler and components
-- `packages/rayact-renderer`: Raylib graphics backend
-- `packages/rayact-shared`: Shared types and utilities
-
-### Apps
-
-- `apps/desktop`: Desktop application example
-- `apps/android`: Android application example (to be added)
-- `apps/web`: WebAssembly application example (to be added)
-
-### Native Code
-
-- `native/desktop`: Desktop platform-specific code
-- `native/tests`: Test suite
-
-## Next Steps
-
-1. Build and test the desktop application
-2. Add more shape types (polygon, path, etc.)
-3. Implement color system with named colors
-4. Add input handling (mouse, keyboard, touch)
-5. Implement event loop in JavaScript
-6. Build Android and Web versions
-
-## Resources
-
-- [QuickJS Documentation](https://github.com/quickjs-ng/quickjs)
-- [Raylib Documentation](https://github.com/raysan5/raylib)
-- [React Reconciler API](https://github.com/facebook/react/blob/main/packages/react-reconciler)
-- [Project Roadmap](TODO.md)
+`docs/maintainer/prebuilts.md` covers prebuilt packaging details;
+`docs/` is the VitePress site (`npm --prefix docs run dev`), with generated
+outputs gated by `npm --prefix docs run check`.

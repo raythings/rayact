@@ -15,7 +15,7 @@ const SITE = 'https://rayact.dev';
 
 const SKIP = new Set(['.vitepress', 'scripts', 'public', 'node_modules', 'maintainer']);
 // Internal maintainer notes kept in the repo but excluded from the public site.
-const SKIP_FILES = new Set(['maintainer-prebuilts.md', 'dev-platform.md']);
+const SKIP_FILES = new Set();
 
 function walk(dir, acc = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -39,11 +39,14 @@ function walkGeneratedMarkdown(dir, acc = []) {
 
 function meta(md) {
   const title = (md.match(/^#\s+(.+)$/m) || [, path.basename])[1]?.trim() ?? 'Untitled';
-  // First non-empty, non-heading, non-comment line as the summary.
-  const summary = md
-    .split('\n')
-    .map((l) => l.trim())
-    .find((l) => l && !l.startsWith('#') && !l.startsWith('<!--') && !l.startsWith('>')) ?? '';
+  // First sentence of the first non-heading/comment/quote paragraph — a hard
+  // line-wrap must not truncate the summary mid-thought.
+  const paragraph = md
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .find((block) => block && !block.startsWith('#') && !block.startsWith('<!--') && !block.startsWith('>')) ?? '';
+  const flat = paragraph.replace(/\s+/g, ' ');
+  const summary = flat.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? flat;
   return { title, summary: summary.replace(/[`*]/g, '') };
 }
 
