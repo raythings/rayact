@@ -1,10 +1,12 @@
 import { defineConfig } from 'vitepress';
 
 // GitHub Pages project sites serve under /<repo>/; override with DOCS_BASE.
+const base = process.env.DOCS_BASE || '/';
+
 export default defineConfig({
   title: 'Rayact',
   description: 'Cross-platform React renderer with a native raylib + QuickJS backend.',
-  base: process.env.DOCS_BASE || '/',
+  base,
   cleanUrls: true,
   lastUpdated: true,
   // Maintainer-only notes stay in the repo but out of the published site.
@@ -16,7 +18,9 @@ export default defineConfig({
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'Reference', link: '/reference/components' },
-      { text: 'llms.txt', link: '/llms.txt', target: '_blank' }
+      // Static file, not a router route — VitePress leaves target=_blank
+      // links as-authored, so apply the base path here.
+      { text: 'llms.txt', link: `${base}llms.txt`, target: '_blank' }
     ],
     sidebar: [
       {
