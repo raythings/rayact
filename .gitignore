@@ -33,6 +33,7 @@ compile_commands.json
 
 # Prebuilt native binaries — shipped via GitHub Releases / npm pack, never git
 packages/prebuilt-*/jni/
+packages/prebuilt-*/jni-debug/
 packages/prebuilt-*/bin/
 packages/prebuilt-*/modules/
 packages/prebuilt-ios-arm64/RayactEngine.xcframework/
