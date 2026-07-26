@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ThemeProvider } from './theming.js';
-import { useColorScheme } from './colorSchemeStore.js';
+import { useIsDarkColorScheme } from './colorSchemeStore.js';
 import { getNativeTheme, lerpTheme, type RayactTheme } from './tokens.js';
 import { useAnimatedValue } from '../anim/useAnimatedValue.js';
 
 export function RayactThemeProvider({ children }: { children: React.ReactNode }): React.ReactElement {
-  const isDark = useColorScheme();
+  const isDark = useIsDarkColorScheme();
   const targetTheme = useMemo(() => getNativeTheme(isDark), [isDark]);
   const stableThemeRef = useRef(targetTheme);
   const [blend, setBlend] = useState<{ from: RayactTheme; to: RayactTheme } | null>(null);
