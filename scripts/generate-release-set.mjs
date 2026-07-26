@@ -58,7 +58,9 @@ const epoch = process.env.SOURCE_DATE_EPOCH ?? spawnSync('git', ['show', '-s', '
 const epochMs = /^\d+$/.test(epoch) ? Number(epoch) * 1000 : Date.parse(epoch);
 const packageNames = new Set(packages.map(item => item.name));
 const supportedPlatforms = [];
-if (packageNames.has('@rayact/prebuilt-android-arm64') && packageNames.has('@rayact/prebuilt-android-x64')) supportedPlatforms.push('android');
+// x64 (emulator) is not shipped as of 0.0.4 — arm64 alone (real devices, arm64
+// emulator images) is enough to call the platform supported.
+if (packageNames.has('@rayact/prebuilt-android-arm64')) supportedPlatforms.push('android');
 if (packageNames.has('@rayact/prebuilt-ios-arm64')) supportedPlatforms.push('ios');
 if (packageNames.has('@rayact/prebuilt-darwin-arm64')) supportedPlatforms.push('macos');
 if (packageNames.has('@rayact/prebuilt-web-wasm')) supportedPlatforms.push('web');

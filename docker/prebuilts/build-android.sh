@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-RAYACT_ROOT="${RAYACT_ROOT:-/workspace/rayact}"
-ANDROID_DIR="$RAYACT_ROOT/apps/android"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Inside the Docker image the repo is bind-mounted at /workspace/rayact; on the
+# host (build-prebuilts.mjs's Docker-unavailable fallback) resolve it from this
+# script's own location instead, so `RAYACT_ROOT` doesn't need pre-exporting.
+RAYACT_ROOT="${RAYACT_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+ANDROID_DIR="$RAYACT_ROOT/apps/android"
 
 echo "==> Gradle assembleDebug + assembleRelease (WASM enabled)..."
 cd "$ANDROID_DIR"
