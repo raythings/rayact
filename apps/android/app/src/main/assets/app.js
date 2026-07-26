@@ -13812,6 +13812,15 @@
           }
           case "image":
             return registerAnimatedHostNode$1(asHostNode$1(requireFunction$1(native.createImage, "createImage")(resolveImageSource$1(props.source ?? props.src, native), style), type), style);
+          case "svg": {
+            const raw = props.source ?? props.src ?? "";
+            const source = typeof raw === "string" ? raw : resolveImageSource$1(raw, native);
+            return registerAnimatedHostNode$1(asHostNode$1(requireFunction$1(native.createSvg, "createSvg")(String(source), style, {
+              vars: props.vars,
+              channels: props.channels,
+              outline: props.outline
+            }), type), style);
+          }
           case "icon":
             return registerAnimatedHostNode$1(asHostNode$1(requireFunction$1(native.createIcon, "createIcon")(String(props.name ?? props.icon ?? ""), typeof props.size === "number" ? props.size : void 0, typeof props.color === "number" || typeof props.color === "string" ? props.color : void 0, style, typeof props.variant === "string" ? props.variant : void 0, typeof props.filled === "boolean" ? props.filled : void 0, typeof props.set === "string" ? props.set : void 0), type), style);
           case "textInput":
@@ -13869,6 +13878,15 @@
             ...props
           });
         }
+        if (node.type === "svg" && typeof native.setSvgProps === "function") {
+          if ("vars" in props || "channels" in props || "outline" in props) {
+            native.setSvgProps(node.id, {
+              vars: props.vars,
+              channels: props.channels,
+              outline: props.outline
+            });
+          }
+        }
         if (node.type === "icon" && typeof native.setIconProps === "function") {
           native.setIconProps(node.id, typeof props.size === "number" ? props.size : void 0, typeof props.color === "number" || typeof props.color === "string" ? props.color : void 0, typeof props.variant === "string" ? props.variant : void 0, typeof props.name === "string" ? props.name : typeof props.icon === "string" ? props.icon : void 0, typeof props.filled === "boolean" ? props.filled : void 0, typeof props.set === "string" ? props.set : void 0);
         }
@@ -13906,6 +13924,12 @@
       setEventHandler(node, eventName, handler) {
         if (eventName === "press" || eventName === "click") {
           requireFunction$1(native.setOnPress, "setOnPress")(node.id, handler ?? null);
+        } else if (eventName === "pressIn" && typeof native.setOnPressIn === "function") {
+          native.setOnPressIn(node.id, handler ?? null);
+        } else if (eventName === "pressOut" && typeof native.setOnPressOut === "function") {
+          native.setOnPressOut(node.id, handler ?? null);
+        } else if (eventName === "longPress" && typeof native.setOnLongPress === "function") {
+          native.setOnLongPress(node.id, handler ?? null);
         } else if (eventName === "changeText" && typeof native.setOnChangeText === "function") {
           native.setOnChangeText(node.id, handler);
         } else if (eventName === "changeValue" && typeof native.setOnChangeValue === "function") {
@@ -22757,7 +22781,8 @@ ${stack}` : message;
     display: 64,
     position: 65,
     overflow: 66,
-    pointerEvents: 67
+    pointerEvents: 67,
+    flexWrap: 68
   };
   const ENUM_VALUES = {
     flexDirection: {
@@ -22765,6 +22790,11 @@ ${stack}` : message;
       column: 1,
       "row-reverse": 2,
       "column-reverse": 3
+    },
+    flexWrap: {
+      nowrap: 0,
+      wrap: 1,
+      "wrap-reverse": 2
     },
     justifyContent: {
       "flex-start": 0,
@@ -23063,6 +23093,9 @@ ${stack}` : message;
   const fiberByHostInstance = /* @__PURE__ */ new WeakMap();
   const eventProps = [
     "onPress",
+    "onPressIn",
+    "onPressOut",
+    "onLongPress",
     "onClick",
     "onChangeText",
     "onValueChange",
@@ -23089,7 +23122,7 @@ ${stack}` : message;
     }
     return false;
   }
-  const hostNodeTypes = /* @__PURE__ */ new Set(["root", "view", "text", "button", "image", "icon", "textInput", "scrollView", "modal", "externalView", "safeArea", "statusBar", "activityIndicator", "appBar", "badge", "banner", "bottomAppBar", "bottomSheet", "dataTable", "dockedToolbar", "floatingToolbar", "buttonGroup", "card", "carousel", "checkbox", "chip", "datePicker", "dialog", "divider", "extendedFab", "fab", "fabMenu", "iconButton", "list", "loadingIndicator", "menu", "menuItem", "navigationBar", "navigationBarItem", "navigationDrawer", "navigationRail", "progressIndicator", "radioButton", "rangeSlider", "search", "searchBar", "segmentedButton", "sideSheet", "slider", "snackbar", "splitButton", "switch", "tabs", "textField", "timePicker", "toolbar", "tooltip", "popover"]);
+  const hostNodeTypes = /* @__PURE__ */ new Set(["root", "view", "text", "button", "image", "icon", "svg", "textInput", "scrollView", "modal", "externalView", "safeArea", "statusBar", "activityIndicator", "appBar", "badge", "banner", "bottomAppBar", "bottomSheet", "dataTable", "dockedToolbar", "floatingToolbar", "buttonGroup", "card", "carousel", "checkbox", "chip", "datePicker", "dialog", "divider", "extendedFab", "fab", "fabMenu", "iconButton", "list", "loadingIndicator", "menu", "menuItem", "navigationBar", "navigationBarItem", "navigationDrawer", "navigationRail", "progressIndicator", "radioButton", "rangeSlider", "search", "searchBar", "segmentedButton", "sideSheet", "slider", "snackbar", "splitButton", "switch", "tabs", "textField", "timePicker", "toolbar", "tooltip", "popover"]);
   function fiberSourceComponentName(fiber) {
     let f = fiber?.return;
     for (let depth = 0; f && depth < 50; depth++, f = f.return) {
@@ -23229,6 +23262,9 @@ ${stack}` : message;
   }
   function eventNameForProp(prop) {
     if (prop === "onClick") return "click";
+    if (prop === "onPressIn") return "pressIn";
+    if (prop === "onPressOut") return "pressOut";
+    if (prop === "onLongPress") return "longPress";
     if (prop === "onChangeText") return "changeText";
     if (prop === "onValueChange") return "changeValue";
     if (prop === "onScroll") return "scroll";
@@ -23655,7 +23691,7 @@ ${stack}` : message;
   let currentUpdatePriority = NoEventPriority;
   const HostTransitionContext = reactExports.createContext(null);
   const RayactReconciler = __reconcilerGlobal.__RAYACT_RECONCILER__ ?? (__reconcilerGlobal.__RAYACT_RECONCILER__ = ReactReconciler({
-    rendererVersion: "0.0.3",
+    rendererVersion: "0.0.4",
     rendererPackageName: "rayact/react",
     supportsMutation: true,
     supportsPersistence: false,
@@ -29503,6 +29539,32 @@ ${stack}` : message;
       ref
     });
   });
+  React.forwardRef((props, ref) => {
+    const {
+      style,
+      children,
+      onPressIn,
+      onPressOut,
+      ...rest
+    } = props;
+    const [pressed, setPressed] = React.useState(false);
+    const state2 = {
+      pressed
+    };
+    return React.createElement("rayact-view", {
+      ...rest,
+      ref,
+      style: typeof style === "function" ? style(state2) : style,
+      onPressIn: () => {
+        setPressed(true);
+        onPressIn?.();
+      },
+      onPressOut: () => {
+        setPressed(false);
+        onPressOut?.();
+      }
+    }, typeof children === "function" ? children(state2) : children);
+  });
   function Text(props) {
     return React.createElement("rayact-text", props);
   }
@@ -29591,7 +29653,36 @@ ${stack}` : message;
     return React.createElement("rayact-text-input", wire);
   }
   function ScrollView(props) {
-    return React.createElement("rayact-scroll-view", props);
+    const {
+      ref,
+      ...rest
+    } = props;
+    if (!ref) return React.createElement("rayact-scroll-view", rest);
+    const wire = {
+      ...rest
+    };
+    wire.ref = (inst) => {
+      if (!inst || inst.node == null) {
+        assignRef(ref, null);
+        return;
+      }
+      const id = inst.node.id;
+      const horizontal = props.horizontal === true;
+      const END = Number.MAX_SAFE_INTEGER;
+      assignRef(ref, {
+        node: inst.node,
+        scrollTo: (options = {}) => {
+          if (typeof setScrollOffset !== "function") return;
+          setScrollOffset(id, options.x ?? Number.NaN, options.y ?? Number.NaN);
+        },
+        scrollToEnd: () => {
+          if (typeof setScrollOffset !== "function") return;
+          if (horizontal) setScrollOffset(id, END, Number.NaN);
+          else setScrollOffset(id, Number.NaN, END);
+        }
+      });
+    };
+    return React.createElement("rayact-scroll-view", wire);
   }
   function createMaterialComponent(tag) {
     return function MaterialComponent(props) {
@@ -30768,7 +30859,7 @@ ${stack}` : message;
     padding: 20,
     gap: 12
   };
-  const DEV_CLIENT_VERSION = "0.0.3";
+  const DEV_CLIENT_VERSION = "0.0.4";
   const TABS = [{
     id: "connect",
     label: "Connect",
@@ -36932,6 +37023,15 @@ ${stack}` : message;
           }
           case "image":
             return registerAnimatedHostNode(asHostNode(requireFunction(native.createImage, "createImage")(resolveImageSource(props.source ?? props.src, native), style), type), style);
+          case "svg": {
+            const raw = props.source ?? props.src ?? "";
+            const source = typeof raw === "string" ? raw : resolveImageSource(raw, native);
+            return registerAnimatedHostNode(asHostNode(requireFunction(native.createSvg, "createSvg")(String(source), style, {
+              vars: props.vars,
+              channels: props.channels,
+              outline: props.outline
+            }), type), style);
+          }
           case "icon":
             return registerAnimatedHostNode(asHostNode(requireFunction(native.createIcon, "createIcon")(String(props.name ?? props.icon ?? ""), typeof props.size === "number" ? props.size : void 0, typeof props.color === "number" || typeof props.color === "string" ? props.color : void 0, style, typeof props.variant === "string" ? props.variant : void 0, typeof props.filled === "boolean" ? props.filled : void 0, typeof props.set === "string" ? props.set : void 0), type), style);
           case "textInput":
@@ -36989,6 +37089,15 @@ ${stack}` : message;
             ...props
           });
         }
+        if (node.type === "svg" && typeof native.setSvgProps === "function") {
+          if ("vars" in props || "channels" in props || "outline" in props) {
+            native.setSvgProps(node.id, {
+              vars: props.vars,
+              channels: props.channels,
+              outline: props.outline
+            });
+          }
+        }
         if (node.type === "icon" && typeof native.setIconProps === "function") {
           native.setIconProps(node.id, typeof props.size === "number" ? props.size : void 0, typeof props.color === "number" || typeof props.color === "string" ? props.color : void 0, typeof props.variant === "string" ? props.variant : void 0, typeof props.name === "string" ? props.name : typeof props.icon === "string" ? props.icon : void 0, typeof props.filled === "boolean" ? props.filled : void 0, typeof props.set === "string" ? props.set : void 0);
         }
@@ -37026,6 +37135,12 @@ ${stack}` : message;
       setEventHandler(node, eventName, handler) {
         if (eventName === "press" || eventName === "click") {
           requireFunction(native.setOnPress, "setOnPress")(node.id, handler ?? null);
+        } else if (eventName === "pressIn" && typeof native.setOnPressIn === "function") {
+          native.setOnPressIn(node.id, handler ?? null);
+        } else if (eventName === "pressOut" && typeof native.setOnPressOut === "function") {
+          native.setOnPressOut(node.id, handler ?? null);
+        } else if (eventName === "longPress" && typeof native.setOnLongPress === "function") {
+          native.setOnLongPress(node.id, handler ?? null);
         } else if (eventName === "changeText" && typeof native.setOnChangeText === "function") {
           native.setOnChangeText(node.id, handler);
         } else if (eventName === "changeValue" && typeof native.setOnChangeValue === "function") {
