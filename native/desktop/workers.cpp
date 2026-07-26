@@ -408,12 +408,35 @@ static JSValue JS_createWorkerView(JSContext* ctx, JSValue,
     if (viewportIt != g_nodes.end()) {
         ce.viewportNode = viewportIt->second;
         ce.viewportNodeId = viewportNodeId;
+        // View3D pattern: the worker paints as the anchor node's own painter,
+        // inside the tree walk — inheriting (and restoring) the ambient
+        // scroll/overflow clip stack and the node's z-order, instead of a
+        // post-tree sibling pass that draws over everything unclipped.
+        std::weak_ptr<WorkerEntry> weakAnchor = entry;
+        auto anchorReplay = replay;
+        auto anchorLayout = layoutRect;
+        ce.viewportNode->customRender = [weakAnchor, anchorReplay, anchorLayout](Rectangle layout) {
+            *anchorLayout = layout;
+            auto e = weakAnchor.lock();
+            if (!e) return;
+            {
+                std::lock_guard<std::mutex> lk(e->draw.mtx);
+                if (e->draw.version != anchorReplay->version) {
+                    anchorReplay->buf = e->draw.front;
+                    anchorReplay->version = e->draw.version;
+                }
+            }
+            if (!anchorReplay->buf.empty() && layout.width > 0 && layout.height > 0)
+                rayactReplayWorkerDraw(anchorReplay->buf.data(), anchorReplay->buf.size(), layout);
+        };
     }
     g_workerCanvases[workerId] = std::move(ce);
     g_canvasNodeToWorker[node.get()] = workerId;
 
     return JS_NewInt32(ctx, nodeId);
 }
+
+
 
 void renderWorkerViews() {
     for (auto& [workerId, ce] : g_workerCanvases) {
@@ -432,11 +455,7 @@ void renderWorkerViews() {
                 ce.replay->version = entry->draw.version;
             }
         }
-        const Rectangle layout = ce.viewportNode->layout;
-        *ce.layoutRect = layout;
-        if (!ce.replay->buf.empty() && layout.width > 0 && layout.height > 0) {
-            rayactReplayWorkerDraw(ce.replay->buf.data(), ce.replay->buf.size(), layout);
-        }
+        *ce.layoutRect = ce.viewportNode->layout;
     }
 }
 

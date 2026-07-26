@@ -1,4 +1,5 @@
 #include "worker_draw.hpp"
+#include <raym3/raym3.h>
 
 #include "raylib.h"
 #include "rlgl.h"
@@ -60,20 +61,6 @@ Texture2D imageTexture(const std::string& path) {
     return tex;
 }
 
-void beginFramebufferScissor(float x, float y, float width, float height) {
-    const int px = (int)raym3::v2::Density::DpToPx(x);
-    const int py = (int)raym3::v2::Density::DpToPx(y);
-    const int pw = (int)raym3::v2::Density::DpToPx(width);
-    const int ph = (int)raym3::v2::Density::DpToPx(height);
-    rlDrawRenderBatchActive();
-    rlEnableScissorTest();
-    rlScissor(px, GetRenderHeight() - py - ph, pw, ph);
-}
-
-void endFramebufferScissor() {
-    rlDrawRenderBatchActive();
-    rlDisableScissorTest();
-}
 
 } // namespace
 
@@ -94,7 +81,10 @@ void rayactReplayWorkerDraw(const uint8_t* data, size_t len, Rectangle layout) {
     // BeginScissorMode uses the process root screen height. Android can render
     // into a smaller per-surface framebuffer, so clip against the active
     // render target instead.
-    beginFramebufferScissor(layout.x, layout.y, layout.width, layout.height);
+    // View3D-style clipping: join raym3's scissor stack instead of overwriting
+    // the ambient scroll/overflow clip — the pushed rect intersects whatever is
+    // active, and PopScissor restores it for the rest of the tree.
+    raym3::PushScissor({layout.x, layout.y, layout.width, layout.height});
 
     int matrixDepth = 0;   // balance user PUSH/POP even on malformed streams
     bool userScissor = false;
@@ -200,13 +190,13 @@ void rayactReplayWorkerDraw(const uint8_t* data, size_t len, Rectangle layout) {
                 if (by > ly2) by = ly2;
                 if (bx < ax) bx = ax;
                 if (by < ay) by = ay;
-                beginFramebufferScissor(ax, ay, bx - ax, by - ay);
+                raym3::PushScissor({ax, ay, bx - ax, by - ay});
                 userScissor = true;
                 break;
             }
             case WDRAW_SCISSOR_END: {
                 // Restore the view clip rather than disabling entirely.
-                beginFramebufferScissor(layout.x, layout.y, layout.width, layout.height);
+                raym3::PopScissor();
                 userScissor = false;
                 break;
             }
@@ -252,8 +242,10 @@ void rayactReplayWorkerDraw(const uint8_t* data, size_t len, Rectangle layout) {
     }
 
     while (matrixDepth-- > 0) rlPopMatrix();
-    (void)userScissor;
-    endFramebufferScissor();
+    // Balance a WDRAW_SCISSOR left open by a malformed stream, then pop the
+    // view clip — restoring whatever ambient scissor the tree walk had active.
+    if (userScissor) raym3::PopScissor();
+    raym3::PopScissor();
     rlPopMatrix();
 }
 
