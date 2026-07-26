@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, Button, Icon, render } from 'rayact/react';
 import { Platform } from 'rayact/shared';
+import './app.css';
 
 const isDesktop = Platform.OS === 'macos' || Platform.OS === 'windows' || Platform.OS === 'linux';
 const metrics = isDesktop
@@ -19,15 +20,15 @@ function App() {
       alignItems: 'center',
       justifyContent: 'center'
     }}>
-      <Text style={{ text: { color: 0xFFFFFFFF, fontSize: metrics.titleSize } }}>
+      <Text className="title" style={{ text: { fontSize: metrics.titleSize } }}>
         __PROJECT_NAME__
       </Text>
-      <Text style={{ text: { color: 0x90CAF9FF, fontSize: metrics.detailSize } }}>
+      <Text className="subtitle" style={{ text: { fontSize: metrics.detailSize } }}>
         {`Platform: ${Platform.OS} · Taps: ${count}`}
       </Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      <View className="tap-row">
         <Icon name="alarm" size={metrics.iconSize} color={0xFFF176FF} />
-        <Text style={{ text: { color: 0xFFFFFFFF, fontSize: metrics.titleSize } }}>
+        <Text className="title" style={{ text: { fontSize: metrics.titleSize } }}>
           Icons + emoji ✅ 🚀
         </Text>
       </View>
