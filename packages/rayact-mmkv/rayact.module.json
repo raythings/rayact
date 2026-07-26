@@ -28,7 +28,7 @@
       "platform": "android",
       "architecture": "arm64",
       "path": "android/arm64-v8a/librayact_mmkv.so",
-      "sha256": "7387e42185d634439d0f732cfdde7013875c4d450bacffbd3249c2b6c62dca04"
+      "sha256": "9e882061106042be5ad6262cfbae5e5778f6f5eea042775b67b7849cd5c31062"
     },
     {
       "platform": "android",
@@ -52,7 +52,7 @@
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_mmkv.xcframework",
-      "sha256": "a5b1ca8c43a335abf146597f370ee227fa9f5b33c4fd748d25609a0367fb9417"
+      "sha256": "ea0277664604e13725c54c79587dd99b4438087a1036a348cae059e7e8f4f0db"
     }
   ]
 }
