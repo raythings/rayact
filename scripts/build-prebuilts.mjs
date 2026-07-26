@@ -20,23 +20,34 @@ const IS_MAC = process.platform === 'darwin';
 const DOCKER_TARGETS = new Set(['android', 'linux']);
 const MAC_TARGETS = new Set(['darwin', 'ios', 'dev-app']);
 
+let dockerAndroid = false;
+
 function parseArgs(argv) {
   const targets = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--target' && argv[i + 1]) {
       targets.push(argv[i + 1]);
       i++;
+    } else if (argv[i] === '--docker-android') {
+      dockerAndroid = true;
     } else if (argv[i] === '--help' || argv[i] === '-h') {
       console.log(`
 Usage: node scripts/build-prebuilts.mjs [--target <name>]...
 
 Targets:
-  android   Docker — generic Android prebuilts + package-owned module .so files
+  android   Host Gradle (falls back to Docker with --docker-android) — arm64
+            prebuilt + package-owned module .so files; x86_64 emulator target
+            not built as of 0.0.4
   linux     Docker — @rayact/prebuilt-linux-x64
   darwin    macOS  — prebuilt-darwin-arm64/x64
   ios       macOS  — generic engine and package-owned module XCFrameworks
   dev-app   macOS  — rayact-dev-app APK + unsigned IPA + simulator zip
   all       All targets (skips mac-only on non-macOS)
+
+Options:
+  --docker-android   Force the Docker toolchain for the android target
+                      (reproducible build; the host Gradle build is faster
+                      and is what release 0.0.4 shipped from)
 
 Maintainer-only. App developers consume npm prebuilts + GitHub Releases.
 `.trim());
@@ -70,6 +81,16 @@ function buildAndroidNative() {
 }
 
 function buildDocker(target) {
+  if (target === 'android' && !dockerAndroid && IS_MAC) {
+    // Host Gradle is the default on macOS: it's a native compile (no
+    // Linux-VM/Rosetta overhead), which in practice made it both much faster
+    // and less brittle than the Docker toolchain (SDK cmake pin,
+    // x86_64-aapt2-on-arm64-host loader issues). Docker stays available via
+    // --docker-android for a reproducible/CI build, and is still the default
+    // off macOS where a local Android SDK/NDK usually isn't pre-configured.
+    buildAndroidNative();
+    return;
+  }
   if (!hasDocker()) {
     if (target === 'android' && process.platform === 'darwin') {
       console.warn('Docker not available; falling back to host Gradle for android.');

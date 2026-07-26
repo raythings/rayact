@@ -24,7 +24,7 @@ The release build must not read sibling repositories. Historical sibling clones 
 
 | Target | Command |
 | --- | --- |
-| Android arm64/x86_64 | `node scripts/build-prebuilts.mjs --target android` |
+| Android arm64 | `node scripts/build-prebuilts.mjs --target android` (host Gradle; falls back to Docker only if it's unavailable — x86_64 emulator target not built as of 0.0.4, see TODO) |
 | Linux x64 preview | `node scripts/build-prebuilts.mjs --target linux` |
 | macOS Apple Silicon (arm64) | `node scripts/build-prebuilts.mjs --target darwin` |
 | iOS device/simulator XCFrameworks | `node scripts/build-prebuilts.mjs --target ios` |

@@ -38,8 +38,24 @@ EOF
 
 echo "==> Packing Android prebuilts into packages/"
 
-missing=0
+# Which ABIs the Gradle build actually produced (driven by
+# apps/android/app/build.gradle's ndk.abiFilters — arm64-v8a only since
+# 0.0.4; x86_64 emulator support is not currently shipped).
+ABIS=()
 for abi in arm64-v8a x86_64; do
+  if find_android_lib "Release" "$abi" "librayact.so" | grep -q .; then
+    ABIS+=("$abi")
+  else
+    echo "  skip $abi (not built)"
+  fi
+done
+if [[ ${#ABIS[@]} -eq 0 ]]; then
+  echo "ERROR: no Android ABI outputs found under $ANDROID_MERGED" >&2
+  exit 1
+fi
+
+missing=0
+for abi in "${ABIS[@]}"; do
   package_arch="arm64"
   [[ "$abi" == "x86_64" ]] && package_arch="x64"
   for variant in Debug Release; do
@@ -67,7 +83,10 @@ if [[ "$missing" -ne 0 ]]; then
   exit 1
 fi
 
-for package_arch in arm64 x64; do
+package_arch_for() { [[ "$1" == "x86_64" ]] && echo "x64" || echo "arm64"; }
+
+for abi in "${ABIS[@]}"; do
+  package_arch="$(package_arch_for "$abi")"
   mkdir -p "$RAYACT_ROOT/packages/prebuilt-android-${package_arch}/include"
   cp "$RAYACT_ROOT/native/core/rayact_module_abi.h" "$RAYACT_ROOT/packages/prebuilt-android-${package_arch}/include/"
   cp "$RAYACT_ROOT/native/core/rayact_version.h" "$RAYACT_ROOT/packages/prebuilt-android-${package_arch}/include/"
@@ -77,23 +96,28 @@ done
 # package into the APK's assets/runtime/resources/fonts/ (RayactBundledAssets.kt
 # extracts assets/runtime/* -> filesDir at first launch). Without shipping them
 # here, release APKs build with zero fonts and icons render as tofu.
-mkdir -p "$RAYACT_ROOT/packages/prebuilt-android-arm64/resources/fonts" "$RAYACT_ROOT/packages/prebuilt-android-x64/resources/fonts"
-if [[ -d "$RAYACT_ROOT/resources/fonts" ]]; then
-  cp "$RAYACT_ROOT/resources/fonts/"* "$RAYACT_ROOT/packages/prebuilt-android-arm64/resources/fonts/"
-  cp "$RAYACT_ROOT/resources/fonts/"* "$RAYACT_ROOT/packages/prebuilt-android-x64/resources/fonts/"
-  echo "  copied resources/fonts"
-else
-  echo "  WARNING: $RAYACT_ROOT/resources/fonts not found — prebuilt will ship without fonts" >&2
-fi
-write_manifest "$RAYACT_ROOT/packages/prebuilt-android-arm64" "android" "arm64-v8a"
-write_manifest "$RAYACT_ROOT/packages/prebuilt-android-x64" "android" "x86_64"
+for abi in "${ABIS[@]}"; do
+  package_arch="$(package_arch_for "$abi")"
+  mkdir -p "$RAYACT_ROOT/packages/prebuilt-android-${package_arch}/resources/fonts"
+  if [[ -d "$RAYACT_ROOT/resources/fonts" ]]; then
+    cp "$RAYACT_ROOT/resources/fonts/"* "$RAYACT_ROOT/packages/prebuilt-android-${package_arch}/resources/fonts/"
+  else
+    echo "  WARNING: $RAYACT_ROOT/resources/fonts not found — prebuilt will ship without fonts" >&2
+  fi
+done
+echo "  copied resources/fonts"
+for abi in "${ABIS[@]}"; do
+  package_arch="$(package_arch_for "$abi")"
+  write_manifest "$RAYACT_ROOT/packages/prebuilt-android-${package_arch}" "android" "$abi"
+done
 
 pack_plugin() {
   local plugin="$1" lib_base="$2"
-  for abi in arm64-v8a x86_64; do
+  for abi in "${ABIS[@]}"; do
     # Optional module binaries are configuration-independent and contain no
     # launcher/dev-server implementation. Pack the Release build deterministically.
-    local so="$(find_android_lib "Release" "$abi" "lib${lib_base}.so")"
+    local so
+    so="$(find_android_lib "Release" "$abi" "lib${lib_base}.so")"
     mkdir -p "$RAYACT_ROOT/packages/rayact-${plugin}/android/$abi"
     cp "$so" "$RAYACT_ROOT/packages/rayact-${plugin}/android/$abi/"
     echo "  plugin $plugin -> android/$abi"
@@ -103,9 +127,6 @@ pack_plugin() {
 pack_plugin "mmkv" "rayact_mmkv"
 pack_plugin "secure-store" "rayact_secure_store"
 pack_plugin "crash-reporter" "rayact_crash_reporter"
-# Module-manifest hash refresh needs node, which the build image doesn't ship.
-# The host-side driver (scripts/build-prebuilts.mjs) runs it after docker run;
-# still run it here when node exists (host-gradle fallback path).
 if command -v node >/dev/null 2>&1; then
   node "$RAYACT_ROOT/scripts/update-module-artifact-hashes.mjs"
 else
