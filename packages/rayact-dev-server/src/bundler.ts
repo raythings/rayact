@@ -595,9 +595,10 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
       }
 
       if (id.startsWith('\0rayact-css:')) {
-        if (options.platform === 'web') {
-          return 'export default {};';
-        }
+        // Web included: the host preloads app-assets.json entries into MEMFS
+        // before boot, so importCSS resolves the same project-relative path on
+        // every platform. (Historically web returned an empty module because
+        // the file did not exist in the WASM filesystem.)
         const encoded = id.slice('\0rayact-css:'.length, -'.js'.length);
         const cssFile = decodeURIComponent(encoded);
         const nativePath = toNativeCssPath(cssFile, root);
