@@ -27,6 +27,20 @@ RUN mkdir -p "$ANDROID_HOME/cmdline-tools" \
 # in the SDK, not on PATH. Separate layer so the NDK layer above stays cached.
 RUN yes | sdkmanager "cmake;4.0.2" >/dev/null
 
+# AGP's bundled aapt2 is x86_64-only. On arm64 hosts (Apple Silicon + Rosetta)
+# the binary can run, but only with the amd64 glibc loader present — jammy's
+# arm64 image points at ports.ubuntu.com, which carries no amd64 debs, so add
+# the archive.ubuntu.com amd64 sources explicitly. No-ops on amd64 hosts.
+RUN if [ "$(dpkg --print-architecture)" = "arm64" ]; then \
+      dpkg --add-architecture amd64 \
+      && printf 'deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main universe\ndeb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-updates main universe\n' \
+         > /etc/apt/sources.list.d/amd64.list \
+      && sed -i 's/^deb http/deb [arch=arm64] http/' /etc/apt/sources.list \
+      && apt-get update \
+      && apt-get install -y --no-install-recommends libc6:amd64 libstdc++6:amd64 zlib1g:amd64 \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
+
 WORKDIR /workspace
 COPY build-android.sh pack-android.sh /scripts/
 RUN chmod +x /scripts/*.sh
