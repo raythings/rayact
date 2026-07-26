@@ -176,6 +176,7 @@ targets:
           - rlgl.h
           - rlmt.h
           - platforms
+          - src
       - path: ../../third_party/raylib-backends/backends/rlmt/platforms
         excludes:
           - rcore_desktop_glfw.c
@@ -387,6 +388,7 @@ targets:
           - rlgl.h
           - rlmt.h
           - platforms
+          - src
       - path: ../../third_party/raylib-backends/backends/rlmt/platforms
         headerVisibility: project
         excludes:
