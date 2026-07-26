@@ -9,7 +9,7 @@
 	url = https://github.com/raythings/raylib-backends.git
 [submodule "third_party/quickjs"]
 	path = third_party/quickjs
-	url = https://github.com/quickjs-ng/quickjs
+	url = https://github.com/raythings/quickjs.git
 [submodule "third_party/cssparser"]
 	path = third_party/cssparser
 	url = https://github.com/Sigil-Ebook/cssparser
