@@ -222,7 +222,9 @@ export async function runBuild(flags: CliFlags): Promise<void> {
       console.log('Skipping web host assembly (RAYACT_SKIP_WEB_HOST_ASSEMBLY=1)');
       return;
     }
-    await assembleWebApp(output.bundleFormat, output.bytecode, code, cssFiles, outDir, isRelease);
+    await assembleWebApp(
+      output.bundleFormat, output.bytecode, code, cssFiles, output.assets, outDir, isRelease
+    );
     return;
   }
 
@@ -388,6 +390,7 @@ async function assembleWebApp(
   bytecode: Buffer | undefined,
   code: string,
   cssFiles: CssRef[],
+  bundleAssets: { outputName: string; kind: string }[],
   outDir: string,
   isRelease: boolean
 ): Promise<void> {
@@ -421,7 +424,7 @@ async function assembleWebApp(
   } else {
     await fs.writeFile(path.join(webDir, 'app.js'), code);
   }
-  // CSS the bundle reads at runtime: stage under webDir/<rel> and list in
+  // Runtime files the bundle reads: stage under webDir and list in
   // app-assets.json — the host shell fetches each entry into MEMFS before boot
   // (web analog of the Android assets/runtime/<rel> staging).
   const assetList: string[] = [];
@@ -432,6 +435,19 @@ async function assembleWebApp(
     }
     await copyInto(ref.src, path.join(webDir, ref.rel));
     assetList.push(ref.rel);
+  }
+  // Bundled assets (worker .wasm, images, …) were written to <outDir>/assets
+  // with content-hashed names the bundle references — stage every one of them,
+  // not just CSS, or spawnWorker/asset loads fail with a missing MEMFS file.
+  for (const asset of bundleAssets) {
+    const rel = `assets/${asset.outputName}`;
+    const src = path.join(outDir, rel);
+    if (!existsSync(src)) {
+      console.warn(`warning: bundle references missing asset: ${rel}`);
+      continue;
+    }
+    await copyInto(src, path.join(webDir, rel));
+    assetList.push(rel);
   }
   await fs.writeFile(path.join(webDir, 'app-assets.json'), JSON.stringify(assetList));
   console.log(`Web app assembled: ${webDir}`);
