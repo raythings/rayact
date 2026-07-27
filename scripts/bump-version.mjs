@@ -83,6 +83,11 @@ edit('CMakeLists.txt', (s) => s.replace(/(project\(rayact VERSION )\d+\.\d+\.\d+
 // in the prebuilt packages as include/rayact_version.h.
 edit('native/core/rayact_version.h', (s) =>
   s.replace(/(#define RAYACT_ENGINE_VERSION ")[^"]*(")/, `$1${version}$2`));
+// …and the copies pack-android.sh mirrors into the prebuilt packages, which go
+// stale for any ABI not rebuilt in a given release.
+for (const header of execSync("find packages -path '*/include/rayact_version.h'", { cwd: ROOT, encoding: 'utf8' }).trim().split('\n').filter(Boolean)) {
+  edit(header, (s) => s.replace(/(#define RAYACT_ENGINE_VERSION ")[^"]*(")/, `$1${version}$2`));
+}
 // CDP handshake strings surfaced in Chrome DevTools.
 edit('native/desktop/cdp_handler.cpp', (s) => s.replace(/Rayact\/\d+\.\d+\.\d+/g, `Rayact/${version}`));
 
