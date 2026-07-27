@@ -198,6 +198,33 @@ function resolveImageSource(value: unknown, native: RayactGlobal): string {
   return String(value ?? '');
 }
 
+/**
+ * Handlers a native module supplies for the element type it registered.
+ *
+ * The engine cannot know how to build a module's node, so the module pairs its
+ * element type with the two calls that do: one to create the native node, one to
+ * push changed props. `create` returns the native node id.
+ */
+export interface ModuleNodeHandlers {
+  create(native: RayactGlobal, props: Record<string, unknown>, style: Record<string, unknown>): number;
+  update?(native: RayactGlobal, nodeId: number, props: Record<string, unknown>): void;
+}
+
+const moduleNodeHandlers = new Map<string, ModuleNodeHandlers>();
+
+/**
+ * Register the bridge half of a module-provided component. Pair with
+ * `registerHostNodeType` from `@rayact/renderer`, which admits the element type to
+ * the reconciler — `registerNativeComponent` in `rayact/react` does both.
+ */
+export function registerModuleNodeHandlers(type: string, handlers: ModuleNodeHandlers): void {
+  if (!type || !handlers?.create) return;
+  moduleNodeHandlers.set(type, handlers);
+}
+
+/** Resolve an asset/path/inline-markup prop to the string native expects. */
+export { resolveImageSource };
+
 const materialHostTypes = new Set<HostNodeType>([
   'appBar',
   'badge',
@@ -292,20 +319,6 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
         }
         case 'image':
           return registerAnimatedHostNode(asHostNode(requireFunction(native.createImage, 'createImage')(resolveImageSource(props.source ?? props.src, native), style), type), style);
-        case 'svg': {
-          // `source` may be a bundler asset, a path, or inline markup.
-          const raw = props.source ?? props.src ?? '';
-          const source =
-            typeof raw === 'string' ? raw : resolveImageSource(raw, native);
-          return registerAnimatedHostNode(asHostNode(
-            requireFunction(native.createSvg, 'createSvg')(String(source), style, {
-              vars: props.vars,
-              channels: props.channels,
-              outline: props.outline,
-            }),
-            type
-          ), style);
-        }
         case 'icon':
           return registerAnimatedHostNode(asHostNode(
             requireFunction(native.createIcon, 'createIcon')(
@@ -348,7 +361,12 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
           ), style);
         case 'activityIndicator':
           return registerAnimatedHostNode(asHostNode(requireFunction(native.createActivityIndicator, 'createActivityIndicator')({ ...style, ...props }), type), style);
-        default:
+        default: {
+          const moduleHandlers = moduleNodeHandlers.get(type);
+          if (moduleHandlers) {
+            return registerAnimatedHostNode(
+              asHostNode(moduleHandlers.create(native, props, style), type), style);
+          }
           if (materialHostTypes.has(type)) {
             return registerAnimatedHostNode(asHostNode(
               requireFunction(native.createMaterialComponent, 'createMaterialComponent')(type, materialProps(type, props, style)),
@@ -356,6 +374,7 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
             ), style);
           }
           throw new Error(`Unsupported Rayact host node type: ${type}`);
+        }
       }
     },
 
@@ -369,18 +388,13 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
         requireFunction(native.setStyle, 'setStyle')(node.id, style);
       }
 
-      if (node.type === 'externalView' && typeof native.setExternalViewProps === 'function') {
-        native.setExternalViewProps(node.id, { ...props });
+      const moduleHandlers = moduleNodeHandlers.get(node.type);
+      if (moduleHandlers?.update) {
+        moduleHandlers.update(native, node.id, props);
       }
 
-      if (node.type === 'svg' && typeof native.setSvgProps === 'function') {
-        if ('vars' in props || 'channels' in props || 'outline' in props) {
-          native.setSvgProps(node.id, {
-            vars: props.vars,
-            channels: props.channels,
-            outline: props.outline,
-          });
-        }
+      if (node.type === 'externalView' && typeof native.setExternalViewProps === 'function') {
+        native.setExternalViewProps(node.id, { ...props });
       }
 
       if (node.type === 'icon' && typeof native.setIconProps === 'function') {

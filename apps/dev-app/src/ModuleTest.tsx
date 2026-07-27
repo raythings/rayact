@@ -7,6 +7,7 @@ import { MMKV } from '@rayact/mmkv';
 import { KV } from 'rayact/kv';
 import { getItemAsync, setItemAsync } from '@rayact/secure-store';
 import { configureCrashReporter, listCrashReports, recordCrash } from '@rayact/crash-reporter';
+import { Svg } from '@rayact/svg';
 
 function App() {
   // Stable identifiers consumed by the publication gate in
@@ -15,12 +16,14 @@ function App() {
     'kv-roundtrip',
     'mmkv-roundtrip',
     'secure-store-roundtrip',
-    'crash-reporter-local'
+    'crash-reporter-local',
+    'svg-node-roundtrip'
   ];
   const [kvLine, setKvLine] = useState('kv: …');
   const [mmkvLine, setMmkvLine] = useState('mmkv: …');
   const [secureLine, setSecureLine] = useState('secure-store: …');
   const [crashLine, setCrashLine] = useState('crash-reporter: …');
+  const [svgLine, setSvgLine] = useState('svg: …');
 
   useEffect(() => {
     try {
@@ -73,7 +76,25 @@ function App() {
         setCrashLine('crash-reporter ERROR: ' + String(e));
       }
     })();
+    try {
+      const invoke = (globalThis as {
+        __rayact_invoke?: (name: string, method: string) => ArrayBuffer;
+      }).__rayact_invoke;
+      if (typeof invoke !== 'function') throw new Error('module bus unavailable');
+      const stats = new TextDecoder().decode(invoke('svg', 'stats'));
+      // Also exercises module -> module dispatch: svg's selftest calls into kv.
+      const selftest = new TextDecoder().decode(invoke('svg', 'selftest'));
+      console.log('MODTEST svg-node-roundtrip PASS', stats, 'selftest=', selftest);
+      setSvgLine('svg: ' + stats + ' selftest=' + selftest);
+    } catch (e) {
+      console.log('MODTEST svg-node-roundtrip FAIL', String(e));
+      setSvgLine('svg ERROR: ' + String(e));
+    }
   }, []);
+
+  const probeSvg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+    '<circle id="dot" cx="50" cy="50" r="40" fill="var(--probe, #8fd6ff)"/></svg>';
 
   return (
     <View style={{ flexGrow: 1, backgroundColor: 0xff101418, padding: 40, gap: 16, justifyContent: 'center' }}>
@@ -82,6 +103,9 @@ function App() {
       <Text style={{ text: { color: 0xff8fd6ff, fontSize: 16 } }}>{mmkvLine}</Text>
       <Text style={{ text: { color: 0xffa5f3a5, fontSize: 16 } }}>{secureLine}</Text>
       <Text style={{ text: { color: 0xffffc37a, fontSize: 16 } }}>{crashLine}</Text>
+      <Text style={{ text: { color: 0xff8fd6ff, fontSize: 16 } }}>{svgLine}</Text>
+      {/* Renders through the module's node kind — proves the component path, not just the bus. */}
+      <Svg source={probeSvg} style={{ width: 64, height: 64 }} vars={{ '--probe': '#a5f3a5' }} />
       <Text style={{ text: { color: 0xff8b949e, fontSize: 12 } }}>{registeredSmokeTests.join(', ')}</Text>
     </View>
   );

@@ -64,6 +64,7 @@ export {
   applyAndroidProjectIdentity,
   applyIosProjectIdentity,
   copyAndroidPluginArtifacts,
+  writeAndroidModuleBuildFiles,
   copyIosPluginArtifacts,
   copyDesktopPluginArtifacts,
   type PrebuildOptions

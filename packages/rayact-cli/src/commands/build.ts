@@ -22,7 +22,8 @@ import {
   prebuiltCacheDir,
   downloadPrebuilt,
   mergeNativeModules,
-  resolveRayactPlugins
+  resolveRayactPlugins,
+  writeAndroidModuleBuildFiles
 } from '@rayact/prebuild';
 import type { CliFlags } from '../parse.js';
 import { resolveDesktopBin } from '../desktop.js';
@@ -313,6 +314,14 @@ async function buildAndroidApk(
 
   // Native plugin manifest the dev client reads (extracted from runtime/ like CSS).
   await writeNativeModules(config, path.join(apkAssets, 'runtime', 'native-modules.json'));
+
+  // Build wiring for modules that ship sources (a source checkout, e.g. the dev app).
+  // Regenerated on every build so adding or removing a dependency is enough — there is
+  // no target list to maintain in CMakeLists.txt or build.gradle.
+  const sourceTargets = writeAndroidModuleBuildFiles(androidDir, resolveRayactPlugins(cwd));
+  if (sourceTargets.length > 0) {
+    console.log(`Native modules built from source: ${sourceTargets.join(', ')}`);
+  }
 
   // Bundle assets (images etc.) — runtime resolves both assets/<name> and assets/assets/<name>.
   const distAssets = path.join(outDir, 'assets');

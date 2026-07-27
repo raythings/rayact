@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "engineVersion": "0.0.3",
+  "engineVersion": "0.0.5",
   "moduleAbiVersion": 1,
   "mode": "dev-app",
   "platforms": [
@@ -30,7 +30,7 @@
         "x64",
         "wasm32"
       ],
-      "abiRange": ">=1 <2",
+      "abiRange": ">=1 <3",
       "permissions": [],
       "smokeTest": "kv-roundtrip"
     },
@@ -47,7 +47,7 @@
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=1 <2",
+      "abiRange": ">=1 <3",
       "permissions": [],
       "smokeTest": "mmkv-roundtrip"
     },
@@ -64,7 +64,7 @@
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=1 <2",
+      "abiRange": ">=1 <3",
       "permissions": [
         "keychain",
         "keystore"
@@ -84,9 +84,27 @@
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=1 <2",
+      "abiRange": ">=1 <3",
       "permissions": [],
       "smokeTest": "crash-reporter-local"
+    },
+    {
+      "name": "svg",
+      "lib": "rayact_svg",
+      "jsPackage": "@rayact/svg",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin",
+        "web"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "abiRange": ">=2 <3",
+      "permissions": [],
+      "smokeTest": "svg-node-roundtrip"
     }
   ]
 }

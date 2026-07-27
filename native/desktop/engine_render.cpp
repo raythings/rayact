@@ -5,6 +5,7 @@
 // engine_internal.hpp and the raym3 bridge tree (g_root / screen stack).
 #include "engine_internal.hpp"
 #include "raym3_bridge.hpp"
+#include "module_nodes.hpp"
 #include "js_stdlib.hpp"
 #include "commit_queue.hpp"
 #include "engine_thread.hpp"
@@ -194,92 +195,6 @@ static void drawAndroidDiagnosticCube(int width, int height) {
         DrawLineV(projected[face.i1], projected[face.i2], BLACK);
         DrawLineV(projected[face.i2], projected[face.i3], BLACK);
         DrawLineV(projected[face.i3], projected[face.i0], BLACK);
-    }
-}
-#endif
-
-#if defined(RAYACT_SVG_SMOKE)
-// raysvg smoke test: renders the converted waddlers pet rig straight through raysvg,
-// bypassing the JS tree, so the vector renderer can be exercised on the real device
-// backends (rlvk on Android, rlmt on iOS). Build with -DRAYACT_SVG_SMOKE=ON (Android) or
-// RAYSVG_SMOKE_DEFINE=RAYACT_SVG_SMOKE=1 (iOS); off by default.
-#include "raysvg.h"
-#include "raysvg_smoke_asset.h"
-
-static void drawRaysvgSmoke(int width, int height) {
-    static RaysvgDoc *doc = nullptr;
-    static bool failed = false;
-    static RaysvgHandle head = RAYSVG_INVALID_HANDLE;
-    static RaysvgHandle armL = RAYSVG_INVALID_HANDLE;
-    static RaysvgHandle armR = RAYSVG_INVALID_HANDLE;
-    static RaysvgHandle tail = RAYSVG_INVALID_HANDLE;
-    static RaysvgHandle wrapper = RAYSVG_INVALID_HANDLE;
-
-    if (!doc && !failed) {
-        doc = RaysvgLoadFromString(kRaysvgSmokeRig, -1);
-        if (!doc) {
-            failed = true;
-            TraceLog(LOG_ERROR, "raysvg smoke: load failed: %s", RaysvgGetLastError());
-        } else {
-            const RaysvgStats stats = RaysvgGetStats(doc);
-            TraceLog(LOG_INFO, "raysvg smoke: %d elements, %d shapes, %d warnings",
-                     stats.elementCount, stats.shapeCount, RaysvgGetWarnings(doc, nullptr, 0));
-            const char *messages[8];
-            const int shown = RaysvgGetWarnings(doc, messages, 8);
-            for (int i = 0; i < shown; i++) TraceLog(LOG_WARNING, "raysvg smoke: %s", messages[i]);
-
-            head = RaysvgGetElementById(doc, "layer-head");
-            armL = RaysvgGetElementById(doc, "layer-arm-left");
-            armR = RaysvgGetElementById(doc, "layer-arm-right");
-            tail = RaysvgGetElementById(doc, "anim-tail");
-            wrapper = RaysvgGetElementById(doc, "anim-wrapper");
-
-            const RaysvgHandle outline = RaysvgGetElementById(doc, "blob-outline");
-            if (outline != RAYSVG_INVALID_HANDLE) {
-                RaysvgSetOutline(doc, outline, true, (Color){26, 26, 26, 255}, 4.5f);
-            }
-            const RaysvgHandle tailLayer = RaysvgGetElementById(doc, "layer-tail");
-            if (tailLayer != RAYSVG_INVALID_HANDLE) {
-                RaysvgSetOutline(doc, tailLayer, true, (Color){26, 26, 26, 255}, 4.5f);
-            }
-        }
-    }
-    if (!doc) {
-        DrawText("raysvg smoke: load failed", 40, 120, 30, RED);
-        return;
-    }
-
-    // A walk cycle in the shape the pet kernel produces, driving the channel API directly.
-    const float t = (float)GetTime();
-    const float stride = t * 7.2f;
-    const float wave = sinf(stride);
-    const float counter = sinf(stride + PI);
-    const float contact = powf(fabsf(wave), 0.72f);
-
-    RaysvgSetTransform(doc, armL, 0.0f, 0.0f, wave * 22.0f, 1.0f, 1.0f);
-    RaysvgSetTransform(doc, armR, 0.0f, 0.0f, counter * 22.0f, 1.0f, 1.0f);
-    RaysvgSetTransform(doc, tail, 0.0f, 0.0f, sinf(stride - 0.85f) * 15.0f, 1.0f, 1.0f);
-    RaysvgSetTransform(doc, head, 0.0f, contact * -3.0f, wave * 2.5f, 1.0f, 1.0f);
-    RaysvgSetTransform(doc, wrapper, 0.0f, contact * -10.0f, 0.0f,
-                       1.0f + contact * 0.03f, 1.0f - contact * 0.05f);
-
-    const float side = (float)((width < height) ? width : height) * 0.8f;
-    RaysvgDraw(doc, (Rectangle){((float)width - side) * 0.5f, ((float)height - side) * 0.5f,
-                                side, side});
-
-    const RaysvgStats stats = RaysvgGetStats(doc);
-    DrawText(TextFormat("raysvg  %d fps  %d verts  %d shapes", GetFPS(), stats.drawnVertices,
-                        stats.drawnShapes),
-             24, 180, 30, (Color){40, 40, 55, 255});
-    DrawText(TextFormat("retess %d  elements %d  %dx%d", stats.tessellations,
-                        stats.elementCount, width, height),
-             24, 220, 30, (Color){110, 110, 130, 255});
-
-    // Periodic log so the numbers survive on a device where the overlay may be clipped.
-    static int frames = 0;
-    if ((frames++ % 120) == 0) {
-        TraceLog(LOG_INFO, "raysvg smoke: %d fps, %d verts, %d shapes, %d retess",
-                 GetFPS(), stats.drawnVertices, stats.drawnShapes, stats.tessellations);
     }
 }
 #endif
@@ -748,12 +663,6 @@ void engineRenderFrame(int width, int height) {
     }
 
     BeginDrawing();
-#if defined(RAYACT_SVG_SMOKE)
-    ClearBackground((Color){238, 240, 244, 255});
-    drawRaysvgSmoke(width, height);
-    EndDrawing();
-    return;
-#endif
 #if defined(RAYACT_ANDROID_3D_SMOKE)
     ClearBackground((Color){20, 20, 30, 255});
     drawAndroid3DSmoke();
@@ -796,15 +705,6 @@ void engineRenderFrame(int width, int height) {
 // then composites those SurfaceViews in ViewGroup z-order, so this function
 // renders exactly one screen tree into the currently bound window.
 void engineRenderFrameAndroid(int screenId, int width, int height) {
-#if defined(RAYACT_SVG_SMOKE)
-    // Ahead of the screen-stack check: the smoke scene draws no JS tree at all.
-    (void)screenId;
-    BeginDrawing();
-    ClearBackground((Color){238, 240, 244, 255});
-    drawRaysvgSmoke(width, height);
-    EndDrawing();
-    return;
-#endif
     if (!engineHasScreenStack()) return; // legacy desktop path uses engineRenderFrame
     mutationBatchPushToRenderQueue();
     // BeginDrawing/EndDrawing are the raylib frame boundaries. On the RLVK
@@ -834,10 +734,6 @@ void engineRenderFrameAndroid(int screenId, int width, int height) {
 }
 
 bool engineNeedsAnotherFrame() {
-#if defined(RAYACT_SVG_SMOKE)
-    // The raysvg smoke scene animates off the wall clock, so it is its own frame source.
-    return true;
-#endif
     // DevTools: drain queued CDP commands even when the app is otherwise idle,
     // so an attached Chrome frontend gets timely replies without user input.
     if (devtoolsHasPendingWork())
@@ -880,6 +776,10 @@ bool engineNeedsAnotherFrame() {
             return true;
     }
     if (hasActiveStyleAnimations())
+        return true;
+    // Native modules that own render nodes drive their own animation (e.g. an SVG
+    // document with a dirty channel), and the engine cannot see that state.
+    if (rayact::moduleNodesNeedFrame())
         return true;
 #ifndef RAYACT_NO_WORKERS
     // Worker output (draw frames, node commands, messages) is drained on the

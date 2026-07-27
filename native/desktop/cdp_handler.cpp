@@ -196,9 +196,9 @@ static std::string handleJsonList(int port, const std::string& title,
 static std::string handleJsonVersion(int port) {
     std::ostringstream ss;
     ss << "{"
-       << "\"Browser\":\"Rayact/0.0.3\","
+       << "\"Browser\":\"Rayact/0.0.4\","
        << "\"Protocol-Version\":\"1.3\","
-       << "\"User-Agent\":\"Rayact/0.0.3\","
+       << "\"User-Agent\":\"Rayact/0.0.4\","
        << "\"V8-Version\":\"QuickJS\","
        << "\"webSocketDebuggerUrl\":\"ws://localhost:" << port << "/rayact-main\""
        << "}";

@@ -17,6 +17,8 @@ const buildOrder = [
   '@rayact/secure-store',
   '@rayact/crash-reporter',
   'rayact',
+  // After the umbrella: @rayact/svg imports registerNativeComponent from rayact/react.
+  '@rayact/svg',
 ];
 
 for (const workspace of buildOrder) {

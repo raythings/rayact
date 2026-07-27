@@ -140,8 +140,11 @@ object DevServerLoader {
                 } finally {
                     conn.disconnect()
                 }
-            } catch (_: Exception) {
-                // Try the LAN address after the ADB-reversed loopback route.
+            } catch (error: Exception) {
+                // Try the LAN address after the ADB-reversed loopback route. Log the
+                // cause: swallowing it silently turns "can't reach the dev server"
+                // into an unexplained "Invalid server URL" in the launcher.
+                Log.i(TAG, "probeManifest candidate failed: $url (${error.javaClass.simpleName}: ${error.message})")
             }
         }
         return false

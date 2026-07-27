@@ -14,7 +14,7 @@
     "arm64",
     "x86_64"
   ],
-  "abiRange": ">=1 <2",
+  "abiRange": ">=1 <3",
   "engineRange": ">=0.0.3 <0.1.0",
   "linkage": "dynamic",
   "permissions": [
@@ -26,36 +26,39 @@
     "additionalProperties": false
   },
   "officialDevApp": true,
+  "nativeSources": [
+    "packages/rayact-secure-store/native/secure_store_plugin.cpp"
+  ],
   "artifacts": [
     {
       "platform": "android",
       "architecture": "arm64",
       "path": "android/arm64-v8a/librayact_secure_store.so",
-      "sha256": "0df8a30b7404d56c0592cb26c993dc065cbe93745aa5b3459f6ede7a63c943d5"
+      "sha256": "a1daa7ce4546b8fafbf9af23211d76d72839956aec2accfb482978fc00549973"
     },
     {
       "platform": "android",
       "architecture": "x86_64",
       "path": "android/x86_64/librayact_secure_store.so",
-      "sha256": "6d536d425f620c3de3d1445e91730394ec22019880d9d2f2fc64594ef2d974c5"
+      "sha256": "adaf492328d8e8c8e98b247230bef9d86bcb4b0e0dc564fc068bf6c6b73b7f18"
     },
     {
       "platform": "darwin",
       "architecture": "arm64",
       "path": "darwin-arm64/librayact_secure_store.dylib",
-      "sha256": "2ec567616dea56f1e1deada7e1f634f292ae01f426d26460456d2431aee04e48"
+      "sha256": "d38ac7774316d4c5634001d03cbcf2e4d63f805c6e28a03345287be4fab0b019"
     },
     {
       "platform": "darwin",
       "architecture": "x86_64",
       "path": "darwin-x64/librayact_secure_store.dylib",
-      "sha256": "8fcda60939f3927e83a8d97c361843d99d36dc2bfb0d95a8984934a3a5d32afa"
+      "sha256": "1e4982834e7417a96329fbf271c06539dcb7a1fa8594c1188fa2e69e6f4961df"
     },
     {
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_secure_store.xcframework",
-      "sha256": "88811a8fd7943632bd23c863606049c8c1c029812abb96e28fce713694f11719"
+      "sha256": "e7957b1db459aafee636a5151e60541c65816cb4ee60505dbb14930d1da7a4b0"
     }
   ]
 }

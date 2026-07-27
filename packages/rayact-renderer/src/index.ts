@@ -1,4 +1,4 @@
-export { createHostContainer, RayactReconciler } from './reconciler.js';
+export { createHostContainer, RayactReconciler, registerHostNodeType } from './reconciler.js';
 export type * from './types.js';
 export {
   SharedValue,

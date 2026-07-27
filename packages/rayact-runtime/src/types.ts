@@ -16,7 +16,6 @@ export type HostNodeType =
   | 'button'
   | 'image'
   | 'icon'
-  | 'svg'
   | 'textInput'
   | 'scrollView'
   | 'modal'
@@ -68,7 +67,11 @@ export type HostNodeType =
   | 'timePicker'
   | 'toolbar'
   | 'tooltip'
-  | 'popover';
+  | 'popover'
+  // Element types contributed at runtime by native modules (ABI 2 node kinds).
+  // `string & {}` keeps editor completion for the built-ins above while allowing
+  // names the engine cannot know at compile time.
+  | (string & {});
 
 export type HostNodeId = number;
 
@@ -164,8 +167,12 @@ export interface RayactGlobal {
   createText?: (text: string, props?: Record<string, unknown>) => number;
   createButton?: (label: string, props?: Record<string, unknown>) => number;
   createImage?: (src: string | RayactAsset, props?: Record<string, unknown>) => number | null;
-  createSvg?: (source: string, style?: unknown, props?: unknown) => number;
-  setSvgProps?: (nodeId: number, props: unknown) => void;
+  /**
+   * Create a node whose kind a native module registered (ABI 2). props travel as a
+   * JSON string because the module parses them without QuickJS.
+   */
+  createModuleNode?: (kind: string, style?: unknown, propsJson?: string) => number;
+  setModuleNodeProps?: (nodeId: number, propsJson: string) => void;
   createIcon?: (name: string, size?: number, color?: number | string, props?: Record<string, unknown>, variant?: string, filled?: boolean, set?: string) => number;
   setIconProps?: (nodeId: number, size?: number, color?: number | string, variant?: string, name?: string, filled?: boolean, set?: string) => void;
   registerFont?: (name: string, path: string) => void;

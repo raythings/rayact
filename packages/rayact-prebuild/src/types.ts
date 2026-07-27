@@ -25,6 +25,20 @@ export interface RayactModuleManifest {
   permissions: string[];
   configurationSchema: Record<string, unknown>;
   officialDevApp: boolean;
+  /**
+   * Building this module from source instead of its prebuilt artifact.
+   *
+   * Published packages ship binaries, so consumers never need these. They matter
+   * in a source checkout — the dev app builds first-party modules from source so
+   * an edit to a plugin's C++ shows up on the next app build. Paths are relative
+   * to the repository root that contains the module's package directory.
+   */
+  nativeSources?: string[];
+  nativeIncludeDirs?: string[];
+  /** Compile definitions for nativeSources, e.g. "RAYACT_SVG_USE_GPU_SHIM=1". */
+  nativeDefines?: string[];
+  /** Sources compiled into the Emscripten host; web has no dynamic loading. */
+  webSources?: string[];
 }
 
 /** Modern rayact.config.json entry. Installed modules autolink unless disabled. */

@@ -207,7 +207,9 @@ void mmkvRelease(void*, RayactBytes buf) { free((void*)buf.ptr); }
 } // namespace
 
 extern "C" int rayact_mmkv_register(const RayactHost* host) {
-  if (!host || host->abi_version != RAYACT_MODULE_ABI_VERSION) return -1;
+  // Lowest ABI whose fields this module uses. Never compare for equality: a newer
+  // host stays compatible, and this check is baked into shipped binaries.
+  if (!host || host->abi_version < 1u) return -1;
   g_host = host;
   RayactModule mod{};
   mod.abi_version = RAYACT_MODULE_ABI_VERSION;

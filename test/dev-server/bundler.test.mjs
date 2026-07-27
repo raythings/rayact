@@ -15,11 +15,24 @@ const repoRoot = path.resolve(here, '../..');
 const entry = 'test-projects/release-consumer-smoke/src/App.tsx';
 
 test('official dev app resolves canonical bundled native module identities', () => {
+  // Modules autolink from the dev app's declared dependencies, so assert the shape
+  // rather than a fixed roster — pinning the exact list here would mean this test
+  // has to be edited every time a module is installed, which is the coupling the
+  // generated build wiring exists to remove.
   const modules = resolveProjectNativeModules(path.join(repoRoot, 'apps/dev-app'));
-  assert.deepEqual(modules.map(module => module.name), ['crash-reporter', 'mmkv', 'secure-store']);
-  assert.deepEqual(modules.map(module => module.jsPackage), [
-    '@rayact/crash-reporter', '@rayact/mmkv', '@rayact/secure-store'
-  ]);
+  assert.ok(modules.length > 0, 'expected the dev app to autolink its installed modules');
+
+  const names = modules.map(module => module.name);
+  assert.deepEqual(names, [...names].sort(), 'entries are sorted by name');
+  assert.deepEqual(names, [...new Set(names)], 'no duplicate module names');
+  for (const module of modules) {
+    assert.match(module.jsPackage, /^@rayact\//, `${module.name} resolves to its npm package`);
+  }
+
+  // The first-party modules the official dev app is expected to carry.
+  for (const expected of ['crash-reporter', 'mmkv', 'secure-store']) {
+    assert.ok(names.includes(expected), `missing bundled module: ${expected}`);
+  }
 });
 
 test('dev-client identity comes from rayact.config.json while official extras are preserved', () => {

@@ -13774,6 +13774,7 @@
     }
     return String(value ?? "");
   }
+  const moduleNodeHandlers$1 = /* @__PURE__ */ new Map();
   const materialHostTypes$1 = /* @__PURE__ */ new Set(["appBar", "badge", "banner", "bottomAppBar", "bottomSheet", "dataTable", "dockedToolbar", "floatingToolbar", "buttonGroup", "card", "carousel", "checkbox", "chip", "datePicker", "dialog", "divider", "extendedFab", "fab", "fabMenu", "iconButton", "list", "loadingIndicator", "menu", "menuItem", "navigationBar", "navigationBarItem", "navigationDrawer", "navigationRail", "progressIndicator", "radioButton", "rangeSlider", "search", "searchBar", "segmentedButton", "sideSheet", "slider", "snackbar", "splitButton", "switch", "tabs", "textField", "timePicker", "toolbar", "tooltip", "popover"]);
   function materialProps$1(type, props, style) {
     const childLabel = typeof props.children === "string" || typeof props.children === "number" ? props.children : void 0;
@@ -13812,15 +13813,6 @@
           }
           case "image":
             return registerAnimatedHostNode$1(asHostNode$1(requireFunction$1(native.createImage, "createImage")(resolveImageSource$1(props.source ?? props.src, native), style), type), style);
-          case "svg": {
-            const raw = props.source ?? props.src ?? "";
-            const source = typeof raw === "string" ? raw : resolveImageSource$1(raw, native);
-            return registerAnimatedHostNode$1(asHostNode$1(requireFunction$1(native.createSvg, "createSvg")(String(source), style, {
-              vars: props.vars,
-              channels: props.channels,
-              outline: props.outline
-            }), type), style);
-          }
           case "icon":
             return registerAnimatedHostNode$1(asHostNode$1(requireFunction$1(native.createIcon, "createIcon")(String(props.name ?? props.icon ?? ""), typeof props.size === "number" ? props.size : void 0, typeof props.color === "number" || typeof props.color === "string" ? props.color : void 0, style, typeof props.variant === "string" ? props.variant : void 0, typeof props.filled === "boolean" ? props.filled : void 0, typeof props.set === "string" ? props.set : void 0), type), style);
           case "textInput":
@@ -13858,11 +13850,16 @@
               ...style,
               ...props
             }), type), style);
-          default:
+          default: {
+            const moduleHandlers = moduleNodeHandlers$1.get(type);
+            if (moduleHandlers) {
+              return registerAnimatedHostNode$1(asHostNode$1(moduleHandlers.create(native, props, style), type), style);
+            }
             if (materialHostTypes$1.has(type)) {
               return registerAnimatedHostNode$1(asHostNode$1(requireFunction$1(native.createMaterialComponent, "createMaterialComponent")(type, materialProps$1(type, props, style)), type), style);
             }
             throw new Error(`Unsupported Rayact host node type: ${type}`);
+          }
         }
       },
       updateNode(node, props) {
@@ -13873,19 +13870,14 @@
         if (Object.keys(style).length > 0) {
           requireFunction$1(native.setStyle, "setStyle")(node.id, style);
         }
+        const moduleHandlers = moduleNodeHandlers$1.get(node.type);
+        if (moduleHandlers?.update) {
+          moduleHandlers.update(native, node.id, props);
+        }
         if (node.type === "externalView" && typeof native.setExternalViewProps === "function") {
           native.setExternalViewProps(node.id, {
             ...props
           });
-        }
-        if (node.type === "svg" && typeof native.setSvgProps === "function") {
-          if ("vars" in props || "channels" in props || "outline" in props) {
-            native.setSvgProps(node.id, {
-              vars: props.vars,
-              channels: props.channels,
-              outline: props.outline
-            });
-          }
         }
         if (node.type === "icon" && typeof native.setIconProps === "function") {
           native.setIconProps(node.id, typeof props.size === "number" ? props.size : void 0, typeof props.color === "number" || typeof props.color === "string" ? props.color : void 0, typeof props.variant === "string" ? props.variant : void 0, typeof props.name === "string" ? props.name : typeof props.icon === "string" ? props.icon : void 0, typeof props.filled === "boolean" ? props.filled : void 0, typeof props.set === "string" ? props.set : void 0);
@@ -23122,7 +23114,7 @@ ${stack}` : message;
     }
     return false;
   }
-  const hostNodeTypes = /* @__PURE__ */ new Set(["root", "view", "text", "button", "image", "icon", "svg", "textInput", "scrollView", "modal", "externalView", "safeArea", "statusBar", "activityIndicator", "appBar", "badge", "banner", "bottomAppBar", "bottomSheet", "dataTable", "dockedToolbar", "floatingToolbar", "buttonGroup", "card", "carousel", "checkbox", "chip", "datePicker", "dialog", "divider", "extendedFab", "fab", "fabMenu", "iconButton", "list", "loadingIndicator", "menu", "menuItem", "navigationBar", "navigationBarItem", "navigationDrawer", "navigationRail", "progressIndicator", "radioButton", "rangeSlider", "search", "searchBar", "segmentedButton", "sideSheet", "slider", "snackbar", "splitButton", "switch", "tabs", "textField", "timePicker", "toolbar", "tooltip", "popover"]);
+  const hostNodeTypes = /* @__PURE__ */ new Set(["root", "view", "text", "button", "image", "icon", "textInput", "scrollView", "modal", "externalView", "safeArea", "statusBar", "activityIndicator", "appBar", "badge", "banner", "bottomAppBar", "bottomSheet", "dataTable", "dockedToolbar", "floatingToolbar", "buttonGroup", "card", "carousel", "checkbox", "chip", "datePicker", "dialog", "divider", "extendedFab", "fab", "fabMenu", "iconButton", "list", "loadingIndicator", "menu", "menuItem", "navigationBar", "navigationBarItem", "navigationDrawer", "navigationRail", "progressIndicator", "radioButton", "rangeSlider", "search", "searchBar", "segmentedButton", "sideSheet", "slider", "snackbar", "splitButton", "switch", "tabs", "textField", "timePicker", "toolbar", "tooltip", "popover"]);
   function fiberSourceComponentName(fiber) {
     let f = fiber?.return;
     for (let depth = 0; f && depth < 50; depth++, f = f.return) {
@@ -23153,7 +23145,7 @@ ${stack}` : message;
     const raw = key.replace(/^rayact-/, "");
     const normalized = raw.toLowerCase().replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
     if (!hostNodeTypes.has(normalized)) {
-      throw new Error(`Unknown Rayact element type: ${type}`);
+      throw new Error(`Unknown Rayact element type: ${type}. Built-in elements come from 'rayact/react'; a component provided by a native module registers its type when you import that module (e.g. import { Svg } from '@rayact/svg').`);
     }
     normalizeCache.set(key, normalized);
     return normalized;
@@ -28635,7 +28627,7 @@ ${stack}` : message;
       isDark: t.isDark ?? true
     };
   }
-  var define_RAYACT_BUNDLED_MODULES_default = [{ name: "crash-reporter", lib: "rayact_crash_reporter", jsPackage: "@rayact/crash-reporter", platforms: ["android", "ios", "darwin", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=1 <2", engineRange: ">=0.0.3 <0.1.0", permissions: ["crash-report-storage", "network-when-consented"], officialDevApp: true }, { name: "mmkv", lib: "rayact_mmkv", jsPackage: "@rayact/mmkv", platforms: ["android", "ios", "darwin"], architectures: ["arm64", "x86_64"], abiRange: ">=1 <2", engineRange: ">=0.0.3 <0.1.0", permissions: [], officialDevApp: true }, { name: "secure-store", lib: "rayact_secure_store", jsPackage: "@rayact/secure-store", platforms: ["android", "ios", "darwin"], architectures: ["arm64", "x86_64"], abiRange: ">=1 <2", engineRange: ">=0.0.3 <0.1.0", permissions: ["keychain", "keystore"], officialDevApp: true }];
+  var define_RAYACT_BUNDLED_MODULES_default = [{ name: "crash-reporter", lib: "rayact_crash_reporter", jsPackage: "@rayact/crash-reporter", platforms: ["android", "ios", "darwin", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=1 <3", engineRange: ">=0.0.3 <0.1.0", permissions: ["crash-report-storage", "network-when-consented"], officialDevApp: true }, { name: "mmkv", lib: "rayact_mmkv", jsPackage: "@rayact/mmkv", platforms: ["android", "ios", "darwin"], architectures: ["arm64", "x86_64"], abiRange: ">=1 <3", engineRange: ">=0.0.3 <0.1.0", permissions: [], officialDevApp: true }, { name: "secure-store", lib: "rayact_secure_store", jsPackage: "@rayact/secure-store", platforms: ["android", "ios", "darwin"], architectures: ["arm64", "x86_64"], abiRange: ">=1 <3", engineRange: ">=0.0.3 <0.1.0", permissions: ["keychain", "keystore"], officialDevApp: true }, { name: "svg", lib: "rayact_svg", jsPackage: "@rayact/svg", platforms: ["android", "ios", "darwin", "web"], architectures: ["arm64", "x86_64"], abiRange: ">=2 <3", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }];
   var define_RAYACT_OFFICIAL_APP_default = { displayName: "Rayact Dev App", packageLabel: "Rayact Dev App", source: "official", androidPackageId: "com.rayact.app", creditTitle: "The official Rayact development client", links: [{ id: "github", icon: "github", set: "fab", label: "GitHub", url: "https://github.com/raythings/rayact" }, { id: "email", icon: "envelope", set: "fa", label: "ramnadroj@gmail.com", url: "mailto:ramnadroj@gmail.com" }] };
   function getOfficialApp() {
     try {
@@ -31185,7 +31177,8 @@ ${stack}` : message;
       style: {
         ...pageStyle,
         backgroundColor: colors2.surface,
-        flexGrow: 1
+        flexGrow: 1,
+        paddingBottom: 32
       },
       children: [official.displayName ? jsxRuntimeExports.jsxs(View, {
         style: {
@@ -37002,6 +36995,7 @@ ${stack}` : message;
     }
     return String(value ?? "");
   }
+  const moduleNodeHandlers = /* @__PURE__ */ new Map();
   const materialHostTypes = /* @__PURE__ */ new Set(["appBar", "badge", "banner", "bottomAppBar", "bottomSheet", "dataTable", "dockedToolbar", "floatingToolbar", "buttonGroup", "card", "carousel", "checkbox", "chip", "datePicker", "dialog", "divider", "extendedFab", "fab", "fabMenu", "iconButton", "list", "loadingIndicator", "menu", "menuItem", "navigationBar", "navigationBarItem", "navigationDrawer", "navigationRail", "progressIndicator", "radioButton", "rangeSlider", "search", "searchBar", "segmentedButton", "sideSheet", "slider", "snackbar", "splitButton", "switch", "tabs", "textField", "timePicker", "toolbar", "tooltip", "popover"]);
   function materialProps(type, props, style) {
     const childLabel = typeof props.children === "string" || typeof props.children === "number" ? props.children : void 0;
@@ -37040,15 +37034,6 @@ ${stack}` : message;
           }
           case "image":
             return registerAnimatedHostNode(asHostNode(requireFunction(native.createImage, "createImage")(resolveImageSource(props.source ?? props.src, native), style), type), style);
-          case "svg": {
-            const raw = props.source ?? props.src ?? "";
-            const source = typeof raw === "string" ? raw : resolveImageSource(raw, native);
-            return registerAnimatedHostNode(asHostNode(requireFunction(native.createSvg, "createSvg")(String(source), style, {
-              vars: props.vars,
-              channels: props.channels,
-              outline: props.outline
-            }), type), style);
-          }
           case "icon":
             return registerAnimatedHostNode(asHostNode(requireFunction(native.createIcon, "createIcon")(String(props.name ?? props.icon ?? ""), typeof props.size === "number" ? props.size : void 0, typeof props.color === "number" || typeof props.color === "string" ? props.color : void 0, style, typeof props.variant === "string" ? props.variant : void 0, typeof props.filled === "boolean" ? props.filled : void 0, typeof props.set === "string" ? props.set : void 0), type), style);
           case "textInput":
@@ -37086,11 +37071,16 @@ ${stack}` : message;
               ...style,
               ...props
             }), type), style);
-          default:
+          default: {
+            const moduleHandlers = moduleNodeHandlers.get(type);
+            if (moduleHandlers) {
+              return registerAnimatedHostNode(asHostNode(moduleHandlers.create(native, props, style), type), style);
+            }
             if (materialHostTypes.has(type)) {
               return registerAnimatedHostNode(asHostNode(requireFunction(native.createMaterialComponent, "createMaterialComponent")(type, materialProps(type, props, style)), type), style);
             }
             throw new Error(`Unsupported Rayact host node type: ${type}`);
+          }
         }
       },
       updateNode(node, props) {
@@ -37101,19 +37091,14 @@ ${stack}` : message;
         if (Object.keys(style).length > 0) {
           requireFunction(native.setStyle, "setStyle")(node.id, style);
         }
+        const moduleHandlers = moduleNodeHandlers.get(node.type);
+        if (moduleHandlers?.update) {
+          moduleHandlers.update(native, node.id, props);
+        }
         if (node.type === "externalView" && typeof native.setExternalViewProps === "function") {
           native.setExternalViewProps(node.id, {
             ...props
           });
-        }
-        if (node.type === "svg" && typeof native.setSvgProps === "function") {
-          if ("vars" in props || "channels" in props || "outline" in props) {
-            native.setSvgProps(node.id, {
-              vars: props.vars,
-              channels: props.channels,
-              outline: props.outline
-            });
-          }
         }
         if (node.type === "icon" && typeof native.setIconProps === "function") {
           native.setIconProps(node.id, typeof props.size === "number" ? props.size : void 0, typeof props.color === "number" || typeof props.color === "string" ? props.color : void 0, typeof props.variant === "string" ? props.variant : void 0, typeof props.name === "string" ? props.name : typeof props.icon === "string" ? props.icon : void 0, typeof props.filled === "boolean" ? props.filled : void 0, typeof props.set === "string" ? props.set : void 0);

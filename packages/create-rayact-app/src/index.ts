@@ -52,7 +52,7 @@ Options:
                        dependencies + overrides (no npm registry needed)
   --release-url <url>  Same, but downloads the release first. Point it at the
                        GitHub release download base, e.g.
-                       https://github.com/raythings/rayact/releases/download/v0.0.3
+                       https://github.com/raythings/rayact/releases/download/v0.0.4
   --vendor-prebuilts   With --release-dir/--release-url: also vendor the
                        @rayact/prebuilt-* engine tarballs (fully offline)
   --monorepo           Use local file: dependencies when run inside the Rayact monorepo
@@ -61,8 +61,8 @@ Options:
   -h, --help           Show help
 
 Examples:
-  npx ./create-rayact-app-0.0.3.tgz my-app --release-dir ~/Downloads/rayact-release
-  npx create-rayact-app my-app --release-url https://github.com/raythings/rayact/releases/download/v0.0.3
+  npx ./create-rayact-app-0.0.4.tgz my-app --release-dir ~/Downloads/rayact-release
+  npx create-rayact-app my-app --release-url https://github.com/raythings/rayact/releases/download/v0.0.4
   rayact init my-app
 `.trim());
       process.exit(0);

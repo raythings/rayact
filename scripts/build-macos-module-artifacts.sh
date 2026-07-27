@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-for package_name in rayact-mmkv rayact-secure-store rayact-crash-reporter; do
+for package_name in rayact-mmkv rayact-secure-store rayact-crash-reporter rayact-svg; do
   library_name="${package_name#rayact-}"
   library_name="rayact_${library_name//-/_}"
   for arch in arm64 x86_64; do

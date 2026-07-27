@@ -709,10 +709,12 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_createIcon,   "createIcon",   4));
     JS_SetPropertyStr(ctx, global, "setIconProps",
                       JS_NewCFunction(ctx, JS_setIconProps, "setIconProps", 4));
-    JS_SetPropertyStr(ctx, global, "createSvg",
-                      JS_NewCFunction(ctx, JS_createSvg,   "createSvg",   3));
-    JS_SetPropertyStr(ctx, global, "setSvgProps",
-                      JS_NewCFunction(ctx, JS_setSvgProps, "setSvgProps", 2));
+    // Generic entry point for module-contributed node kinds (ABI 2). Unprefixed to sit
+    // beside the other create* natives the runtime bridge calls.
+    JS_SetPropertyStr(ctx, global, "createModuleNode",
+                      JS_NewCFunction(ctx, JS_createModuleNode, "createModuleNode", 3));
+    JS_SetPropertyStr(ctx, global, "setModuleNodeProps",
+                      JS_NewCFunction(ctx, JS_setModuleNodeProps, "setModuleNodeProps", 2));
     JS_SetPropertyStr(ctx, global, "registerFont",
                       JS_NewCFunction(ctx, JS_registerFont, "registerFont", 2));
     JS_SetPropertyStr(ctx, global, "loadFont",

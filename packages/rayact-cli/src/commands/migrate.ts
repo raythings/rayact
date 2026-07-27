@@ -74,7 +74,7 @@ function migratePackageJson(root: string, required: Set<string>): void {
   const file = path.join(root, 'package.json');
   const pkg = JSON.parse(fs.readFileSync(file, 'utf8')) as { dependencies?: Record<string, string> };
   pkg.dependencies ??= {};
-  for (const packageName of required) pkg.dependencies[packageName] = '0.0.3';
+  for (const packageName of required) pkg.dependencies[packageName] = '0.0.4';
   fs.writeFileSync(file, `${JSON.stringify(pkg, null, 2)}\n`);
 }
 

@@ -23,6 +23,7 @@
 		06E524FDD81D005CD12DE30C /* engine_render.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7ECC0C8C334F47DFAA15AD64 /* engine_render.cpp */; };
 		082095F94FE51B39A377AEEF /* Container.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9D7D73423A19565149CE17F2 /* Container.cpp */; };
 		0844E720DAD4AEC45A348EF4 /* CalculateLayout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7BB87A76EC7C75004E1CAD68 /* CalculateLayout.cpp */; };
+		09F5C5536C20CD3D4BA8B89A /* gpu_api.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5D7659A0136E97021C30CD66 /* gpu_api.cpp */; };
 		0AA922A924C0C14035AED05B /* RayactRenderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67BDFB073956694F1E0D55E1 /* RayactRenderScheduler.swift */; };
 		0AB7F22628B85249C014E248 /* TextMeasureCache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 394F9D7799DD790573E5CC67 /* TextMeasureCache.cpp */; };
 		0BDE071553F93E3CFDECF316 /* tests.conf in Resources */ = {isa = PBXBuildFile; fileRef = AD29354857DD2F2C1DCA7296 /* tests.conf */; };
@@ -173,6 +174,7 @@
 		727ED2D364206A452B0691AA /* RayactMobileNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BC286521C505F7F1AD4DB95 /* RayactMobileNetwork.swift */; };
 		72B73B3D3982C835C65D1956 /* Animations.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0843C3B037B28BE2C80615D4 /* Animations.cpp */; };
 		72D223B8411CBD028D9474EF /* RenderContext.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5CB06F040A4CC6DF6B4A9B82 /* RenderContext.cpp */; };
+		73342818A0AA2B6D214588E4 /* gpu_api.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5D7659A0136E97021C30CD66 /* gpu_api.cpp */; };
 		74223BD415FAF751EB835C2C /* devtools.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8CFBF8A458DF20D73BB61F5F /* devtools.cpp */; };
 		748C568A5FCB85B3AD62A15D /* shadow_tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C2FF8D3204D04C57EF6C3CE5 /* shadow_tree.cpp */; };
 		749B7B48C978B5A727914A11 /* rayactpack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 77FCB5613F3516AB0744BDE9 /* rayactpack.cpp */; };
@@ -264,6 +266,7 @@
 		B674CC7DE84151560BED4F1F /* rtext.c in Sources */ = {isa = PBXBuildFile; fileRef = 033D06CBD69C1A750204C7F1 /* rtext.c */; };
 		B81F127C71B41115425C7181 /* TextField.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F5B08C908128E9379859CC94 /* TextField.cpp */; };
 		B870195D94778C6A4768EFD9 /* SystemAppearance.mm in Sources */ = {isa = PBXBuildFile; fileRef = 78460481074191BFF35CD1D8 /* SystemAppearance.mm */; };
+		B963FBE2A50396EC5152C63E /* raylib_gpu_shim.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4B55935367B2CD94AF932DD3 /* raylib_gpu_shim.cpp */; };
 		B9BAD944CAED4AD97C43D833 /* TextAnalysis.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9534335DFD81470DF8CB49F1 /* TextAnalysis.cpp */; };
 		BA0B8531C69D7AF1CA02DDEE /* CSSParser.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E69B05E520CE0BDC11E5E814 /* CSSParser.cpp */; };
 		BC2B53799DE98B6E7ED6CD29 /* TextEngine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8D9B685A8DE5801F02A3EDAC /* TextEngine.cpp */; };
@@ -298,6 +301,7 @@
 		CC54AAEF37DD23D2B3BFA469 /* TextLineBreak.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 818812982FA7A044805E44EA /* TextLineBreak.cpp */; };
 		CC8A0AF0CD9C8EF514002A60 /* TextInput.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C8D38712A957FD5697015BC3 /* TextInput.cpp */; };
 		CCA044874CC03B7682C22636 /* worklet_runtime.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 70D8D848C09D583397C08FB7 /* worklet_runtime.cpp */; };
+		CDA1119FA0D486BAE6B33242 /* svg_plugin.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A6CB9DD96A287D6EFB5877A4 /* svg_plugin.cpp */; };
 		CDE0442F103EDA1E5682F73B /* data_dir.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9089E6D8BE1FFB1B63D3F8FE /* data_dir.cpp */; };
 		CE40867E29384F843E367E47 /* event.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F131ED1BCD99188B3EA6615C /* event.cpp */; };
 		CE78B87556A7B10FC543EDE2 /* CSSParser.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E69B05E520CE0BDC11E5E814 /* CSSParser.cpp */; };
@@ -397,6 +401,7 @@
 		15B78893FEC9E2EB16EAEA93 /* Chip.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Chip.cpp; sourceTree = "<group>"; };
 		161ECA68BB5DDAA75415F0FD /* platform_ios.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = platform_ios.cpp; sourceTree = "<group>"; };
 		164A07104D9D08FB2DDAB72E /* BoxSizing.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BoxSizing.h; sourceTree = "<group>"; };
+		167C3C72AFCC2BC311FC48AE /* module_nodes.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = module_nodes.hpp; sourceTree = "<group>"; };
 		1A975362667BD597D2506176 /* m3_compile.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_compile.c; sourceTree = "<group>"; };
 		1C5A43075C3E76AAD1988559 /* devtools.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = devtools.hpp; sourceTree = "<group>"; };
 		1CF8EAFC4FD8B1B033557097 /* EmojiFont.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = EmojiFont.cpp; sourceTree = "<group>"; };
@@ -456,6 +461,7 @@
 		49E704D3FE6E22A46FA74C75 /* system_appearance.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = system_appearance.cpp; sourceTree = "<group>"; };
 		4ADA129237C4AD20879A6BB1 /* RangeSlider.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = RangeSlider.cpp; sourceTree = "<group>"; };
 		4B39956F06DD9AC33A73C936 /* CSSUtils.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CSSUtils.cpp; sourceTree = "<group>"; };
+		4B55935367B2CD94AF932DD3 /* raylib_gpu_shim.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = raylib_gpu_shim.cpp; sourceTree = "<group>"; };
 		4B6C514910B80601FDD7FD37 /* theme_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = theme_bridge.hpp; sourceTree = "<group>"; };
 		4BE5620B1A2988311F03FE0B /* DevLauncherController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevLauncherController.swift; sourceTree = "<group>"; };
 		4C691D9041EAB7C4D2EC024E /* quickjs.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = quickjs.c; sourceTree = "<group>"; };
@@ -474,6 +480,7 @@
 		59C1FBA894A809745E8CC4E5 /* secure_store_plugin.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = secure_store_plugin.cpp; sourceTree = "<group>"; };
 		5A2DAB3DA708FD3FD8F533FC /* DevClientBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevClientBridge.swift; sourceTree = "<group>"; };
 		5CB06F040A4CC6DF6B4A9B82 /* RenderContext.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = RenderContext.cpp; sourceTree = "<group>"; };
+		5D7659A0136E97021C30CD66 /* gpu_api.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = gpu_api.cpp; sourceTree = "<group>"; };
 		5F1EED944D9ADAA093227DE4 /* fib32_tail.wasm.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = fib32_tail.wasm.h; sourceTree = "<group>"; };
 		5F9E6DF5CF775408AFF833C4 /* Align.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Align.h; sourceTree = "<group>"; };
 		6058EEEEED5EBA2479FC7DD7 /* List.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = List.cpp; sourceTree = "<group>"; };
@@ -481,6 +488,7 @@
 		60C506A65430CF60588D22FB /* ProjectHmrClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectHmrClient.swift; sourceTree = "<group>"; };
 		62D5F1BAB64A9A455402D29E /* rmodels.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rmodels.c; sourceTree = "<group>"; };
 		6492F076A3C93508C738F9B5 /* TextSelectionOverlay.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TextSelectionOverlay.cpp; sourceTree = "<group>"; };
+		655B49C34306178B7F165E66 /* gpu_api.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = gpu_api.hpp; sourceTree = "<group>"; };
 		66C69168EE966ECD7A706D46 /* fib32.wasm.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = fib32.wasm.h; sourceTree = "<group>"; };
 		67BDFB073956694F1E0D55E1 /* RayactRenderScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactRenderScheduler.swift; sourceTree = "<group>"; };
 		68469D2FE07DBA277E1658B0 /* Density.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Density.cpp; sourceTree = "<group>"; };
@@ -553,6 +561,7 @@
 		A4E0D57F836EE51563FCBE41 /* quickjs_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = quickjs_bridge.hpp; sourceTree = "<group>"; };
 		A542F6F40A2E3A2B38CECD8D /* IconRenderer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = IconRenderer.cpp; sourceTree = "<group>"; };
 		A6823BC8335C79C6CD1BC7EE /* Switch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Switch.cpp; sourceTree = "<group>"; };
+		A6CB9DD96A287D6EFB5877A4 /* svg_plugin.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = svg_plugin.cpp; sourceTree = "<group>"; };
 		A73583B9FBD598A5FF8D87CC /* libRayactEngineStatic.a */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = archive.ar; path = libRayactEngineStatic.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		A73914BE9936EC5E072E99C9 /* FontManager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = FontManager.cpp; sourceTree = "<group>"; };
 		A8553035399C5D547BE08A8E /* LayoutableChildren.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LayoutableChildren.h; sourceTree = "<group>"; };
@@ -635,7 +644,6 @@
 		EAAAB3A0A7F5BAC4E0953F4F /* ColorScheme.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ColorScheme.cpp; sourceTree = "<group>"; };
 		EB2CA3CB3D6288CF7BEA0C0F /* ios_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ios_bridge.hpp; sourceTree = "<group>"; };
 		EBA2048A9320D5CEA239B3C4 /* crash_reporter_plugin.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = crash_reporter_plugin.cpp; sourceTree = "<group>"; };
-		ECD72668E77FDDCCFB8836A4 /* raysvg_smoke_asset.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = raysvg_smoke_asset.h; sourceTree = "<group>"; };
 		ECF39F19F0783E95837FDC50 /* m3_info.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_info.c; sourceTree = "<group>"; };
 		EE0F30DA7DE7D611C4DB1AD6 /* ios_engine_instance.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ios_engine_instance.cpp; sourceTree = "<group>"; };
 		EE8DF0A2D484B19EFDBDC81A /* Modal.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Modal.cpp; sourceTree = "<group>"; };
@@ -670,6 +678,16 @@
 				13B32CCF88CFB21B68DA7B56 /* RayactIOS.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		03937F70C089811D70D6F26F /* native */ = {
+			isa = PBXGroup;
+			children = (
+				4B55935367B2CD94AF932DD3 /* raylib_gpu_shim.cpp */,
+				A6CB9DD96A287D6EFB5877A4 /* svg_plugin.cpp */,
+			);
+			name = native;
+			path = "../../packages/rayact-svg/native";
 			sourceTree = "<group>";
 		};
 		0BFE1E225E217BB8FBE92C11 /* ios */ = {
@@ -943,6 +961,8 @@
 				7D6CD8BB50B297A17E45231F /* engine_thread.cpp */,
 				125987C1814763C5DD732C3C /* gesture_recognizer.cpp */,
 				D8CC98D23BA0119E72BCA0E8 /* gesture_recognizer.hpp */,
+				5D7659A0136E97021C30CD66 /* gpu_api.cpp */,
+				655B49C34306178B7F165E66 /* gpu_api.hpp */,
 				20F92CF43B7F1D037FF2CC55 /* js_stdlib.cpp */,
 				E4E8757AA4DC53306442B3AF /* js_stdlib.hpp */,
 				5652D373531BC05A07AF0E14 /* kv_store.cpp */,
@@ -950,6 +970,7 @@
 				945608FA4A82183CFC3A9FC3 /* main_impl.hpp */,
 				831D0F39EBE86FFE17FFF5B0 /* module_bus.cpp */,
 				C2E39C21C3C70AED1071F5C8 /* module_bus.hpp */,
+				167C3C72AFCC2BC311FC48AE /* module_nodes.hpp */,
 				0B8B502FEB56CFC73F60E738 /* net.hpp */,
 				B55C2CF2B0916AB2342C5289 /* platform_wayland.hpp */,
 				7E4AFA70E175927A372050E1 /* platform.hpp */,
@@ -959,7 +980,6 @@
 				A4E0D57F836EE51563FCBE41 /* quickjs_bridge.hpp */,
 				4509BE0DB4D7D7B1ED6BEAF8 /* raym3_bridge.cpp */,
 				D465C5675F029FD7EE39C14D /* raym3_bridge.hpp */,
-				ECD72668E77FDDCCFB8836A4 /* raysvg_smoke_asset.h */,
 				C2FF8D3204D04C57EF6C3CE5 /* shadow_tree.cpp */,
 				6D0420A8A055553874A0C9D7 /* shadow_tree.hpp */,
 				49E704D3FE6E22A46FA74C75 /* system_appearance.cpp */,
@@ -1202,6 +1222,7 @@
 				B2A0F679ED3DE726F7462F88 /* native */,
 				22D063B9EBFCA11948AE08F0 /* native */,
 				2299435D3EDEFE92AB4CD6F2 /* native */,
+				03937F70C089811D70D6F26F /* native */,
 				27222A481FD06CA7C6B182A5 /* platforms */,
 				E4259D8BF16E3E412BBC27A5 /* quickjs */,
 				7576FF4C5C4A796550B71BC5 /* rlmt */,
@@ -1568,6 +1589,7 @@
 				B063B63DAF0AE710F05A3B08 /* engine_thread.cpp in Sources */,
 				9188F6F40DE13083F9C4E337 /* event.cpp in Sources */,
 				CB11E83D4066E9A2F9A2201E /* gesture_recognizer.cpp in Sources */,
+				73342818A0AA2B6D214588E4 /* gpu_api.cpp in Sources */,
 				E222EE2C1B7638D43B7721B2 /* ios_bridge.mm in Sources */,
 				1E28D84F1AD986DF8F475877 /* ios_engine_instance.cpp in Sources */,
 				7C696CA0756E5D2289D53FB2 /* ios_plugins_register.cpp in Sources */,
@@ -1595,6 +1617,7 @@
 				E3089CBD9ABA5AFDF8B28701 /* quickjs.c in Sources */,
 				1BCA7FAED4BC3B515D74A6DD /* quickjs_bridge.cpp in Sources */,
 				749B7B48C978B5A727914A11 /* rayactpack.cpp in Sources */,
+				B963FBE2A50396EC5152C63E /* raylib_gpu_shim.cpp in Sources */,
 				B41A1BAB1F083D8548230FAB /* raym3.cpp in Sources */,
 				944FD0C549D5A987A55307A9 /* raym3_bridge.cpp in Sources */,
 				9B173DE95F86DDCF8C69FEA0 /* raysvg.cpp in Sources */,
@@ -1617,6 +1640,7 @@
 				18CBE15CD1FCA45E087DF3D6 /* secure_store_mac.mm in Sources */,
 				FCA3CB0A139C2870DC61C3A2 /* secure_store_plugin.cpp in Sources */,
 				FC89F20BE1679C7A74401EDD /* shadow_tree.cpp in Sources */,
+				CDA1119FA0D486BAE6B33242 /* svg_plugin.cpp in Sources */,
 				5733A093EEB0ADEC6B7168F7 /* system_appearance.cpp in Sources */,
 				D99132B5214B01EF3563A232 /* theme_bridge.cpp in Sources */,
 				2DA12B685C581ED14B7ED2D3 /* utils.cpp in Sources */,
@@ -1740,6 +1764,7 @@
 				1420A7A3DFBF956FA57873EC /* engine_thread.cpp in Sources */,
 				CE40867E29384F843E367E47 /* event.cpp in Sources */,
 				6AE718E36FB7EA82983AE96C /* gesture_recognizer.cpp in Sources */,
+				09F5C5536C20CD3D4BA8B89A /* gpu_api.cpp in Sources */,
 				F72DA144DD8122736D94D156 /* ios_bridge.mm in Sources */,
 				6FDAD799251285017952CD73 /* ios_engine_instance.cpp in Sources */,
 				AEF0E6947E6B375489895303 /* js_stdlib.cpp in Sources */,
@@ -1807,9 +1832,9 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CLANG_CXX_LIBRARY = "libc++";
 				DEVELOPMENT_TEAM = "";
-				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) $(RAYSVG_SMOKE_DEFINE) RAYACT_PLATFORM_NET_BACKEND=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1";
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) RAYACT_PLATFORM_NET_BACKEND=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1";
 				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = "$(inherited) ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
+				HEADER_SEARCH_PATHS = "$(inherited) ../../packages/rayact-svg/native ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1822,7 +1847,7 @@
 				SKIP_INSTALL = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				USER_HEADER_SEARCH_PATHS = "$(inherited) ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
+				USER_HEADER_SEARCH_PATHS = "$(inherited) ../../packages/rayact-svg/native ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
 				USE_HEADERMAP = NO;
 			};
 			name = Debug;
@@ -1837,9 +1862,9 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				EXCLUDED_SOURCE_FILE_NAMES = "devtools.cpp cdp_handler.cpp dev_client_bridge.cpp desktop_dev_loader.cpp desktop_mdns.cpp DevClientBridge.swift DevLauncherController.swift DevMenuOverlay.swift DevServerLoader.swift DevShakeDetector.swift ProjectHmrClient.swift RayactDevToolsTransport.swift";
-				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) $(RAYSVG_SMOKE_DEFINE) RAYACT_PLATFORM_NET_BACKEND=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1";
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) RAYACT_PLATFORM_NET_BACKEND=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1";
 				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = "$(inherited) ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
+				HEADER_SEARCH_PATHS = "$(inherited) ../../packages/rayact-svg/native ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
 				INFOPLIST_FILE = "Info-Release.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1854,7 +1879,7 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = RAYACT_RELEASE;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				USER_HEADER_SEARCH_PATHS = "$(inherited) ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
+				USER_HEADER_SEARCH_PATHS = "$(inherited) ../../packages/rayact-svg/native ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
 				USE_HEADERMAP = NO;
 			};
 			name = Release;
@@ -1921,9 +1946,9 @@
 				CLANG_CXX_LIBRARY = "libc++";
 				DEVELOPMENT_TEAM = "";
 				EXCLUDED_SOURCE_FILE_NAMES = "devtools.cpp cdp_handler.cpp dev_client_bridge.cpp desktop_dev_loader.cpp desktop_mdns.cpp";
-				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) $(RAYSVG_SMOKE_DEFINE) RAYACT_PLATFORM_NET_BACKEND=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1";
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) RAYACT_PLATFORM_NET_BACKEND=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1";
 				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = "$(inherited) ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
+				HEADER_SEARCH_PATHS = "$(inherited) ../../packages/rayact-svg/native ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1936,7 +1961,7 @@
 				SKIP_INSTALL = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				USER_HEADER_SEARCH_PATHS = "$(inherited) ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
+				USER_HEADER_SEARCH_PATHS = "$(inherited) ../../packages/rayact-svg/native ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
 				USE_HEADERMAP = NO;
 			};
 			name = Release;
@@ -2011,9 +2036,9 @@
 				CLANG_CXX_LIBRARY = "libc++";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_TEAM = "";
-				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) $(RAYSVG_SMOKE_DEFINE) RAYACT_PLATFORM_NET_BACKEND=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1";
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) RAYACT_PLATFORM_NET_BACKEND=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1";
 				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = "$(inherited) ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
+				HEADER_SEARCH_PATHS = "$(inherited) ../../packages/rayact-svg/native ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
 				INFOPLIST_FILE = Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -2027,7 +2052,7 @@
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				USER_HEADER_SEARCH_PATHS = "$(inherited) ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
+				USER_HEADER_SEARCH_PATHS = "$(inherited) ../../packages/rayact-svg/native ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
 				USE_HEADERMAP = NO;
 			};
 			name = Debug;

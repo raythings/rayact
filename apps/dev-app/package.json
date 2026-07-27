@@ -38,6 +38,7 @@
     "@rayact/dev-client": "0.0.4",
     "@rayact/mmkv": "0.0.4",
     "@rayact/secure-store": "0.0.4",
+    "@rayact/svg": "0.0.4",
     "rayact": "0.0.4",
     "react": "^19.0.0"
   },

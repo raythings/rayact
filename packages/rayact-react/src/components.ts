@@ -8,7 +8,6 @@ import type {
   ButtonProps,
   ColorValue,
   IconProps,
-  SvgProps,
   ImageProps,
   ListProps,
   MaterialComponentProps,
@@ -117,9 +116,6 @@ export function Icon(props: IconProps): React.ReactElement {
   return React.createElement('rayact-icon', props);
 }
 
-export function Svg(props: SvgProps): React.ReactElement {
-  return React.createElement('rayact-svg', props);
-}
 
 // RN keyboardType → raym3 wire inputType. The engine masks (password) and the
 // OS keyboard layout (email/number/phone) are driven by this single token.

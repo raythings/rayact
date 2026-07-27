@@ -60,7 +60,9 @@ void release(void*, RayactBytes bytes) { std::free(const_cast<uint8_t*>(bytes.pt
 } // namespace
 
 extern "C" int rayact_crash_reporter_register(const RayactHost* host) {
-  if (!host || host->abi_version != RAYACT_MODULE_ABI_VERSION) return -1;
+  // Lowest ABI whose fields this module uses. Never compare for equality: a newer
+  // host stays compatible, and this check is baked into shipped binaries.
+  if (!host || host->abi_version < 1u) return -1;
   const char* dataDir = host->data_dir ? host->data_dir() : nullptr;
   const std::string path = std::string(dataDir ? dataDir : ".") + "/rayact-crash-marker.bin";
   markerFd = open(path.c_str(), O_CREAT | O_RDWR | O_APPEND | O_CLOEXEC, 0600);

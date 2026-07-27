@@ -56,10 +56,18 @@ void registerFromLib(const std::string& path) {
     return;
   }
   int rc = fn(busHost());
-  if (rc != 0)
-    fprintf(stderr, "[plugin] %s: register returned %d\n", path.c_str(), rc);
-  else
+  if (rc != 0) {
+    // Overwhelmingly this is a plugin built against an older engine: it compares the
+    // host's ABI version and refuses anything it does not recognise. Say so, because
+    // the symptom otherwise is a module that is simply missing at runtime.
+    fprintf(stderr,
+            "[plugin] %s: rayact_module_register returned %d — the plugin rejected "
+            "this host (ABI %u). It was most likely built for a different engine "
+            "version; reinstall the module or delete the stale copy.\n",
+            path.c_str(), rc, (unsigned)RAYACT_MODULE_ABI_VERSION);
+  } else {
     fprintf(stderr, "[plugin] loaded %s\n", path.c_str());
+  }
   // Intentionally keep the handle open for process lifetime.
 }
 
