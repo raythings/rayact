@@ -6,11 +6,12 @@ resolved or downloaded for you.
 
 ## Requirements
 
-**Node >=22 <25.** Every `rayact` command checks the running Node version and
-exits with an error outside that range. npm only emits a passive `EBADENGINE`
-warning at install time, which is easy to miss and does not catch switching Node
-after install — so the CLI enforces it directly. On a newer Node, run
-`nvm use 24`.
+**Node >= 22.** Every `rayact` command checks the running Node version, because
+npm's `EBADENGINE` warning is passive and doesn't catch switching Node after
+install. Only the floor is enforced: Rayact is tested through Node 24, and a
+newer major prints a single "untested" warning and then runs normally — a Node
+upgrade will never brick an existing project. Set
+`RAYACT_SILENCE_NODE_WARNING=1` to hide the warning.
 
 ## Distribution model
 

@@ -4,7 +4,7 @@ Scaffold a new app from a Rayact release, run it with hot reload, then build a r
 
 ## Requirements
 
-- **Node >= 22 < 25** — the CLI checks on every command and exits outside that range (npm's `EBADENGINE` warning is easy to miss). On a newer Node, `nvm use 24`.
+- **Node >= 22.** Tested through Node 24; newer majors print a one-line "untested" warning and run normally (silence it with `RAYACT_SILENCE_NODE_WARNING=1`).
 - Per-platform toolchains only when you target them: Xcode + [xcodegen](https://github.com/yonaskolb/XcodeGen) for iOS, the Android SDK/NDK for Android. Desktop and web need nothing beyond Node — the native hosts come prebuilt.
 
 ## Create an app

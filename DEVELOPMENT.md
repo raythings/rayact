@@ -6,7 +6,7 @@ Consumers never need any of this — apps use prebuilt hosts
 
 ## Prerequisites
 
-- Node **>= 22 < 25** (`nvm use 24`)
+- Node **>= 22** (tested through 24; newer majors warn but work)
 - CMake 3.20+, a C++17 compiler
 - macOS: Xcode + `brew install xcodegen pkg-config curl libwebsockets openssl`
 - Android: SDK + NDK r27, JDK 17 (or use the Docker path below)

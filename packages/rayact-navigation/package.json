@@ -41,7 +41,7 @@
     "react": "^19.0.0"
   },
   "engines": {
-    "node": ">=22 <25"
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public",

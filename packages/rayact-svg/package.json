@@ -1,7 +1,7 @@
 {
   "name": "@rayact/svg",
   "version": "0.0.4",
-  "description": "SVG rendering for Rayact — a retained scene graph drawn through rlgl, with per-element animation channels",
+  "description": "SVG rendering for Rayact \u2014 a retained scene graph drawn through rlgl, with per-element animation channels",
   "type": "module",
   "sideEffects": true,
   "main": "./dist/index.js",
@@ -35,7 +35,7 @@
     "react": ">=19"
   },
   "engines": {
-    "node": ">=22 <25"
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public",

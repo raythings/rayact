@@ -24,7 +24,7 @@
     "@rayact/shared": "0.0.4"
   },
   "engines": {
-    "node": ">=22 <25"
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public",

@@ -7,6 +7,9 @@ if [[ ! -f "$RAYACT_ROOT/CMakeLists.txt" ]]; then
 fi
 
 ENGINE_VERSION="${ENGINE_VERSION:-$(node -p "require('$RAYACT_ROOT/package.json').version" 2>/dev/null || echo 0.0.0)}"
+# Module ABI is defined by the native header — never hardcode it here, or the
+# manifests will disagree with the CLI (checkPrebuiltAbi) after an ABI bump.
+ABI_VERSION="${ABI_VERSION:-$(sed -n 's/^#define RAYACT_MODULE_ABI_VERSION \([0-9]*\)u*$/\1/p' "$RAYACT_ROOT/native/core/rayact_module_abi.h")}"
 ABI_VERSION="${ABI_VERSION:-1}"
 BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
