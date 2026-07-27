@@ -74,6 +74,15 @@ async function resolveReleaseAsset(assetName) {
   return { url: asset.browser_download_url, name: asset.name };
 }
 
+// Package id of the official dev app; keep in sync with official-app.json.
+const ANDROID_PACKAGE_ID = (() => {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'official-app.json'), 'utf8'));
+    if (cfg.androidPackageId) return cfg.androidPackageId;
+  } catch { /* packaged install without the config — fall through */ }
+  return 'com.rayact.app';
+})();
+
 async function installAndroid(apkPath) {
   const adb = spawnSync('adb', ['devices'], { encoding: 'utf8' });
   if (adb.status !== 0) {
@@ -84,7 +93,10 @@ async function installAndroid(apkPath) {
   const install = spawnSync('adb', ['install', '-r', apkPath], { stdio: 'inherit' });
   if (install.status !== 0) process.exit(install.status ?? 1);
   console.log('Launching Rayact Dev App...');
-  spawnSync('adb', ['shell', 'am', 'start', '-n', 'com.rayact.devapp/.DevLauncherActivity'], {
+  // Must match apps/dev-app/official-app.json androidPackageId (and the APK's
+  // applicationId). Launching a stale package id silently starts an older dev
+  // app if one is installed, which then reports its own outdated version.
+  spawnSync('adb', ['shell', 'am', 'start', '-n', `${ANDROID_PACKAGE_ID}/com.rayact.app.DevLauncherActivity`], {
     stdio: 'inherit'
   });
 }
