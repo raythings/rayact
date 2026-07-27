@@ -53,7 +53,7 @@
       "platform": "android",
       "architecture": "arm64",
       "path": "android/arm64-v8a/librayact_crash_reporter.so",
-      "sha256": "1f484d19c3dd29f9e5e5833dc0647cb72cea4d2d79aa95fd865cdc5bdb57202c"
+      "sha256": "d891fe8bafe0e3218d99b88c0c3be288278bf9a96bf6e09f4889aa08631ed630"
     },
     {
       "platform": "android",
@@ -77,7 +77,7 @@
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_crash_reporter.xcframework",
-      "sha256": "1141a4ad1279365e34df7ea52e3ed0cba4a58ebb6d2a9d187a1ef833bb15ee3a"
+      "sha256": "88e4900925ea930f9971d8fc272b8631f36666c6193e459562c8c2244b399ee4"
     }
   ]
 }
