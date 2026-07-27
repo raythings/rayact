@@ -1,14 +1,23 @@
 {
   "schemaVersion": 1,
-  "engineVersion": "0.0.3",
+  "engineVersion": "0.0.4",
   "modules": [
     {
       "name": "kv",
       "lib": "",
       "jsPackage": "rayact/kv",
-      "platforms": ["android", "ios", "darwin", "web"],
-      "architectures": ["arm64", "x64", "wasm32"],
-      "abiRange": ">=1 <2",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin",
+        "web"
+      ],
+      "architectures": [
+        "arm64",
+        "x64",
+        "wasm32"
+      ],
+      "abiRange": ">=1 <3",
       "officialDevApp": true,
       "integratedInEngine": true,
       "smokeTest": "kv-roundtrip"
@@ -18,9 +27,16 @@
       "lib": "rayact_mmkv",
       "jsPackage": "@rayact/mmkv",
       "pluginPackage": "@rayact/mmkv",
-      "platforms": ["android", "ios", "darwin"],
-      "architectures": ["arm64", "x86_64"],
-      "abiRange": ">=1 <2",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "abiRange": ">=1 <3",
       "officialDevApp": true,
       "iosIntegratedInEngine": false,
       "smokeTest": "mmkv-roundtrip"
@@ -30,12 +46,22 @@
       "lib": "rayact_secure_store",
       "jsPackage": "@rayact/secure-store",
       "pluginPackage": "@rayact/secure-store",
-      "platforms": ["android", "ios", "darwin"],
-      "architectures": ["arm64", "x86_64"],
-      "abiRange": ">=1 <2",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "abiRange": ">=1 <3",
       "officialDevApp": true,
       "iosIntegratedInEngine": false,
-      "permissions": ["keychain", "keystore"],
+      "permissions": [
+        "keychain",
+        "keystore"
+      ],
       "smokeTest": "secure-store-roundtrip"
     },
     {
@@ -43,12 +69,39 @@
       "lib": "rayact_crash_reporter",
       "jsPackage": "@rayact/crash-reporter",
       "pluginPackage": "@rayact/crash-reporter",
-      "platforms": ["android", "ios", "darwin"],
-      "architectures": ["arm64", "x86_64"],
-      "abiRange": ">=1 <2",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "abiRange": ">=1 <3",
       "officialDevApp": true,
       "iosIntegratedInEngine": false,
       "smokeTest": "crash-reporter-local"
+    },
+    {
+      "name": "svg",
+      "lib": "rayact_svg",
+      "jsPackage": "@rayact/svg",
+      "pluginPackage": "@rayact/svg",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin",
+        "web"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "abiRange": ">=2 <3",
+      "officialDevApp": true,
+      "iosIntegratedInEngine": false,
+      "smokeTest": "svg-node-roundtrip"
     }
   ]
 }

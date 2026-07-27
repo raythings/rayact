@@ -20,6 +20,50 @@
     "permissions": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
     "configurationSchema": { "type": "object" },
     "officialDevApp": { "type": "boolean" },
+    "wasmImports": {
+      "description": "Host functions this module publishes to WASM workers (ABI 2). Declarative metadata: the module still registers them at runtime via host->register_wasm_imports. signature uses wasm3's grammar, e.g. \"i(iii)\".",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["namespace", "functions"],
+        "properties": {
+          "namespace": { "type": "string", "minLength": 1 },
+          "functions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "signature"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "signature": { "type": "string", "pattern": "^[viIfF]\\([viIfF]*\\)$" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "nativeSources": {
+      "description": "Sources for building this module from a source checkout (the dev app does this so plugin edits rebuild with the app). Repo-root relative. Consumers use the prebuilt artifacts instead.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "nativeIncludeDirs": {
+      "description": "Extra include directories for nativeSources, repo-root relative.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "nativeDefines": {
+      "description": "Compile definitions applied to nativeSources when building from source.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "webSources": {
+      "description": "Sources compiled into the Emscripten host for this module, repo-relative. Web has no dynamic loading, so web modules are linked statically.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
     "artifacts": {
       "type": "array",
       "items": {
@@ -30,7 +74,11 @@
           "platform": { "type": "string" },
           "architecture": { "type": "string" },
           "path": { "type": "string" },
-          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "kind": {
+            "description": "library (default) is a native binary the loader dlopens or links. wasm is a module-shipped .wasm payload — reserved; nothing consumes it yet.",
+            "enum": ["library", "wasm"]
+          }
         }
       }
     }

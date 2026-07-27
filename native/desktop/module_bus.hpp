@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 extern "C" {
 #include "quickjs.h"
@@ -8,6 +9,16 @@ extern "C" {
 #include "rayact_module_abi.h"
 
 namespace rayact {
+
+// A wasm host function a module contributed, with its namespace. Strings are owned
+// here because a plugin may register from a temporary table.
+struct BusWasmImport {
+  std::string ns;
+  std::string name;
+  std::string signature;
+  RayactWasmHostFn fn;
+  void* self;
+};
 
 // Registry (process singleton, thread-safe).
 bool busRegister(const char* name, const RayactModule* mod);
@@ -28,8 +39,13 @@ const RayactHost* busHost();
 // Set the JavaVM pointer exposed to plugins via host->get_java_vm (Android).
 void busSetJavaVM(void* vm);
 
-// Per-context JS bindings: __rayact_invoke / __rayact_invoke_async.
+// Per-context JS bindings: __rayact_invoke / __rayact_invoke_async /
+// __rayact_module_buffer.
 void installModuleBindings(JSContext* ctx, JSValue global);
+
+// Host imports contributed by modules, for WASM workers to link alongside the
+// built-in sys_* set. Snapshot; safe to call from a worker thread.
+std::vector<BusWasmImport> busWasmImports();
 
 // Resolve completed async invocations on this context (call each frame, beside
 // drainNetEvents).

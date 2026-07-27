@@ -1,5 +1,5 @@
 #include "raym3_bridge.hpp"
-#include "raysvg.h"
+#include "module_nodes.hpp"
 #include "../core/engine.hpp"
 #include "css_bridge.hpp"
 #include "workers.hpp"
@@ -436,121 +436,6 @@ struct IconRenderState {
 };
 
 static std::map<int, IconRenderState> g_iconRenderStates;
-
-static std::optional<Color> jsToColor(JSContext* ctx, JSValueConst v);
-
-// <Svg>: one raysvg document per node. Channels are per-instance animation state, so
-// documents are not shared between nodes even when two nodes name the same file.
-struct SvgRenderState {
-    std::string source;
-    RaysvgDoc* doc = nullptr;
-    // Outlines currently enabled, so the prop can stay declarative: an id dropped from the
-    // array is turned back off rather than lingering.
-    std::vector<std::string> outlineIds;
-};
-static std::map<int, SvgRenderState> g_svgRenderStates;
-
-// Reads the { vars, channels, outline } prop bag onto a document. Every field is
-// optional; absent fields leave the current state alone.
-static void applySvgProps(JSContext* ctx, SvgRenderState& state, JSValueConst props) {
-    RaysvgDoc* doc = state.doc;
-    if (!doc || !JS_IsObject(props)) return;
-
-    JSValue vars = JS_GetPropertyStr(ctx, props, "vars");
-    if (JS_IsObject(vars)) {
-        JSPropertyEnum* names = nullptr;
-        uint32_t count = 0;
-        if (JS_GetOwnPropertyNames(ctx, &names, &count, vars, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) == 0) {
-            for (uint32_t i = 0; i < count; i++) {
-                const char* name = JS_AtomToCString(ctx, names[i].atom);
-                JSValue value = JS_GetProperty(ctx, vars, names[i].atom);
-                if (name) {
-                    if (auto c = jsToColor(ctx, value)) RaysvgSetVar(doc, name, *c);
-                    JS_FreeCString(ctx, name);
-                }
-                JS_FreeValue(ctx, value);
-                JS_FreeAtom(ctx, names[i].atom);
-            }
-            js_free(ctx, names);
-        }
-    }
-    JS_FreeValue(ctx, vars);
-
-    // channels: { "element-id": [translateX, translateY, rotationDeg, scaleX, scaleY] }
-    JSValue channels = JS_GetPropertyStr(ctx, props, "channels");
-    if (JS_IsObject(channels)) {
-        JSPropertyEnum* names = nullptr;
-        uint32_t count = 0;
-        if (JS_GetOwnPropertyNames(ctx, &names, &count, channels, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) == 0) {
-            for (uint32_t i = 0; i < count; i++) {
-                const char* id = JS_AtomToCString(ctx, names[i].atom);
-                JSValue value = JS_GetProperty(ctx, channels, names[i].atom);
-                if (id) {
-                    const RaysvgHandle h = RaysvgGetElementById(doc, id);
-                    if (h != RAYSVG_INVALID_HANDLE && JS_IsArray(value)) {
-                        double v[5] = {0.0, 0.0, 0.0, 1.0, 1.0};
-                        for (int k = 0; k < 5; k++) {
-                            JSValue item = JS_GetPropertyUint32(ctx, value, (uint32_t)k);
-                            if (!JS_IsUndefined(item)) JS_ToFloat64(ctx, &v[k], item);
-                            JS_FreeValue(ctx, item);
-                        }
-                        RaysvgSetTransform(doc, h, (float)v[0], (float)v[1], (float)v[2],
-                                           (float)v[3], (float)v[4]);
-                    }
-                    JS_FreeCString(ctx, id);
-                }
-                JS_FreeValue(ctx, value);
-                JS_FreeAtom(ctx, names[i].atom);
-            }
-            js_free(ctx, names);
-        }
-    }
-    JS_FreeValue(ctx, channels);
-
-    // outline: array of element ids, or of { id, color?, radius? }.
-    JSValue outline = JS_GetPropertyStr(ctx, props, "outline");
-    if (JS_IsArray(outline)) {
-        for (const std::string& prev : state.outlineIds) {
-            const RaysvgHandle h = RaysvgGetElementById(doc, prev.c_str());
-            if (h != RAYSVG_INVALID_HANDLE) RaysvgSetOutline(doc, h, false, Color{0, 0, 0, 255}, 0.0f);
-        }
-        state.outlineIds.clear();
-        uint32_t len = 0;
-        JSValue lenVal = JS_GetPropertyStr(ctx, outline, "length");
-        JS_ToUint32(ctx, &len, lenVal);
-        JS_FreeValue(ctx, lenVal);
-        for (uint32_t i = 0; i < len; i++) {
-            JSValue entry = JS_GetPropertyUint32(ctx, outline, i);
-            std::string id;
-            Color color{26, 26, 26, 255};
-            double radius = 4.5;
-            if (JS_IsString(entry)) {
-                const char* s = JS_ToCString(ctx, entry);
-                if (s) { id = s; JS_FreeCString(ctx, s); }
-            } else if (JS_IsObject(entry)) {
-                JSValue idVal = JS_GetPropertyStr(ctx, entry, "id");
-                const char* s = JS_ToCString(ctx, idVal);
-                if (s) { id = s; JS_FreeCString(ctx, s); }
-                JS_FreeValue(ctx, idVal);
-                JSValue colorVal = JS_GetPropertyStr(ctx, entry, "color");
-                if (auto c = jsToColor(ctx, colorVal)) color = *c;
-                JS_FreeValue(ctx, colorVal);
-                JSValue radiusVal = JS_GetPropertyStr(ctx, entry, "radius");
-                if (!JS_IsUndefined(radiusVal)) JS_ToFloat64(ctx, &radius, radiusVal);
-                JS_FreeValue(ctx, radiusVal);
-            }
-            if (!id.empty()) {
-                const RaysvgHandle h = RaysvgGetElementById(doc, id.c_str());
-                if (h != RAYSVG_INVALID_HANDLE) {
-                    RaysvgSetOutline(doc, h, true, color, (float)radius);
-                    state.outlineIds.push_back(id);
-                }
-            }
-            JS_FreeValue(ctx, entry);
-        }
-    }
-    JS_FreeValue(ctx, outline);
-}
 
 static void DrawSliderTrackSegment(Rectangle r, float leftRadius,
                                    float rightRadius, Color color) {
@@ -4176,10 +4061,7 @@ JSValue JS_disposeNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     g_safeAreaBaseStyles.erase(id);
     g_scrollViewIds.erase(id);
     g_iconRenderStates.erase(id);
-    if (auto svgIt = g_svgRenderStates.find(id); svgIt != g_svgRenderStates.end()) {
-        if (svgIt->second.doc) RaysvgUnload(svgIt->second.doc);
-        g_svgRenderStates.erase(svgIt);
-    }
+    rayact::moduleNodesDispose(id);
     g_nodeClassNames.erase(id);
     g_nodeParents.erase(id);
     for (auto it = g_nodeParents.begin(); it != g_nodeParents.end();) {
@@ -4280,55 +4162,177 @@ JSValue JS_createIcon(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCon
     return JS_NewInt32(ctx, id);
 }
 
-// <Svg source=... /> — a Custom node that hands its laid-out rect to raysvg. raysvg
-// keeps the parsed scene graph, so animating it is a channel write rather than a reparse.
-JSValue JS_createSvg(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
-    if (argc < 1) return JS_ThrowTypeError(ctx, "createSvg: expected (source, style?, props?)");
+// ─── Module-contributed node kinds (ABI 2) ────────────────────────────────────
+//
+// The generic form of the <Svg> path above: a module registers a kind + vtable,
+// and JS creates nodes of that kind without the engine knowing anything about
+// what gets painted. Layout, style and the node id stay engine-owned; the module
+// owns the pixels inside the rect it is handed.
+//
+// Threading: create/update/dispose run here on the JS thread, draw runs on the
+// render thread inside the Custom callback. The registry mutex covers the tables,
+// not the module's own state — that contract is the module's to keep (documented
+// in rayact_module_abi.h).
 
-    const char* src = JS_ToCString(ctx, argv[0]);
-    if (!src) return JS_ThrowTypeError(ctx, "createSvg: source must be a string");
-    std::string source(src);
-    JS_FreeCString(ctx, src);
+namespace {
+
+struct ModuleNodeKind {
+    RayactNodeVTable vt;
+};
+
+std::mutex g_moduleKindMtx;
+std::map<std::string, ModuleNodeKind> g_moduleKinds;
+std::map<int, std::string> g_moduleNodeKindById; // live node id → kind
+
+// Copy of a kind's vtable, or vt.draw == nullptr when absent.
+RayactNodeVTable lookupModuleKind(const std::string& kind) {
+    std::lock_guard<std::mutex> lk(g_moduleKindMtx);
+    auto it = g_moduleKinds.find(kind);
+    if (it == g_moduleKinds.end()) return RayactNodeVTable{};
+    return it->second.vt;
+}
+
+} // namespace
+
+namespace rayact {
+
+bool moduleNodesRegisterKind(const char* kind, const RayactNodeVTable* vtable) {
+    if (!kind || !*kind || !vtable || !vtable->draw) return false;
+    std::lock_guard<std::mutex> lk(g_moduleKindMtx);
+    auto it = g_moduleKinds.find(kind);
+    if (it != g_moduleKinds.end()) {
+        // Re-registering the identical vtable is harmless (a host may load the same
+        // plugin twice in dev); a different one is a collision worth refusing.
+        return memcmp(&it->second.vt, vtable, sizeof(RayactNodeVTable)) == 0;
+    }
+    g_moduleKinds[kind].vt = *vtable;
+    return true;
+}
+
+bool moduleNodesNeedFrame() {
+    std::lock_guard<std::mutex> lk(g_moduleKindMtx);
+    if (g_moduleNodeKindById.empty()) return false;
+    for (auto& [name, kind] : g_moduleKinds) {
+        (void)name;
+        if (kind.vt.needs_frame && kind.vt.needs_frame(kind.vt.self)) return true;
+    }
+    return false;
+}
+
+void moduleNodesNotifyGpuReset() {
+    std::vector<RayactNodeVTable> vts;
+    {
+        std::lock_guard<std::mutex> lk(g_moduleKindMtx);
+        for (auto& [name, kind] : g_moduleKinds) {
+            (void)name;
+            if (kind.vt.gpu_reset) vts.push_back(kind.vt);
+        }
+    }
+    for (auto& vt : vts) vt.gpu_reset(vt.self);
+}
+
+void moduleNodesDisposeAll() {
+    std::map<int, std::string> nodes;
+    {
+        std::lock_guard<std::mutex> lk(g_moduleKindMtx);
+        nodes.swap(g_moduleNodeKindById);
+    }
+    for (auto& [id, kind] : nodes) {
+        RayactNodeVTable vt = lookupModuleKind(kind);
+        if (vt.dispose) vt.dispose(vt.self, id);
+    }
+}
+
+// Dispose one node; called from JS_disposeNode. No-op for non-module nodes.
+void moduleNodesDispose(int id) {
+    std::string kind;
+    {
+        std::lock_guard<std::mutex> lk(g_moduleKindMtx);
+        auto it = g_moduleNodeKindById.find(id);
+        if (it == g_moduleNodeKindById.end()) return;
+        kind = it->second;
+        g_moduleNodeKindById.erase(it);
+    }
+    RayactNodeVTable vt = lookupModuleKind(kind);
+    if (vt.dispose) vt.dispose(vt.self, id);
+}
+
+} // namespace rayact
+
+// __rayactCreateModuleNode(kind, style?, propsJson?) → nodeId
+JSValue JS_createModuleNode(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1)
+        return JS_ThrowTypeError(ctx, "createModuleNode: expected (kind, style?, propsJson?)");
+
+    const char* kindStr = JS_ToCString(ctx, argv[0]);
+    if (!kindStr) return JS_ThrowTypeError(ctx, "createModuleNode: kind must be a string");
+    std::string kind(kindStr);
+    JS_FreeCString(ctx, kindStr);
+
+    RayactNodeVTable vt = lookupModuleKind(kind);
+    if (!vt.draw) {
+        return JS_ThrowReferenceError(
+            ctx, "no native module provides node kind '%s' — is its plugin installed?",
+            kind.c_str());
+    }
 
     raym3::v2::ViewProps props;
     if (argc >= 2) props.style = parseStyle(ctx, argv[1]);
 
-    // Inline markup is accepted directly so a caller can build SVG at runtime; anything
-    // else is a path resolved by the caller through the normal asset pipeline.
-    RaysvgDoc* doc = nullptr;
-    if (source.size() > 4 && source.find('<') != std::string::npos) {
-        doc = RaysvgLoadFromString(source.c_str(), -1);
-    } else {
-        doc = RaysvgLoadFromFile(source.c_str());
+    std::string propsJson;
+    if (argc >= 3 && JS_IsString(argv[2])) {
+        const char* p = JS_ToCString(ctx, argv[2]);
+        if (p) { propsJson = p; JS_FreeCString(ctx, p); }
     }
-    if (!doc) TraceLog(LOG_WARNING, "createSvg: %s", RaysvgGetLastError());
 
     int id = nextNativeNodeId();
-    SvgRenderState& state = g_svgRenderStates[id];
-    state.source = source;
-    state.doc = doc;
-    if (doc && argc >= 3) applySvgProps(ctx, state, argv[2]);
+    const int rc = vt.create ? vt.create(vt.self, id, propsJson.c_str(), propsJson.size()) : 0;
+    if (rc < 0) {
+        return JS_ThrowInternalError(ctx, "module node '%s' rejected its props (%d)",
+                                     kind.c_str(), rc);
+    }
+    {
+        std::lock_guard<std::mutex> lk(g_moduleKindMtx);
+        g_moduleNodeKindById[id] = kind;
+    }
 
-    auto node = raym3::v2::Custom(props, [id](Rectangle layout) {
-        auto it = g_svgRenderStates.find(id);
-        if (it == g_svgRenderStates.end() || !it->second.doc) return;
-        RaysvgDraw(it->second.doc, layout);
+    auto drawFn = vt.draw;
+    auto self = vt.self;
+    auto node = raym3::v2::Custom(props, [id, drawFn, self](Rectangle layout) {
+        drawFn(self, id, RayactRect{layout.x, layout.y, layout.width, layout.height});
     });
 
     g_nodes[id] = node;
     if (argc >= 2 && JS_IsObject(argv[1])) captureNodeClassName(ctx, id, argv[1]);
+    if (rc > 0) rayact::engineRequestFrame();
     return JS_NewInt32(ctx, id);
 }
 
-JSValue JS_setSvgProps(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
-    if (argc < 2) return JS_ThrowTypeError(ctx, "setSvgProps: expected (nodeId, props)");
+// __rayactSetModuleNodeProps(nodeId, propsJson)
+JSValue JS_setModuleNodeProps(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2)
+        return JS_ThrowTypeError(ctx, "setModuleNodeProps: expected (nodeId, propsJson)");
     int id = 0;
     JS_ToInt32(ctx, &id, argv[0]);
-    auto it = g_svgRenderStates.find(id);
-    if (it == g_svgRenderStates.end() || !it->second.doc) return JS_UNDEFINED;
-    applySvgProps(ctx, it->second, argv[1]);
-    // Channel writes only dirty the document; ask for a frame so the change is drawn.
-    if (RaysvgNeedsRedraw(it->second.doc)) rayact::engineRequestFrame();
+
+    std::string kind;
+    {
+        std::lock_guard<std::mutex> lk(g_moduleKindMtx);
+        auto it = g_moduleNodeKindById.find(id);
+        if (it == g_moduleNodeKindById.end()) return JS_UNDEFINED;
+        kind = it->second;
+    }
+    RayactNodeVTable vt = lookupModuleKind(kind);
+    if (!vt.update) return JS_UNDEFINED;
+
+    std::string propsJson;
+    if (JS_IsString(argv[1])) {
+        const char* p = JS_ToCString(ctx, argv[1]);
+        if (p) { propsJson = p; JS_FreeCString(ctx, p); }
+    }
+    const int rc = vt.update(vt.self, id, propsJson.c_str(), propsJson.size());
+    // >0 means the change needs painting; the host may be idle, so wake it.
+    if (rc > 0) rayact::engineRequestFrame();
     return JS_UNDEFINED;
 }
 
@@ -5269,6 +5273,8 @@ static void raym3UnloadGpuCaches() {
     for (auto& tex : g_textures) UnloadTexture(tex);
     g_textures.clear();
     raym3::v2::ResetAllIconAtlases();
+    // Modules own GPU objects the engine cannot see; tell them the device is gone.
+    rayact::moduleNodesNotifyGpuReset();
 }
 
 Raym3RuntimeStorage* raym3BridgeNewRuntimeStorage() {
@@ -5396,10 +5402,7 @@ void raym3BridgeClearRuntimeGlobals() {
     g_scrollViewIds.clear();
     g_safeAreaInsets = SafeAreaInsets{};
     g_safeAreaBaseStyles.clear();
-    for (auto& kv : g_svgRenderStates) {
-        if (kv.second.doc) RaysvgUnload(kv.second.doc);
-    }
-    g_svgRenderStates.clear();
+    rayact::moduleNodesDisposeAll();
     g_iconRenderStates.clear();
     raym3UnloadGpuCaches();
 }
@@ -5465,10 +5468,7 @@ void cleanupRaym3Bridge(JSContext* ctx, bool unloadGpuCaches) {
     g_safeAreaBaseStyles.clear();
     g_scrollViewIds.clear();
     g_safeAreaInsets = SafeAreaInsets{};
-    for (auto& kv : g_svgRenderStates) {
-        if (kv.second.doc) RaysvgUnload(kv.second.doc);
-    }
-    g_svgRenderStates.clear();
+    rayact::moduleNodesDisposeAll();
     g_iconRenderStates.clear();
     g_nodeClassNames.clear();
     g_changeTextCallbacks.clear();

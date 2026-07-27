@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const packageNames = ['rayact-mmkv', 'rayact-secure-store', 'rayact-crash-reporter'];
+const packageNames = ['rayact-mmkv', 'rayact-secure-store', 'rayact-crash-reporter', 'rayact-svg'];
 
 function digest(target) {
   const hash = crypto.createHash('sha256');

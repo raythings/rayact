@@ -75,7 +75,6 @@ export {
   Fab,
   FabMenu,
   Icon,
-  Svg,
   IconButton,
   Image,
   List,
@@ -117,6 +116,9 @@ export {
 } from './components.js';
 export { RayactReconciler };
 export { createRuntime, getDefaultRuntime } from '@rayact/runtime';
+// Extension point for native modules that ship a component (see @rayact/svg).
+export { registerNativeComponent } from './moduleComponents.js';
+export type { ModuleNodeHandlers } from './moduleComponents.js';
 export { useTheme, withTheme } from './theme/theming.js';
 export { useKeyboard } from './hooks/useKeyboard.js';
 export type { KeyboardInsets } from './hooks/useKeyboard.js';

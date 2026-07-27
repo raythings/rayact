@@ -29,7 +29,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
       - name: Prepare canary version
         if: github.ref == 'refs/heads/main'
-        run: node scripts/bump-version.mjs "0.0.3-canary.${GITHUB_SHA::12}"
+        run: node scripts/bump-version.mjs "0.0.4-canary.${GITHUB_SHA::12}"
       - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm test

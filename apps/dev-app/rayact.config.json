@@ -16,10 +16,5 @@
   "ios": {
     "projectDir": "../ios",
     "bundleId": "com.rayact.app"
-  },
-  "nativeModules": [
-    "@rayact/mmkv",
-    "@rayact/secure-store",
-    "@rayact/crash-reporter"
-  ]
+  }
 }

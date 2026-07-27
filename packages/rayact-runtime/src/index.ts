@@ -22,7 +22,8 @@ export {
   resolveAssetUrl,
   resolveWorkerSpecifier
 } from './assets.js';
-export { createBridge } from './bridge.js';
+export { createBridge, registerModuleNodeHandlers, resolveImageSource } from './bridge.js';
+export type { ModuleNodeHandlers } from './bridge.js';
 export { createDevClient, installConsoleForwarding } from './devClient.js';
 export { loadFont, loadIcons, loadEmoji } from './fonts.js';
 export type { FontSource, IconSetVariants } from './fonts.js';

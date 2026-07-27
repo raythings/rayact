@@ -112,7 +112,6 @@ const hostNodeTypes = new Set<string>([
   'button',
   'image',
   'icon',
-  'svg',
   'textInput',
   'scrollView',
   'modal',
@@ -214,6 +213,25 @@ function reportInspectorSourceName(nodeId: number, internalHandle: unknown): voi
 }
 
 const normalizeCache = new Map<string, HostNodeType>();
+
+/**
+ * Let a native module contribute a host element type at import time.
+ *
+ * Built-in types are a fixed set because the engine knows how to build each one.
+ * A module-provided component (an ABI 2 node kind, e.g. `<Svg>` from `@rayact/svg`)
+ * is not knowable here, so the module registers its type name when it loads and
+ * pairs it with handlers on the runtime bridge.
+ *
+ * Safe to call repeatedly. The normalize cache is memoized on a miss too, so it has
+ * to be dropped when the set grows.
+ */
+export function registerHostNodeType(name: string): void {
+  if (!name) return;
+  if (hostNodeTypes.has(name)) return;
+  hostNodeTypes.add(name);
+  normalizeCache.clear();
+}
+
 function normalizeType(type: RayactElementType | string): HostNodeType {
   const key = String(type);
   const cached = normalizeCache.get(key);
@@ -221,7 +239,11 @@ function normalizeType(type: RayactElementType | string): HostNodeType {
   const raw = key.replace(/^rayact-/, '');
   const normalized = raw.toLowerCase().replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
   if (!hostNodeTypes.has(normalized)) {
-    throw new Error(`Unknown Rayact element type: ${type}`);
+    throw new Error(
+      `Unknown Rayact element type: ${type}. Built-in elements come from 'rayact/react'; ` +
+      `a component provided by a native module registers its type when you import that ` +
+      `module (e.g. import { Svg } from '@rayact/svg').`
+    );
   }
   normalizeCache.set(key, normalized as HostNodeType);
   return normalized as HostNodeType;

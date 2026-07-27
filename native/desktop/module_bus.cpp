@@ -1,6 +1,8 @@
 #include "module_bus.hpp"
 
 #include "data_dir.hpp"
+#include "gpu_api.hpp"
+#include "module_nodes.hpp"
 #include "../core/engine.hpp"
 
 #include <cstring>
@@ -23,7 +25,10 @@ std::map<std::string, RayactModule> g_modules;
 
 bool busRegister(const char* name, const RayactModule* mod) {
   if (!name || !mod || !mod->invoke) return false;
-  if (mod->abi_version != RAYACT_MODULE_ABI_VERSION) return false;
+  // Accept any ABI this host still understands, not just the current one: a module
+  // built against an older header is compiled into a binary we may not be able to
+  // rebuild. RayactModule's layout is frozen, so an older struct is readable as-is.
+  if (mod->abi_version < 1u || mod->abi_version > RAYACT_MODULE_ABI_VERSION) return false;
   std::lock_guard<std::mutex> lk(g_regMtx);
   g_modules[name] = *mod;
   return true;
@@ -109,15 +114,107 @@ void hostLog(int level, const char* msg) {
 void* g_javaVm = nullptr;
 void* hostJavaVM() { return g_javaVm; }
 
+// ─── ABI 2: node kinds ─────────────────────────────────────────────────────────
+
+int hostRegisterNodeKind(const char* kind, const RayactNodeVTable* vtable) {
+  if (!kind || !*kind || !vtable || !vtable->draw) return -1;
+  // struct_size lets a module built against a later header register safely: we only
+  // read the prefix both sides agree on.
+  if (vtable->struct_size < sizeof(RayactNodeVTable)) {
+    // Older/smaller vtable: nothing to do today (v2 is the first), but reject a
+    // zero size outright since it means the caller never initialized the struct.
+    if (vtable->struct_size == 0) return -1;
+  }
+  return moduleNodesRegisterKind(kind, vtable) ? 0 : -1;
+}
+
+const RayactGpuApi* hostGpu() { return rayactGpuApi(); }
+
+void hostRequestFrame() { engineRequestFrame(); }
+
+// ─── ABI 2: shared buffers ─────────────────────────────────────────────────────
+
+// Slabs a module publishes to JS as ArrayBuffers. Freeing one while JS still holds
+// a view would hand the app a dangling pointer, so drop only marks it: the memory
+// goes away once every context that was handed a view has detached it.
+struct SharedSlab {
+  std::vector<uint8_t> bytes;
+  bool dropped = false;
+  int views = 0; // contexts currently holding an ArrayBuffer over this slab
+};
+
+std::mutex g_bufMtx;
+std::map<int32_t, SharedSlab> g_buffers;
+int32_t g_nextBufferId = 1;
+
+// Caller must hold g_bufMtx.
+void reapSlabLocked(std::map<int32_t, SharedSlab>::iterator it) {
+  if (it->second.dropped && it->second.views == 0) g_buffers.erase(it);
+}
+
+int32_t hostSharedBufferCreate(size_t size, void** out_ptr) {
+  if (size == 0) return -1;
+  std::lock_guard<std::mutex> lk(g_bufMtx);
+  const int32_t id = g_nextBufferId++;
+  SharedSlab& slab = g_buffers[id];
+  slab.bytes.assign(size, 0);
+  if (out_ptr) *out_ptr = slab.bytes.data();
+  return id;
+}
+
+void* hostSharedBufferPtr(int32_t id, size_t* out_size) {
+  std::lock_guard<std::mutex> lk(g_bufMtx);
+  auto it = g_buffers.find(id);
+  if (it == g_buffers.end() || it->second.dropped) return nullptr;
+  if (out_size) *out_size = it->second.bytes.size();
+  return it->second.bytes.data();
+}
+
+int hostSharedBufferDrop(int32_t id) {
+  std::lock_guard<std::mutex> lk(g_bufMtx);
+  auto it = g_buffers.find(id);
+  if (it == g_buffers.end()) return -1;
+  it->second.dropped = true;
+  reapSlabLocked(it);
+  return 0;
+}
+
+// ─── ABI 2: WASM host imports ──────────────────────────────────────────────────
+
+std::mutex g_wasmMtx;
+std::vector<BusWasmImport> g_wasmImports;
+
+int hostRegisterWasmImports(const char* ns, const RayactWasmImport* imports,
+                            size_t count) {
+  if (!ns || !*ns || (!imports && count > 0)) return -1;
+  std::lock_guard<std::mutex> lk(g_wasmMtx);
+  for (size_t i = 0; i < count; ++i) {
+    const RayactWasmImport& in = imports[i];
+    if (!in.name || !in.signature || !in.fn) return -1;
+    // Copy the strings: a plugin may hand us pointers into a temporary table.
+    g_wasmImports.push_back(BusWasmImport{ns, in.name, in.signature, in.fn, in.self});
+  }
+  return 0;
+}
+
 RayactHost g_host = {
     RAYACT_MODULE_ABI_VERSION, hostDataDir, hostRegister, hostInvoke,
     hostRandom, hostLog, hostJavaVM,
+    // ABI 2
+    hostRegisterNodeKind, hostGpu,
+    hostSharedBufferCreate, hostSharedBufferPtr, hostSharedBufferDrop,
+    hostRequestFrame, hostRegisterWasmImports,
 };
 } // namespace
 
 const RayactHost* busHost() { return &g_host; }
 
 void busSetJavaVM(void* vm) { g_javaVm = vm; }
+
+std::vector<BusWasmImport> busWasmImports() {
+  std::lock_guard<std::mutex> lk(g_wasmMtx);
+  return g_wasmImports;
+}
 
 // ─── Async dispatch + per-context bindings ─────────────────────────────────────
 
@@ -148,6 +245,9 @@ struct BusCtx {
   std::shared_ptr<BusQueue> queue = std::make_shared<BusQueue>();
   std::map<int, std::pair<JSValue, JSValue>> pending; // id → {resolve, reject}
   int nextId = 1;
+  // Shared-buffer views handed to this context, so they can be detached when the
+  // owning module drops the slab or the context goes away.
+  std::map<int32_t, JSValue> buffers;
 };
 
 std::mutex g_ctxMtx;
@@ -244,6 +344,68 @@ JSValue jsInvokeAsync(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
   return promise;
 }
 
+// __rayact_module_buffer(id) → ArrayBuffer over a module's shared slab.
+//
+// The view is non-owning and cached per context, so repeated calls hand back the
+// same ArrayBuffer rather than aliasing the slab N times. Writers and readers race
+// by design; the contract (see rayact_module_abi.h) is plain scalars plus a
+// generation counter.
+JSValue jsModuleBuffer(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+  if (argc < 1) return JS_ThrowTypeError(ctx, "__rayact_module_buffer(id)");
+  int32_t id = 0;
+  if (JS_ToInt32(ctx, &id, argv[0]) != 0) return JS_EXCEPTION;
+
+  BusCtx* bc = getBusCtx(ctx);
+  if (!bc) return JS_ThrowInternalError(ctx, "module bus not installed on context");
+
+  auto cached = bc->buffers.find(id);
+  if (cached != bc->buffers.end()) return JS_DupValue(ctx, cached->second);
+
+  uint8_t* ptr = nullptr;
+  size_t size = 0;
+  {
+    std::lock_guard<std::mutex> lk(g_bufMtx);
+    auto it = g_buffers.find(id);
+    if (it == g_buffers.end() || it->second.dropped)
+      return JS_ThrowReferenceError(ctx, "shared buffer %d not available", (int)id);
+    ptr = it->second.bytes.data();
+    size = it->second.bytes.size();
+    it->second.views++;
+  }
+
+  JSValue buf = JS_NewArrayBuffer(ctx, ptr, size, nullptr, nullptr, false);
+  bc->buffers[id] = JS_DupValue(ctx, buf);
+  return buf;
+}
+
+// Detach any view whose slab the owning module has dropped, then let the slab go.
+void reapDroppedBuffers(JSContext* ctx, BusCtx* bc) {
+  if (bc->buffers.empty()) return;
+  for (auto it = bc->buffers.begin(); it != bc->buffers.end();) {
+    bool dropped = false;
+    {
+      std::lock_guard<std::mutex> lk(g_bufMtx);
+      auto slab = g_buffers.find(it->first);
+      dropped = (slab == g_buffers.end()) || slab->second.dropped;
+    }
+    if (!dropped) {
+      ++it;
+      continue;
+    }
+    JS_DetachArrayBuffer(ctx, it->second);
+    JS_FreeValue(ctx, it->second);
+    {
+      std::lock_guard<std::mutex> lk(g_bufMtx);
+      auto slab = g_buffers.find(it->first);
+      if (slab != g_buffers.end()) {
+        if (slab->second.views > 0) slab->second.views--;
+        reapSlabLocked(slab);
+      }
+    }
+    it = bc->buffers.erase(it);
+  }
+}
+
 } // namespace
 
 void installModuleBindings(JSContext* ctx, JSValue global) {
@@ -255,11 +417,14 @@ void installModuleBindings(JSContext* ctx, JSValue global) {
                     JS_NewCFunction(ctx, jsInvoke, "__rayact_invoke", 3));
   JS_SetPropertyStr(ctx, global, "__rayact_invoke_async",
                     JS_NewCFunction(ctx, jsInvokeAsync, "__rayact_invoke_async", 3));
+  JS_SetPropertyStr(ctx, global, "__rayact_module_buffer",
+                    JS_NewCFunction(ctx, jsModuleBuffer, "__rayact_module_buffer", 1));
 }
 
 void drainModuleEvents(JSContext* ctx) {
   BusCtx* bc = getBusCtx(ctx);
   if (!bc) return;
+  reapDroppedBuffers(ctx, bc);
   auto items = bc->queue->drain();
   for (auto& r : items) {
     auto it = bc->pending.find(r.id);
@@ -295,6 +460,18 @@ void shutdownModuleBus(JSContext* ctx) {
   for (auto& [id, pr] : bc->pending) {
     JS_FreeValue(ctx, pr.first);
     JS_FreeValue(ctx, pr.second);
+  }
+  // Release this context's shared-buffer views; the slabs outlive the context
+  // unless their module already dropped them, in which case the last release frees.
+  for (auto& [id, buf] : bc->buffers) {
+    JS_DetachArrayBuffer(ctx, buf);
+    JS_FreeValue(ctx, buf);
+    std::lock_guard<std::mutex> lk(g_bufMtx);
+    auto slab = g_buffers.find(id);
+    if (slab != g_buffers.end()) {
+      if (slab->second.views > 0) slab->second.views--;
+      reapSlabLocked(slab);
+    }
   }
   delete bc;
 }

@@ -222,6 +222,7 @@ set(ENGINE_SOURCES
     ${DESKTOP_DIR}/kv_store.cpp
     ${DESKTOP_DIR}/data_dir.cpp
     ${DESKTOP_DIR}/module_bus.cpp
+    ${DESKTOP_DIR}/gpu_api.cpp
     ${DESKTOP_DIR}/accessibility_bridge.cpp
     ${DESKTOP_DIR}/quickjs_bridge.cpp
     ${DESKTOP_DIR}/raylib_bridge.cpp

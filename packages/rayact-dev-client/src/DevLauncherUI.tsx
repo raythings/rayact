@@ -188,8 +188,10 @@ function AboutPage() {
   const official = getOfficialApp();
   const bundledModules = getBundledModules();
 
+  // paddingBottom clears the navigation bar: the shared page padding alone leaves
+  // the last card flush with it, so its bottom border gets clipped.
   return (
-    <ScrollView style={{ ...pageStyle, backgroundColor: colors.surface, flexGrow: 1 }}>
+    <ScrollView style={{ ...pageStyle, backgroundColor: colors.surface, flexGrow: 1, paddingBottom: 32 }}>
       {official.displayName ? (
         <View style={{ ...sectionStyle, backgroundColor: colors.surfaceContainer, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: cardBorder, marginBottom: 16 }}>
           <Text style={{ text: { color: colors.onSurface, fontSize: 17, fontWeight: 600 } }}>{official.displayName}</Text>

@@ -16,7 +16,7 @@
     "x86_64",
     "wasm32"
   ],
-  "abiRange": ">=1 <2",
+  "abiRange": ">=1 <3",
   "engineRange": ">=0.0.3 <0.1.0",
   "linkage": "dynamic",
   "permissions": [
@@ -45,36 +45,39 @@
     }
   },
   "officialDevApp": true,
+  "nativeSources": [
+    "packages/rayact-crash-reporter/native/crash_reporter_plugin.cpp"
+  ],
   "artifacts": [
     {
       "platform": "android",
       "architecture": "arm64",
       "path": "android/arm64-v8a/librayact_crash_reporter.so",
-      "sha256": "83a1611c17f550e545244bfd98a4caf5aabceea32b7642c3d227519a67eca3dc"
+      "sha256": "1f484d19c3dd29f9e5e5833dc0647cb72cea4d2d79aa95fd865cdc5bdb57202c"
     },
     {
       "platform": "android",
       "architecture": "x86_64",
       "path": "android/x86_64/librayact_crash_reporter.so",
-      "sha256": "a6717bcba001c7acddfdba7820f0aa78bb0bde62b3e9266662db808d8e0eee58"
+      "sha256": "91df9aa6d47eee27d5276338ca3865185129bbcc46a7973bff18dade56418d6e"
     },
     {
       "platform": "darwin",
       "architecture": "arm64",
       "path": "darwin-arm64/librayact_crash_reporter.dylib",
-      "sha256": "2e5414328e6ec76673e7b160f6cd1edcce1bc4a34cb94d59d294dd21fbae11e9"
+      "sha256": "64736c2a06f998fb8319bd69f9bef7e8b2136f3e762860a059c0e17fef712869"
     },
     {
       "platform": "darwin",
       "architecture": "x86_64",
       "path": "darwin-x64/librayact_crash_reporter.dylib",
-      "sha256": "4b50ded24a17f6bd32da7181b43afd3c924a2e5d7878bfd2e0df34c16463e4a6"
+      "sha256": "623fc3c2bce004fedc27585e5396fca7cdb1774613d82bdf10ae215839d624b0"
     },
     {
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_crash_reporter.xcframework",
-      "sha256": "c72fd8f064c96458f54219df52fb9155890c161f8814fb9427fc8d85223d07a3"
+      "sha256": "1141a4ad1279365e34df7ea52e3ed0cba4a58ebb6d2a9d187a1ef833bb15ee3a"
     }
   ]
 }

@@ -123,30 +123,6 @@ add_library(cssparser STATIC
 )
 target_include_directories(cssparser PUBLIC ${THIRD_PARTY}/cssparser)
 
-# raysvg: compiled from source against this build's raylib headers, so the rl* calls bind
-# to the rlvk backend rather than to a second raylib copy.
-add_library(raysvg STATIC
-    ${RAYSVG_DIR}/src/raysvg.cpp
-    ${RAYSVG_DIR}/src/rsvg_xml.cpp
-    ${RAYSVG_DIR}/src/rsvg_parse.cpp
-    ${RAYSVG_DIR}/src/rsvg_path.cpp
-    ${RAYSVG_DIR}/src/rsvg_paint.cpp
-    ${RAYSVG_DIR}/src/rsvg_transform.cpp
-    ${RAYSVG_DIR}/src/rsvg_flatten.cpp
-    ${RAYSVG_DIR}/src/rsvg_tess_fill.cpp
-    ${RAYSVG_DIR}/src/rsvg_stroke.cpp
-    ${RAYSVG_DIR}/src/rsvg_clip.cpp
-    ${RAYSVG_DIR}/src/rsvg_render.cpp
-)
-target_include_directories(raysvg PUBLIC
-    ${RAYSVG_DIR}/include
-    PRIVATE ${RAYSVG_DIR}/src ${RAYSVG_DIR}/third_party/earcut)
-target_include_directories(raysvg PUBLIC ${RAYLIB_DIR}/src)
-if (RAYACT_ANDROID_USE_RAYLIB_BACKEND)
-    target_include_directories(raysvg PUBLIC ${RAYLIB_BACKENDS_DIR}/backends/rlvk)
-endif()
-
-# ---------------------------------------------------------------------------
 # Rayact engine (shared core, compiled with RAYACT_ANDROID so main() is excluded)
 # + Android platform/system-appearance variants + JNI bridge.
 # ---------------------------------------------------------------------------
@@ -167,6 +143,7 @@ set(ENGINE_SRC
     ${RAYACT}/native/desktop/kv_store.cpp
     ${RAYACT}/native/desktop/data_dir.cpp
     ${RAYACT}/native/desktop/module_bus.cpp
+    ${RAYACT}/native/desktop/gpu_api.cpp
     ${RAYACT}/native/desktop/plugin_loader.cpp
     ${RAYACT}/native/desktop/accessibility_bridge.cpp
     ${RAYACT}/native/desktop/platform_wayland.cpp
@@ -226,7 +203,6 @@ target_compile_definitions(rayact PRIVATE
     RAYACT_RELEASE_HOST=$<BOOL:${RAYACT_RELEASE_HOST}>
     RL_DEFAULT_BATCH_BUFFER_ELEMENTS=8192
     $<$<BOOL:${RAYACT_ANDROID_3D_SMOKE}>:RAYACT_ANDROID_3D_SMOKE>
-    $<$<BOOL:${RAYACT_SVG_SMOKE}>:RAYACT_SVG_SMOKE>
 )
 # Select the Android network implementation. This does not disable networking;
 # JNI installs the fetch and WebSocket bindings for every engine context.
@@ -241,7 +217,7 @@ target_include_directories(rayact PRIVATE
     ${YOGA_DIR}
 )
 target_link_libraries(rayact
-    raylib qjs raym3 cssparser raysvg
+    raylib qjs raym3 cssparser
     ${RAYLIB_LIBS} android log m dl
 )
 
@@ -253,23 +229,20 @@ if (RAYACT_ANDROID_USE_RAYLIB_BACKEND)
 endif()
 
 # ---------------------------------------------------------------------------
-# Bundled native plugins (prebuilt Rayact dev app). Built as standalone
-# shared libs so the NDK packages them into the APK jniLibs; at runtime the
-# module bus's plugin loader dlopen's them from the app's nativeLibraryDir
-# (loadPlugins(libDir) in jni_bridge.cpp) — adding a module needs no rebuild of
-# the engine, only a relink of the plugin. Each depends only on the stable ABI
-# header in native/core.
+# Bundled native plugins (prebuilt Rayact dev app). Built as standalone shared
+# libs so the NDK packages them into the APK jniLibs; at runtime the module bus's
+# plugin loader dlopen's them from the app's nativeLibraryDir (loadPlugins(libDir)
+# in jni_bridge.cpp). Each depends only on the stable ABI header in native/core.
+#
+# The list is GENERATED from the installed npm dependencies — `rayact prebuild`
+# writes rayact-modules.cmake with one add_library() per module that declares
+# nativeSources in its rayact.module.json. Adding a module is `npm install`, not
+# an edit here. build.gradle reads the matching target names from
+# ../rayact-module-targets.txt.
 # ---------------------------------------------------------------------------
-add_library(rayact_mmkv SHARED ${RAYACT}/packages/rayact-mmkv/native/mmkv_plugin.cpp)
-target_include_directories(rayact_mmkv PRIVATE ${RAYACT}/native/core)
-target_link_libraries(rayact_mmkv log)
-
-add_library(rayact_secure_store SHARED
-    ${RAYACT}/packages/rayact-secure-store/native/secure_store_plugin.cpp)
-target_include_directories(rayact_secure_store PRIVATE ${RAYACT}/native/core)
-target_link_libraries(rayact_secure_store log)
-
-add_library(rayact_crash_reporter SHARED
-    ${RAYACT}/packages/rayact-crash-reporter/native/crash_reporter_plugin.cpp)
-target_include_directories(rayact_crash_reporter PRIVATE ${RAYACT}/native/core)
-target_link_libraries(rayact_crash_reporter log)
+set(RAYACT_REPO_ROOT "${RAYACT}")
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/rayact-modules.cmake")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/rayact-modules.cmake")
+else()
+    message(STATUS "rayact: no generated module build file; run `rayact prebuild`")
+endif()

@@ -14,7 +14,7 @@ import {
 
 const manifestFixture = (overrides = {}) => ({
   schemaVersion: 1, name: 'sample', package: '@rayact/sample', jsEntry: '.', library: 'rayact_sample',
-  platforms: ['android'], architectures: ['arm64'], abiRange: '>=1 <2', engineRange: '>=0.0.3 <0.1.0',
+  platforms: ['android'], architectures: ['arm64'], abiRange: '>=1 <3', engineRange: '>=0.0.3 <0.1.0',
   linkage: 'dynamic', permissions: [], configurationSchema: {}, officialDevApp: false, artifacts: [],
   ...overrides,
 });
@@ -64,7 +64,10 @@ test('module configuration is checked against its package-owned schema', () => {
 
 test('module compatibility rejects actionable ABI and engine mismatches', () => {
   assert.doesNotThrow(() => assertModuleCompatibility(manifestFixture()));
-  assert.throws(() => assertModuleCompatibility(manifestFixture({ abiRange: '>=2 <3' })), /ABI mismatch.*regenerate native projects/);
+  // Both directions must fail: a module needing a newer ABI than this host, and
+  // one pinned to an ABI this host has moved past.
+  assert.throws(() => assertModuleCompatibility(manifestFixture({ abiRange: '>=3 <4' })), /ABI mismatch.*regenerate native projects/);
+  assert.throws(() => assertModuleCompatibility(manifestFixture({ abiRange: '>=1 <2' })), /ABI mismatch.*regenerate native projects/);
   assert.throws(() => assertModuleCompatibility(manifestFixture({ engineRange: '>=1.0.0 <2.0.0' })), /engine mismatch.*rayact migrate/);
 });
 
@@ -82,7 +85,7 @@ test('Android custom module libraries are copied into generated clients', () => 
     manifestPath: path.join(packageDir, 'rayact.module.json'),
     manifest: {
       schemaVersion: 1, name: 'sample', package: '@rayact/sample', jsEntry: '.', library: 'rayact_sample',
-      platforms: ['android'], architectures: ['arm64'], abiRange: '>=1 <2', engineRange: '>=0.0.3 <0.1.0',
+      platforms: ['android'], architectures: ['arm64'], abiRange: '>=1 <3', engineRange: '>=0.0.3 <0.1.0',
       linkage: 'dynamic', permissions: [], configurationSchema: {}, officialDevApp: false,
       artifacts: [{ platform: 'android', architecture: 'arm64', path: 'android/arm64-v8a/librayact_sample.so', sha256 }]
     }
@@ -107,7 +110,7 @@ test('installed native module packages are discovered without monorepo scanning'
   }));
   fs.writeFileSync(path.join(packageDir, 'rayact.module.json'), JSON.stringify({
     schemaVersion: 1, name: 'sample', package: '@rayact/sample', jsEntry: '.', library: 'rayact_sample',
-    platforms: ['android', 'ios', 'darwin'], architectures: ['arm64'], abiRange: '>=1 <2', engineRange: '>=0.0.3 <0.1.0',
+    platforms: ['android', 'ios', 'darwin'], architectures: ['arm64'], abiRange: '>=1 <3', engineRange: '>=0.0.3 <0.1.0',
     linkage: 'dynamic', permissions: [], configurationSchema: {}, officialDevApp: false, artifacts: []
   }));
 
@@ -149,7 +152,7 @@ test('iOS custom module XCFrameworks are copied and linked into generated client
     manifestPath: path.join(packageDir, 'rayact.module.json'),
     manifest: {
       schemaVersion: 1, name: 'sample', package: '@rayact/sample', jsEntry: '.', library: 'rayact_sample',
-      platforms: ['ios'], architectures: ['arm64'], abiRange: '>=1 <2', engineRange: '>=0.0.3 <0.1.0',
+      platforms: ['ios'], architectures: ['arm64'], abiRange: '>=1 <3', engineRange: '>=0.0.3 <0.1.0',
       linkage: 'framework', permissions: [], configurationSchema: {}, officialDevApp: false,
       artifacts: [{ platform: 'ios', architecture: 'arm64', path: 'ios/Sample.xcframework', sha256 }]
     }

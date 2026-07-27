@@ -1,0 +1,59 @@
+{
+  "name": "@rayact/svg",
+  "version": "0.0.4",
+  "description": "SVG rendering for Rayact — a retained scene graph drawn through rlgl, with per-element animation channels",
+  "type": "module",
+  "sideEffects": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "rayact": {
+    "manifest": "./rayact.module.json"
+  },
+  "files": [
+    "dist",
+    "native",
+    "android",
+    "darwin-arm64",
+    "darwin-x64",
+    "ios",
+    "rayact.module.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "rayact": ">=0.0.4 <0.1.0",
+    "react": ">=19"
+  },
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "keywords": [
+    "svg",
+    "vector",
+    "rayact",
+    "native-module"
+  ],
+  "license": "MIT",
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact-svg"
+  }
+}

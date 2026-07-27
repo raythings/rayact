@@ -327,23 +327,6 @@ export interface IconProps extends BaseProps {
   set?: string;
 }
 
-/**
- * Vector artwork rendered by raysvg. The parsed document is retained natively, so
- * animating it means writing channels rather than reparsing: `channels` maps an element id
- * to [translateX, translateY, rotationDeg, scaleX, scaleY] in the document's own user
- * units, applied about that element's transform-origin.
- */
-export interface SvgProps extends ViewProps {
-  /** Asset, file path, or inline SVG markup. */
-  source?: unknown;
-  src?: unknown;
-  /** CSS custom properties the document references via var(), e.g. { '--skin': '#ffe76a' }. */
-  vars?: Record<string, string | number>;
-  /** Per-element transforms, keyed by element id. */
-  channels?: Record<string, [number, number, number, number, number] | number[]>;
-  /** Groups to draw a synthesized dilate-style outline beneath. */
-  outline?: Array<string | { id: string; color?: string | number; radius?: number }>;
-}
 
 /** react-native TextInput.keyboardType (cross-platform subset + common iOS/Android values). */
 export type KeyboardType =
@@ -645,7 +628,6 @@ declare global {
       Button: ButtonProps;
       Image: ImageProps;
       Icon: IconProps;
-      Svg: SvgProps;
       TextInput: TextInputProps;
       ScrollView: ScrollViewProps;
       Modal: ModalProps;
@@ -694,7 +676,6 @@ declare global {
       'rayact-button': ButtonProps;
       'rayact-image': ImageProps;
       'rayact-icon': IconProps;
-      'rayact-svg': SvgProps;
       'rayact-text-input': TextInputProps;
       'rayact-scroll-view': ScrollViewProps;
       'rayact-modal': ModalProps;

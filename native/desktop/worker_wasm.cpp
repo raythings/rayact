@@ -21,6 +21,9 @@ struct WasmWorkerCtx {
     int                          workerId;
     std::shared_ptr<WorkerEntry> entry;
     IM3Runtime                   runtime;
+    // Module-contributed imports, kept alive for the worker's lifetime: wasm3
+    // stores the userdata pointer we hand it rather than copying the entry.
+    std::shared_ptr<std::vector<rayact::BusWasmImport>> moduleImports;
 };
 
 // wasm3 has no QuickJS-style runtime interrupt hook. Worker canvases cross
@@ -212,6 +215,48 @@ static m3ApiRawFunction(wasm_sys_invoke) {
     m3ApiReturn(n);
 }
 
+// ── Module-contributed host imports (ABI 2) ──────────────────────────────────
+//
+// One trampoline serves every import a native module registers, so modules can
+// publish their own namespace to WASM workers without the engine knowing the
+// signatures at compile time. wasm3 lays the raw stack out as
+// [return slot, if the signature returns anything][arg 0][arg 1]…, one 64-bit
+// slot each, so decoding only needs the parameter count.
+static m3ApiRawFunction(wasm_module_import) {
+    const rayact::BusWasmImport* imp = (const rayact::BusWasmImport*)_ctx->userdata;
+    if (!imp || !imp->fn) m3ApiTrap(m3Err_trapAbort);
+
+    const char* sig = imp->signature.c_str();
+    const char* open = strchr(sig, '(');
+    if (!open) m3ApiTrap(m3Err_trapAbort);
+
+    uint64_t* sp = _sp;
+    uint64_t* retSlot = nullptr;
+    if (sig[0] != 'v') retSlot = sp++;
+
+    // Every parameter occupies exactly one slot regardless of width.
+    constexpr size_t kMaxArgs = 16;
+    uint64_t args[kMaxArgs] = {0};
+    size_t argc = 0;
+    for (const char* p = open + 1; *p && *p != ')'; ++p) {
+        if (*p == 'v') continue;
+        if (argc >= kMaxArgs) m3ApiTrap(m3Err_trapAbort);
+        args[argc] = sp[argc];
+        argc++;
+    }
+
+    uint32_t memSize = 0;
+    uint8_t* mem = m3_GetMemory(runtime, &memSize, 0);
+
+    // The module bounds-checks any pointer it pulls out of args against mem/memSize
+    // — same contract the built-in sys_* imports above follow.
+    uint64_t results[1] = {0};
+    const int rc = imp->fn(imp->self, mem, (size_t)memSize, args, results);
+    if (rc < 0) m3ApiTrap(m3Err_trapAbort);
+    if (retSlot) *retSlot = results[0];
+    m3ApiSuccess();
+}
+
 // ── Worker thread body ───────────────────────────────────────────────────────
 
 static void runWasmWorkerThread(int workerId,
@@ -286,6 +331,17 @@ static void runWasmWorkerThread(int workerId,
     m3_LinkRawFunctionEx(module, "rayact", "sys_present_draw",   "v(ii)",   wasm_sys_present_draw,   &wctx);
     m3_LinkRawFunctionEx(module, "rayact", "sys_flush_nodes",    "v(ii)",   wasm_sys_flush_nodes,    &wctx);
     m3_LinkRawFunctionEx(module, "rayact", "sys_invoke",         "i(iiiiiiii)", wasm_sys_invoke,     &wctx);
+
+    // Imports contributed by native modules, under whatever namespace each declared.
+    // Held for the worker's lifetime because m3_LinkRawFunctionEx stores the userdata
+    // pointer rather than copying it.
+    auto moduleImports =
+        std::make_shared<std::vector<rayact::BusWasmImport>>(rayact::busWasmImports());
+    wctx.moduleImports = moduleImports;
+    for (auto& imp : *moduleImports) {
+        m3_LinkRawFunctionEx(module, imp.ns.c_str(), imp.name.c_str(),
+                             imp.signature.c_str(), wasm_module_import, &imp);
+    }
 
     // Try _start first (WASI convention), then main, then start
     const char* entryPoints[] = {"_start", "main", "start", nullptr};
