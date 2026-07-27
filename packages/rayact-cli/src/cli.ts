@@ -9,7 +9,7 @@ import { runInit } from './commands/init.js';
 import { runDevApp } from './commands/devApp.js';
 import { runPrebuildCommand } from './commands/prebuild.js';
 import { runServe } from './commands/serve.js';
-import { runDoctor, checkNodeVersion } from './commands/doctor.js';
+import { runDoctor, checkNodeVersion, NODE_MIN_MAJOR, NODE_MAX_TESTED_MAJOR } from './commands/doctor.js';
 import { runMigrate } from './commands/migrate.js';
 
 async function main(): Promise<void> {
@@ -30,10 +30,18 @@ async function main(): Promise<void> {
   const node = checkNodeVersion();
   if (!node.ok) {
     console.error(
-      `✗ Node.js ${node.version} is unsupported. Rayact requires Node >=22 <25 ` +
-        `(e.g. \`nvm use 24\`).`
+      `✗ Node.js ${node.version} is too old. Rayact requires Node >=${NODE_MIN_MAJOR} ` +
+        `(e.g. \`nvm use ${NODE_MAX_TESTED_MAJOR}\`).`
     );
     process.exit(1);
+  }
+  if (node.untested && !process.env.RAYACT_SILENCE_NODE_WARNING) {
+    // Newer majors are allowed through: blocking them would brick working
+    // projects on every Node release. Set RAYACT_SILENCE_NODE_WARNING=1 to hide.
+    console.warn(
+      `! Node.js ${node.version} is newer than the latest version Rayact was tested ` +
+        `against (${NODE_MAX_TESTED_MAJOR}.x). Proceeding — report anything that breaks.`
+    );
   }
 
   try {

@@ -18,6 +18,21 @@ const packages = candidates.map(directory => ({
 const byName = new Map(packages.map(item => [item.manifest.name, item]));
 const failures = [];
 const releaseVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+// The native header defines the module ABI; the TS constant and every prebuilt
+// manifest must agree with it or checkPrebuiltAbi rejects the prebuilts at
+// runtime (symptom: "module ABI 1; CLI requires 2" in rayact doctor).
+const nativeAbi = Number(
+  fs.readFileSync(path.join(root, 'native/core/rayact_module_abi.h'), 'utf8')
+    .match(/^#define RAYACT_MODULE_ABI_VERSION (\d+)u?$/m)?.[1] ?? 0
+);
+const constantAbi = Number(
+  fs.readFileSync(path.join(root, 'packages/rayact-prebuild/src/constants.ts'), 'utf8')
+    .match(/RAYACT_MODULE_ABI_VERSION = (\d+)/)?.[1] ?? 0
+);
+if (!nativeAbi) failures.push('cannot read RAYACT_MODULE_ABI_VERSION from native/core/rayact_module_abi.h');
+else if (nativeAbi !== constantAbi) {
+  failures.push(`module ABI mismatch: native header ${nativeAbi} vs constants.ts ${constantAbi}`);
+}
 const OPTIONAL_MODULE_BINARY = /^librayact_(?:mmkv|secure_store|crash_reporter)(?:[-.].*)?$/;
 const OPTIONAL_REGISTRATION_SYMBOL = /(?:^|\n)[^\n]*\s[A-TV-Z]\s+_?rayact_(?:mmkv|secure_store|crash_reporter)_register(?:\s|$)/m;
 const GENERIC_ENGINE_BINARY = /^(?:librayact\.so|rayact_desktop|libRayactEngine\.a|rayact\.wasm)$/;
@@ -82,6 +97,13 @@ for (const { directory, manifest } of packages) {
   }
   if (!manifest.maintainers) failures.push(`${manifest.name}: missing maintainers`);
   if (manifest.name.startsWith('@rayact/prebuilt-')) {
+    const prebuiltManifestPath = path.join(directory, 'manifest.json');
+    if (fs.existsSync(prebuiltManifestPath) && nativeAbi) {
+      const abi = JSON.parse(fs.readFileSync(prebuiltManifestPath, 'utf8')).moduleAbiVersion;
+      if (abi !== nativeAbi) {
+        failures.push(`${manifest.name}: manifest moduleAbiVersion ${abi} != native ABI ${nativeAbi}`);
+      }
+    }
     for (const artifact of findMisplacedOptionalArtifacts(directory)) {
       failures.push(`${manifest.name}: optional module artifact is misplaced in generic prebuilt: ${artifact}`);
     }

@@ -22,18 +22,32 @@ export interface DoctorCheck {
   detail: string;
 }
 
+/** Minimum Node major Rayact's tooling requires. */
+export const NODE_MIN_MAJOR = 22;
+/** Highest Node major this release was tested against. */
+export const NODE_MAX_TESTED_MAJOR = 24;
+
 /**
- * Supported Node range, kept in lockstep with the `engines` field in every
- * package.json (`>=22 <25`). Shared so `rayact doctor` and the CLI entry point
- * enforce the same version instead of relying on npm's passive EBADENGINE warn.
+ * Node support, kept in lockstep with the `engines` field in every package.json
+ * (`>=22`). Shared so `rayact doctor` and the CLI entry point agree instead of
+ * relying on npm's passive EBADENGINE warning.
+ *
+ * Only the floor is enforced: newer majors are reported as untested (a warning)
+ * rather than blocked, so a Node upgrade never bricks an existing project.
  */
 export function checkNodeVersion(version = process.versions.node): {
   ok: boolean;
+  untested: boolean;
   major: number;
   version: string;
 } {
   const major = Number(version.split('.')[0]);
-  return { ok: major >= 22 && major < 25, major, version };
+  return {
+    ok: major >= NODE_MIN_MAJOR,
+    untested: major > NODE_MAX_TESTED_MAJOR,
+    major,
+    version
+  };
 }
 
 function commandExists(command: string): boolean {
@@ -74,8 +88,12 @@ export function collectDoctorChecks(root = process.cwd()): DoctorCheck[] {
   const checks: DoctorCheck[] = [
     {
       name: 'Node.js',
-      status: node.ok ? 'pass' : 'fail',
-      detail: node.ok ? process.version : `${process.version} — Rayact requires Node >=22 <25`
+      status: node.ok ? (node.untested ? 'warn' : 'pass') : 'fail',
+      detail: !node.ok
+        ? `${process.version} — Rayact requires Node >=${NODE_MIN_MAJOR}`
+        : node.untested
+          ? `${process.version} — newer than the tested ${NODE_MAX_TESTED_MAJOR}.x; supported but unverified`
+          : process.version
     },
     {
       name: 'CMake',

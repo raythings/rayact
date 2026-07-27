@@ -35,7 +35,7 @@
     "rayact": ">=0.0.3 <0.1.0"
   },
   "engines": {
-    "node": ">=22 <25"
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public",

@@ -11,6 +11,9 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 ENGINE_VERSION="${ENGINE_VERSION:-$(node -p "require('./package.json').version")}"
+# Module ABI is defined by the native header — never hardcode it here, or the
+# manifests will disagree with the CLI (checkPrebuiltAbi) after an ABI bump.
+ABI_VERSION="${ABI_VERSION:-$(sed -n 's/^#define RAYACT_MODULE_ABI_VERSION \([0-9]*\)u*$/\1/p' "$ROOT/native/core/rayact_module_abi.h")}"
 ABI_VERSION="${ABI_VERSION:-1}"
 BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 DO_DARWIN=0

@@ -10,6 +10,12 @@ const args = process.argv.slice(2);
 const assetsDir = path.resolve(root, args[args.indexOf('--assets') + 1] ?? 'release1');
 const requireSignature = args.includes('--require-signature');
 const sha256 = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+// Module ABI comes from the native header (the definition of record), so the
+// release set can never disagree with the engine it describes.
+const RAYACT_MODULE_ABI_VERSION = Number(
+  fs.readFileSync(path.join(root, 'native/core/rayact_module_abi.h'), 'utf8')
+    .match(/^#define RAYACT_MODULE_ABI_VERSION (\d+)u?$/m)?.[1] ?? 1
+);
 const tarJson = (tarball, member) => {
   const result = spawnSync('tar', ['-xOf', tarball, member], { encoding: 'utf8' });
   if (result.status !== 0) return null;
@@ -68,7 +74,7 @@ const releaseSet = {
   schemaVersion: 1,
   version,
   createdAt: new Date(epochMs).toISOString(),
-  engineAbiVersion: 1,
+  engineAbiVersion: RAYACT_MODULE_ABI_VERSION,
   supportedPlatforms,
   previewPlatforms: packageNames.has('@rayact/prebuilt-linux-x64') ? ['linux'] : [],
   packages,
