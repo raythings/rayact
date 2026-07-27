@@ -1581,6 +1581,32 @@ import { setAccessibilityFocus, useReducedMotion } from 'rayact/react';
 Move platform accessibility focus to a node; respect reduce-motion. See
 [accessibility](/accessibility) for the current surface.
 
+## Native components from modules (`registerNativeComponent`)
+
+Built-in components are wired into the engine at compile time; a native module
+cannot be, so it registers its component types at import scope. This is the
+module-owned render node feature of **ABI 2** — the same mechanism
+[`@rayact/svg`](/reference/components#svg) uses.
+
+```ts
+import { registerNativeComponent } from 'rayact/react';
+
+registerNativeComponent('svg', {
+  create: (native, props, style) =>
+    native.createModuleNode!('svg', style, JSON.stringify(payload(props))),
+  update: (native, nodeId, props) =>
+    native.setModuleNodeProps!(nodeId, JSON.stringify(payload(props)))
+});
+
+export const Svg = (props: SvgProps) => React.createElement('rayact-svg', props);
+```
+
+It updates both registries the component needs in one call: the reconciler
+learns the element type is legal, and the bridge learns how to create and update
+it. Registration always precedes the first render by construction, because the
+only way to render the component is to import it from the module that registers
+it. See [native modules](/native-modules) for the module side.
+
 ## Umbrella package subpaths
 
 | Import | Contents |
