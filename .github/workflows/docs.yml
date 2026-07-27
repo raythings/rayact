@@ -28,11 +28,6 @@ jobs:
           node-version: '24'
       - name: Build docs (regenerates config reference + llms.txt)
         working-directory: docs
-        # Project sites serve under /<repo>/, so every asset and router link
-        # must be prefixed. Without this the deployed site loads no CSS/JS and
-        # every nav link 404s.
-        env:
-          DOCS_BASE: /${{ github.event.repository.name }}/
         run: |
           npm install --no-audit --no-fund
           npm run build
