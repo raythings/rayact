@@ -252,8 +252,7 @@ export async function runBuild(flags: CliFlags): Promise<void> {
  * the `nativeModules` field the dev server publishes in its manifest.
  */
 async function writeNativeModules(config: RayactConfig, destPath: string): Promise<void> {
-  const nativeModules = mergeNativeModules(config.nativeModules, resolveRayactPlugins(process.cwd()))
-    .filter(module => module.nativeBus !== false);
+  const nativeModules = mergeNativeModules(config.nativeModules, resolveRayactPlugins(process.cwd()));
   await fs.mkdir(path.dirname(destPath), { recursive: true });
   await fs.writeFile(destPath, JSON.stringify({ nativeModules }, null, 2));
 }

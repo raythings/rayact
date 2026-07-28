@@ -29,8 +29,20 @@ test('official dev app resolves canonical bundled native module identities', () 
     assert.match(module.jsPackage, /^@rayact\//, `${module.name} resolves to its npm package`);
   }
 
-  // C ABI modules are advertised in the bundle manifest.
-  for (const expected of ['crash-reporter', 'mmkv', 'secure-store', 'svg']) {
+  // Both C ABI modules and platform-registry modules are advertised.
+  for (const expected of [
+    'barcode-scanner',
+    'clipboard',
+    'crash-reporter',
+    'haptics',
+    'image-picker',
+    'linking',
+    'mmkv',
+    'secure-store',
+    'sensors',
+    'svg',
+    'webview',
+  ]) {
     assert.ok(names.includes(expected), `missing bundled module: ${expected}`);
   }
 });

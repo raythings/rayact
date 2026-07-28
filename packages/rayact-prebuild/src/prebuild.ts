@@ -277,7 +277,7 @@ function writeNativeModulesManifest(
   fs.mkdirSync(assetsDir, { recursive: true });
   fs.writeFileSync(
     path.join(assetsDir, 'native-modules.json'),
-    JSON.stringify({ nativeModules: modules.filter(module => module.nativeBus !== false) }, null, 2) + '\n'
+    JSON.stringify({ nativeModules: modules }, null, 2) + '\n'
   );
 }
 

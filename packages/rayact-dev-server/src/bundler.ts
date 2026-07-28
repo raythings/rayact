@@ -94,8 +94,7 @@ function compilerForMode(mode: RayactBuildMode): RayactCompiler {
 export function resolveProjectNativeModules(root: string): RayactNativeModuleEntry[] {
   const projectRoot = path.resolve(root);
   const config = loadRayactConfig(projectRoot);
-  return mergeNativeModules(config.nativeModules, resolveRayactPlugins(projectRoot))
-    .filter(module => module.nativeBus !== false);
+  return mergeNativeModules(config.nativeModules, resolveRayactPlugins(projectRoot));
 }
 
 export interface DevClientAppMetadata {
