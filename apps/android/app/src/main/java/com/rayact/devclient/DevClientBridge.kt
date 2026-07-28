@@ -10,10 +10,12 @@ import android.net.nsd.NsdServiceInfo
 import android.util.Log
 import android.os.Debug
 import android.os.SystemClock
+import android.provider.MediaStore
+import android.provider.OpenableColumns
+import android.graphics.BitmapFactory
+import android.util.Base64
 import java.io.RandomAccessFile
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
-import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import java.lang.reflect.Proxy
 import com.rayact.app.BuildConfig
 import com.rayact.engine.RayactEngineSession
 import org.json.JSONArray
@@ -47,6 +49,10 @@ object DevClientBridge {
     @Volatile private var discoveryGeneration = 0
     private var lastCpuTicks = -1L
     private var lastCpuWallMs = -1L
+    @Volatile private var barcodeScanState = JSONObject().put("status", "idle").toString()
+    @Volatile private var imagePickerState = JSONObject().put("status", "idle").toString()
+    @Volatile private var imagePickerWantsBase64 = false
+    const val REQUEST_IMAGE_PICKER = 58421
 
     fun init(context: Context, session: RayactEngineSession? = null) {
         appContext = context.applicationContext
@@ -285,6 +291,11 @@ object DevClientBridge {
             "getConnectError" -> DevServerLoader.lastError ?: ""
             "isConnectLoading" -> DevServerLoader.loading
             "scanQR" -> { startQrScan(); null }
+            "startBarcodeScan" -> { startRawBarcodeScan(); null }
+            "pollBarcodeScan" -> barcodeScanState
+            "startImagePicker" -> { startImagePicker(data?.optBoolean("base64", false) == true); null }
+            "pollImagePicker" -> imagePickerState
+            "pollLinkingURL", "getInitialURL" -> RayactEngineSession.pollPendingURL()
             else -> null
         }
     }
@@ -405,37 +416,166 @@ object DevClientBridge {
     }
 
     private fun startQrScan() {
+        launchQrScan(
+            onSuccess = { raw ->
+                Thread {
+                    val candidates = parseQrCandidates(raw)
+                    val best = pickBestServer(candidates) ?: candidates.firstOrNull()
+                    if (best == null) {
+                        Log.w(TAG, "scanQR: no candidates in '$raw'")
+                        return@Thread
+                    }
+                    Log.i(TAG, "scanQR chose $best from $candidates")
+                    openProjectFromNative(best)
+                }.start()
+            },
+            onCanceled = { Log.i(TAG, "scanQR canceled") },
+            onFailure = { Log.e(TAG, "scanQR failed", it) },
+        )
+    }
+
+    private fun startRawBarcodeScan() {
+        barcodeScanState = JSONObject().put("status", "pending").toString()
+        launchQrScan(
+            onSuccess = { raw ->
+                barcodeScanState = JSONObject()
+                    .put("status", "success")
+                    .put("data", raw)
+                    .put("format", "qr")
+                    .toString()
+            },
+            onCanceled = {
+                barcodeScanState = JSONObject().put("status", "canceled").toString()
+            },
+            onFailure = { error ->
+                barcodeScanState = JSONObject()
+                    .put("status", "error")
+                    .put("error", error.message ?: "Native barcode scan failed")
+                    .toString()
+            },
+        )
+    }
+
+    private fun launchQrScan(
+        onSuccess: (String) -> Unit,
+        onCanceled: () -> Unit,
+        onFailure: (Throwable) -> Unit,
+    ) {
         val activity = liveActivity()
         if (activity == null) {
-            Log.w(TAG, "scanQR: no live activity")
+            onFailure(IllegalStateException("No live activity"))
             return
         }
-        val options = GmsBarcodeScannerOptions.Builder()
-            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-            .enableAutoZoom()
-            .build()
         activity.runOnUiThread {
-            GmsBarcodeScanning.getClient(activity, options).startScan()
-                .addOnSuccessListener { code ->
-                    val raw = code.rawValue.orEmpty()
-                    if (raw.isEmpty()) {
-                        Log.w(TAG, "scanQR: empty rawValue")
-                        return@addOnSuccessListener
+            try {
+                val builder = Class.forName("com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions\$Builder")
+                    .getDeclaredConstructor().newInstance()
+                builder.javaClass.methods.first { it.name == "setBarcodeFormats" }
+                    .invoke(builder, 256, intArrayOf())
+                builder.javaClass.methods.firstOrNull { it.name == "enableAutoZoom" }?.invoke(builder)
+                val options = builder.javaClass.methods.first { it.name == "build" }.invoke(builder)
+                val scanning = Class.forName("com.google.mlkit.vision.codescanner.GmsBarcodeScanning")
+                val scanner = scanning.methods.first { it.name == "getClient" && it.parameterCount == 2 }
+                    .invoke(null, activity, options)
+                val task = scanner.javaClass.methods.first { it.name == "startScan" }.invoke(scanner)
+                fun listener(typeName: String, body: (Array<out Any?>?) -> Unit): Any {
+                    val type = Class.forName(typeName)
+                    return Proxy.newProxyInstance(type.classLoader, arrayOf(type)) { _, method, args ->
+                        if (method.name.startsWith("on")) body(args)
+                        null
                     }
-                    Thread {
-                        val candidates = parseQrCandidates(raw)
-                        val best = pickBestServer(candidates) ?: candidates.firstOrNull()
-                        if (best == null) {
-                            Log.w(TAG, "scanQR: no candidates in '$raw'")
-                            return@Thread
-                        }
-                        Log.i(TAG, "scanQR chose $best from $candidates")
-                        openProjectFromNative(best)
-                    }.start()
                 }
-                .addOnCanceledListener { Log.i(TAG, "scanQR canceled") }
-                .addOnFailureListener { e -> Log.e(TAG, "scanQR failed", e) }
+                val success = listener("com.google.android.gms.tasks.OnSuccessListener") { args ->
+                    val code = args?.firstOrNull()
+                    val raw = code?.javaClass?.methods?.firstOrNull { it.name == "getRawValue" }?.invoke(code) as? String
+                    if (raw.isNullOrEmpty()) onFailure(IllegalStateException("Scanner returned an empty value"))
+                    else onSuccess(raw)
+                }
+                val canceled = listener("com.google.android.gms.tasks.OnCanceledListener") { onCanceled() }
+                val failure = listener("com.google.android.gms.tasks.OnFailureListener") { args ->
+                    val error = args?.firstOrNull() as? Throwable
+                        ?: IllegalStateException("Native barcode scan failed")
+                    // Some Google Code Scanner versions report the system UI's
+                    // back/cancel action as a generic ML Kit failure instead of
+                    // completing the Task through OnCanceledListener.
+                    if (error.message?.trim()?.equals("Failed to scan code.", ignoreCase = true) == true) {
+                        onCanceled()
+                    } else {
+                        onFailure(error)
+                    }
+                }
+                task.javaClass.methods.first { it.name == "addOnSuccessListener" && it.parameterCount == 1 }.invoke(task, success)
+                task.javaClass.methods.first { it.name == "addOnCanceledListener" && it.parameterCount == 1 }.invoke(task, canceled)
+                task.javaClass.methods.first { it.name == "addOnFailureListener" && it.parameterCount == 1 }.invoke(task, failure)
+            } catch (error: Throwable) {
+                Log.e(TAG, "Unable to launch barcode scanner", error)
+                onFailure(
+                    IllegalStateException(
+                        "Barcode scanner package is unavailable: ${error.javaClass.simpleName}: ${error.message}",
+                        error,
+                    ),
+                )
+            }
         }
+    }
+
+    private fun startImagePicker(base64: Boolean) {
+        val activity = liveActivity()
+        if (activity == null) {
+            imagePickerState = JSONObject().put("status", "error").put("error", "No live activity").toString()
+            return
+        }
+        imagePickerWantsBase64 = base64
+        imagePickerState = JSONObject().put("status", "pending").toString()
+        activity.runOnUiThread {
+            val intent = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*")
+            } else {
+                Intent(Intent.ACTION_OPEN_DOCUMENT)
+                    .addCategory(Intent.CATEGORY_OPENABLE)
+                    .setType("image/*")
+            }
+            runCatching { activity.startActivityForResult(intent, REQUEST_IMAGE_PICKER) }
+                .onFailure {
+                    imagePickerState = JSONObject().put("status", "error")
+                        .put("error", it.message ?: "Unable to open image picker").toString()
+                }
+        }
+    }
+
+    fun onImagePickerResult(resultCode: Int, intent: Intent?) {
+        if (resultCode != Activity.RESULT_OK || intent?.data == null) {
+            imagePickerState = JSONObject().put("status", "canceled").toString()
+            return
+        }
+        val context = appContext ?: return
+        val uri = intent.data!!
+        Thread {
+            runCatching {
+                val resolver = context.contentResolver
+                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+                var name: String? = null
+                resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) name = cursor.getString(0)
+                }
+                val asset = JSONObject()
+                    .put("uri", uri.toString())
+                    .put("mimeType", resolver.getType(uri) ?: "image/*")
+                    .put("width", options.outWidth.coerceAtLeast(0))
+                    .put("height", options.outHeight.coerceAtLeast(0))
+                    .put("fileName", name ?: JSONObject.NULL)
+                if (imagePickerWantsBase64) {
+                    val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: ByteArray(0)
+                    asset.put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                }
+                imagePickerState = JSONObject().put("status", "success")
+                    .put("assets", JSONArray().put(asset)).toString()
+            }.onFailure {
+                imagePickerState = JSONObject().put("status", "error")
+                    .put("error", it.message ?: "Unable to read selected image").toString()
+            }
+        }.start()
     }
 
     private fun parseQrCandidates(raw: String): List<String> {

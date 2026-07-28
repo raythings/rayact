@@ -1,0 +1,29 @@
+{
+  "name": "@rayact/clipboard",
+  "version": "0.0.4",
+  "description": "Cross-platform clipboard API for Rayact",
+  "type": "module",
+  "sideEffects": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "README.md", "rayact.module.json"],
+  "rayact": { "manifest": "rayact.module.json" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "engines": { "node": ">=22" },
+  "publishConfig": { "access": "public", "provenance": true },
+  "license": "MIT",
+  "maintainers": ["Rayact Maintainers"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact-clipboard"
+  }
+}

@@ -259,7 +259,7 @@ function AboutPage() {
         </View>
       </View>
 
-      <View style={{ ...sectionStyle, backgroundColor: colors.surfaceContainer, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: cardBorder, marginTop: 16 }}>
+      <View style={{ ...sectionStyle, backgroundColor: colors.surfaceContainer, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: cardBorder, marginTop: 16, marginBottom: 24 }}>
         <Text style={{ text: { color: colors.onSurfaceVariant, fontSize: 12, fontWeight: 600, letterSpacing: 0.4 } }}>BUNDLED NATIVE MODULES</Text>
         <View style={{ gap: 6, marginTop: 12 }}>
           {bundledModules.length > 0 ? bundledModules.map(m => (

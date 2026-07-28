@@ -218,7 +218,7 @@ targets:
         Release:
           INFOPLIST_FILE: Info-Release.plist
           OTHER_CFLAGS: "$(inherited) -DRAYACT_ENABLE_DEVTOOLS=0 -DRAYACT_RELEASE_HOST=1"
-          EXCLUDED_SOURCE_FILE_NAMES: "devtools.cpp cdp_handler.cpp dev_client_bridge.cpp desktop_dev_loader.cpp desktop_mdns.cpp DevClientBridge.swift DevLauncherController.swift DevMenuOverlay.swift DevServerLoader.swift DevShakeDetector.swift ProjectHmrClient.swift RayactDevToolsTransport.swift"
+          EXCLUDED_SOURCE_FILE_NAMES: "devtools.cpp cdp_handler.cpp dev_client_bridge.cpp desktop_dev_loader.cpp desktop_mdns.cpp DevClientBridge.swift DevLauncherController.swift DevMenuOverlay.swift DevServerLoader.swift ProjectHmrClient.swift RayactDevToolsTransport.swift"
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: RAYACT_RELEASE
           DEAD_CODE_STRIPPING: YES
     preBuildScripts:

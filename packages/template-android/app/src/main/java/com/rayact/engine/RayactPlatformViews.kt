@@ -53,7 +53,16 @@ import java.util.concurrent.ConcurrentHashMap
 object RayactPlatformViews {
     private const val TAG = "RayactPlatformViews"
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val hosts = ConcurrentHashMap<Int, TextFieldHost>()
+    private interface PlatformHost {
+        val screenRect: RectF
+        fun resize(width: Int, height: Int, densityDpi: Int)
+        fun setProp(key: String, value: String)
+        fun forwardTouch(event: MotionEvent)
+        fun ensureImeFocus() {}
+        fun dispose()
+    }
+
+    private val hosts = ConcurrentHashMap<Int, PlatformHost>()
 
     @Volatile
     private var boundSession: RayactEngineSession? = null
@@ -70,11 +79,11 @@ object RayactPlatformViews {
         private set
 
     /** Gesture currently captured by a host (set on DOWN inside its rect). */
-    private var touchTarget: TextFieldHost? = null
+    private var touchTarget: PlatformHost? = null
 
     /** True when [view] is an EditText hosted by a platform view (IMM proxy check). */
     fun isPlatformViewInput(view: android.view.View): Boolean {
-        for (host in hosts.values) if (host.editText === view) return true
+        for (host in hosts.values) if ((host as? TextFieldHost)?.editText === view) return true
         return false
     }
 
@@ -109,8 +118,9 @@ object RayactPlatformViews {
                 // While focused, the hit region includes the overflow chrome
                 // (selection toolbar above, handles below) so those controls
                 // are tappable; unfocused fields only claim their own rect.
-                val rect = if (host.editText != null && host.editText === focusedEditText)
-                    host.expandedRect() else host.screenRect
+                val field = host as? TextFieldHost
+                val rect = if (field?.editText != null && field.editText === focusedEditText)
+                    field.expandedRect() else host.screenRect
                 if (rect.contains(event.x, event.y)) {
                     touchTarget = host
                     break
@@ -128,13 +138,21 @@ object RayactPlatformViews {
     }
 
     fun onRect(nodeId: Int, kind: String, x: Float, y: Float, w: Float, h: Float) {
-        if (kind != "textfield") return
         mainHandler.post {
             val ctx = session()?.host?.imeView?.context ?: run {
                 Log.e(TAG, "no context for platform view $nodeId")
                 return@post
             }
-            val host = hosts.getOrPut(nodeId) { TextFieldHost(nodeId, ctx) }
+            RayactPlatformRegistry.initialize(ctx)
+            val host = hosts.getOrPut(nodeId) {
+                when (kind) {
+                    "textfield" -> TextFieldHost(nodeId, ctx)
+                    else -> {
+                        if (!RayactPlatformRegistry.shared.hasViewFactory(kind)) return@post
+                        RegisteredViewHost(nodeId, kind, ctx)
+                    }
+                }
+            }
             host.screenRect.set(x, y, x + w, y + h)
             host.resize(w.toInt().coerceAtLeast(1), h.toInt().coerceAtLeast(1),
                         ctx.resources.displayMetrics.densityDpi)
@@ -234,16 +252,120 @@ object RayactPlatformViews {
             else super.getSystemService(name)
     }
 
-    /**
-     * One EditText-in-VirtualDisplay producer. All methods main-thread only
-     * except forwardTouch/screenRect (called from the UI thread's touch
-     * dispatch, which IS the main thread).
-     */
-    private class TextFieldHost(val nodeId: Int, val context: Context) {
+    /** Generic texture compositor for package-registered Android views. */
+    private class RegisteredViewHost(
+        private val nodeId: Int,
+        private val kind: String,
+        private val context: Context,
+    ) : PlatformHost {
+        override val screenRect = RectF()
+        private var reader: ImageReader? = null
+        private var virtualDisplay: VirtualDisplay? = null
+        private var presentation: Presentation? = null
+        private var controller: RayactPlatformViewController? = null
+        private var liveImage: Image? = null
+        private var previousImage: Image? = null
+        private var widthPx = 0
+        private var heightPx = 0
+
+        override fun resize(width: Int, height: Int, densityDpi: Int) {
+            if (width == widthPx && height == heightPx && virtualDisplay != null) return
+            widthPx = width
+            heightPx = height
+            val nextReader = ImageReader.newInstance(
+                width, height, android.graphics.ImageFormat.PRIVATE, 4,
+                HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE or HardwareBuffer.USAGE_GPU_COLOR_OUTPUT
+            )
+            nextReader.setOnImageAvailableListener({ source ->
+                val image = runCatching { source.acquireLatestImage() }.getOrNull()
+                    ?: return@setOnImageAvailableListener
+                image.hardwareBuffer?.let { buffer ->
+                    session()?.nativePushExternalViewFrame(nodeId, buffer)
+                    buffer.close()
+                }
+                previousImage?.close()
+                previousImage = liveImage
+                liveImage = image
+                session()?.host?.renderScheduler?.requestFrame()
+            }, mainHandler)
+            val display = virtualDisplay
+            if (display == null) {
+                val manager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+                virtualDisplay = manager.createVirtualDisplay(
+                    "rayact-platform-$kind-$nodeId", width, height, densityDpi, nextReader.surface,
+                    DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
+                )
+                buildPresentation()
+            } else {
+                display.resize(width, height, densityDpi)
+                display.surface = nextReader.surface
+            }
+            liveImage?.close(); liveImage = null
+            previousImage?.close(); previousImage = null
+            reader?.close()
+            reader = nextReader
+        }
+
+        private fun emit(payload: String) {
+            session()?.nativeExternalViewTextChanged(nodeId, payload)
+            session()?.host?.renderScheduler?.requestFrame()
+        }
+
+        private fun buildPresentation() {
+            val display = virtualDisplay?.display ?: return
+            val container = Presentation(context, display)
+            container.window?.setFlags(
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            )
+            val nextController = RayactPlatformRegistry.shared.createView(
+                kind,
+                RayactPlatformViewContext(container.context, nodeId, ::emit),
+            ) ?: run {
+                container.dismiss()
+                return
+            }
+            container.setContentView(nextController.view)
+            container.show()
+            presentation = container
+            controller = nextController
+        }
+
+        override fun setProp(key: String, value: String) {
+            controller?.setProperty(key, value)
+        }
+
+        override fun forwardTouch(event: MotionEvent) {
+            val target = presentation?.window?.decorView ?: return
+            val local = MotionEvent.obtain(event)
+            local.offsetLocation(-screenRect.left, -screenRect.top)
+            target.dispatchTouchEvent(local)
+            local.recycle()
+        }
+
+        override fun ensureImeFocus() {
+            controller?.view?.requestFocus()
+        }
+
+        override fun dispose() {
+            controller?.dispose()
+            presentation?.dismiss()
+            virtualDisplay?.release()
+            liveImage?.close()
+            previousImage?.close()
+            reader?.close()
+            controller = null
+            presentation = null
+            virtualDisplay = null
+            reader = null
+        }
+    }
+
+    private class TextFieldHost(val nodeId: Int, val context: Context) : PlatformHost {
         var editText: EditText? = null
             private set
         /** Node rect in surface px (set from the engine's layout pushes). */
-        val screenRect = RectF()
+        override val screenRect = RectF()
         // Producer-surface padding (px) around the field so overflow chrome —
         // selection toolbar above, caret/selection handles + magnifier below —
         // renders inside the texture instead of being clipped at the edge.
@@ -272,7 +394,7 @@ object RayactPlatformViews {
         private var pendingInputType: String? = null
         private var pendingSecure = false
 
-        fun resize(fieldWPx: Int, fieldHPx: Int, densityDpi: Int) {
+        override fun resize(fieldWPx: Int, fieldHPx: Int, densityDpi: Int) {
             val wPx = fieldWPx + (padLeft + padRight).toInt()
             val hPx = fieldHPx + (padTop + padBottom).toInt()
             if (wPx == widthPx && hPx == heightPx && virtualDisplay != null) return
@@ -384,7 +506,7 @@ object RayactPlatformViews {
 
         /** Replay a real touch event into the presentation, surface-local px
          *  (the presentation origin sits padTop/padLeft above the field). */
-        fun forwardTouch(event: MotionEvent) {
+        override fun forwardTouch(event: MotionEvent) {
             val decor = presentation?.window?.decorView ?: return
             val local = MotionEvent.obtain(event)
             local.offsetLocation(-(screenRect.left - padLeft), -(screenRect.top - padTop))
@@ -393,7 +515,7 @@ object RayactPlatformViews {
         }
 
         /** After a routed tap: bind the IME to this field via the proxy. */
-        fun ensureImeFocus() {
+        override fun ensureImeFocus() {
             val keepLongPressToolbar =
                 toolbar?.visibility == View.VISIBLE && toolbarShownByLongPress
             if (editText?.hasSelection() != true && !keepLongPressToolbar) hideToolbar()
@@ -469,7 +591,7 @@ object RayactPlatformViews {
             toolbar?.visibility = View.GONE
         }
 
-        fun setProp(key: String, value: String) {
+        override fun setProp(key: String, value: String) {
             val et = editText
             when (key) {
                 "value" -> if (et != null) applyValue(value) else pendingValue = value
@@ -504,7 +626,7 @@ object RayactPlatformViews {
             }
         }
 
-        fun dispose() {
+        override fun dispose() {
             if (focusedEditText === editText) setFocused(null)
             presentation?.dismiss()
             presentation = null

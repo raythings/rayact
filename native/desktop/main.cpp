@@ -115,6 +115,16 @@ void mainLoop(JSContext* ctx) {
         int tapUpFrame = -1;
         float tapX = 0.0f;
         float tapY = 0.0f;
+        // Interpolated drag/fling. A gesture has to be delivered as a sequence
+        // of moves across consecutive frames: the velocity tracker least-
+        // squares-fits samples over a 100ms horizon and needs at least 3 of
+        // them, so a single jump to the end point produces no fling at all.
+        bool dragActive = false;
+        bool dragRelease = false;   // release at the end (fling) or hold (drag)
+        int dragFrame = 0;          // 0..dragFrames
+        int dragFrames = 0;
+        float dragFromX = 0.0f, dragFromY = 0.0f;
+        float dragToX = 0.0f, dragToY = 0.0f;
     };
     static ScriptState scriptState;
     auto runScriptedInput = [&](bool& quit) {
@@ -123,6 +133,28 @@ void mainLoop(JSContext* ctx) {
         ++scriptState.frame;
         if (scriptState.tapUpFrame == scriptState.frame) {
             rayact::engineQueueTouch(1, 0, scriptState.tapX, scriptState.tapY);
+        }
+        // Advance an in-flight drag/fling one step before processing new ops.
+        if (scriptState.dragActive) {
+            ++scriptState.dragFrame;
+            const float t = scriptState.dragFrames > 0
+                ? (float)scriptState.dragFrame / (float)scriptState.dragFrames
+                : 1.0f;
+            const float x = scriptState.dragFromX +
+                (scriptState.dragToX - scriptState.dragFromX) * t;
+            const float y = scriptState.dragFromY +
+                (scriptState.dragToY - scriptState.dragFromY) * t;
+            rayact::engineQueueTouch(2, 0, x, y);
+            scriptState.tapX = x;
+            scriptState.tapY = y;
+            if (scriptState.dragFrame >= scriptState.dragFrames) {
+                scriptState.dragActive = false;
+                if (scriptState.dragRelease) {
+                    // Release on the NEXT frame so the final move is sampled by
+                    // the velocity tracker before the fit runs at release.
+                    scriptState.tapUpFrame = scriptState.frame + 1;
+                }
+            }
         }
         std::string s(script);
         size_t pos = 0;
@@ -157,6 +189,30 @@ void mainLoop(JSContext* ctx) {
                 if (sscanf(arg, "%f,%f", &scriptState.tapX, &scriptState.tapY) == 2) {
                     rayact::engineQueueTouch(1, 0, scriptState.tapX, scriptState.tapY);
                     scriptState.tapUpFrame = -1;
+                }
+            } else if (strcmp(op, "move") == 0) {
+                // move:x,y — single pointer move, gesture state untouched.
+                if (sscanf(arg, "%f,%f", &scriptState.tapX, &scriptState.tapY) == 2)
+                    rayact::engineQueueTouch(2, 0, scriptState.tapX, scriptState.tapY);
+            } else if (strcmp(op, "drag") == 0 || strcmp(op, "fling") == 0) {
+                // drag:x,y,toX,toY,frames  — press, interpolate, hold.
+                // fling:x,y,toX,toY,frames — same, then release (momentum).
+                float x = 0, y = 0, tx = 0, ty = 0;
+                int frames = 0;
+                if (sscanf(arg, "%f,%f,%f,%f,%d", &x, &y, &tx, &ty, &frames) == 5 &&
+                    frames > 0) {
+                    rayact::engineQueueTouch(0, 0, x, y);
+                    scriptState.tapX = x;
+                    scriptState.tapY = y;
+                    scriptState.tapUpFrame = -1;
+                    scriptState.dragActive = true;
+                    scriptState.dragRelease = (strcmp(op, "fling") == 0);
+                    scriptState.dragFrame = 0;
+                    scriptState.dragFrames = frames;
+                    scriptState.dragFromX = x;
+                    scriptState.dragFromY = y;
+                    scriptState.dragToX = tx;
+                    scriptState.dragToY = ty;
                 }
             } else if (strcmp(op, "shot") == 0) {
                 TakeScreenshot(arg);

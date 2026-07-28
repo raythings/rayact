@@ -294,6 +294,11 @@ export interface AvoidKeyboardProps extends BaseProps {
   animate?: boolean;
 }
 
+export interface KeyboardStickyViewProps extends BaseProps {
+  /** Additional distance above the keyboard. */
+  offset?: number;
+}
+
 export type SafeAreaEdge = 'top' | 'right' | 'bottom' | 'left';
 
 export interface SafeAreaProps extends BaseProps {
@@ -303,6 +308,11 @@ export interface SafeAreaProps extends BaseProps {
 
 export interface TextProps extends BaseProps {
   text?: string;
+  selectable?: boolean;
+  selectionColor?: ColorValue;
+  onSelectionChange?: (event: {
+    nativeEvent: { selection: { start: number; end: number }; text: string };
+  }) => void;
 }
 
 export interface ButtonProps extends BaseProps {
@@ -451,7 +461,16 @@ export interface ScrollViewProps extends BaseProps {
   /** Start at and follow the end of vertical content until the user scrolls. */
   autoScrollToEnd?: boolean;
   contentContainerStyle?: StyleProp;
-  onScroll?: (event: unknown) => void;
+  onScroll?: (event: {
+    nativeEvent: {
+      contentOffset: { x: number; y: number };
+      contentSize: { width: number; height: number };
+      layoutMeasurement: { width: number; height: number };
+    };
+  }) => void;
+  onContentSizeChange?: (width: number, height: number) => void;
+  /** Keep a focused descendant visible as the software keyboard moves. */
+  keyboardAware?: boolean;
 }
 
 export interface ListRenderItem<T> {
@@ -464,6 +483,32 @@ export interface ListProps<T = unknown> extends Omit<ScrollViewProps, 'children'
   renderItem: (info: ListRenderItem<T>) => React.ReactNode;
   keyExtractor?: (item: T, index: number) => string;
   estimatedItemSize?: number;
+}
+
+export type ComponentTypeLike = React.ReactNode | React.ComponentType<any>;
+
+export interface MaintainVisibleContentPosition {
+  minIndexForVisible: number;
+  autoscrollToTopThreshold?: number;
+}
+
+export interface FlatListProps<T = unknown> extends Omit<ScrollViewProps, 'children'> {
+  data: readonly T[];
+  renderItem: (info: ListRenderItem<T>) => React.ReactNode;
+  keyExtractor?: (item: T, index: number) => string;
+  estimatedItemSize?: number;
+  /** Number of viewport lengths rendered before and after the visible range. */
+  windowSize?: number;
+  inverted?: boolean;
+  maintainVisibleContentPosition?: MaintainVisibleContentPosition;
+  ListHeaderComponent?: ComponentTypeLike;
+  ListFooterComponent?: ComponentTypeLike;
+  ListEmptyComponent?: ComponentTypeLike;
+  onEndReached?: (info: { distanceFromEnd: number }) => void;
+  onEndReachedThreshold?: number;
+  refreshing?: boolean;
+  onRefresh?: () => void;
+  initialNumToRender?: number;
 }
 
 export interface ModalProps extends BaseProps {
@@ -494,6 +539,8 @@ export interface MaterialComponentProps extends BaseProps {
   disabled?: boolean;
   selected?: boolean;
   checked?: boolean;
+  /** Controlled value callback used by switch-like Material controls. */
+  onValueChange?: (value: boolean) => void;
   indeterminate?: boolean;
   wavy?: boolean;
   open?: boolean;

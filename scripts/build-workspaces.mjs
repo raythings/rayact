@@ -17,8 +17,14 @@ const buildOrder = [
   '@rayact/secure-store',
   '@rayact/crash-reporter',
   'rayact',
-  // After the umbrella: @rayact/svg imports registerNativeComponent from rayact/react.
+  // Platform capability packages are built after the umbrella because UI
+  // packages such as svg and webview import from rayact/react.
   '@rayact/svg',
+  '@rayact/barcode-scanner',
+  '@rayact/clipboard',
+  '@rayact/image-picker',
+  '@rayact/linking',
+  '@rayact/webview',
 ];
 
 for (const workspace of buildOrder) {

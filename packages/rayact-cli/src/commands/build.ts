@@ -23,7 +23,9 @@ import {
   downloadPrebuilt,
   mergeNativeModules,
   resolveRayactPlugins,
-  writeAndroidModuleBuildFiles
+  writeAndroidModuleBuildFiles,
+  writeAndroidPlatformAutolinking,
+  writeIosPlatformAutolinking,
 } from '@rayact/prebuild';
 import type { CliFlags } from '../parse.js';
 import { resolveDesktopBin } from '../desktop.js';
@@ -250,7 +252,8 @@ export async function runBuild(flags: CliFlags): Promise<void> {
  * the `nativeModules` field the dev server publishes in its manifest.
  */
 async function writeNativeModules(config: RayactConfig, destPath: string): Promise<void> {
-  const nativeModules = mergeNativeModules(config.nativeModules, resolveRayactPlugins(process.cwd()));
+  const nativeModules = mergeNativeModules(config.nativeModules, resolveRayactPlugins(process.cwd()))
+    .filter(module => module.nativeBus !== false);
   await fs.mkdir(path.dirname(destPath), { recursive: true });
   await fs.writeFile(destPath, JSON.stringify({ nativeModules }, null, 2));
 }
@@ -318,7 +321,9 @@ async function buildAndroidApk(
   // Build wiring for modules that ship sources (a source checkout, e.g. the dev app).
   // Regenerated on every build so adding or removing a dependency is enough — there is
   // no target list to maintain in CMakeLists.txt or build.gradle.
-  const sourceTargets = writeAndroidModuleBuildFiles(androidDir, resolveRayactPlugins(cwd));
+  const selectedPlugins = resolveRayactPlugins(cwd);
+  const sourceTargets = writeAndroidModuleBuildFiles(androidDir, selectedPlugins);
+  writeAndroidPlatformAutolinking(androidDir, selectedPlugins);
   if (sourceTargets.length > 0) {
     console.log(`Native modules built from source: ${sourceTargets.join(', ')}`);
   }
@@ -501,6 +506,7 @@ async function buildIosApp(
     process.exit(1);
   }
   console.log(`iOS project: ${iosDir}`);
+  writeIosPlatformAutolinking(iosDir, resolveRayactPlugins(cwd));
 
   // Template-scaffolded projects (rayact prebuild) bundle assets from the
   // app's rayact-assets/ via the SyncRayactAssets build phase — write there.

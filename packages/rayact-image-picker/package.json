@@ -1,0 +1,29 @@
+{
+  "name": "@rayact/image-picker",
+  "version": "0.0.4",
+  "description": "System image library picker for Rayact",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "README.md", "rayact.module.json"],
+  "rayact": { "manifest": "rayact.module.json" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "engines": { "node": ">=22" },
+  "publishConfig": { "access": "public", "provenance": true },
+  "license": "MIT",
+  "maintainers": ["Rayact Maintainers"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact-image-picker"
+  }
+}

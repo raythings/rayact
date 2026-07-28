@@ -1,3 +1,5 @@
+import { scanAsync } from '@rayact/barcode-scanner';
+
 export interface RecentEntry {
   url: string;
   label?: string;
@@ -156,7 +158,10 @@ export function isConnectLoading(): Promise<boolean> {
 }
 
 export function scanQR(): Promise<void> {
-  return call('scanQR');
+  return scanAsync({ formats: ['qr'] }).then(async result => {
+    const opened = await openProjectDirect(parseUrl(result.data));
+    if (!opened.ok) throw new Error(opened.error ?? 'Unable to open scanned Rayact server');
+  });
 }
 
 export function parseUrl(input: string): string {

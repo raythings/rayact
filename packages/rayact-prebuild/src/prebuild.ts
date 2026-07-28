@@ -37,8 +37,99 @@ export interface PrebuildOptions {
     projectDir?: string;
     bundleId?: string;
   };
+  linking?: {
+    schemes?: string[];
+  };
   /** When false, refuse to overwrite existing android/ios trees (monorepo safety). */
   force?: boolean;
+}
+
+function validateLinkingSchemes(schemes: readonly string[]): string[] {
+  const normalized = [...new Set(schemes.map(value => value.trim().toLowerCase()).filter(Boolean))];
+  for (const scheme of normalized) {
+    if (!/^[a-z][a-z0-9+.-]*$/.test(scheme)) {
+      throw new Error(`Invalid linking scheme "${scheme}"`);
+    }
+  }
+  return normalized;
+}
+
+function insertBeforeRootPlistClose(xml: string, entries: string): string {
+  const close = xml.lastIndexOf('</dict>');
+  if (close < 0) throw new Error('Invalid plist: missing root </dict>');
+  return `${xml.slice(0, close)}${entries}\n${xml.slice(close)}`;
+}
+
+function appendPlistArray(xml: string, key: string, entries: string): string {
+  const keyIndex = xml.indexOf(`<key>${key}</key>`);
+  if (keyIndex < 0) {
+    return insertBeforeRootPlistClose(xml, `\t<key>${key}</key>\n\t<array>\n${entries}\n\t</array>`);
+  }
+  const open = xml.indexOf('<array>', keyIndex);
+  if (open < 0) throw new Error(`Invalid plist array for ${key}`);
+  const tags = /<\/?array>/g;
+  tags.lastIndex = open;
+  let depth = 0;
+  let match: RegExpExecArray | null;
+  while ((match = tags.exec(xml))) {
+    if (match[0] === '<array>') depth += 1;
+    else {
+      depth -= 1;
+      if (depth === 0) {
+        return `${xml.slice(0, match.index)}${entries}\n\t${xml.slice(match.index)}`;
+      }
+    }
+  }
+  throw new Error(`Invalid plist array for ${key}: missing closing tag`);
+}
+
+export function applyLinkingConfiguration(
+  androidDir: string | null,
+  iosDir: string | null,
+  schemesInput: readonly string[] = []
+): void {
+  const schemes = validateLinkingSchemes(schemesInput);
+  if (androidDir && schemes.length) {
+    const filters = schemes.map(scheme => [
+      '            <intent-filter>',
+      '                <action android:name="android.intent.action.VIEW" />',
+      '                <category android:name="android.intent.category.DEFAULT" />',
+      '                <category android:name="android.intent.category.BROWSABLE" />',
+      `                <data android:scheme="${scheme}" />`,
+      '            </intent-filter>',
+    ].join('\n')).join('\n');
+    for (const relative of ['app/src/main/AndroidManifest.xml', 'app/src/release/AndroidManifest.xml']) {
+      const file = path.join(androidDir, relative);
+      if (!fs.existsSync(file)) continue;
+      let xml = fs.readFileSync(file, 'utf8');
+      if (xml.includes('<!-- RAYACT_LINKING_INTENT_FILTERS -->')) {
+        xml = xml.replace('<!-- RAYACT_LINKING_INTENT_FILTERS -->', `${filters}\n            <!-- RAYACT_LINKING_INTENT_FILTERS -->`);
+      } else {
+        xml = xml.replace(
+          /(<activity\b(?![^>]*\/>)[^>]*)(>)/,
+          `$1>\n${filters}\n            <!-- RAYACT_LINKING_INTENT_FILTERS -->`
+        );
+      }
+      fs.writeFileSync(file, xml);
+    }
+  }
+  if (iosDir && schemes.length) {
+    const value = schemes.map(scheme => [
+        '\t<dict>',
+        '\t\t<key>CFBundleURLName</key>',
+        `\t\t<string>${scheme}</string>`,
+        '\t\t<key>CFBundleURLSchemes</key>',
+        `\t\t<array><string>${scheme}</string></array>`,
+        '\t</dict>',
+      ].join('\n')).join('\n');
+    for (const name of ['Info.plist', 'Info-Release.plist']) {
+      const file = path.join(iosDir, name);
+      if (!fs.existsSync(file)) continue;
+      let xml = fs.readFileSync(file, 'utf8');
+      xml = appendPlistArray(xml, 'CFBundleURLTypes', value);
+      fs.writeFileSync(file, xml);
+    }
+  }
 }
 
 function replaceInFile(filePath: string, replacements: Record<string, string>): void {
@@ -186,7 +277,7 @@ function writeNativeModulesManifest(
   fs.mkdirSync(assetsDir, { recursive: true });
   fs.writeFileSync(
     path.join(assetsDir, 'native-modules.json'),
-    JSON.stringify({ nativeModules: modules }, null, 2) + '\n'
+    JSON.stringify({ nativeModules: modules.filter(module => module.nativeBus !== false) }, null, 2) + '\n'
   );
 }
 
@@ -200,7 +291,23 @@ export function copyIosPluginArtifacts(
       const source = verifyModuleArtifact(plugin, artifact);
       const entryName = path.basename(source);
       const destination = path.join(iosDir, 'Frameworks/Modules', entryName);
-      if (fs.statSync(source).isDirectory()) copyDirRecursive(source, destination);
+      if (fs.statSync(source).isDirectory()) {
+        copyDirRecursive(source, destination);
+        // Static module XCFrameworks all expose the same RayactModule ABI
+        // header. Xcode copies public XCFramework headers into one product
+        // include directory, so selecting two packages otherwise creates
+        // duplicate-output build commands. App code never imports these
+        // private registration headers; remove them from the copied artifact.
+        const infoFile = path.join(destination, 'Info.plist');
+        if (fs.existsSync(infoFile)) {
+          const info = fs.readFileSync(infoFile, 'utf8')
+            .replace(/\s*<key>HeadersPath<\/key>\s*<string>Headers<\/string>/g, '');
+          fs.writeFileSync(infoFile, info);
+          for (const slice of fs.readdirSync(destination)) {
+            fs.rmSync(path.join(destination, slice, 'Headers'), { recursive: true, force: true });
+          }
+        }
+      }
       else {
         fs.mkdirSync(path.dirname(destination), { recursive: true });
         fs.copyFileSync(source, destination);
@@ -224,10 +331,11 @@ export function writeIosModuleRegistry(
   iosDir: string,
   plugins: ReturnType<typeof resolveRayactPlugins>
 ): void {
-  const declarations = plugins
+  const busPlugins = plugins.filter(plugin => plugin.manifest.nativeBus !== false);
+  const declarations = busPlugins
     .map(plugin => `extern "C" int ${plugin.manifest.library}_register(const RayactHost* host);`)
     .join('\n');
-  const calls = plugins
+  const calls = busPlugins
     .map(plugin => `    { const int rc = ${plugin.manifest.library}_register(host); if (rc != 0) return rc; }`)
     .join('\n');
   const source = `struct RayactHost;\n\n${declarations}${declarations ? '\n\n' : '\n'}extern "C" int rayact_module_register(const RayactHost* host) {\n${calls}${calls ? '\n' : ''}    return 0;\n}\n`;
@@ -441,7 +549,7 @@ function applyInfoPlistValues(file: string, values: Record<string, string | numb
   const entries = Object.entries(values)
     .map(([key, value]) => `\t<key>${key}</key>\n\t${plistXmlValue(value)}`)
     .join('\n');
-  xml = xml.replace(/\s*<\/dict>/, `\n${entries}\n</dict>`);
+  xml = insertBeforeRootPlistClose(xml, entries);
   fs.writeFileSync(file, xml);
 }
 
@@ -495,6 +603,11 @@ export function writeIosPlatformAutolinking(
     '    static func register(with registry: RayactPlatformRegistry) {',
     ...registrations.map(type => `        ${type}().register(with: registry)`),
     '    }',
+    '}',
+    '',
+    '@_cdecl("RayactRegisterGeneratedModules")',
+    'public func RayactRegisterGeneratedModules() {',
+    '    RayactGeneratedModules.register(with: RayactPlatformRegistry.shared)',
     '}',
     '',
   ].join('\n');
@@ -657,6 +770,8 @@ export async function runPrebuild(options: PrebuildOptions): Promise<{
         `matching your other @rayact/* packages, if you need \`rayact prebuild --ios\`.`
     );
   }
+
+  applyLinkingConfiguration(androidDir, templateIos ? iosDir : null, options.linking?.schemes);
 
   writeNativeModulesManifest(projectRoot, nativeModules);
   copyDesktopPluginArtifacts(projectRoot, enabledPlugins);

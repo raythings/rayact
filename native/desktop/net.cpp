@@ -1024,15 +1024,29 @@ static const char s_polyfill[] = R"JS(
   }
   AbortSignal.prototype = Object.create(EventTarget.prototype);
   AbortSignal.prototype.constructor = AbortSignal;
+  AbortSignal.prototype.throwIfAborted = function() { if (this.aborted) throw this.reason; };
+  AbortSignal.prototype.__abort = function(reason) {
+    if (this.aborted) return;
+    this.aborted = true;
+    this.reason = reason!==undefined?reason:new DOMException('The operation was aborted','AbortError');
+    __native_signal_abort(this.__nativeAbortId);
+    this.dispatchEvent(new Event('abort'));
+  };
+  AbortSignal.abort = function(reason) {
+    var s = new AbortSignal();
+    s.aborted = true;
+    s.reason = reason!==undefined?reason:new DOMException('The operation was aborted','AbortError');
+    __native_signal_abort(s.__nativeAbortId);
+    return s;
+  };
+  AbortSignal.timeout = function(ms) {
+    var s = new AbortSignal();
+    setTimeout(function(){ s.__abort(new DOMException('The operation timed out','TimeoutError')); }, ms);
+    return s;
+  };
 
   function AbortController() { this.signal = new AbortSignal(); }
-  AbortController.prototype.abort = function(reason) {
-    if (this.signal.aborted) return;
-    this.signal.aborted = true;
-    this.signal.reason = reason!==undefined?reason:new DOMException('The operation was aborted','AbortError');
-    __native_signal_abort(this.signal.__nativeAbortId);
-    this.signal.dispatchEvent(new Event('abort'));
-  };
+  AbortController.prototype.abort = function(reason) { this.signal.__abort(reason); };
 
   // ── EventSource ──────────────────────────────────────────────────────────────
   function EventSource(url, opts) {

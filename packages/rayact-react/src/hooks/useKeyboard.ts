@@ -9,6 +9,8 @@ export interface KeyboardInsets {
   visible: boolean;
   height: number;
   duration: number;
+  /** 0..1 progress of the current keyboard-frame transition. */
+  progress: number;
 }
 
 export function useKeyboard(): KeyboardInsets {

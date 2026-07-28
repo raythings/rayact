@@ -6,5 +6,5 @@
     "port": 8082,
     "cdpPort": 9230
   },
-  "entry": "src/App.tsx"
+  "entry": "src/flatlist-bench.tsx"
 }

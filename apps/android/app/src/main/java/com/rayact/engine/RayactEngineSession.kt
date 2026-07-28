@@ -83,6 +83,15 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
     fun setKeyboardInsets(heightDp: Float, visible: Boolean, durationMs: Float) =
         nativeSetKeyboardInsets(nativeHandle, heightDp, visible, durationMs)
 
+    fun deliverURL(url: String?) {
+        if (url.isNullOrBlank()) return
+        try {
+            nativePushURL(url)
+        } catch (_: UnsatisfiedLinkError) {
+            synchronized(pendingURLs) { pendingURLs.addLast(url) }
+        }
+    }
+
     fun destroySurface(surfaceId: Int) = nativeDestroySurface(nativeHandle, surfaceId)
     fun pushSurface(surfaceId: Int) = nativePushSurface(nativeHandle, surfaceId)
     fun popSurface(): Int = nativePopSurface(nativeHandle)
@@ -133,6 +142,13 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
         nativeSetExternalViewInsets(nativeHandle, nodeId, l, t, r, b)
 
     companion object {
+        private val pendingURLs = ArrayDeque<String>()
+
+        @JvmStatic
+        fun pollPendingURL(): String? =
+            synchronized(pendingURLs) {
+                if (pendingURLs.isEmpty()) null else pendingURLs.removeFirst()
+            }
         init { System.loadLibrary("rayact") }
 
         fun create(dataPath: String): RayactEngineSession? {
@@ -166,6 +182,7 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
         @JvmStatic external fun nativeDevtoolsMessage(handle: Long, message: String)
         @JvmStatic external fun nativeSetSafeAreaInsets(handle: Long, top: Float, right: Float, bottom: Float, left: Float)
         @JvmStatic external fun nativeSetKeyboardInsets(handle: Long, heightDp: Float, visible: Boolean, durationMs: Float)
+        @JvmStatic external fun nativePushURL(url: String)
         @JvmStatic external fun nativeDestroySurface(handle: Long, surfaceId: Int)
         @JvmStatic external fun nativePushSurface(handle: Long, surfaceId: Int)
         @JvmStatic external fun nativePopSurface(handle: Long): Int

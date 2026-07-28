@@ -111,6 +111,9 @@ export function createDevClient(options: DevClientOptions): RayactDevClient {
       }
       send('client:reloaded');
       setReloadState('running');
+      // The bundle evaluated cleanly — take the error overlay down so a fix is
+      // visible without restarting the app.
+      options.bridge.clearError?.();
       return true;
     } catch (error) {
       setReloadState('failed');

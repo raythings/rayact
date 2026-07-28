@@ -20,9 +20,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import com.rayact.devclient.DevClientBridge
 import com.rayact.devclient.DevServerLoader
-import com.rayact.devclient.DevShakeDetector
 import com.rayact.devclient.ProjectHmrClient
 import com.rayact.engine.RayactEngineSession
+import com.rayact.engine.RayactPlatformRegistry
 import org.json.JSONObject
 
 class DevLauncherActivity : AppCompatActivity() {
@@ -43,7 +43,6 @@ class DevLauncherActivity : AppCompatActivity() {
     private var projectLoadingView: View? = null
     private var activePane: ActivePane = ActivePane.LAUNCHER
     @Volatile private var projectLoadGeneration = 0
-    private var shakeDetector: DevShakeDetector? = null
     @Volatile private var destroyed = false
     @Volatile private var reloadInProgress = false
     private var projectBackBlockedUntilMs = 0L
@@ -56,6 +55,7 @@ class DevLauncherActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        RayactPlatformRegistry.initialize(this)
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
@@ -72,6 +72,7 @@ class DevLauncherActivity : AppCompatActivity() {
 
         launcherSession = RayactEngineSession.create(filesDir.absolutePath)
             ?: throw IllegalStateException("Failed to create Rayact engine session")
+        launcherSession.deliverURL(intent.dataString)
         launcherHost = createHost(launcherSession)
 
         DevClientBridge.init(this, launcherSession)
@@ -89,8 +90,17 @@ class DevLauncherActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        activeSession()?.deliverURL(intent.dataString)
         intent.getStringExtra(DevClientBridge.EXTRA_DEV_SERVER_URL)?.takeIf { it.isNotBlank() }?.let { url ->
             openProject(url)
+        }
+    }
+
+    @Deprecated("Activity result bridge for the optional image picker")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == DevClientBridge.REQUEST_IMAGE_PICKER) {
+            DevClientBridge.onImagePickerResult(resultCode, data)
         }
     }
 
@@ -451,14 +461,10 @@ class DevLauncherActivity : AppCompatActivity() {
 
     private fun startProjectDebugTools(session: RayactEngineSession, host: NavigationHost) {
         session.host.attachDevMenuOverlay(host)
-        shakeDetector?.stop()
-        shakeDetector = DevShakeDetector(this, session).also { it.start() }
     }
 
     private fun stopProjectDebugTools() {
         ProjectHmrClient.stop()
-        shakeDetector?.stop()
-        shakeDetector = null
         projectBackBlockedUntilMs = 0L
     }
 

@@ -9,6 +9,12 @@ enum RayactMobileNetwork {
     private static var sockets: [Int32: SocketRecord] = [:]
     private static var events: [Int64: [[String: Any]]] = [:]
 
+    // In-flight fetches, keyed by owner + the JS-side request id, so AbortSignal
+    // can reach the actual URLSessionDataTask. Entries are removed on every
+    // terminal path (completion, abort, engine teardown).
+    private struct FetchKey: Hashable { let owner: Int64; let requestId: Int32 }
+    private static var fetchTasks: [FetchKey: URLSessionDataTask] = [:]
+
     static let fetchTextCallback: RayactNativeBridge.NetworkFetchFn = { urlPtr in
         let url = urlPtr.map { String(cString: $0) } ?? ""
         let text = (try? RayactHTTP.getText(url)) ?? ""
@@ -37,7 +43,7 @@ enum RayactMobileNetwork {
     // on the render thread. Replaces the old synchronous httpGetText/Bytes shims
     // that blocked the render thread (froze the dev launcher on unreachable
     // server probes).
-    static let fetchStartCallback: RayactNativeBridge.NetworkFetchStartFn = { owner, requestId, urlPtr in
+    static let fetchStartCallback: RayactNativeBridge.NetworkFetchStartFn = { owner, requestId, urlPtr, methodPtr, headersPtr, bodyPtr in
         let urlString = urlPtr.map { String(cString: $0) } ?? ""
         guard let url = URL(string: urlString) else {
             enqueueFetch(owner: owner, requestId: requestId, status: 0, body: "", error: "Invalid URL")
@@ -45,9 +51,28 @@ enum RayactMobileNetwork {
         }
         var request = URLRequest(url: url)
         request.timeoutInterval = 5
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        request.httpMethod = (methodPtr.map { String(cString: $0) } ?? "GET").uppercased()
+        if let headersPtr,
+           let data = String(cString: headersPtr).data(using: .utf8),
+           let headers = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for (name, value) in headers {
+                request.setValue(String(describing: value), forHTTPHeaderField: name)
+            }
+        }
+        // A null body pointer means "no body" — distinct from an empty one.
+        if let bodyPtr { request.httpBody = String(cString: bodyPtr).data(using: .utf8) }
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            removeFetchTask(owner: owner, requestId: requestId)
             if let error {
-                enqueueFetch(owner: owner, requestId: requestId, status: 0, body: "", error: error.localizedDescription)
+                // A cancel surfaces here as NSURLErrorCancelled; flag it so the JS
+                // side can reject with AbortError rather than a generic Error.
+                let nsError = error as NSError
+                let canceled = nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+                enqueueFetch(
+                    owner: owner, requestId: requestId, status: 0, body: "",
+                    error: canceled ? "aborted" : error.localizedDescription,
+                    canceled: canceled
+                )
                 return
             }
             let http = response as? HTTPURLResponse
@@ -69,7 +94,36 @@ enum RayactMobileNetwork {
                 owner: owner, requestId: requestId, status: status, body: body, error: "",
                 statusText: statusText, headers: headers, mimeType: mimeType
             )
-        }.resume()
+        }
+        // Retained before resume() so an abort on the very next frame still finds
+        // the task; URLSessionDataTask.cancel() tears the connection down for real.
+        lock.lock()
+        fetchTasks[FetchKey(owner: owner, requestId: requestId)] = task
+        lock.unlock()
+        task.resume()
+    }
+
+    /// Cancel an in-flight fetch. Backs `AbortController.abort()` on the JS side.
+    static let fetchAbortCallback: RayactNativeBridge.NetworkFetchAbortFn = { owner, requestId in
+        lock.lock()
+        let task = fetchTasks.removeValue(forKey: FetchKey(owner: owner, requestId: requestId))
+        lock.unlock()
+        task?.cancel()
+    }
+
+    private static func removeFetchTask(owner: Int64, requestId: Int32) {
+        lock.lock()
+        fetchTasks.removeValue(forKey: FetchKey(owner: owner, requestId: requestId))
+        lock.unlock()
+    }
+
+    /// Drop in-flight fetches for an engine that is going away.
+    static func cancelFetches(owner: Int64) {
+        lock.lock()
+        let doomed = fetchTasks.filter { $0.key.owner == owner }
+        for key in doomed.keys { fetchTasks.removeValue(forKey: key) }
+        lock.unlock()
+        for task in doomed.values { task.cancel() }
     }
 
     private static func enqueueFetch(
@@ -80,7 +134,8 @@ enum RayactMobileNetwork {
         error: String,
         statusText: String = "",
         headers: [String: String] = [:],
-        mimeType: String = ""
+        mimeType: String = "",
+        canceled: Bool = false
     ) {
         lock.lock()
         var ev: [String: Any] = [
@@ -88,6 +143,7 @@ enum RayactMobileNetwork {
             "statusText": statusText, "headers": headers, "mimeType": mimeType, "protocol": ""
         ]
         if !error.isEmpty { ev["error"] = error }
+        if canceled { ev["canceled"] = true }
         events[owner, default: []].append(ev)
         lock.unlock()
         RayactNativeBridge.requestGraphicsFrame(owner)

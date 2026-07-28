@@ -25,5 +25,13 @@
         </dict>
     </dict>
     <key>UILaunchScreen</key><dict/>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan a QR code to connect to a development server.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan a QR code to connect to a development server.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan a QR code to connect to a development server.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan a QR code to connect to a development server.</string>
 </dict>
 </plist>

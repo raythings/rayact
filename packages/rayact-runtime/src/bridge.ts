@@ -288,6 +288,22 @@ function materialProps(type: HostNodeType, props: Record<string, unknown>, style
 export function createBridge(globalObject: RayactGlobal = globalThis as RayactGlobal): HostBridge {
   const native = globalObject;
 
+  // The dev error overlay replaces the native root with its own tree. Remember
+  // the app's root so clearError() can put it back — otherwise a fixed bundle
+  // re-renders into a React root the native side is no longer pointing at, and
+  // the error screen stays on forever (the app looks broken after the fix).
+  let appRootNode: HostNode | null = null;
+  let errorOverlayNode: HostNode | null = null;
+  const setNativeRoot = (node: HostNode | null) => {
+    if (node) {
+      requireFunction(native.setRootNode, 'setRootNode')(node.id);
+    } else if (typeof native.clearRootNode === 'function') {
+      native.clearRootNode();
+    } else {
+      requireFunction(native.setRootNode, 'setRootNode')(null);
+    }
+  };
+
   const bridge: HostBridge = {
     createNode(type, props = {}) {
       const style = toStyleProps(props, true);
@@ -458,13 +474,20 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
     },
 
     setRoot(node) {
-      if (node) {
-        requireFunction(native.setRootNode, 'setRootNode')(node.id);
-      } else if (typeof native.clearRootNode === 'function') {
-        native.clearRootNode();
-      } else {
-        requireFunction(native.setRootNode, 'setRootNode')(null);
+      appRootNode = node ?? null;
+      if (errorOverlayNode) {
+        // React commits asynchronously, so an explicit clearError() after a
+        // reload can land before the new tree exists. Instead, treat a freshly
+        // committed app root as the proof that recovery worked: swap the
+        // overlay out exactly then. A null root (unmount) leaves it up.
+        if (!node) return;
+        const overlay = errorOverlayNode;
+        errorOverlayNode = null;
+        setNativeRoot(node);
+        try { bridge.disposeNode(overlay); } catch { /* already gone */ }
+        return;
       }
+      setNativeRoot(node);
     },
 
     setEventHandler(node, eventName: HostEventName, handler) {
@@ -602,9 +625,50 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
         bridge.appendChild(content, body);
         bridge.appendChild(scroller, content);
         bridge.appendChild(root, scroller);
-        bridge.setRoot(root);
+        // Replace any overlay already on screen rather than stacking them, and
+        // take over the native root directly so setRoot() keeps tracking where
+        // the app tree lives.
+        const previousOverlay = errorOverlayNode;
+        errorOverlayNode = root;
+        setNativeRoot(root);
+        if (previousOverlay) {
+          try { bridge.disposeNode(previousOverlay); } catch { /* already gone */ }
+        }
       } catch (overlayError) {
         native.console?.error?.('Failed to show Rayact error overlay', overlayError);
+      }
+    },
+
+    /**
+     * Dismiss the error overlay and hand the screen back to the app tree.
+     * Called after a reload or hot update evaluates cleanly, so fixing the code
+     * actually clears the red screen instead of leaving it up forever.
+     */
+    /** True while the dev error overlay owns the screen. */
+    hasError() {
+      return errorOverlayNode !== null;
+    },
+
+    noteAppRoot(node) {
+      appRootNode = node ?? null;
+      if (!node || !errorOverlayNode) return;
+      // The binary/batched commit already pointed the native root at the new
+      // app tree; only the JS-side overlay bookkeeping is stale. Retire the
+      // overlay node — restoring the root here would race the flushed commit
+      // (and a binary node id is not addressable via the sync setRootNode).
+      const overlay = errorOverlayNode;
+      errorOverlayNode = null;
+      try { bridge.disposeNode(overlay); } catch { /* already gone */ }
+    },
+
+    clearError() {
+      const overlay = errorOverlayNode;
+      if (!overlay) return;
+      errorOverlayNode = null;
+      try {
+        setNativeRoot(appRootNode);
+      } finally {
+        try { bridge.disposeNode(overlay); } catch { /* already gone */ }
       }
     }
   };

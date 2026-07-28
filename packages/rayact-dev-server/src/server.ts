@@ -609,9 +609,34 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
       }
     }
 
-    if (updates.size) {
+    if (!updates.size) return;
+
+    // Gate the push on the module actually compiling. Broadcasting first and
+    // letting the device fetch a broken module turns every typo into a red
+    // screen (or worse, a half-applied update); instead, transform the changed
+    // file server-side and only announce the update when it produces valid
+    // code. While the file is broken the client gets a build:error (red box
+    // with the real syntax error); the next save that compiles re-fires the
+    // watcher and the update goes out normally.
+    void (async () => {
+      try {
+        const mods = context.vite!.moduleGraph.getModulesByFile(file);
+        const probeUrl = mods?.size ? [...mods][0].url : `/${rel}`;
+        await context.vite!.transformRequest(probeUrl);
+      } catch (error) {
+        const err = error as Error & { id?: string; frame?: string };
+        if (claimHmrBroadcast(hmrBroadcastClaims, `build-error:${rel}`, timestamp)) {
+          const message = `Build error in ${rel}:\n${err.message ?? String(error)}`;
+          broadcastModuleHmr({
+            type: 'build:error',
+            payload: { message, stack: err.frame ?? err.stack }
+          } as DebugMessage);
+          console.error(`[rayact] build error in ${rel} — holding HMR update until it compiles`);
+        }
+        return;
+      }
       broadcastModuleHmr({ type: 'update', updates: [...updates.values()] } as DebugMessage);
-    }
+    })();
   };
 
   async function getContext(platform: DevPlatform): Promise<PlatformContext> {

@@ -94,7 +94,8 @@ function compilerForMode(mode: RayactBuildMode): RayactCompiler {
 export function resolveProjectNativeModules(root: string): RayactNativeModuleEntry[] {
   const projectRoot = path.resolve(root);
   const config = loadRayactConfig(projectRoot);
-  return mergeNativeModules(config.nativeModules, resolveRayactPlugins(projectRoot));
+  return mergeNativeModules(config.nativeModules, resolveRayactPlugins(projectRoot))
+    .filter(module => module.nativeBus !== false);
 }
 
 export interface DevClientAppMetadata {
@@ -621,6 +622,7 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
       if (id === `\0${DEV_CLIENT_ENTRY_ID}`) {
         const includeDevConsole = options.platform !== 'web';
         return [
+          `import ${JSON.stringify('rayact/crypto')};`,
           `import ${JSON.stringify(REACT_DEVTOOLS_BACKEND_SETUP_ID)};`,
           `import React from 'react';`,
           `import { render } from 'rayact/react';`,
@@ -665,14 +667,17 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
           `__vendor.react = React.default || React;`,
           `__vendor.jsxRuntime = jsxRuntime.default || jsxRuntime;`,
           `__vendor.jsxDevRuntime = jsxDevRuntime.default || jsxDevRuntime;`,
-          `import { installModuleHmrRuntime } from 'rayact/runtime';`,
+          `import { installModuleHmrRuntime, getDefaultRuntime } from 'rayact/runtime';`,
           `(async function(){`,
           `  const serverUrl = globalThis.__RAYACT_DEV_SERVER__;`,
           `  if (!serverUrl) throw new Error('__RAYACT_DEV_SERVER__ is required');`,
           `  if (typeof globalThis.__rayactDevFetch !== 'function' && typeof globalThis.rayactDevFetch === 'function') {`,
           `    globalThis.__rayactDevFetch = function(url) { return globalThis.rayactDevFetch(url); };`,
           `  }`,
-          `  const runtime = installModuleHmrRuntime({ serverUrl, global: globalThis });`,
+          `  // The bridge owns the dev error overlay: without it the HMR runtime`,
+          `  // cannot detect a crashed app (hasError) or clear the error screen`,
+          `  // after a fix (clearError), making runtime errors unrecoverable.`,
+          `  const runtime = installModuleHmrRuntime({ serverUrl, global: globalThis, bridge: getDefaultRuntime().bridge });`,
           `  runtime.markBootstrap(serverUrl + '/rayact/bootstrap.js');`,
           `  await runtime.startFromManifest();`,
           `})().catch(function(err){`,

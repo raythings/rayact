@@ -48,6 +48,18 @@ struct QueuedTouch {
     bool released = false;
     bool down = false;
     Vector2 position = {0.0f, 0.0f};
+    // Position at the moment of the press. `position` is a single slot that
+    // every subsequent move overwrites, so when a whole gesture arrives between
+    // two frames (slow frame, or synthetic input) the press would otherwise be
+    // delivered at the gesture's END point — pressOrigin == final position,
+    // zero travel, touch slop never crossed, and the scroll never engages.
+    // Keeping the press point separate lets the press frame report where the
+    // finger actually went down and the next frame report where it ended up.
+    Vector2 pressPosition = {0.0f, 0.0f};
+    // Set when a move arrives while a press is still queued: the release must
+    // not be delivered until that motion has been consumed on its own frame,
+    // otherwise the drag is never seen with the button down.
+    bool hasPendingMove = false;
     // Accumulated mouse-wheel notches since the last consumed frame (web feeds
     // this via engineQueueWheel; raylib's GetMouseWheelMove is bypassed there).
     float wheel = 0.0f;

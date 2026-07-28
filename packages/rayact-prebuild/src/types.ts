@@ -44,6 +44,8 @@ export interface RayactModuleManifest {
   package: string;
   jsEntry: string;
   library: string;
+  /** False for platform-only packages that do not publish a C ABI module. */
+  nativeBus?: boolean;
   platforms: RayactModulePlatform[];
   architectures: RayactModuleArchitecture[];
   abiRange: string;
@@ -102,6 +104,7 @@ export type RayactNativeModuleSelection =
 export interface RayactNativeModuleEntry {
   name: string;
   lib: string;
+  nativeBus?: boolean;
   jsPackage: string;
   platforms?: string[];
   architectures?: string[];

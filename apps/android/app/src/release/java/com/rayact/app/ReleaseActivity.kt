@@ -9,6 +9,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import com.rayact.engine.RayactEngineSession
+import com.rayact.engine.RayactPlatformRegistry
 
 /** Release-only entry point. It owns one engine session and loads embedded app assets. */
 class ReleaseActivity : AppCompatActivity() {
@@ -24,6 +25,7 @@ class ReleaseActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        RayactPlatformRegistry.initialize(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
@@ -32,6 +34,7 @@ class ReleaseActivity : AppCompatActivity() {
         RayactBundledAssets.extract(this)
         session = RayactEngineSession.create(filesDir.absolutePath)
             ?: throw IllegalStateException("Failed to create Rayact engine session")
+        session.deliverURL(intent.dataString)
         host = NavigationHost(this, session).also {
             it.installRoot(RayactSurfaceView(this, session))
         }
@@ -48,6 +51,12 @@ class ReleaseActivity : AppCompatActivity() {
             val source = assets.open("app.js").bufferedReader().use { it.readText() }
             check(session.loadSource(source)) { "Failed to load embedded app bundle" }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        session.deliverURL(intent.dataString)
     }
 
     override fun onStart() {

@@ -141,6 +141,17 @@ export interface HostBridge {
   disposeNode(node: HostNode): void;
   reload(source?: string): Promise<void> | void;
   showError?(message: string, stack?: string): void;
+  /** Dismiss the dev error overlay and restore the app tree (see createBridge). */
+  clearError?(): void;
+  /**
+   * Bookkeeping-only root notification for renderers that set the native root
+   * out-of-band (binary command buffer / batched mutations): records the app
+   * root and retires any error overlay WITHOUT touching the native root, which
+   * those paths have already switched during commit.
+   */
+  noteAppRoot?(node: HostNode | null): void;
+  /** True while the dev error overlay is displayed. */
+  hasError?(): boolean;
 }
 
 export interface RayactRuntime {
@@ -251,6 +262,12 @@ export interface RayactGlobal {
   loadBytecode?: (bytes: Uint8Array) => Promise<void> | void;
   eval?: (source: string) => unknown;
   devCall?: (method: string, data?: unknown, callback?: (result: unknown) => void) => void;
+  platformCall?: (
+    module: string,
+    method: string,
+    data?: unknown,
+    callback?: (result: { ok: boolean; value?: unknown; error?: string }) => void,
+  ) => void;
   WebSocket?: new (url: string) => WebSocketLike;
   console?: Console;
   __RAYACT_DEV_SERVER__?: string;

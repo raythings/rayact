@@ -109,6 +109,26 @@ WebGPU/COOP/COEP hosting requirements.
 - HTTP `/rayact/status` poll — fallback
 - Bytecode incompatible with React Fast Refresh; dev server serves JS when HMR clients are connected
 
+### Scripted / agent-driven reloads
+
+Saving a file is normally all it takes: the dev server pushes a hot update and
+the connected app applies it in place, keeping app state. Nothing needs to be
+rebuilt, reinstalled, or relaunched for a JS change.
+
+Two HTTP endpoints cover everything else, so scripts and AI agents never need
+the interactive TUI or a raw websocket client:
+
+- `POST /rayact/reload` — rebuild the bundles and full-reload every connected
+  client. This restarts the JS entry (fresh state) without restarting the app
+  process; use it after config/asset changes or when you want a clean re-run.
+- `GET /rayact/status` — `ok: true` + current revision, or `ok: false` with
+  the build error when the last save didn't compile.
+
+If the app hit a build error or an uncaught render error, it shows the red
+error screen; the next save that evaluates cleanly (or a `POST /rayact/reload`)
+clears it and remounts the app — no restart required. Scaffolded projects ship
+an `AGENTS.md` documenting this loop for coding agents working in the repo.
+
 ## Chrome DevTools (CDP)
 
 The development server binds its InspectorProxy to `127.0.0.1:9229` (falling

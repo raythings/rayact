@@ -12,6 +12,8 @@ typedef int64_t RayactIOSHandle;
 void RayactIOSSetDevCallbacks(
     const char* (*devCall)(const char* method, const char* dataJson),
     const char* (*devFetch)(const char* url));
+void RayactIOSSetPlatformModuleCallback(
+    const char* (*platformCall)(const char* module, const char* method, const char* payloadJson));
 void RayactIOSSetDevFetchBytes(
     const uint8_t* (*devFetchBytes)(const char* url, uint32_t* outLen));
 void RayactIOSSetNetworkCallbacks(
@@ -22,7 +24,10 @@ void RayactIOSSetNetworkCallbacks(
     bool (*wsClose)(int64_t owner, int id, int code, const char* reason),
     const char* (*wsPollEvents)(int64_t owner));
 void RayactIOSSetNetworkFetchStart(
-    void (*fetchStart)(int64_t owner, int requestId, const char* url));
+    void (*fetchStart)(int64_t owner, int requestId, const char* url, const char* method,
+                       const char* headersJson, const char* body));
+void RayactIOSSetNetworkFetchAbort(
+    void (*fetchAbort)(int64_t owner, int requestId));
 
 RayactIOSHandle RayactIOSSessionCreate(const char* dataPath);
 void RayactIOSSessionDestroy(RayactIOSHandle handle);

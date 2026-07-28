@@ -56,6 +56,8 @@ export type StackAnimation =
   | 'none';
 
 export type RayactStackNavigationOptions = {
+  /** Style applied to this screen's scene container (RN stack parity). */
+  contentStyle?: Record<string, unknown> | Array<Record<string, unknown> | null | undefined>;
   /** Hide inactive screen content once another route is above it. */
   detachInactiveScreens?: boolean;
   /** Defer mounting screen content until after the transition shell is visible. */
@@ -73,6 +75,8 @@ export type RayactStackNavigationOptions = {
 };
 
 type StackNavigationConfig = {
+  /** Default scene-container style. Screen options override it. */
+  contentStyle?: Record<string, unknown> | Array<Record<string, unknown> | null | undefined>;
   animation?: StackAnimation;
   animationDuration?: number;
   /** Keep visited screens mounted by route name (instant tab-style switching). */
@@ -248,6 +252,7 @@ type CachedSceneLayerProps = {
   visible: boolean;
   lazy: boolean;
   bgColor: number;
+  contentStyle?: Style | Array<Style | null | undefined>;
 };
 
 function CachedSceneLayer({
@@ -256,6 +261,7 @@ function CachedSceneLayer({
   visible,
   lazy,
   bgColor,
+  contentStyle,
 }: CachedSceneLayerProps) {
   const hasMountedRef = React.useRef(false);
   const [contentReady, setContentReady] = React.useState(!lazy);
@@ -294,6 +300,7 @@ function CachedSceneLayer({
           opacity: visible ? 1 : 0,
           pointerEvents: visible ? 'auto' : 'none',
         },
+        contentStyle,
       ]}
     >
       {contentReady ? (
@@ -316,6 +323,7 @@ type SceneViewProps = {
   defaultAnimation: StackAnimation;
   defaultDuration: number;
   bgColor: number;
+  contentStyle?: Style | Array<Style | null | undefined>;
   onEnterSettled?: (key: string) => void;
   onExitSettled: (key: string) => void;
   embedded?: boolean;
@@ -332,6 +340,7 @@ function SceneView({
   defaultAnimation,
   defaultDuration,
   bgColor,
+  contentStyle,
   onEnterSettled,
   onExitSettled,
   embedded = false,
@@ -588,6 +597,8 @@ function SceneView({
           backgroundColor: bgColor,
           pointerEvents: isFocused ? 'auto' : 'none',
         },
+        contentStyle,
+        opts.contentStyle,
         interp(initialProgress, sceneSize),
       ]}
     >
@@ -655,6 +666,7 @@ function StackNavigator({
   cacheScreensByName = false,
   lazyScreens = false,
   embedded = false,
+  contentStyle,
   ...rest
 }: Props) {
   const forceUpdate = React.useReducer((x) => x + 1, 0)[1];
@@ -827,6 +839,14 @@ function StackNavigator({
               visible={focusedUsesCache && focusedRoute?.name === name}
               lazy={lazy}
               bgColor={bgColor}
+              contentStyle={[
+                ...(Array.isArray(contentStyle) ? contentStyle : [contentStyle]),
+                ...(
+                  Array.isArray(options.contentStyle)
+                    ? options.contentStyle
+                    : [options.contentStyle]
+                ),
+              ]}
             />
           );
         })}
@@ -846,6 +866,7 @@ function StackNavigator({
               defaultAnimation={defaultAnimation}
               defaultDuration={defaultDuration}
               bgColor={bgColor}
+              contentStyle={contentStyle}
               onExitSettled={() => {}}
               embedded={embedded}
             />
@@ -872,6 +893,7 @@ function StackNavigator({
             defaultAnimation={defaultAnimation}
             defaultDuration={defaultDuration}
             bgColor={bgColor}
+            contentStyle={contentStyle}
             onEnterSettled={(key) => {
               seenRouteKeysRef.current.add(key);
               if (topRouteSettledRef.current) return;
@@ -897,6 +919,7 @@ function StackNavigator({
               defaultAnimation={defaultAnimation}
               defaultDuration={defaultDuration}
               bgColor={bgColor}
+              contentStyle={contentStyle}
               onExitSettled={(settledKey) => {
                 closingKeysRef.current.delete(settledKey);
                 closingDescriptorsRef.current.delete(settledKey);

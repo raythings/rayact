@@ -58,6 +58,32 @@ fill `none`/`forwards`/`backwards`/`both`).
 Unknown properties are ignored with a parse warning — they never abort
 rendering.
 
+## Paint order and `position: absolute`
+
+Rayact paints a node's children in **tree order** — the order they appear in
+JSX — stable-sorted by an explicit `zIndex`. Unlike the web, `position:
+absolute` does **not** promote a child above its in-flow siblings: an absolute
+child written before a sibling paints *underneath* it.
+
+`z-index` is not readable from CSS or from `style`; only the top-level
+`zIndex={n}` prop reaches the node.
+
+```jsx
+// The actions layer paints UNDER the content, because it comes first.
+<View style={{ overflow: 'hidden' }}>
+  <View style={{ position: 'absolute', right: 0 }}>{actions}</View>
+  <View>{content}</View>
+</View>
+```
+
+The trap: painting underneath is not the same as being hidden. If the content
+on top is translucent — a glass card, a tint overlay, anything with an alpha
+background — whatever is parked behind it shows straight through, which reads
+as the absolute layer being "on top". A layer that must be invisible at rest
+has to actually leave the visible area: park it outside the parent's bounds and
+let `overflow: hidden` clip it (translating it in with a `SharedValue` keeps a
+drag-driven reveal smooth), or animate its `opacity` to 0.
+
 ## Values
 
 - **Lengths**: `px` (density-independent), `rem`; **`calc()`** over them.

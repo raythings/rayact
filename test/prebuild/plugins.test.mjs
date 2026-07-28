@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   assertModuleCompatibility,
+  applyLinkingConfiguration,
   copyAndroidPluginArtifacts,
   copyIosPluginArtifacts,
   mergeNativeModules,
@@ -26,6 +27,75 @@ const pluginFixture = {
   manifestPath: '/fixture/rayact.module.json', manifest: manifestFixture(),
 };
 
+test('Android app template applies the generated autolink script from the project root', () => {
+  const templateAppDir = path.resolve('packages/template-android/app');
+  const gradle = fs.readFileSync(path.join(templateAppDir, 'build.gradle'), 'utf8');
+  const relativeScript = gradle.match(/def rayactAutolink = file\('([^']+)'\)/)?.[1];
+  assert.equal(relativeScript, '../rayact-autolink.gradle');
+  assert.equal(
+    path.resolve(templateAppDir, relativeScript),
+    path.resolve('packages/template-android/rayact-autolink.gradle'),
+  );
+});
+
+test('Android WebView implementation is package-owned and absent from the base template', () => {
+  const engineSource = fs.readFileSync(
+    path.resolve('packages/template-android/app/src/main/java/com/rayact/engine/RayactPlatformViews.kt'),
+    'utf8',
+  );
+  const packageSource = fs.readFileSync(
+    path.resolve('packages/rayact-webview/android/src/main/java/dev/rayact/webview/RayactWebViewRegistration.kt'),
+    'utf8',
+  );
+  const manifest = JSON.parse(fs.readFileSync(
+    path.resolve('packages/rayact-webview/rayact.module.json'),
+    'utf8',
+  ));
+
+  assert.doesNotMatch(engineSource, /android\.webkit|WebViewHost|RayactWebView/);
+  assert.match(engineSource, /RayactPlatformRegistry\.shared\.hasViewFactory/);
+  assert.match(packageSource, /android\.webkit\.WebView/);
+  assert.equal(
+    manifest.android.registrationClass,
+    'dev.rayact.webview.RayactWebViewRegistration',
+  );
+  assert.deepEqual(manifest.android.sourceDirs, ['android/src/main/java']);
+});
+
+test('sensor implementations are package-owned and dev hosts only forward generic system events', () => {
+  const androidHost = fs.readFileSync(
+    path.resolve('packages/template-android/app/src/main/java/com/rayact/app/DevLauncherActivity.kt'),
+    'utf8',
+  );
+  const androidSensors = fs.readFileSync(
+    path.resolve('packages/rayact-sensors/android/src/main/java/dev/rayact/sensors/RayactSensorsRegistration.kt'),
+    'utf8',
+  );
+  const iosHost = fs.readFileSync(
+    path.resolve('packages/template-ios/DevLauncherController.swift'),
+    'utf8',
+  );
+  const iosSensors = fs.readFileSync(
+    path.resolve('packages/rayact-sensors/ios/RayactSensorsRegistration.swift'),
+    'utf8',
+  );
+  const manifest = JSON.parse(fs.readFileSync(
+    path.resolve('packages/rayact-sensors/rayact.module.json'),
+    'utf8',
+  ));
+
+  assert.doesNotMatch(androidHost, /SensorManager|DevShakeDetector|android\.hardware/);
+  assert.match(androidSensors, /android\.hardware\.SensorManager/);
+  assert.doesNotMatch(iosHost, /CoreMotion|CMMotionManager|nativeToggleDevMenu/);
+  assert.match(iosHost, /emitSystemEvent\("motionShake"\)/);
+  assert.match(iosSensors, /import CoreMotion/);
+  assert.equal(
+    manifest.android.registrationClass,
+    'dev.rayact.sensors.RayactSensorsRegistration',
+  );
+  assert.equal(manifest.ios.registrationType, 'RayactSensorsRegistration');
+});
+
 test('module selection precedence supports autolink, configuration, disable, and the legacy warning', () => {
   assert.equal(mergeNativeModules(undefined, [pluginFixture]).length, 1);
   assert.deepEqual(
@@ -41,6 +111,16 @@ test('module selection precedence supports autolink, configuration, disable, and
   );
   assert.equal(legacy[0].lib, 'legacy_sample');
   assert.match(warnings[0], /rayact migrate/);
+});
+
+test('platform-only packages preserve autolinking metadata without becoming C ABI requirements', () => {
+  const platformPlugin = {
+    ...pluginFixture,
+    manifest: manifestFixture({ nativeBus: false, android: { dependencies: ['com.example:ui:1.0'] } }),
+  };
+  const [entry] = mergeNativeModules(undefined, [platformPlugin]);
+  assert.equal(entry.nativeBus, false);
+  assert.equal(entry.lib, 'rayact_sample');
 });
 
 test('module configuration is checked against its package-owned schema', () => {
@@ -230,4 +310,24 @@ test('platform autolinking copies iOS sources and contributes frameworks and pli
   assert.match(fs.readFileSync(path.join(iosDir, 'Autolinked/RayactGeneratedModules.swift'), 'utf8'), /SampleRegistration/);
   assert.match(fs.readFileSync(path.join(iosDir, 'project.yml'), 'utf8'), /AVFoundation\.framework/);
   assert.match(fs.readFileSync(path.join(iosDir, 'Info.plist'), 'utf8'), /NSCameraUsageDescription/);
+});
+
+test('linking and module plist values are inserted at the root and preserve existing schemes', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rayact-linking-ios-'));
+  const plist = `<?xml version="1.0"?><plist><dict>
+    <key>CFBundleURLTypes</key><array><dict>
+      <key>CFBundleURLName</key><string>rayact</string>
+      <key>CFBundleURLSchemes</key><array><string>rayact</string></array>
+    </dict></array>
+    <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+  </dict></plist>`;
+  fs.writeFileSync(path.join(root, 'Info.plist'), plist);
+  fs.writeFileSync(path.join(root, 'Info-Release.plist'), plist);
+  applyLinkingConfiguration(null, root, ['codesitter']);
+  const output = fs.readFileSync(path.join(root, 'Info.plist'), 'utf8');
+  assert.match(output, /<string>rayact<\/string>/);
+  assert.match(output, /<string>codesitter<\/string>/);
+  const atsEnd = output.indexOf('</dict>', output.indexOf('<key>NSAppTransportSecurity</key>'));
+  assert.ok(output.indexOf('<string>codesitter</string>') < output.indexOf('<key>NSAppTransportSecurity</key>'));
+  assert.doesNotMatch(output.slice(output.indexOf('<key>NSAppTransportSecurity</key>'), atsEnd), /codesitter/);
 });

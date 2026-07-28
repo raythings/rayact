@@ -12,6 +12,10 @@
     "package": { "type": "string" },
     "jsEntry": { "type": "string" },
     "library": { "type": "string" },
+    "nativeBus": {
+      "type": "boolean",
+      "description": "False for platform-only packages that do not publish a C ABI module."
+    },
     "platforms": { "type": "array", "uniqueItems": true, "items": { "enum": ["android", "ios", "darwin", "linux", "windows", "web"] } },
     "architectures": { "type": "array", "uniqueItems": true, "items": { "enum": ["arm64", "x86_64", "wasm32"] } },
     "abiRange": { "type": "string" },

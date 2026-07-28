@@ -34,3 +34,5 @@ npm run start:dev
 ## Docs
 
 - [Rayact dev platform](https://rayact.dev/dev-platform)
+- `AGENTS.md` — the non-interactive dev loop (HMR on save, `POST /rayact/reload`,
+  `/rayact/status`) for scripts and AI coding agents

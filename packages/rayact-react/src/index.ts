@@ -14,6 +14,7 @@ export type {
   AccessibilityValue,
   AppBarProps,
   AvoidKeyboardProps,
+  KeyboardStickyViewProps,
   BaseProps,
   BadgeProps,
   ButtonProps,
@@ -21,6 +22,8 @@ export type {
   IconProps,
   ImageProps,
   ListProps,
+  FlatListProps,
+  MaintainVisibleContentPosition,
   MaterialComponentProps,
   ModalProps,
   NavigationBarProps,
@@ -50,11 +53,14 @@ export type {
 } from './types.js';
 
 export { ExternalView, NativeTextInput } from './components.js';
-export type { TextInputHandle, ScrollViewHandle } from './components.js';
+export type { TextInputHandle, ScrollViewHandle, ExternalViewProps } from './components.js';
+export { FlatList } from './FlatList.js';
+export type { FlatListHandle } from './FlatList.js';
 export {
   ActivityIndicator,
   AppBar,
   AvoidKeyboard,
+  KeyboardStickyView,
   Badge,
   Banner,
   BottomAppBar,
@@ -255,7 +261,19 @@ export function render(element: React.ReactNode): RayactRoot {
   // dev-bundle footer) before the project entry's first render(<App/>) runs, so
   // gating purely on that flag skips the initial mount and the pane stays black.
   const alreadyMounted = !!(globalThis as GlobalWithRoot).__rayactReactRoot;
-  if ((globalThis as Record<string, unknown>).__RAYACT_HMR_ACTIVE__ && alreadyMounted) {
+  // An uncaught render error leaves a mounted-but-dead fiber root: React will
+  // not re-render it, and Fast Refresh cannot revive it. The dev error overlay
+  // is the signal. Drop the dead root so the entry's render() below mounts a
+  // fresh one — this is what lets fixing the code clear the error screen
+  // instead of leaving the app stuck on it until it is restarted.
+  let crashed = false;
+  try {
+    crashed = !!getDefaultRuntime().bridge.hasError?.();
+  } catch { /* runtime not initialised — treat as healthy */ }
+  if (crashed && alreadyMounted) {
+    delete (globalThis as GlobalWithRoot).__rayactReactRoot;
+  }
+  if (!crashed && (globalThis as Record<string, unknown>).__RAYACT_HMR_ACTIVE__ && alreadyMounted) {
     return getOrCreateRoot();
   }
   const root = getOrCreateRoot();
@@ -266,5 +284,13 @@ export function render(element: React.ReactNode): RayactRoot {
   root.render(
     ReactNS.createElement(RayactThemeProvider, null, renderedElement)
   );
+  // The legacy-root render above commits synchronously, and the binary/batched
+  // renderers set the native root inside that commit without ever calling
+  // bridge.setRoot. Tell the bridge where the app tree lives so the dev error
+  // overlay bookkeeping (hasError/clearError) tracks reality — this is what
+  // retires the error screen after a successful recovery render.
+  try {
+    getDefaultRuntime().bridge.noteAppRoot?.(root.container.rootNode);
+  } catch { /* bridge without dev overlay support */ }
   return root;
 }

@@ -58,7 +58,7 @@ targets:
           INFOPLIST_FILE: Info-Release.plist
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: RAYACT_RELEASE
           DEAD_CODE_STRIPPING: YES
-          EXCLUDED_SOURCE_FILE_NAMES: "DevClientBridge.swift DevLauncherController.swift DevMenuOverlay.swift DevServerLoader.swift DevShakeDetector.swift ProjectHmrClient.swift RayactDevToolsTransport.swift"
+          EXCLUDED_SOURCE_FILE_NAMES: "DevClientBridge.swift DevLauncherController.swift DevMenuOverlay.swift DevServerLoader.swift ProjectHmrClient.swift RayactDevToolsTransport.swift"
     dependencies:
       - framework: Frameworks/RayactEngine.xcframework
         embed: false

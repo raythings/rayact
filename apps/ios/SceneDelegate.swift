@@ -24,6 +24,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             RayactMobileNetwork.wsPollCallback
         )
         RayactNativeBridge.setNetworkFetchStart(RayactMobileNetwork.fetchStartCallback)
+        RayactNativeBridge.setNetworkFetchAbort(RayactMobileNetwork.fetchAbortCallback)
+        connectionOptions.urlContexts.first?.url.absoluteString.withCString {
+            if !RayactNativeBridge.pushURL($0) {
+                DevClientBridge.enqueueLinkingURL(String(cString: $0))
+            }
+        }
 
 #if !RAYACT_RELEASE
         RayactNativeBridge.setDevCallbacks(DevClientBridge.devCallCallback, DevServerLoader.devFetchCallback)
@@ -51,6 +57,13 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        for context in URLContexts {
+            context.url.absoluteString.withCString {
+                if !RayactNativeBridge.pushURL($0) {
+                    DevClientBridge.enqueueLinkingURL(String(cString: $0))
+                }
+            }
+        }
 #if !RAYACT_RELEASE
         for context in URLContexts {
             guard let server = Self.parseDevServerURL(context.url) else { continue }

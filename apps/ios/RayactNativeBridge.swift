@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 typealias RayactIOSHandle = Int64
 
@@ -26,11 +27,13 @@ struct RayactIOSHostCallbacks {
 
 enum RayactNativeBridge {
     typealias DevCallFn = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafePointer<CChar>?
+    typealias PlatformCallFn = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafePointer<CChar>?
     typealias DevFetchFn = @convention(c) (UnsafePointer<CChar>?) -> UnsafePointer<CChar>?
     typealias DevFetchBytesFn = @convention(c) (UnsafePointer<CChar>?, UnsafeMutablePointer<UInt32>?) -> UnsafePointer<UInt8>?
     typealias NetworkFetchFn = @convention(c) (UnsafePointer<CChar>?) -> UnsafePointer<CChar>?
     typealias NetworkFetchBytesFn = @convention(c) (UnsafePointer<CChar>?, UnsafeMutablePointer<UInt32>?) -> UnsafePointer<UInt8>?
-    typealias NetworkFetchStartFn = @convention(c) (Int64, Int32, UnsafePointer<CChar>?) -> Void
+    typealias NetworkFetchStartFn = @convention(c) (Int64, Int32, UnsafePointer<CChar>?, UnsafePointer<CChar>?, UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> Void
+    typealias NetworkFetchAbortFn = @convention(c) (Int64, Int32) -> Void
     typealias WebSocketOpenFn = @convention(c) (Int64, UnsafePointer<CChar>?) -> Int32
     typealias WebSocketSendFn = @convention(c) (Int64, Int32, UnsafePointer<CChar>?) -> Bool
     typealias WebSocketCloseFn = @convention(c) (Int64, Int32, Int32, UnsafePointer<CChar>?) -> Bool
@@ -38,6 +41,9 @@ enum RayactNativeBridge {
 
     @_silgen_name("RayactIOSSetDevCallbacks")
     static func setDevCallbacks(_ devCall: DevCallFn?, _ devFetch: DevFetchFn?)
+
+    @_silgen_name("RayactIOSSetPlatformModuleCallback")
+    static func setPlatformModuleCallback(_ platformCall: PlatformCallFn?)
 
     @_silgen_name("RayactIOSSetDevFetchBytes")
     static func setDevFetchBytes(_ devFetchBytes: DevFetchBytesFn?)
@@ -54,6 +60,12 @@ enum RayactNativeBridge {
 
     @_silgen_name("RayactIOSSetNetworkFetchStart")
     static func setNetworkFetchStart(_ fetchStart: NetworkFetchStartFn?)
+
+    static func setNetworkFetchAbort(_ fetchAbort: NetworkFetchAbortFn?) {
+        typealias Function = @convention(c) (NetworkFetchAbortFn?) -> Void
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "RayactIOSSetNetworkFetchAbort") else { return }
+        unsafeBitCast(symbol, to: Function.self)(fetchAbort)
+    }
 
     @_silgen_name("RayactIOSSessionCreate")
     static func sessionCreate(_ dataPath: UnsafePointer<CChar>?) -> RayactIOSHandle
@@ -115,6 +127,14 @@ enum RayactNativeBridge {
 
     @_silgen_name("RayactIOSSessionSetKeyboardInsets")
     static func sessionSetKeyboardInsets(_ handle: RayactIOSHandle, _ heightDp: Float, _ visible: Bool, _ durationMs: Float)
+
+    @discardableResult
+    static func pushURL(_ url: UnsafePointer<CChar>?) -> Bool {
+        typealias Function = @convention(c) (UnsafePointer<CChar>?) -> Void
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "RayactIOSPushURL") else { return false }
+        unsafeBitCast(symbol, to: Function.self)(url)
+        return true
+    }
 
     @_silgen_name("RayactIOSSessionKeyEvent")
     static func sessionKeyEvent(

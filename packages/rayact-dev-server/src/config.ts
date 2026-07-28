@@ -62,6 +62,10 @@ export interface RayactConfig {
     projectDir?: string;
     bundleId?: string;
   };
+  linking?: {
+    /** Custom URL schemes generated into Android intent filters and iOS URL types. */
+    schemes?: string[];
+  };
   /** Native plugin modules the host bundles / the project requires. */
   nativeModules?: RayactNativeModuleSelection[];
   transform?: RayactTransformConfig;

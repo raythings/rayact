@@ -6,6 +6,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        true
+        RayactPlatformRegistry.initialize()
+        RayactNativeBridge.setPlatformModuleCallback(RayactPlatformRegistry.platformCallCallback)
+        return true
     }
 }

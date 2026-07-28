@@ -1,0 +1,23 @@
+{
+  "$schema": "../../schema/rayact.module.schema.json",
+  "schemaVersion": 1,
+  "name": "webview",
+  "package": "@rayact/webview",
+  "jsEntry": ".",
+  "library": "rayact_webview",
+  "nativeBus": false,
+  "platforms": ["android", "ios", "web"],
+  "architectures": ["arm64", "x86_64", "wasm32"],
+  "abiRange": ">=2 <3",
+  "engineRange": ">=0.0.4 <0.1.0",
+  "artifacts": [],
+  "linkage": "static",
+  "permissions": [],
+  "configurationSchema": { "type": "object", "additionalProperties": false },
+  "officialDevApp": true,
+  "android": {
+    "sourceDirs": ["android/src/main/java"],
+    "registrationClass": "dev.rayact.webview.RayactWebViewRegistration"
+  },
+  "ios": { "frameworks": ["WebKit"] }
+}

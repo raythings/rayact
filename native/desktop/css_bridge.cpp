@@ -650,6 +650,21 @@ static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& props) {
             "translate-x","translate-y","top","right","bottom","left",
         };
         if (std::find(kLength.begin(), kLength.end(), prop) != kLength.end()) {
+            // Percentage dimensions are resolved by Yoga against the parent, so
+            // they must survive as percentages rather than being read as a bare
+            // number (`width: 50%` used to reach layout as 50dp). Forwarded as
+            // the original "N%" string; the style bridge routes it to the
+            // percent field. Only the box dimensions accept percentages.
+            static const std::vector<std::string> kPercentCapable = {
+                "width","height","min-width","min-height","max-width","max-height","flex-basis",
+            };
+            const std::string trimmedVal = trimStr(val);
+            if (!trimmedVal.empty() && trimmedVal.back() == '%' &&
+                std::find(kPercentCapable.begin(), kPercentCapable.end(), prop) != kPercentCapable.end()) {
+                JS_SetPropertyStr(ctx, obj, camelCase(prop).c_str(),
+                                  JS_NewString(ctx, trimmedVal.c_str()));
+                continue;
+            }
             JS_SetPropertyStr(ctx, obj, camelCase(prop).c_str(), JS_NewFloat64(ctx, parseLength(val)));
             continue;
         }

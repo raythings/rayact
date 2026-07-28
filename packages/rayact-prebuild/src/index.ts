@@ -63,6 +63,7 @@ export {
   runPrebuild,
   applyAndroidProjectIdentity,
   applyIosProjectIdentity,
+  applyLinkingConfiguration,
   copyAndroidPluginArtifacts,
   writeAndroidModuleBuildFiles,
   writeAndroidPlatformAutolinking,

@@ -2,14 +2,30 @@ package com.rayact.engine
 
 import android.content.Context
 import android.view.View
+import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 fun interface RayactPlatformModule {
     fun invoke(method: String, payload: ByteArray, completion: (Result<ByteArray>) -> Unit)
 }
 
+class RayactPlatformViewContext(
+    val context: Context,
+    val nodeId: Int,
+    val emit: (String) -> Unit,
+)
+
+interface RayactPlatformViewController {
+    val view: View
+    fun setProperty(key: String, value: String) {}
+    fun dispose() {}
+}
+
 fun interface RayactPlatformViewFactory {
-    fun create(context: Context, nodeId: Int, props: Map<String, Any?>): View
+    fun create(context: RayactPlatformViewContext): RayactPlatformViewController
 }
 
 interface RayactPlatformModuleRegistration {
@@ -43,9 +59,62 @@ class RayactPlatformRegistry {
         module.invoke(method, payload, completion)
     }
 
-    fun createView(kind: String, context: Context, nodeId: Int, props: Map<String, Any?>): View? =
-        viewFactories[kind]?.create(context, nodeId, props)
+    fun createView(kind: String, context: RayactPlatformViewContext): RayactPlatformViewController? =
+        viewFactories[kind]?.create(context)
 
     fun hasModule(name: String): Boolean = modules.containsKey(name)
     fun hasViewFactory(kind: String): Boolean = viewFactories.containsKey(kind)
+
+    companion object {
+        val shared = RayactPlatformRegistry()
+        private val initialized = AtomicBoolean(false)
+        private const val CALL_TIMEOUT_SECONDS = 15L
+
+        /**
+         * Prebuild generates this class from dependency manifests. Reflection
+         * lets the source template compile before prebuild and avoids importing
+         * any optional package from the base application.
+         */
+        fun initialize(context: Context) {
+            if (!initialized.compareAndSet(false, true)) return
+            runCatching {
+                val generated = Class.forName("com.rayact.generated.RayactGeneratedModules")
+                generated.getMethod(
+                    "register",
+                    Context::class.java,
+                    RayactPlatformRegistry::class.java,
+                ).invoke(null, context.applicationContext, shared)
+            }.onFailure {
+                initialized.set(false)
+                if (it !is ClassNotFoundException) throw it
+            }
+        }
+
+        /**
+         * Release-safe QuickJS bridge. Modules remain asynchronous internally;
+         * this compatibility entry point waits off the Android UI thread while
+         * package APIs expose Promise-based calls to application JavaScript.
+         */
+        @JvmStatic
+        fun platformCallFromNative(name: String, method: String, payloadJson: String?): String {
+            val latch = CountDownLatch(1)
+            var response = "{\"ok\":false,\"error\":\"Platform module call did not complete\"}"
+            shared.invoke(name, method, (payloadJson ?: "null").toByteArray(Charsets.UTF_8)) { result ->
+                response = result.fold(
+                    onSuccess = {
+                        val json = it.toString(Charsets.UTF_8).ifBlank { "null" }
+                        "{\"ok\":true,\"value\":$json}"
+                    },
+                    onFailure = {
+                        "{\"ok\":false,\"error\":${JSONObject.quote(it.message ?: "Platform module call failed")}}"
+                    },
+                )
+                latch.countDown()
+            }
+            if (!latch.await(CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                return "{\"ok\":false,\"error\":\"Platform module call timed out\"}"
+            }
+            return response
+        }
+    }
 }

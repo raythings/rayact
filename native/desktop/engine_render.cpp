@@ -540,18 +540,39 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
         pressed = g_queuedTouch.pressed;
         released = g_queuedTouch.released;
         down = g_queuedTouch.down;
+        // Deliver the press at the point the finger actually went down. When a
+        // whole gesture batches into one frame, `position` has already been
+        // overwritten with the end point, and reporting the press there makes
+        // pressOrigin == final position: zero travel, slop never crossed, and
+        // the gesture is silently lost.
+        if (pressed) {
+            mouse = g_queuedTouch.pressPosition;
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
+            mouseDp = raym3::v2::Density::PxToDp(mouse);
+#else
+            mouseDp = mouse;
+#endif
+        }
         // Web/mobile bypass raylib's GetMouseWheelMove — take the queued wheel
         // accumulated by engineQueueWheel and consume it for this frame.
         wheelY = g_queuedTouch.wheel;
         g_queuedTouch.wheel = 0.0f;
-        if (pressed && released) {
-            // DOWN and UP arrived within one JS pump (fast tap / scripted
-            // input). Dispatch DOWN this frame and hold UP for the next so
-            // the release lands on the node activated by the press.
+        // A gesture that arrives inside a single JS pump (fast tap, a swipe
+        // during a slow frame, or scripted input) is replayed over up to three
+        // frames so each phase is observable: DOWN at the press point, then the
+        // moved position still held down (so a drag is actually seen), then UP.
+        // Collapsing these into one frame is what made swipes vanish entirely.
+        if (pressed && (released || g_queuedTouch.hasPendingMove)) {
             released = false;
             down = true;
-            g_queuedTouch.pressed = false; // keep .released queued
+            g_queuedTouch.pressed = false; // keep .released / .hasPendingMove
+        } else if (!pressed && g_queuedTouch.hasPendingMove) {
+            // Frame 2: report the end position with the button still down.
+            released = false;
+            down = true;
+            g_queuedTouch.hasPendingMove = false; // UP lands next frame
         } else {
+            g_queuedTouch.hasPendingMove = false;
             g_queuedTouch.pressed = false;
             g_queuedTouch.released = false;
         }

@@ -202,6 +202,7 @@
 		83FE650F9EF5F6D54EFCF4DD /* TextEngine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8D9B685A8DE5801F02A3EDAC /* TextEngine.cpp */; };
 		8541CCB5B35E434B9BA8B08A /* Tooltip.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B532A16A4117E91655AB71CE /* Tooltip.cpp */; };
 		877AD2A3BFAE7486B46730E1 /* Button.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6BC4638C75044DF07841D17B /* Button.cpp */; };
+		87ED24D835BC9673D11EF92A /* RayactGeneratedModules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F487096F5E169EF7F1AFCC /* RayactGeneratedModules.swift */; };
 		898AB0E4C7400BD90D65CB0B /* rtext.c in Sources */ = {isa = PBXBuildFile; fileRef = 033D06CBD69C1A750204C7F1 /* rtext.c */; };
 		8AB41411FECA2FC3AB9711FF /* YGNode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2EDBDE36DAE581834D13867D /* YGNode.cpp */; };
 		8AEC684306E9F88EB3A1EA06 /* FontManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A73914BE9936EC5E072E99C9 /* FontManager.cpp */; };
@@ -233,10 +234,11 @@
 		9F186EB555AD7647CD02B657 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 390CE3FE919320CBB64E90B5 /* Assets.xcassets */; };
 		A136622FA5AD4DA957BBF15B /* MaterialDefaults.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C4149BFBCA91BDC435ADB975 /* MaterialDefaults.cpp */; };
 		A1FE45E1B2DB343FC78FAF85 /* worker_native.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CB3C855D36B51CE29E8AAA3A /* worker_native.cpp */; };
+		A35D9475BA99EE74A727A6AB /* RayactSensorsRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CA978A3EBBCE129D8B3FB3D /* RayactSensorsRegistration.swift */; };
 		A3DAD6180F0CFC39540A8839 /* DevClientBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A2DAB3DA708FD3FD8F533FC /* DevClientBridge.swift */; };
 		A4A54E28B804963EA472EFB7 /* Theme.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FF5EFD75635045D7F31B8AF4 /* Theme.cpp */; };
-		A50E4A706D46B27E9C009C8D /* DevShakeDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2504A8EEDDEE6DE370CF8E42 /* DevShakeDetector.swift */; };
 		A633B49D47788CB85D2FAB10 /* EmojiFont.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1CF8EAFC4FD8B1B033557097 /* EmojiFont.cpp */; };
+		A69B1F81BD16B6E526FA68F0 /* RayactPlatformRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 852E7399569C594258CB32F3 /* RayactPlatformRegistry.swift */; };
 		A8113A86442C500C8B597872 /* Density.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 68469D2FE07DBA277E1658B0 /* Density.cpp */; };
 		A8FECD0B4BA5E98A70298A95 /* AppBar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E02CD5F98842E4310FC445C /* AppBar.cpp */; };
 		AA0B378F4226BD056359881F /* color_parse.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D338089586A9E4D25A64C8FA /* color_parse.cpp */; };
@@ -416,7 +418,7 @@
 		2269869C4AB537C8F8FE0402 /* RayactDevToolsTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactDevToolsTransport.swift; sourceTree = "<group>"; };
 		22B96FC50B0BD6D4BFE09371 /* Edge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Edge.h; sourceTree = "<group>"; };
 		2349AA101E797DF097B7183D /* FloatingActionButton.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = FloatingActionButton.cpp; sourceTree = "<group>"; };
-		2504A8EEDDEE6DE370CF8E42 /* DevShakeDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevShakeDetector.swift; sourceTree = "<group>"; };
+		24F487096F5E169EF7F1AFCC /* RayactGeneratedModules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactGeneratedModules.swift; sourceTree = "<group>"; };
 		25205A3983407A326A8FA64A /* quickjs_bridge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = quickjs_bridge.cpp; sourceTree = "<group>"; };
 		25B7FE4A12BC024FA7A69E8D /* tree-sitter-typescript.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "tree-sitter-typescript.h"; sourceTree = "<group>"; };
 		26A2363B4CBAC90587376E4F /* View3D.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = View3D.cpp; sourceTree = "<group>"; };
@@ -465,6 +467,7 @@
 		4B6C514910B80601FDD7FD37 /* theme_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = theme_bridge.hpp; sourceTree = "<group>"; };
 		4BE5620B1A2988311F03FE0B /* DevLauncherController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevLauncherController.swift; sourceTree = "<group>"; };
 		4C691D9041EAB7C4D2EC024E /* quickjs.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = quickjs.c; sourceTree = "<group>"; };
+		4CA978A3EBBCE129D8B3FB3D /* RayactSensorsRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactSensorsRegistration.swift; sourceTree = "<group>"; };
 		4DD415575E09D0EE82B83F4C /* m3_parse.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_parse.c; sourceTree = "<group>"; };
 		4EB865D7A2EB827CB554084F /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		4F1D8A2C57EC5F03592EC0DE /* Controls.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Controls.cpp; sourceTree = "<group>"; };
@@ -524,6 +527,7 @@
 		818812982FA7A044805E44EA /* TextLineBreak.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TextLineBreak.cpp; sourceTree = "<group>"; };
 		81E31863B107845C0A8FE311 /* CSSDeNest.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CSSDeNest.cpp; sourceTree = "<group>"; };
 		831D0F39EBE86FFE17FFF5B0 /* module_bus.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = module_bus.cpp; sourceTree = "<group>"; };
+		852E7399569C594258CB32F3 /* RayactPlatformRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactPlatformRegistry.swift; sourceTree = "<group>"; };
 		8567FB0243169DBFCDEEE936 /* Mutations.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Mutations.cpp; sourceTree = "<group>"; };
 		856F631BEDDD2B68FFAB8DDA /* StyleValuePool.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StyleValuePool.h; sourceTree = "<group>"; };
 		86D7ADA32D292808F71E2343 /* Log.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Log.cpp; sourceTree = "<group>"; };
@@ -688,6 +692,14 @@
 			);
 			name = native;
 			path = "../../packages/rayact-svg/native";
+			sourceTree = "<group>";
+		};
+		05EDCCFA8E3F9B215A4AF704 /* sensors */ = {
+			isa = PBXGroup;
+			children = (
+				A0F9BEE8BB6ADB778177B123 /* Sources */,
+			);
+			path = sensors;
 			sourceTree = "<group>";
 		};
 		0BFE1E225E217BB8FBE92C11 /* ios */ = {
@@ -911,6 +923,14 @@
 			path = v2;
 			sourceTree = "<group>";
 		};
+		A0F9BEE8BB6ADB778177B123 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				4CA978A3EBBCE129D8B3FB3D /* RayactSensorsRegistration.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
 		A2AF8820EF07542A6379D4C2 /* style */ = {
 			isa = PBXGroup;
 			children = (
@@ -1028,6 +1048,15 @@
 			path = "../../packages/rayact-crash-reporter/native";
 			sourceTree = "<group>";
 		};
+		B7E36FED1707B6C0EE6A47B4 /* Autolinked */ = {
+			isa = PBXGroup;
+			children = (
+				24F487096F5E169EF7F1AFCC /* RayactGeneratedModules.swift */,
+				05EDCCFA8E3F9B215A4AF704 /* sensors */,
+			);
+			path = Autolinked;
+			sourceTree = "<group>";
+		};
 		B95DCD781E7E8815F935AA48 /* enums */ = {
 			isa = PBXGroup;
 			children = (
@@ -1073,7 +1102,6 @@
 				4BE5620B1A2988311F03FE0B /* DevLauncherController.swift */,
 				ADA048B96ADC9AFDA99C4C08 /* DevMenuOverlay.swift */,
 				131E130C48A79923A9CC645E /* DevServerLoader.swift */,
-				2504A8EEDDEE6DE370CF8E42 /* DevShakeDetector.swift */,
 				F4D9B8203BB5BC48BC276F07 /* Info-Release.plist */,
 				D871AAC601732161AF2747A3 /* IOSBundledAssets.swift */,
 				D0212F7D9A4AD975A70B16DF /* NavigationHost.swift */,
@@ -1087,11 +1115,13 @@
 				C768E6E1A5A2A97A150ED997 /* RayactMetalView.swift */,
 				6BC286521C505F7F1AD4DB95 /* RayactMobileNetwork.swift */,
 				BA3C7D1E2BC8A5A32056664A /* RayactNativeBridge.swift */,
+				852E7399569C594258CB32F3 /* RayactPlatformRegistry.swift */,
 				67BDFB073956694F1E0D55E1 /* RayactRenderScheduler.swift */,
 				96196FB533595CED1263FDFB /* RayactScreenViewController.swift */,
 				C863A2828BD0228178D84024 /* RayactSurfaceView.swift */,
 				BC63DB3CC366823DD7E8B2F5 /* ReleaseViewController.swift */,
 				4EB865D7A2EB827CB554084F /* SceneDelegate.swift */,
+				B7E36FED1707B6C0EE6A47B4 /* Autolinked */,
 			);
 			name = ios;
 			path = .;
@@ -1214,6 +1244,7 @@
 			isa = PBXGroup;
 			children = (
 				87CD1BA336223407B2B2281F /* android */,
+				B7E36FED1707B6C0EE6A47B4 /* Autolinked */,
 				C6FF80BCB2723A862B3A5153 /* core */,
 				7559C894759D94A42ADFCE75 /* cssparser */,
 				A4021D54D800B1610BAC30E9 /* desktop */,
@@ -1487,7 +1518,6 @@
 				FF6F20B985EBC656F348D298 /* DevLauncherController.swift in Sources */,
 				7A4B23999FB8B6F78A1AA124 /* DevMenuOverlay.swift in Sources */,
 				41EF64C12FB89FCAF4105024 /* DevServerLoader.swift in Sources */,
-				A50E4A706D46B27E9C009C8D /* DevShakeDetector.swift in Sources */,
 				29718BB6BB5CF7F4EB74F6A2 /* Dialog.cpp in Sources */,
 				0680F7AB30870D565359F4F9 /* Divider.cpp in Sources */,
 				A633B49D47788CB85D2FAB10 /* EmojiFont.cpp in Sources */,
@@ -1522,14 +1552,17 @@
 				15DA274669E506B6C6693415 /* RayactDevToolsTransport.swift in Sources */,
 				0CCE1126D396A593E53F71C4 /* RayactEngineHostCallbacks.swift in Sources */,
 				7C9AD967B12DEF49FF0AA129 /* RayactEngineSession.swift in Sources */,
+				87ED24D835BC9673D11EF92A /* RayactGeneratedModules.swift in Sources */,
 				3E4B2B92F752CF94F424BE21 /* RayactHTTP.swift in Sources */,
 				3A62D21DEF7029A946CC1E8E /* RayactHost.swift in Sources */,
 				F2FED92558BF715FE5DBB2AB /* RayactHostCallbacksBridge.swift in Sources */,
 				15BCDF543FED685FFE548917 /* RayactMetalView.swift in Sources */,
 				727ED2D364206A452B0691AA /* RayactMobileNetwork.swift in Sources */,
 				B3CDA4E49203E1A34EE4392E /* RayactNativeBridge.swift in Sources */,
+				A69B1F81BD16B6E526FA68F0 /* RayactPlatformRegistry.swift in Sources */,
 				0AA922A924C0C14035AED05B /* RayactRenderScheduler.swift in Sources */,
 				BC8B81AB58B3CE0814462B83 /* RayactScreenViewController.swift in Sources */,
+				A35D9475BA99EE74A727A6AB /* RayactSensorsRegistration.swift in Sources */,
 				59B9264006E4AF897A8E9C1E /* RayactSurfaceView.swift in Sources */,
 				597026D389546C1142B889FE /* ReleaseViewController.swift in Sources */,
 				72D223B8411CBD028D9474EF /* RenderContext.cpp in Sources */,

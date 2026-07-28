@@ -188,6 +188,7 @@ function normalizedEntry(plugin: ResolvedPlugin, configuration?: Record<string, 
   return {
     name: plugin.name,
     lib: plugin.lib,
+    nativeBus: plugin.manifest.nativeBus,
     jsPackage: plugin.jsPackage,
     platforms: plugin.manifest.platforms,
     architectures: plugin.manifest.architectures,

@@ -707,6 +707,37 @@ static std::optional<Color> jsToColor(JSContext* ctx, JSValueConst v) {
     return std::nullopt;
 }
 
+// A dimension prop accepts a number (dp) or a percentage string ("50%").
+// Returns the numeric value plus whether it was a percentage, so callers can
+// route it to the px or percent field of v2::Style.
+struct JsDimension { float value; bool percent; };
+static std::optional<JsDimension> jsGetDimension(JSContext* ctx, JSValue obj, const char* key) {
+    JSValue v = JS_GetPropertyStr(ctx, obj, key);
+    std::optional<JsDimension> result;
+    if (!JS_IsUndefined(v) && !JS_IsNull(v)) {
+        if (JS_IsString(v)) {
+            const char* s = JS_ToCString(ctx, v);
+            if (s) {
+                const std::string text(s);
+                JS_FreeCString(ctx, s);
+                try {
+                    size_t idx = 0;
+                    const float f = std::stof(text, &idx);
+                    std::string unit = text.substr(idx);
+                    unit.erase(0, unit.find_first_not_of(" \t"));
+                    if (unit.rfind('%', 0) == 0) result = JsDimension{f, true};
+                    else result = JsDimension{f, false};
+                } catch (...) { /* unparseable — leave unset */ }
+            }
+        } else {
+            double d;
+            if (JS_ToFloat64(ctx, &d, v) == 0) result = JsDimension{(float)d, false};
+        }
+    }
+    JS_FreeValue(ctx, v);
+    return result;
+}
+
 static std::optional<float> jsGetFloat(JSContext* ctx, JSValue obj, const char* key) {
     JSValue v = JS_GetPropertyStr(ctx, obj, key);
     std::optional<float> result;
@@ -839,6 +870,13 @@ static raym3::v2::Style preserveLayoutStyle(const raym3::v2::Style& visualStyle,
     result.flexGrow = previousStyle.flexGrow;
     result.flexShrink = previousStyle.flexShrink;
     result.flexBasis = previousStyle.flexBasis;
+    result.widthPercent = previousStyle.widthPercent;
+    result.heightPercent = previousStyle.heightPercent;
+    result.minWidthPercent = previousStyle.minWidthPercent;
+    result.minHeightPercent = previousStyle.minHeightPercent;
+    result.maxWidthPercent = previousStyle.maxWidthPercent;
+    result.maxHeightPercent = previousStyle.maxHeightPercent;
+    result.flexBasisPercent = previousStyle.flexBasisPercent;
     result.gap = previousStyle.gap;
     result.rowGap = previousStyle.rowGap;
     result.columnGap = previousStyle.columnGap;
@@ -1430,12 +1468,17 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
     if (!JS_IsObject(obj)) return;
 
     // Sizing
-    if (auto v = jsGetFloat(ctx, obj, "width"))     s.width     = v;
-    if (auto v = jsGetFloat(ctx, obj, "height"))    s.height    = v;
-    if (auto v = jsGetFloat(ctx, obj, "minWidth"))  s.minWidth  = v;
-    if (auto v = jsGetFloat(ctx, obj, "minHeight")) s.minHeight = v;
-    if (auto v = jsGetFloat(ctx, obj, "maxWidth"))  s.maxWidth  = v;
-    if (auto v = jsGetFloat(ctx, obj, "maxHeight")) s.maxHeight = v;
+    // Dimensions accept dp numbers or percentage strings ("50%").
+#define RAYACT_APPLY_DIMENSION(key, pxField, pctField)                    \
+    if (auto v = jsGetDimension(ctx, obj, key)) {                          \
+        if (v->percent) s.pctField = v->value; else s.pxField = v->value;  \
+    }
+    RAYACT_APPLY_DIMENSION("width",     width,     widthPercent)
+    RAYACT_APPLY_DIMENSION("height",    height,    heightPercent)
+    RAYACT_APPLY_DIMENSION("minWidth",  minWidth,  minWidthPercent)
+    RAYACT_APPLY_DIMENSION("minHeight", minHeight, minHeightPercent)
+    RAYACT_APPLY_DIMENSION("maxWidth",  maxWidth,  maxWidthPercent)
+    RAYACT_APPLY_DIMENSION("maxHeight", maxHeight, maxHeightPercent)
 
     // Flex
     if (auto v = jsGetFloat(ctx, obj, "flex")) {
@@ -1453,7 +1496,8 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
     }
     if (auto v = jsGetFloat(ctx, obj, "flexGrow"))   s.flexGrow   = v;
     if (auto v = jsGetFloat(ctx, obj, "flexShrink")) s.flexShrink = v;
-    if (auto v = jsGetFloat(ctx, obj, "flexBasis"))  s.flexBasis  = v;
+    RAYACT_APPLY_DIMENSION("flexBasis", flexBasis, flexBasisPercent)
+#undef RAYACT_APPLY_DIMENSION
     if (auto v = jsGetFloat(ctx, obj, "gap"))        s.gap        = v;
     if (auto v = jsGetFloat(ctx, obj, "rowGap"))     s.rowGap     = v;
     if (auto v = jsGetFloat(ctx, obj, "columnGap"))  s.columnGap  = v;
@@ -2378,9 +2422,11 @@ JSValue JS_createScrollView(JSContext* ctx, JSValue, int argc, JSValueConst* arg
         std::string persistTaps = jsGetString(ctx, argv[0], "keyboardShouldPersistTaps");
         node->keepTextInputFocusOnTap = persistTaps == "always" || persistTaps == "handled";
     }
-#if defined(RAYACT_ANDROID) || defined(__ANDROID__)
+    // Momentum on every platform. This was previously gated to Android, which
+    // meant iOS, macOS, Linux and web had no fling at all — a release just
+    // stopped dead. Wheel/trackpad input is excluded inside the scroll core
+    // (macOS already supplies its own momentum deltas), not here.
     node->scrollMomentumEnabled = true;
-#endif
     int id = nextNativeNodeId();
     g_nodes[id] = node;
     g_scrollViewIds.insert(id);
@@ -2656,9 +2702,14 @@ JSValue JS_focusTextInput(JSContext* ctx, JSValue, int argc, JSValueConst* argv)
 // setScrollOffset(nodeId, x, y) — imperative ScrollView ref.scrollTo()/
 // scrollToEnd(). NaN on an axis leaves that axis unchanged. The offset is
 // clamped to valid range on the next StoreYogaLayout pass, so scrollToEnd can
-// pass a huge y and rely on the clamp. Setting an explicit offset cancels any
-// in-flight fling and (for a y set) auto-scroll-to-end follow, matching a
-// user-initiated scroll.
+// pass a huge y and rely on the clamp. Clearing scrollVelocity* and (for a y
+// set) auto-scroll-to-end follow matches a user-initiated scroll.
+//
+// BUG: this does NOT cancel an in-flight fling. scrollVelocityY has been
+// vestigial since the spline refactor (the momentum tick re-derives an
+// absolute target from flingStartOffsetY every frame), so the write here is
+// silently reverted on the next tick while a fling is running. Traced below;
+// funnelled through ScrollTo() in the scroll-core rework.
 JSValue JS_setScrollOffset(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (argc < 3) return JS_ThrowTypeError(ctx, "setScrollOffset: expected (nodeId, x, y)");
     int id = 0;
@@ -2669,16 +2720,50 @@ JSValue JS_setScrollOffset(JSContext* ctx, JSValue, int argc, JSValueConst* argv
     JS_ToFloat64(ctx, &x, argv[1]);
     JS_ToFloat64(ctx, &y, argv[2]);
     if (!std::isnan(x)) {
+        raym3::v2::ScrollTraceOffsetWrite(*it->second,
+                                          raym3::v2::ScrollWriteSource::Js, 'x',
+                                          it->second->scrollOffsetX,
+                                          static_cast<float>(x));
         it->second->scrollOffsetX = static_cast<float>(x);
         it->second->scrollVelocityX = 0.0f;
     }
     if (!std::isnan(y)) {
+        raym3::v2::ScrollTraceOffsetWrite(*it->second,
+                                          raym3::v2::ScrollWriteSource::Js, 'y',
+                                          it->second->scrollOffsetY,
+                                          static_cast<float>(y));
+        if (it->second->flingActive)
+            raym3::v2::ScrollTraceEvent(
+                "js setScrollOffset y=%.2f DURING FLING (write will be reverted)",
+                y);
         it->second->scrollOffsetY = static_cast<float>(y);
         it->second->scrollVelocityY = 0.0f;
         it->second->scrollFollowEnd = false;
     }
     workerRequestRenderFrame();
     return JS_UNDEFINED;
+}
+
+JSValue JS_rayactClipboardRead(JSContext* ctx, JSValue, int, JSValueConst*) {
+    auto &hooks = raym3::v2::GetTextInputHostHooks();
+    const std::string value = hooks.getClipboardText ? hooks.getClipboardText() : std::string{};
+    return JS_NewStringLen(ctx, value.data(), value.size());
+}
+
+JSValue JS_rayactClipboardWrite(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_ThrowTypeError(ctx, "__rayactClipboardWrite(text)");
+    const char *text = JS_ToCString(ctx, argv[0]);
+    if (!text) return JS_EXCEPTION;
+    auto &hooks = raym3::v2::GetTextInputHostHooks();
+    if (hooks.setClipboardText) hooks.setClipboardText(text);
+    JS_FreeCString(ctx, text);
+    return JS_UNDEFINED;
+}
+
+JSValue JS_rayactClipboardHasString(JSContext* ctx, JSValue, int, JSValueConst*) {
+    auto &hooks = raym3::v2::GetTextInputHostHooks();
+    const std::string value = hooks.getClipboardText ? hooks.getClipboardText() : std::string{};
+    return JS_NewBool(ctx, !value.empty());
 }
 
 JSValue JS_setAccessibilityFocus(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
@@ -6937,9 +7022,8 @@ void createNodeFromBuffer(int id, int typeId, const raym3::v2::Style& style) {
         props.style = style;
         props.style.overflow = raym3::v2::Overflow::Scroll;
         auto node = raym3::v2::View(props);
-#if defined(RAYACT_ANDROID) || defined(__ANDROID__)
+        // Keep in sync with JS_createScrollView: momentum on every platform.
         node->scrollMomentumEnabled = true;
-#endif
         g_nodes[id] = node;
         g_scrollViewIds.insert(id);
     } else if (typeId == RTYPE_SAFE_AREA) {

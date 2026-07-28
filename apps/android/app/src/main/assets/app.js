@@ -19,6 +19,28 @@
     }
     return Object.freeze(Object.defineProperty(n, Symbol.toStringTag, { value: "Module" }));
   }
+  const existing = globalThis.crypto ?? null;
+  if (!existing || typeof existing.getRandomValues !== "function") {
+    const crypto2 = {
+      getRandomValues(array) {
+        const view2 = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
+        for (let i = 0; i < view2.length; i++) {
+          view2[i] = Math.floor(Math.random() * 256);
+        }
+        return array;
+      },
+      randomUUID() {
+        const b = new Uint8Array(16);
+        this.getRandomValues(b);
+        b[6] = b[6] & 15 | 64;
+        b[8] = b[8] & 63 | 128;
+        const hex = [];
+        for (let i = 0; i < 16; i++) hex.push(b[i].toString(16).padStart(2, "0"));
+        return hex.slice(0, 4).join("") + "-" + hex.slice(4, 6).join("") + "-" + hex.slice(6, 8).join("") + "-" + hex.slice(8, 10).join("") + "-" + hex.slice(10, 16).join("");
+      }
+    };
+    globalThis.crypto = crypto2;
+  }
   function getDefaultExportFromCjs(x) {
     return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
   }
@@ -12836,7 +12858,7 @@
                 if (hook == null) {
                   return;
                 }
-                var _ref = options || {}, _ref$host = _ref.host, host = _ref$host === void 0 ? "localhost" : _ref$host, nativeStyleEditorValidAttributes = _ref.nativeStyleEditorValidAttributes, _ref$useHttps = _ref.useHttps, useHttps = _ref$useHttps === void 0 ? false : _ref$useHttps, _ref$port = _ref.port, port = _ref$port === void 0 ? 8097 : _ref$port, websocket = _ref.websocket, _ref$resolveRNStyle = _ref.resolveRNStyle, resolveRNStyle = _ref$resolveRNStyle === void 0 ? null : _ref$resolveRNStyle, _ref$retryConnectionD = _ref.retryConnectionDelay, retryConnectionDelay = _ref$retryConnectionD === void 0 ? 2e3 : _ref$retryConnectionD, _ref$isAppActive = _ref.isAppActive, isAppActive = _ref$isAppActive === void 0 ? function() {
+                var _ref = options || {}, _ref$host = _ref.host, host2 = _ref$host === void 0 ? "localhost" : _ref$host, nativeStyleEditorValidAttributes = _ref.nativeStyleEditorValidAttributes, _ref$useHttps = _ref.useHttps, useHttps = _ref$useHttps === void 0 ? false : _ref$useHttps, _ref$port = _ref.port, port = _ref$port === void 0 ? 8097 : _ref$port, websocket = _ref.websocket, _ref$resolveRNStyle = _ref.resolveRNStyle, resolveRNStyle = _ref$resolveRNStyle === void 0 ? null : _ref$resolveRNStyle, _ref$retryConnectionD = _ref.retryConnectionDelay, retryConnectionDelay = _ref$retryConnectionD === void 0 ? 2e3 : _ref$retryConnectionD, _ref$isAppActive = _ref.isAppActive, isAppActive = _ref$isAppActive === void 0 ? function() {
                   return true;
                 } : _ref$isAppActive, onSettingsUpdated = _ref.onSettingsUpdated, _ref$isReloadAndProfi = _ref.isReloadAndProfileSupported, isReloadAndProfileSupported = _ref$isReloadAndProfi === void 0 ? getIsReloadAndProfileSupported() : _ref$isReloadAndProfi, isProfiling = _ref.isProfiling, onReloadAndProfile2 = _ref.onReloadAndProfile, onReloadAndProfileFlagsReset2 = _ref.onReloadAndProfileFlagsReset;
                 var protocol = useHttps ? "wss" : "ws";
@@ -12854,7 +12876,7 @@
                 }
                 var bridge2 = null;
                 var messageListeners = [];
-                var uri = protocol + "://" + host + ":" + port;
+                var uri = protocol + "://" + host2 + ":" + port;
                 var ws = websocket ? websocket : new window.WebSocket(uri);
                 ws.onclose = handleClose;
                 ws.onerror = handleFailed;
@@ -13787,6 +13809,17 @@
   }
   function createBridge$1(globalObject = globalThis) {
     const native = globalObject;
+    let appRootNode = null;
+    let errorOverlayNode = null;
+    const setNativeRoot = (node) => {
+      if (node) {
+        requireFunction$1(native.setRootNode, "setRootNode")(node.id);
+      } else if (typeof native.clearRootNode === "function") {
+        native.clearRootNode();
+      } else {
+        requireFunction$1(native.setRootNode, "setRootNode")(null);
+      }
+    };
     const bridge2 = {
       createNode(type, props = {}) {
         const style = toStyleProps$1(props, true);
@@ -13905,13 +13938,19 @@
         requireFunction$1(native.insertBefore, "insertBefore")(parent.id, child.id, beforeChild.id);
       },
       setRoot(node) {
-        if (node) {
-          requireFunction$1(native.setRootNode, "setRootNode")(node.id);
-        } else if (typeof native.clearRootNode === "function") {
-          native.clearRootNode();
-        } else {
-          requireFunction$1(native.setRootNode, "setRootNode")(null);
+        appRootNode = node ?? null;
+        if (errorOverlayNode) {
+          if (!node) return;
+          const overlay = errorOverlayNode;
+          errorOverlayNode = null;
+          setNativeRoot(node);
+          try {
+            bridge2.disposeNode(overlay);
+          } catch {
+          }
+          return;
         }
+        setNativeRoot(node);
       },
       setEventHandler(node, eventName, handler) {
         if (eventName === "press" || eventName === "click") {
@@ -14066,20 +14105,60 @@ ${stack}` : message;
           bridge2.appendChild(content, body);
           bridge2.appendChild(scroller, content);
           bridge2.appendChild(root, scroller);
-          bridge2.setRoot(root);
+          const previousOverlay = errorOverlayNode;
+          errorOverlayNode = root;
+          setNativeRoot(root);
+          if (previousOverlay) {
+            try {
+              bridge2.disposeNode(previousOverlay);
+            } catch {
+            }
+          }
         } catch (overlayError) {
           native.console?.error?.("Failed to show Rayact error overlay", overlayError);
+        }
+      },
+      /**
+       * Dismiss the error overlay and hand the screen back to the app tree.
+       * Called after a reload or hot update evaluates cleanly, so fixing the code
+       * actually clears the red screen instead of leaving it up forever.
+       */
+      /** True while the dev error overlay owns the screen. */
+      hasError() {
+        return errorOverlayNode !== null;
+      },
+      noteAppRoot(node) {
+        appRootNode = node ?? null;
+        if (!node || !errorOverlayNode) return;
+        const overlay = errorOverlayNode;
+        errorOverlayNode = null;
+        try {
+          bridge2.disposeNode(overlay);
+        } catch {
+        }
+      },
+      clearError() {
+        const overlay = errorOverlayNode;
+        if (!overlay) return;
+        errorOverlayNode = null;
+        try {
+          setNativeRoot(appRootNode);
+        } finally {
+          try {
+            bridge2.disposeNode(overlay);
+          } catch {
+          }
         }
       }
     };
     return bridge2;
   }
   let state$1 = "idle";
-  const listeners$3 = /* @__PURE__ */ new Set();
+  const listeners$4 = /* @__PURE__ */ new Set();
   function setReloadState$1(next) {
     if (state$1 === next) return;
     state$1 = next;
-    for (const listener of [...listeners$3]) listener(state$1);
+    for (const listener of [...listeners$4]) listener(state$1);
   }
   function joinUrl$1(serverUrl2, path) {
     return `${serverUrl2.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
@@ -14120,7 +14199,7 @@ ${stack}` : message;
     let hmrSocket = null;
     let debuggerReconnect = null;
     let hmrReconnect = null;
-    let pollTimer = null;
+    let pollTimer2 = null;
     let lastRevision = null;
     let manifest = {};
     const send = (type, payload) => {
@@ -14161,6 +14240,7 @@ ${stack}` : message;
         }
         send("client:reloaded");
         setReloadState$1("running");
+        options.bridge.clearError?.();
         return true;
       } catch (error) {
         setReloadState$1("failed");
@@ -14262,8 +14342,8 @@ ${stack}` : message;
         connectHmr();
         connectDebugger();
       });
-      if (!pollTimer) {
-        pollTimer = setInterval(() => {
+      if (!pollTimer2) {
+        pollTimer2 = setInterval(() => {
           void pollStatus();
         }, 5e3);
         void pollStatus();
@@ -14278,9 +14358,9 @@ ${stack}` : message;
         clearTimeout(hmrReconnect);
         hmrReconnect = null;
       }
-      if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
+      if (pollTimer2) {
+        clearInterval(pollTimer2);
+        pollTimer2 = null;
       }
       if (debuggerSocket) {
         debuggerSocket.close();
@@ -15158,8 +15238,8 @@ ${stack}` : message;
         }
         function createCapturedValueAtFiber(value, source) {
           if ("object" === typeof value && null !== value) {
-            var existing = CapturedStacks.get(value);
-            if (void 0 !== existing) return existing;
+            var existing2 = CapturedStacks.get(value);
+            if (void 0 !== existing2) return existing2;
             source = {
               value,
               source,
@@ -22636,21 +22716,21 @@ ${stack}` : message;
   }
   function flushMutations() {
     if (!nativeFastPath.batch || mutationQueue.length === 0) return;
-    const host = globalThis;
+    const host2 = globalThis;
     const ops = mutationQueue.splice(0, mutationQueue.length);
     const start = typeof performance !== "undefined" ? performance.now() : Date.now();
-    host.__rayactBatchMutations(ops);
+    host2.__rayactBatchMutations(ops);
     const end = typeof performance !== "undefined" ? performance.now() : Date.now();
     perfLogBatch(end - start, ops.length);
   }
   function createNodeFast(type, props) {
-    const host = globalThis;
+    const host2 = globalThis;
     if (!nativeFastPath.createNode) return null;
-    const id = host.__rayactCreateNodeFast(type, props);
+    const id = host2.__rayactCreateNodeFast(type, props);
     if (typeof id !== "number") return null;
     const animated = animatedStyleSnapshot$1(flattenStyleForAnimated(props.style, true));
-    if (Object.keys(animated).length > 0 && typeof host.__rayactRegisterAnimatedNode === "function") {
-      host.__rayactRegisterAnimatedNode(id, animated);
+    if (Object.keys(animated).length > 0 && typeof host2.__rayactRegisterAnimatedNode === "function") {
+      host2.__rayactRegisterAnimatedNode(id, animated);
     }
     return {
       id,
@@ -22658,10 +22738,10 @@ ${stack}` : message;
     };
   }
   function updateNodeFast(nodeId, type, oldProps, newProps) {
-    const host = globalThis;
+    const host2 = globalThis;
     if (!nativeFastPath.updateNode) return false;
     try {
-      return host.__rayactUpdateNodeFast(nodeId, type, oldProps, newProps) === true;
+      return host2.__rayactUpdateNodeFast(nodeId, type, oldProps, newProps) === true;
     } catch {
       return false;
     }
@@ -23027,8 +23107,8 @@ ${stack}` : message;
     }
   }
   function internString(s) {
-    const existing = stringIds.get(s);
-    if (existing !== void 0) return existing;
+    const existing2 = stringIds.get(s);
+    if (existing2 !== void 0) return existing2;
     const id = nextStringId++;
     stringIds.set(s, id);
     const len = utf8ByteLen(s);
@@ -24069,7 +24149,7 @@ ${stack}` : message;
     }, children);
   }
   let isDark = true;
-  const listeners$2 = /* @__PURE__ */ new Set();
+  const listeners$3 = /* @__PURE__ */ new Set();
   function readInitialIsDark() {
     const g = globalThis;
     if (typeof g.__rayactGetColorScheme === "function") {
@@ -24082,11 +24162,11 @@ ${stack}` : message;
     return true;
   }
   function emit() {
-    for (const listener of listeners$2) listener();
+    for (const listener of listeners$3) listener();
   }
-  function subscribe(listener) {
-    listeners$2.add(listener);
-    return () => listeners$2.delete(listener);
+  function subscribe$1(listener) {
+    listeners$3.add(listener);
+    return () => listeners$3.delete(listener);
   }
   function getSnapshot() {
     return isDark;
@@ -24109,7 +24189,7 @@ ${stack}` : message;
   }
   function useIsDarkColorScheme() {
     initColorSchemeStore();
-    return reactExports.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+    return reactExports.useSyncExternalStore(subscribe$1, getSnapshot, getServerSnapshot);
   }
   const easeInOutCubic$1 = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   function useAnimatedValue(target, options = {}) {
@@ -24312,13 +24392,25 @@ ${stack}` : message;
   }
   function render(element) {
     const alreadyMounted = !!globalThis.__rayactReactRoot;
-    if (globalThis.__RAYACT_HMR_ACTIVE__ && alreadyMounted) {
+    let crashed = false;
+    try {
+      crashed = !!getDefaultRuntime().bridge.hasError?.();
+    } catch {
+    }
+    if (crashed && alreadyMounted) {
+      delete globalThis.__rayactReactRoot;
+    }
+    if (!crashed && globalThis.__RAYACT_HMR_ACTIVE__ && alreadyMounted) {
       return getOrCreateRoot();
     }
     const root = getOrCreateRoot();
     const decorateRoot = globalThis.__rayactDecorateRoot;
     const renderedElement = decorateRoot ? decorateRoot(element) : element;
     root.render(React.createElement(RayactThemeProvider, null, renderedElement));
+    try {
+      getDefaultRuntime().bridge.noteAppRoot?.(root.container.rootNode);
+    } catch {
+    }
     return root;
   }
   globalThis.Icons = {
@@ -28576,6 +28668,69 @@ ${stack}` : message;
     "zoom_out": 59648,
     "zoom_out_map": 58731
   };
+  const listeners$2 = /* @__PURE__ */ new Map();
+  let pollTimer;
+  function call$1(method, payload = {}) {
+    const host2 = globalThis;
+    if (!host2.platformCall) {
+      return Promise.reject(new Error("Rayact sensors are unavailable on this platform"));
+    }
+    return new Promise((resolve, reject) => {
+      host2.platformCall("sensors", method, payload, (response) => {
+        if (response?.ok) resolve(response.value);
+        else reject(new Error(response?.error || `Sensor operation failed: ${method}`));
+      });
+    });
+  }
+  async function drainEvents() {
+    const events = await call$1("drainEvents").catch(() => []);
+    for (const event of events) {
+      for (const listener of listeners$2.get(event.type) ?? []) listener(event);
+    }
+  }
+  function updatePolling() {
+    const active = [...listeners$2.values()].some((group) => group.size > 0);
+    if (active && !pollTimer) {
+      pollTimer = setInterval(() => {
+        void drainEvents();
+      }, 50);
+    } else if (!active && pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = void 0;
+    }
+  }
+  function subscribe(type, listener, intervalMs = 50) {
+    let group = listeners$2.get(type);
+    if (!group) listeners$2.set(type, group = /* @__PURE__ */ new Set());
+    group.add(listener);
+    void call$1("startObserving", {
+      type,
+      intervalMs
+    }).catch(() => {
+      group?.delete(listener);
+      updatePolling();
+    });
+    updatePolling();
+    let removed = false;
+    return {
+      remove() {
+        if (removed) return;
+        removed = true;
+        group?.delete(listener);
+        if (!group?.size) {
+          listeners$2.delete(type);
+          void call$1("stopObserving", {
+            type
+          }).catch(() => {
+          });
+        }
+        updatePolling();
+      }
+    };
+  }
+  function addShakeListener(listener) {
+    return subscribe("shake", listener, 16);
+  }
   const FALLBACK_THEME = {
     surface: "#121212",
     surfaceContainer: "#1e1e1e",
@@ -28769,8 +28924,8 @@ ${stack}` : message;
       ok: false,
       error: "Invalid URL"
     };
-    const host = m[1];
-    if (!host || host.length === 0) return {
+    const host2 = m[1];
+    if (!host2 || host2.length === 0) return {
       ok: false,
       error: "Missing host"
     };
@@ -28950,6 +29105,96 @@ ${stack}` : message;
       modules: missing
     };
   }
+  const host = globalThis;
+  function devCall$1(method, data) {
+    return new Promise((resolve, reject) => {
+      if (!host.devCall) {
+        reject(new Error("Barcode scanner native bridge is unavailable"));
+        return;
+      }
+      host.devCall(method, data, resolve);
+    });
+  }
+  async function scanDevClient(options) {
+    await devCall$1("startBarcodeScan", options);
+    for (; ; ) {
+      const raw = await devCall$1("pollBarcodeScan");
+      const state2 = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (state2.status === "success" && state2.data) {
+        return {
+          data: state2.data,
+          format: state2.format ?? "unknown"
+        };
+      }
+      if (state2.status === "canceled") {
+        const error = new Error("Barcode scan was canceled");
+        error.name = "RayactBarcodeCanceledError";
+        throw error;
+      }
+      if (state2.status === "error") {
+        const error = new Error(state2.error || "Native barcode scan failed");
+        error.name = "RayactBarcodeNativeError";
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+  async function scanWeb(options) {
+    if (!host.BarcodeDetector || !host.navigator?.mediaDevices?.getUserMedia || !host.document) {
+      const error = new Error("Barcode scanner is unavailable on this platform");
+      error.name = "RayactBarcodeUnavailableError";
+      throw error;
+    }
+    const stream = await host.navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: {
+          ideal: "environment"
+        }
+      }
+    });
+    const video = host.document.createElement("video");
+    video.srcObject = stream;
+    video.playsInline = true;
+    await video.play();
+    const detector = new host.BarcodeDetector({
+      formats: options.formats?.map((value) => value === "qr" ? "qr_code" : value)
+    });
+    try {
+      return await new Promise((resolve, reject) => {
+        const started = Date.now();
+        const tick = async () => {
+          try {
+            const [result] = await detector.detect(video);
+            if (result?.rawValue) {
+              resolve({
+                data: result.rawValue,
+                format: result.format === "qr_code" ? "qr" : result.format
+              });
+              return;
+            }
+            if (Date.now() - started > 6e4) {
+              const error = new Error("Barcode scan canceled or timed out");
+              error.name = "RayactBarcodeCanceledError";
+              reject(error);
+              return;
+            }
+            requestAnimationFrame(tick);
+          } catch (error) {
+            reject(error);
+          }
+        };
+        void tick();
+      });
+    } finally {
+      stream.getTracks().forEach((track) => track.stop());
+      video.remove();
+    }
+  }
+  async function scanAsync(options = {}) {
+    if (host.__rayactBarcodeScannerScan) return host.__rayactBarcodeScannerScan(options);
+    if (host.devCall) return scanDevClient(options);
+    return scanWeb(options);
+  }
   const normalizeDevToolsState = (raw) => {
     const value = typeof raw === "string" ? JSON.parse(raw) : raw;
     return {
@@ -29033,7 +29278,38 @@ ${stack}` : message;
     return call("getPerformanceMetrics").then((raw) => typeof raw === "string" ? JSON.parse(raw) : raw);
   }
   function scanQR() {
-    return call("scanQR");
+    return scanAsync({
+      formats: ["qr"]
+    }).then(async (result) => {
+      const opened = await openProjectDirect(parseUrl(result.data));
+      if (!opened.ok) throw new Error(opened.error ?? "Unable to open scanned Rayact server");
+    });
+  }
+  function parseUrl(input) {
+    const trimmed = input.trim();
+    if (trimmed.startsWith("[")) {
+      try {
+        const arr = JSON.parse(trimmed);
+        if (Array.isArray(arr) && typeof arr[0] === "string" && arr[0]) {
+          let u = arr[0].trim();
+          if (!/^https?:\/\//i.test(u)) u = `http://${u}`;
+          return u.replace(/\/+$/, "");
+        }
+      } catch {
+      }
+    }
+    if (trimmed.startsWith("{")) {
+      try {
+        const payload = JSON.parse(trimmed);
+        if (payload.url) return payload.url.replace(/\/+$/, "");
+        const ws = payload.transports?.find((t) => t.type === "websocket");
+        if (ws?.ips?.[0]) return `http://${ws.ips[0]}:${ws.port}`;
+      } catch {
+      }
+    }
+    let url = trimmed.replace(/\\\//g, "/");
+    if (!/^https?:\/\//i.test(url)) url = `http://${url}`;
+    return url.replace(/\/+$/, "");
   }
   const INVALID_SERVER_URL_MESSAGE = "Invalid server URL";
   const DevLauncherContext = reactExports.createContext(null);
@@ -29111,6 +29387,12 @@ ${stack}` : message;
     }, [inspectorPickMode]);
     const g = globalThis;
     g.__rayactToggleDevMenu = () => setDevMenuOpen((open) => !open);
+    reactExports.useEffect(() => {
+      const subscription = addShakeListener(() => {
+        setDevMenuOpen((open_0) => !open_0);
+      });
+      return () => subscription.remove();
+    }, []);
     const setUrl = reactExports.useCallback((u) => {
       setUrlState(u);
       setConnectError("");
@@ -29205,7 +29487,7 @@ ${stack}` : message;
         clearInterval(id);
       };
     }, [recentListKey, probeAllRecents]);
-    const parseUrl = reactExports.useCallback((input) => persistedDevServerUrl(input), []);
+    const parseUrl2 = reactExports.useCallback((input) => persistedDevServerUrl(input), []);
     const removeRecentItem = reactExports.useCallback((u_0) => {
       void removeRecentUrl(u_0).then(() => {
         setRecentReachability((prev_0) => {
@@ -29309,7 +29591,7 @@ ${stack}` : message;
       onScanQR: () => {
         void scanQR();
       },
-      parseUrl,
+      parseUrl: parseUrl2,
       reload: () => {
         void reloadWithProjectBundle();
       },
@@ -29324,7 +29606,7 @@ ${stack}` : message;
       setInspectorPickMode,
       devToolsState,
       setDevToolsEnabled: setDevToolsEnabled$1
-    }), [url, setUrl, theme, recentEntries, recentReachability, discoveredServers, incompatibleModalVisible, incompatibleModules, connectError, connecting, refreshRecent, removeRecentItem, connectToUrl, openProject, showIncompatibleModalForUrl, parseUrl, devMenuOpen, inspectorOpen, inspectorPickMode, devToolsState, setDevToolsEnabled$1]);
+    }), [url, setUrl, theme, recentEntries, recentReachability, discoveredServers, incompatibleModalVisible, incompatibleModules, connectError, connecting, refreshRecent, removeRecentItem, connectToUrl, openProject, showIncompatibleModalForUrl, parseUrl2, devMenuOpen, inspectorOpen, inspectorPickMode, devToolsState, setDevToolsEnabled$1]);
     return jsxRuntimeExports.jsx(DevLauncherContext.Provider, {
       value,
       children
@@ -29428,7 +29710,8 @@ ${stack}` : message;
   const defaultKeyboard = {
     visible: false,
     height: 0,
-    duration: 250
+    duration: 250,
+    progress: 1
   };
   const defaultSafeArea = {
     top: 0,
@@ -29440,6 +29723,7 @@ ${stack}` : message;
   let cachedSafeArea = defaultSafeArea;
   const insetsListeners = /* @__PURE__ */ new Set();
   let listenerInstalled = false;
+  let keyboardFrame = null;
   function readKeyboardRaw() {
     const globalObj2 = globalThis;
     const snapshot = globalObj2.__rayactKeyboardInsets;
@@ -29447,7 +29731,8 @@ ${stack}` : message;
     return {
       visible: !!snapshot.visible,
       height: typeof snapshot.height === "number" ? snapshot.height : 0,
-      duration: typeof snapshot.duration === "number" ? snapshot.duration : 250
+      duration: typeof snapshot.duration === "number" ? snapshot.duration : 250,
+      progress: typeof snapshot.progress === "number" ? snapshot.progress : 1
     };
   }
   function readSafeAreaRaw() {
@@ -29461,16 +29746,17 @@ ${stack}` : message;
       left: typeof snapshot.left === "number" ? snapshot.left : 0
     };
   }
-  function sameKeyboard(a, b) {
-    return a.visible === b.visible && a.height === b.height && a.duration === b.duration;
-  }
   function sameSafeArea(a, b) {
     return a.top === b.top && a.right === b.right && a.bottom === b.bottom && a.left === b.left;
   }
   function getKeyboardSnapshot() {
-    const next = readKeyboardRaw();
-    if (sameKeyboard(next, cachedKeyboard)) return cachedKeyboard;
-    cachedKeyboard = next;
+    if (!listenerInstalled) {
+      const initial = readKeyboardRaw();
+      cachedKeyboard = {
+        ...initial,
+        progress: 1
+      };
+    }
     return cachedKeyboard;
   }
   function getSafeAreaSnapshot() {
@@ -29478,6 +29764,9 @@ ${stack}` : message;
     if (sameSafeArea(next, cachedSafeArea)) return cachedSafeArea;
     cachedSafeArea = next;
     return cachedSafeArea;
+  }
+  function getServerKeyboardSnapshot() {
+    return defaultKeyboard;
   }
   function getServerSafeAreaSnapshot() {
     return defaultSafeArea;
@@ -29487,15 +29776,53 @@ ${stack}` : message;
     listenerInstalled = true;
     const globalObj2 = globalThis;
     globalObj2.__rayactOnKeyboardInsetsChange = () => {
-      getKeyboardSnapshot();
+      const next = readKeyboardRaw();
       getSafeAreaSnapshot();
-      for (const listener of insetsListeners) listener();
+      if (keyboardFrame !== null && typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(keyboardFrame);
+        keyboardFrame = null;
+      }
+      const from = cachedKeyboard.height;
+      const duration = Math.max(0, next.duration);
+      const notify = () => {
+        for (const listener of insetsListeners) listener();
+      };
+      if (duration === 0 || typeof requestAnimationFrame !== "function" || from === next.height) {
+        cachedKeyboard = {
+          ...next,
+          progress: 1
+        };
+        notify();
+        return;
+      }
+      const start = typeof performance !== "undefined" ? performance.now() : Date.now();
+      cachedKeyboard = {
+        ...next,
+        height: from,
+        progress: 0
+      };
+      notify();
+      const step = (now2) => {
+        const progress = Math.min(1, Math.max(0, (now2 - start) / duration));
+        const eased = progress * progress * (3 - 2 * progress);
+        cachedKeyboard = {
+          ...next,
+          height: from + (next.height - from) * eased,
+          progress
+        };
+        notify();
+        keyboardFrame = progress < 1 ? requestAnimationFrame(step) : null;
+      };
+      keyboardFrame = requestAnimationFrame(step);
     };
   }
   function subscribeInsets(listener) {
     ensureInsetsListener();
     insetsListeners.add(listener);
     return () => insetsListeners.delete(listener);
+  }
+  function useKeyboard() {
+    return reactExports.useSyncExternalStore(subscribeInsets, getKeyboardSnapshot, getServerKeyboardSnapshot);
   }
   function useSafeAreaInsets() {
     return reactExports.useSyncExternalStore(subscribeInsets, getSafeAreaSnapshot, getServerSafeAreaSnapshot);
@@ -29654,21 +29981,85 @@ ${stack}` : message;
       ref,
       contentContainerStyle,
       children,
+      onScroll,
+      onLayout,
+      onContentSizeChange,
       ...rest
     } = props;
+    const viewportRef = React.useRef({
+      width: 0,
+      height: 0
+    });
+    const contentSizeRef = React.useRef({
+      width: 0,
+      height: 0
+    });
+    const keyboard = useKeyboard();
     const contentStyle = {
       flexDirection: props.horizontal ? "row" : "column",
       flexGrow: 0,
       flexShrink: 0,
       alignSelf: "stretch",
+      ...props.keyboardAware && keyboard.height > 0 ? {
+        paddingBottom: keyboard.height
+      } : {},
       ...flattenStyleProp(contentContainerStyle)
     };
     const content = React.createElement("rayact-view", {
-      style: contentStyle
+      style: contentStyle,
+      onLayout: (event) => {
+        const {
+          width,
+          height
+        } = event.nativeEvent.layout;
+        const previous = contentSizeRef.current;
+        contentSizeRef.current = {
+          width,
+          height
+        };
+        if (previous.width !== width || previous.height !== height) {
+          onContentSizeChange?.(width, height);
+        }
+      }
     }, children);
-    if (!ref) return React.createElement("rayact-scroll-view", rest, content);
+    const wireScroll = (event_0) => {
+      if (!onScroll) return;
+      const candidate = event_0;
+      const x = candidate.nativeEvent?.contentOffset?.x ?? candidate.x ?? 0;
+      const y = candidate.nativeEvent?.contentOffset?.y ?? candidate.y ?? 0;
+      onScroll({
+        nativeEvent: {
+          contentOffset: {
+            x,
+            y
+          },
+          contentSize: contentSizeRef.current,
+          layoutMeasurement: viewportRef.current
+        }
+      });
+    };
+    const wireLayout = (event_1) => {
+      const {
+        width: width_0,
+        height: height_0
+      } = event_1.nativeEvent.layout;
+      viewportRef.current = {
+        width: width_0,
+        height: height_0
+      };
+      onLayout?.(event_1);
+    };
+    if (!ref) {
+      return React.createElement("rayact-scroll-view", {
+        ...rest,
+        onScroll: wireScroll,
+        onLayout: wireLayout
+      }, content);
+    }
     const wire = {
-      ...rest
+      ...rest,
+      onScroll: wireScroll,
+      onLayout: wireLayout
     };
     wire.ref = (inst) => {
       if (!inst || inst.node == null) {
@@ -30660,7 +31051,7 @@ ${stack}` : message;
   function CombinedServerList(props) {
     const {
       theme,
-      parseUrl,
+      parseUrl: parseUrl2,
       discoveredServers,
       recentEntries,
       recentReachability,
@@ -30677,7 +31068,7 @@ ${stack}` : message;
     const recentByKey = reactExports.useMemo(() => {
       const m = /* @__PURE__ */ new Map();
       for (const e of recentEntries) {
-        const parsed = parseUrl(e.url);
+        const parsed = parseUrl2(e.url);
         m.set(serverIdentityKey({
           url: parsed,
           appKey: e.appKey
@@ -30687,12 +31078,12 @@ ${stack}` : message;
         }), e);
       }
       return m;
-    }, [recentEntries, parseUrl]);
+    }, [recentEntries, parseUrl2]);
     const merged = reactExports.useMemo(() => {
       const out = [];
       const seen = /* @__PURE__ */ new Set();
       for (const s of discoveredServers) {
-        const parsed_0 = parseUrl(s.url);
+        const parsed_0 = parseUrl2(s.url);
         const key = serverIdentityKey({
           url: parsed_0,
           appKey: s.appKey
@@ -30721,7 +31112,7 @@ ${stack}` : message;
         });
       }
       for (const e_0 of recentEntries) {
-        const parsed_1 = parseUrl(e_0.url);
+        const parsed_1 = parseUrl2(e_0.url);
         const key_0 = serverIdentityKey({
           url: parsed_1,
           appKey: e_0.appKey
@@ -30752,16 +31143,16 @@ ${stack}` : message;
         });
       }
       return out;
-    }, [discoveredServers, recentEntries, recentByKey, recentReachability, parseUrl, online, offline, mismatch, checking]);
+    }, [discoveredServers, recentEntries, recentByKey, recentReachability, parseUrl2, online, offline, mismatch, checking]);
     const handleSelect = reactExports.useCallback((rawUrl, compatible_0) => {
-      const parsed_2 = parseUrl(rawUrl);
+      const parsed_2 = parseUrl2(rawUrl);
       if (!compatible_0) {
         showIncompatibleModalForUrl(parsed_2);
         return;
       }
       setUrl(parsed_2);
       openProject(rawUrl);
-    }, [parseUrl, setUrl, openProject, showIncompatibleModalForUrl]);
+    }, [parseUrl2, setUrl, openProject, showIncompatibleModalForUrl]);
     if (merged.length === 0) {
       return jsxRuntimeExports.jsx(View, {
         style: {
@@ -31417,7 +31808,8 @@ ${stack}` : message;
           padding: 16,
           borderWidth: 1,
           borderColor: cardBorder,
-          marginTop: 16
+          marginTop: 16,
+          marginBottom: 24
         },
         children: [jsxRuntimeExports.jsx(Text, {
           style: {
@@ -35224,9 +35616,9 @@ ${stack}` : message;
   function ensureDimensionsHook() {
     if (dimensionsHookInstalled) return;
     dimensionsHookInstalled = true;
-    const host = globalThis;
-    const prev = host.__rayactOnDimensionsChange;
-    host.__rayactOnDimensionsChange = () => {
+    const host2 = globalThis;
+    const prev = host2.__rayactOnDimensionsChange;
+    host2.__rayactOnDimensionsChange = () => {
       if (typeof prev === "function") prev();
       for (const listener of dimensionsListeners) listener();
     };
@@ -35285,7 +35677,8 @@ ${stack}` : message;
     renderScreen,
     visible,
     lazy,
-    bgColor
+    bgColor,
+    contentStyle
   }) {
     const hasMountedRef = reactExports.useRef(false);
     const [contentReady, setContentReady] = reactExports.useState(!lazy);
@@ -35316,7 +35709,7 @@ ${stack}` : message;
         backgroundColor: bgColor,
         opacity: visible ? 1 : 0,
         pointerEvents: visible ? "auto" : "none"
-      }],
+      }, contentStyle],
       children: contentReady ? jsxRuntimeExports.jsx(View, {
         style: {
           width: sceneSize.width,
@@ -35337,6 +35730,7 @@ ${stack}` : message;
     defaultAnimation,
     defaultDuration,
     bgColor,
+    contentStyle,
     onEnterSettled,
     onExitSettled,
     embedded = false
@@ -35405,11 +35799,11 @@ ${stack}` : message;
     }, []);
     const applyStyle = reactExports.useCallback((progress) => {
       const nodeId = viewRef.current?.node?.id;
-      const host = globalThis;
-      if (typeof nodeId !== "number" || typeof host.__rayactSetAnimatedStyle !== "function") {
+      const host2 = globalThis;
+      if (typeof nodeId !== "number" || typeof host2.__rayactSetAnimatedStyle !== "function") {
         return;
       }
-      host.__rayactSetAnimatedStyle(nodeId, animatedStyleFrom(interp(progress, layoutRef.current)));
+      host2.__rayactSetAnimatedStyle(nodeId, animatedStyleFrom(interp(progress, layoutRef.current)));
     }, [interp]);
     reactExports.useEffect(() => {
       settledAtRef.current = null;
@@ -35456,7 +35850,7 @@ ${stack}` : message;
     };
     reactExports.useLayoutEffect(() => {
       const nodeId = viewRef.current?.node?.id;
-      const host = globalThis;
+      const host2 = globalThis;
       const from = progressRef.current;
       const diff = target - from;
       const layout = effectiveLayout();
@@ -35469,12 +35863,12 @@ ${stack}` : message;
         route: descriptor.route.key,
         nodeId
       });
-      if (typeof nodeId !== "number" || typeof host.__rayactStartStyleAnimation !== "function" || typeof host.__rayactSetAnimatedStyle !== "function") {
+      if (typeof nodeId !== "number" || typeof host2.__rayactStartStyleAnimation !== "function" || typeof host2.__rayactSetAnimatedStyle !== "function") {
         return;
       }
-      host.__rayactStopStyleAnimation?.(nodeId);
-      host.__rayactSetAnimatedStyle(nodeId, animatedStyleFrom(interp(from, layout)));
-      host.__rayactStartStyleAnimation(nodeId, animatedStyleFrom(interp(target, layout)), {
+      host2.__rayactStopStyleAnimation?.(nodeId);
+      host2.__rayactSetAnimatedStyle(nodeId, animatedStyleFrom(interp(from, layout)));
+      host2.__rayactStartStyleAnimation(nodeId, animatedStyleFrom(interp(target, layout)), {
         type: "timing",
         duration,
         easing: "easeInOutCubic"
@@ -35483,16 +35877,16 @@ ${stack}` : message;
         settle(target);
       });
       return () => {
-        host.__rayactStopStyleAnimation?.(nodeId);
+        host2.__rayactStopStyleAnimation?.(nodeId);
       };
     }, [animation, applyStyle, duration, interp, layoutVersion, nodeIdReady, settle, target]);
     reactExports.useEffect(() => {
       const nodeId = viewRef.current?.node?.id;
-      const host = globalThis;
+      const host2 = globalThis;
       const from = progressRef.current;
       const diff = target - from;
       if (diff === 0 || animation === "none" || duration <= 0) return;
-      if (typeof nodeId === "number" && typeof host.__rayactSetAnimatedStyle === "function") {
+      if (typeof nodeId === "number" && typeof host2.__rayactSetAnimatedStyle === "function") {
         return;
       }
       effectiveLayout();
@@ -35530,7 +35924,7 @@ ${stack}` : message;
         },
         backgroundColor: bgColor,
         pointerEvents: isFocused ? "auto" : "none"
-      }, interp(initialProgress, sceneSize)],
+      }, contentStyle, opts.contentStyle, interp(initialProgress, sceneSize)],
       children: renderContent && contentReady ? jsxRuntimeExports.jsx(View, {
         style: embedded ? {
           flexGrow: 1
@@ -35620,6 +36014,7 @@ ${stack}` : message;
     cacheScreensByName = false,
     lazyScreens = false,
     embedded = false,
+    contentStyle,
     ...rest
   }) {
     const forceUpdate = reactExports.useReducer((x) => x + 1, 0)[1];
@@ -35748,7 +36143,8 @@ ${stack}` : message;
             renderScreen,
             visible: focusedUsesCache && focusedRoute?.name === name_0,
             lazy,
-            bgColor
+            bgColor,
+            contentStyle: [...Array.isArray(contentStyle) ? contentStyle : [contentStyle], ...Array.isArray(options_5.contentStyle) ? options_5.contentStyle : [options_5.contentStyle]]
           }, `cached-${name_0}`);
         }), backgroundRoutes.map((route_3) => {
           const descriptor_3 = descriptors[route_3.key];
@@ -35764,6 +36160,7 @@ ${stack}` : message;
             defaultAnimation,
             defaultDuration,
             bgColor,
+            contentStyle,
             onExitSettled: () => {
             },
             embedded
@@ -35783,6 +36180,7 @@ ${stack}` : message;
           defaultAnimation,
           defaultDuration,
           bgColor,
+          contentStyle,
           onEnterSettled: (key) => {
             seenRouteKeysRef.current.add(key);
             if (topRouteSettledRef.current) return;
@@ -35805,6 +36203,7 @@ ${stack}` : message;
             defaultAnimation,
             defaultDuration,
             bgColor,
+            contentStyle,
             onExitSettled: (settledKey) => {
               closingKeysRef.current.delete(settledKey);
               closingDescriptorsRef.current.delete(settledKey);
@@ -37008,6 +37407,17 @@ ${stack}` : message;
   }
   function createBridge(globalObject = globalThis) {
     const native = globalObject;
+    let appRootNode = null;
+    let errorOverlayNode = null;
+    const setNativeRoot = (node) => {
+      if (node) {
+        requireFunction(native.setRootNode, "setRootNode")(node.id);
+      } else if (typeof native.clearRootNode === "function") {
+        native.clearRootNode();
+      } else {
+        requireFunction(native.setRootNode, "setRootNode")(null);
+      }
+    };
     const bridge2 = {
       createNode(type, props = {}) {
         const style = toStyleProps(props, true);
@@ -37126,13 +37536,19 @@ ${stack}` : message;
         requireFunction(native.insertBefore, "insertBefore")(parent.id, child.id, beforeChild.id);
       },
       setRoot(node) {
-        if (node) {
-          requireFunction(native.setRootNode, "setRootNode")(node.id);
-        } else if (typeof native.clearRootNode === "function") {
-          native.clearRootNode();
-        } else {
-          requireFunction(native.setRootNode, "setRootNode")(null);
+        appRootNode = node ?? null;
+        if (errorOverlayNode) {
+          if (!node) return;
+          const overlay = errorOverlayNode;
+          errorOverlayNode = null;
+          setNativeRoot(node);
+          try {
+            bridge2.disposeNode(overlay);
+          } catch {
+          }
+          return;
         }
+        setNativeRoot(node);
       },
       setEventHandler(node, eventName, handler) {
         if (eventName === "press" || eventName === "click") {
@@ -37287,9 +37703,49 @@ ${stack}` : message;
           bridge2.appendChild(content, body);
           bridge2.appendChild(scroller, content);
           bridge2.appendChild(root, scroller);
-          bridge2.setRoot(root);
+          const previousOverlay = errorOverlayNode;
+          errorOverlayNode = root;
+          setNativeRoot(root);
+          if (previousOverlay) {
+            try {
+              bridge2.disposeNode(previousOverlay);
+            } catch {
+            }
+          }
         } catch (overlayError) {
           native.console?.error?.("Failed to show Rayact error overlay", overlayError);
+        }
+      },
+      /**
+       * Dismiss the error overlay and hand the screen back to the app tree.
+       * Called after a reload or hot update evaluates cleanly, so fixing the code
+       * actually clears the red screen instead of leaving it up forever.
+       */
+      /** True while the dev error overlay owns the screen. */
+      hasError() {
+        return errorOverlayNode !== null;
+      },
+      noteAppRoot(node) {
+        appRootNode = node ?? null;
+        if (!node || !errorOverlayNode) return;
+        const overlay = errorOverlayNode;
+        errorOverlayNode = null;
+        try {
+          bridge2.disposeNode(overlay);
+        } catch {
+        }
+      },
+      clearError() {
+        const overlay = errorOverlayNode;
+        if (!overlay) return;
+        errorOverlayNode = null;
+        try {
+          setNativeRoot(appRootNode);
+        } finally {
+          try {
+            bridge2.disposeNode(overlay);
+          } catch {
+          }
         }
       }
     };
@@ -37341,7 +37797,7 @@ ${stack}` : message;
     let hmrSocket = null;
     let debuggerReconnect = null;
     let hmrReconnect = null;
-    let pollTimer = null;
+    let pollTimer2 = null;
     let lastRevision = null;
     let manifest = {};
     const send = (type, payload) => {
@@ -37382,6 +37838,7 @@ ${stack}` : message;
         }
         send("client:reloaded");
         setReloadState("running");
+        options.bridge.clearError?.();
         return true;
       } catch (error) {
         setReloadState("failed");
@@ -37487,8 +37944,8 @@ ${stack}` : message;
         connectHmr();
         connectDebugger();
       });
-      if (!pollTimer) {
-        pollTimer = setInterval(() => {
+      if (!pollTimer2) {
+        pollTimer2 = setInterval(() => {
           void pollStatus();
         }, 5e3);
         void pollStatus();
@@ -37503,9 +37960,9 @@ ${stack}` : message;
         clearTimeout(hmrReconnect);
         hmrReconnect = null;
       }
-      if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
+      if (pollTimer2) {
+        clearInterval(pollTimer2);
+        pollTimer2 = null;
       }
       if (debuggerSocket) {
         debuggerSocket.close();

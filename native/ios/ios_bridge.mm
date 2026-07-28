@@ -11,6 +11,7 @@
 #include "../desktop/dev_client_bridge.hpp"
 #include "../desktop/devtools.hpp"
 #include "../desktop/js_stdlib.hpp"
+#include "../shared/mobile_network_polyfill.h"
 #include "../desktop/kv_store.hpp"
 #include "../desktop/module_bus.hpp"
 #include "../desktop/plugin_loader.hpp"
@@ -107,15 +108,20 @@ PendingKeyboardInsets g_lastDeviceKeyboard;
 std::mutex g_globalImeMutex;
 std::string g_globalImeText;
 std::atomic<int> g_imeNodeId{-1};
+std::mutex g_linkingMutex;
+std::vector<std::string> g_pendingLinkingUrls;
 
 bool g_processBooted = false;
 
 const char* (*g_iosDevCall)(const char*, const char*) = nullptr;
+const char* (*g_iosPlatformCall)(const char*, const char*, const char*) = nullptr;
 const char* (*g_iosDevFetch)(const char*) = nullptr;
 const uint8_t* (*g_iosDevFetchBytes)(const char*, uint32_t*) = nullptr;
 const char* (*g_iosNetworkFetchText)(const char*) = nullptr;
 const uint8_t* (*g_iosNetworkFetchBytes)(const char*, uint32_t*) = nullptr;
-void (*g_iosNetworkFetchStart)(int64_t, int, const char*) = nullptr;
+void (*g_iosNetworkFetchStart)(int64_t, int, const char*, const char*, const char*,
+                               const char*) = nullptr;
+void (*g_iosNetworkFetchAbort)(int64_t, int) = nullptr;
 int (*g_iosWsOpen)(int64_t, const char*) = nullptr;
 bool (*g_iosWsSend)(int64_t, int, const char*) = nullptr;
 bool (*g_iosWsClose)(int64_t, int, int, const char*) = nullptr;
@@ -155,9 +161,28 @@ static JSValue JS_iosMobileFetchStart(JSContext* ctx, JSValue, int argc, JSValue
     int32_t id = 0;
     JS_ToInt32(ctx, &id, argv[0]);
     const char* url = JS_ToCString(ctx, argv[1]);
+    const char* method = argc > 2 ? JS_ToCString(ctx, argv[2]) : nullptr;
+    const char* headers = argc > 3 ? JS_ToCString(ctx, argv[3]) : nullptr;
+    // Undefined/null body stays null so the request is sent without one.
+    const char* body = (argc > 4 && !JS_IsUndefined(argv[4]) && !JS_IsNull(argv[4]))
+                           ? JS_ToCString(ctx, argv[4])
+                           : nullptr;
     IOSEngineInstance* owner = iosEngineCurrent();
-    g_iosNetworkFetchStart(owner ? owner->id : 0, (int)id, url ? url : "");
+    g_iosNetworkFetchStart(owner ? owner->id : 0, (int)id, url ? url : "",
+                           method ? method : "GET", headers ? headers : "{}", body);
+    if (body) JS_FreeCString(ctx, body);
+    if (headers) JS_FreeCString(ctx, headers);
+    if (method) JS_FreeCString(ctx, method);
     if (url) JS_FreeCString(ctx, url);
+    return JS_UNDEFINED;
+}
+
+static JSValue JS_iosMobileFetchAbort(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1 || !g_iosNetworkFetchAbort) return JS_UNDEFINED;
+    int32_t id = 0;
+    JS_ToInt32(ctx, &id, argv[0]);
+    IOSEngineInstance* owner = iosEngineCurrent();
+    g_iosNetworkFetchAbort(owner ? owner->id : 0, (int)id);
     return JS_UNDEFINED;
 }
 
@@ -232,142 +257,6 @@ static JSValue JS_iosMobileWsPollEvents(JSContext* ctx, JSValue, int, JSValueCon
     return JS_NewString(ctx, events ? events : "[]");
 }
 
-static const char* kIOSMobileNetworkPolyfill = R"JS(
-(function(G){
-  if (!G.Event) G.Event = function Event(type){ this.type=type; };
-  if (!G.EventTarget) {
-    G.EventTarget = function EventTarget(){ this.__listeners={}; };
-    G.EventTarget.prototype.addEventListener=function(type, fn){
-      if (!fn) return; (this.__listeners[type]||(this.__listeners[type]=[])).push(fn);
-    };
-    G.EventTarget.prototype.removeEventListener=function(type, fn){
-      var a=this.__listeners[type]; if(!a) return;
-      var i=a.indexOf(fn); if(i>=0) a.splice(i,1);
-    };
-    G.EventTarget.prototype.dispatchEvent=function(ev){
-      ev.target=this;
-      var prop=this['on'+ev.type]; if(typeof prop==='function') prop.call(this, ev);
-      var a=(this.__listeners&&this.__listeners[ev.type])||[];
-      for(var i=0;i<a.length;i++) a[i].call(this, ev);
-      return true;
-    };
-  }
-  if (!G.MessageEvent) G.MessageEvent = function MessageEvent(type, init){ G.Event.call(this,type); this.data=init&&init.data; };
-  if (!G.CloseEvent) G.CloseEvent = function CloseEvent(type, init){ G.Event.call(this,type); this.code=(init&&init.code)||1000; this.reason=(init&&init.reason)||''; this.wasClean=true; };
-  if (!G.ErrorEvent) G.ErrorEvent = function ErrorEvent(type, init){ G.Event.call(this,type); this.message=(init&&init.message)||''; };
-  if (!G.Headers) G.Headers = function Headers(init){ this._h=init||{}; };
-  if (!G.Response) {
-    G.Response = function Response(body, init){
-      this._body=body||'';
-      this._bytes=(init&&init.bytes) instanceof ArrayBuffer ? init.bytes : null;
-      this.status=(init&&init.status)||200;
-      this.statusText=(init&&init.statusText)||'OK';
-      this.ok=this.status>=200&&this.status<300;
-      this.url=(init&&init.url)||'';
-      this.headers=new G.Headers();
-    };
-    G.Response.prototype.text=function(){
-      if(this._bytes){
-        if(typeof G.TextDecoder==='function') return Promise.resolve(new G.TextDecoder('utf-8').decode(this._bytes));
-        var b=new Uint8Array(this._bytes), o='';
-        for(var j=0;j<b.length;j++) o+=String.fromCharCode(b[j]);
-        return Promise.resolve(o);
-      }
-      return Promise.resolve(String(this._body));
-    };
-    G.Response.prototype.json=function(){ return this.text().then(JSON.parse); };
-    G.Response.prototype.arrayBuffer=function(){
-      if(this._bytes) return Promise.resolve(this._bytes);
-      var s=String(this._body), n=s.length, buf=new ArrayBuffer(n), v=new Uint8Array(buf);
-      for(var i=0;i<n;i++) v[i]=s.charCodeAt(i)&0xff;
-      return Promise.resolve(buf);
-    };
-  }
-  G.__rayactNativeFetchSeq = G.__rayactNativeFetchSeq || 0;
-  G.__rayactNativeFetchPending = G.__rayactNativeFetchPending || {};
-  function __ts(){ return Date.now()/1000; }
-  function __net(method, params){
-    if(!(G.__rayactDevtoolsActive && G.__rayactDevtoolsActive())) return;
-    try { G.__rayactDevtoolsNetwork(method, JSON.stringify(params)); } catch(e){}
-  }
-  function __storeBody(requestId, body){
-    if(!(G.__rayactDevtoolsActive && G.__rayactDevtoolsActive())) return;
-    try { G.__rayactDevtoolsStoreNetworkBody(requestId, body); } catch(e){}
-  }
-  if (typeof G.fetch !== 'function') {
-    // Asynchronous fetch: hands the request to the native dispatcher and
-    // resolves later from the network drain. Never blocks the render thread.
-    G.fetch=function(url, opts){
-      var target=String(url);
-      var id=++G.__rayactNativeFetchSeq;
-      var reqId='rayact-fetch-'+id;
-      var httpMethod=(opts&&opts.method)||'GET';
-      __net('Network.requestWillBeSent',{requestId:reqId,loaderId:'rayact-loader',documentURL:target,request:{url:target,method:httpMethod,headers:(opts&&opts.headers)||{}},timestamp:__ts(),wallTime:Date.now()/1000,initiator:{type:'script'},type:'Fetch'});
-      return new Promise(function(resolve, reject){
-        G.__rayactNativeFetchPending[id]={resolve:resolve, reject:reject, url:target, reqId:reqId};
-        try { G.__rayactNativeFetchStart(id, target); }
-        catch(e){ delete G.__rayactNativeFetchPending[id]; __net('Network.loadingFailed',{requestId:reqId,timestamp:__ts(),type:'Fetch',errorText:String(e&&e.message||e),canceled:false}); reject(e); }
-      });
-    };
-  }
-  if (typeof G.WebSocket !== 'function') {
-    function WebSocket(url) {
-      G.EventTarget.call(this);
-      this.url=String(url); this.readyState=0; this.protocol=''; this.extensions='';
-      this.binaryType='arraybuffer'; this.bufferedAmount=0;
-      this.onopen=null; this.onmessage=null; this.onerror=null; this.onclose=null;
-      this.__id=G.__rayactNativeWsOpen(this.url);
-      this.__netId='rayact-ws-'+this.__id;
-      G.__rayactNativeWsSockets[this.__id]=this;
-      __net('Network.webSocketCreated',{requestId:this.__netId,url:this.url,initiator:{type:'script'}});
-      __net('Network.webSocketWillSendHandshakeRequest',{requestId:this.__netId,timestamp:__ts(),wallTime:Date.now()/1000,request:{headers:{}}});
-    }
-    WebSocket.CONNECTING=0; WebSocket.OPEN=1; WebSocket.CLOSING=2; WebSocket.CLOSED=3;
-    WebSocket.prototype=Object.create(G.EventTarget.prototype);
-    WebSocket.prototype.constructor=WebSocket;
-    WebSocket.prototype.CONNECTING=0; WebSocket.prototype.OPEN=1; WebSocket.prototype.CLOSING=2; WebSocket.prototype.CLOSED=3;
-    WebSocket.prototype.send=function(data){
-      if(this.readyState!==1) throw new Error('WebSocket not open');
-      G.__rayactNativeWsSend(this.__id, String(data));
-      __net('Network.webSocketFrameSent',{requestId:this.__netId,timestamp:__ts(),response:{opcode:1,mask:true,payloadData:String(data)}});
-    };
-    WebSocket.prototype.close=function(code, reason){
-      if(this.readyState===2||this.readyState===3) return;
-      this.readyState=2;
-      G.__rayactNativeWsClose(this.__id, code||1000, reason||'');
-    };
-    G.WebSocket=WebSocket;
-  }
-  G.__rayactNativeWsSockets = G.__rayactNativeWsSockets || {};
-  G.__rayactNativeNetworkDrain = function(){
-    var raw=G.__rayactNativeWsPollEvents();
-    if(!raw||raw==='[]') return;
-    var events=JSON.parse(raw);
-    for(var i=0;i<events.length;i++){
-      var ev=events[i];
-      if(ev.type==='fetch'){
-        var p=G.__rayactNativeFetchPending[ev.req];
-        if(!p) continue;
-        delete G.__rayactNativeFetchPending[ev.req];
-        if(ev.status===0){ __net('Network.loadingFailed',{requestId:p.reqId,timestamp:__ts(),type:'Fetch',errorText:ev.error||'Network request failed',canceled:false}); p.reject(new Error(ev.error||'Network request failed')); continue; }
-        var s=ev.body||'', n=s.length, buf=new ArrayBuffer(n), v=new Uint8Array(buf);
-        for(var k=0;k<n;k++) v[k]=s.charCodeAt(k)&0xff;
-        __storeBody(p.reqId, buf);
-        __net('Network.responseReceived',{requestId:p.reqId,loaderId:'rayact-loader',timestamp:__ts(),type:'Fetch',response:{url:p.url,status:ev.status,statusText:ev.statusText||'',headers:ev.headers||{},mimeType:ev.mimeType||'application/octet-stream',protocol:ev.protocol||'',connectionReused:false,fromDiskCache:false,encodedDataLength:n}});
-        __net('Network.loadingFinished',{requestId:p.reqId,timestamp:__ts(),encodedDataLength:n});
-        p.resolve(new G.Response('',{status:ev.status, statusText:'', url:p.url, bytes:buf}));
-        continue;
-      }
-      var ws=G.__rayactNativeWsSockets[ev.id];
-      if(!ws) continue;
-      if(ev.type==='open'){ ws.readyState=1; __net('Network.webSocketHandshakeResponseReceived',{requestId:ws.__netId,timestamp:__ts(),response:{status:ev.status||101,statusText:ev.statusText||'Switching Protocols',headers:ev.headers||{}}}); ws.dispatchEvent(new G.Event('open')); }
-      else if(ev.type==='message'){ __net('Network.webSocketFrameReceived',{requestId:ws.__netId,timestamp:__ts(),response:{opcode:ev.binary?2:1,mask:false,payloadData:ev.data||''}}); ws.dispatchEvent(new G.MessageEvent('message',{data:ev.data||''})); }
-      else if(ev.type==='error'){ __net('Network.webSocketFrameError',{requestId:ws.__netId,timestamp:__ts(),errorMessage:ev.message||'WebSocket error'}); ws.dispatchEvent(new G.ErrorEvent('error',{message:ev.message||'WebSocket error'})); }
-      else if(ev.type==='close'){ ws.readyState=3; delete G.__rayactNativeWsSockets[ev.id]; __net('Network.webSocketClosed',{requestId:ws.__netId,timestamp:__ts()}); ws.dispatchEvent(new G.CloseEvent('close',{code:ev.code||1000,reason:ev.reason||''})); }
-    }
-  };
-})(globalThis);
-)JS";
 
 static void installIOSMobileNetworkBindings(JSContext* ctx) {
     if (!ctx) return;
@@ -377,7 +266,9 @@ static void installIOSMobileNetworkBindings(JSContext* ctx) {
     JS_SetPropertyStr(ctx, global, "__rayactNativeFetchBytes",
                       JS_NewCFunction(ctx, JS_iosMobileFetchBytes, "__rayactNativeFetchBytes", 1));
     JS_SetPropertyStr(ctx, global, "__rayactNativeFetchStart",
-                      JS_NewCFunction(ctx, JS_iosMobileFetchStart, "__rayactNativeFetchStart", 2));
+                      JS_NewCFunction(ctx, JS_iosMobileFetchStart, "__rayactNativeFetchStart", 5));
+    JS_SetPropertyStr(ctx, global, "__rayactNativeFetchAbort",
+                      JS_NewCFunction(ctx, JS_iosMobileFetchAbort, "__rayactNativeFetchAbort", 1));
     JS_SetPropertyStr(ctx, global, "__rayactDevtoolsActive",
                       JS_NewCFunction(ctx, JS_iosDevtoolsActive, "__rayactDevtoolsActive", 0));
     JS_SetPropertyStr(ctx, global, "__rayactDevtoolsNetwork",
@@ -393,7 +284,7 @@ static void installIOSMobileNetworkBindings(JSContext* ctx) {
     JS_SetPropertyStr(ctx, global, "__rayactNativeWsPollEvents",
                       JS_NewCFunction(ctx, JS_iosMobileWsPollEvents, "__rayactNativeWsPollEvents", 0));
     JS_FreeValue(ctx, global);
-    JSValue r = JS_Eval(ctx, kIOSMobileNetworkPolyfill, strlen(kIOSMobileNetworkPolyfill),
+    JSValue r = JS_Eval(ctx, rayact::kMobileNetworkPolyfill, strlen(rayact::kMobileNetworkPolyfill),
                         "ios-mobile-network.js", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(r)) {
         JSValue exc = JS_GetException(ctx);
@@ -763,6 +654,11 @@ extern "C" void RayactIOSSetDevCallbacks(
     g_iosDevFetch = devFetch;
 }
 
+extern "C" void RayactIOSSetPlatformModuleCallback(
+    const char* (*platformCall)(const char*, const char*, const char*)) {
+    g_iosPlatformCall = platformCall;
+}
+
 extern "C" void RayactIOSSetDevFetchBytes(
     const uint8_t* (*devFetchBytes)(const char*, uint32_t*)) {
     g_iosDevFetchBytes = devFetchBytes;
@@ -784,8 +680,14 @@ extern "C" void RayactIOSSetNetworkCallbacks(
 }
 
 extern "C" void RayactIOSSetNetworkFetchStart(
-    void (*fetchStart)(int64_t owner, int requestId, const char* url)) {
+    void (*fetchStart)(int64_t owner, int requestId, const char* url, const char* method,
+                       const char* headersJson, const char* body)) {
     g_iosNetworkFetchStart = fetchStart;
+}
+
+extern "C" void RayactIOSSetNetworkFetchAbort(
+    void (*fetchAbort)(int64_t owner, int requestId)) {
+    g_iosNetworkFetchAbort = fetchAbort;
 }
 
 extern "C" RayactIOSHandle RayactIOSSessionCreate(const char* dataPath) {
@@ -1026,6 +928,15 @@ extern "C" void RayactIOSSessionSetKeyboardInsets(RayactIOSHandle handle, float 
     g_lastDeviceKeyboard.durationMs = durationMs;
 }
 
+extern "C" void RayactIOSPushURL(const char* url) {
+    if (!url || !*url) return;
+    {
+        std::lock_guard<std::mutex> lock(g_linkingMutex);
+        g_pendingLinkingUrls.emplace_back(url);
+    }
+    rayact::engineRequestFrame();
+}
+
 extern "C" void RayactIOSSessionKeyEvent(
     RayactIOSHandle handle, int type, const char* key, const char* code,
     const char* text, bool repeat, bool ctrl, bool alt, bool shift, bool meta) {
@@ -1131,6 +1042,50 @@ extern "C" bool RayactIOSSessionRenderFrame(RayactIOSHandle handle, int64_t fram
     }
     if (g_pendingImeBlur.exchange(false, std::memory_order_acq_rel)) rayactBlurFocusedTextInput();
     if (g_pendingImeSubmit.exchange(false, std::memory_order_acq_rel)) rayactSubmitFocusedTextInput();
+
+    {
+        std::vector<std::string> urls;
+        {
+            std::lock_guard<std::mutex> lock(g_linkingMutex);
+            urls.swap(g_pendingLinkingUrls);
+        }
+        JSContext* ctx = rayact::engineContext();
+        if (ctx && !urls.empty()) {
+            JSValue global = JS_GetGlobalObject(ctx);
+            JSValue initial = JS_GetPropertyStr(ctx, global, "__rayactLinkingInitialURL");
+            if (JS_IsUndefined(initial) || JS_IsNull(initial)) {
+                JS_SetPropertyStr(ctx, global, "__rayactLinkingInitialURL",
+                                  JS_NewString(ctx, urls.front().c_str()));
+            }
+            JS_FreeValue(ctx, initial);
+            JSValue listener = JS_GetPropertyStr(ctx, global, "__rayactOnURL");
+            const bool hasListener = JS_IsFunction(ctx, listener);
+            JSValue queue = JS_GetPropertyStr(ctx, global, "__rayactPendingURLs");
+            if (!JS_IsArray(queue)) {
+                JS_FreeValue(ctx, queue);
+                queue = JS_NewArray(ctx);
+                JS_SetPropertyStr(ctx, global, "__rayactPendingURLs", JS_DupValue(ctx, queue));
+            }
+            for (const std::string& url : urls) {
+                if (!hasListener) {
+                    JSValue push = JS_GetPropertyStr(ctx, queue, "push");
+                    JSValue value = JS_NewString(ctx, url.c_str());
+                    JSValue pushed = JS_Call(ctx, push, queue, 1, &value);
+                    JS_FreeValue(ctx, pushed);
+                    JS_FreeValue(ctx, value);
+                    JS_FreeValue(ctx, push);
+                } else {
+                    JSValue arg = JS_NewString(ctx, url.c_str());
+                    JSValue result = JS_Call(ctx, listener, JS_UNDEFINED, 1, &arg);
+                    JS_FreeValue(ctx, result);
+                    JS_FreeValue(ctx, arg);
+                }
+            }
+            JS_FreeValue(ctx, listener);
+            JS_FreeValue(ctx, queue);
+            JS_FreeValue(ctx, global);
+        }
+    }
 
     {
         IOSEngineInstance* active = iosEngineCurrent();
@@ -1377,6 +1332,17 @@ std::vector<uint8_t> iosFetchBytes(const char* url) {
     const uint8_t* bytes = g_iosNetworkFetchBytes(url, &len);
     if (!bytes || len == 0) return {};
     return std::vector<uint8_t>(bytes, bytes + len);
+}
+
+std::string iosPlatformCall(const char* module, const char* method, const char* payloadJson) {
+    if (!g_iosPlatformCall)
+        return "{\"ok\":false,\"error\":\"iOS platform registry is unavailable\"}";
+    const char* result = g_iosPlatformCall(
+        module ? module : "",
+        method ? method : "",
+        payloadJson ? payloadJson : "null");
+    return result ? std::string(result)
+                  : std::string("{\"ok\":false,\"error\":\"iOS platform module returned no result\"}");
 }
 
 std::string iosDevCall(const char* method, const char* dataJson) {

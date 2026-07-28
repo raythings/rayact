@@ -123,6 +123,7 @@ type GlobalHmr = RayactGlobal & {
   __rayactModuleRegistry?: Map<string, ModuleFactory>;
   __rayactModuleLoading?: Map<string, Promise<unknown>>;
   __rayactRequire?: (specifier: string, fromUrl?: string) => unknown;
+  __rayactRequireAsync?: (specifier: string, fromUrl?: string) => Promise<unknown>;
   __rayactRegisterModule?: (url: string, factory: ModuleFactory) => void;
   /** Development-only bridge: retains the exact module source evaluated by QuickJS. */
   __rayactRegisterDebugScript?: (url: string, source: string) => void;
@@ -183,6 +184,21 @@ export class ModuleHmrRuntime {
       if (vendor) return vendor;
       const resolved = resolveModuleUrl(specifier, fromUrl ?? '', this.serverUrl);
       return normalizeModuleExport(this.loadModuleSync(resolved));
+    };
+
+    // Backing for `__vite_ssr_dynamic_import__` (i.e. `await import()`), which
+    // ssrTransform emits and the module prelude forwards here. Kept separate
+    // from __rayactRequire so a dynamic import of an already-in-flight module
+    // awaits it instead of hitting loadModuleSync's circular-dependency throw.
+    this.globalObject.__rayactRequireAsync = (specifier, fromUrl) => {
+      try {
+        const vendor = getVendorNamespace(this.globalObject, specifier);
+        if (vendor) return Promise.resolve(vendor);
+        const resolved = resolveModuleUrl(specifier, fromUrl ?? '', this.serverUrl);
+        return this.loadModuleDynamic(resolved).then(normalizeModuleExport);
+      } catch (error) {
+        return Promise.reject(error);
+      }
     };
   }
 
@@ -256,6 +272,38 @@ export class ModuleHmrRuntime {
     return registry.get(key)?.() ?? null;
   }
 
+  /**
+   * Promise-returning load for `await import()`.
+   *
+   * Unlike loadModule, this never falls straight through to loadModuleSync on
+   * native: it checks the in-flight map first, so importing a module that is
+   * already being loaded resolves against that load rather than throwing
+   * "Circular or async module dependency". Only a genuinely cold module takes
+   * the sync fetch path, which is what native has to use anyway.
+   */
+  loadModuleDynamic(moduleUrl: string): Promise<unknown> {
+    const key = normalizeModuleUrl(moduleUrl);
+    const registry = this.globalObject.__rayactModuleRegistry!;
+    const loading = this.globalObject.__rayactModuleLoading!;
+
+    if (registry.has(key)) {
+      return Promise.resolve(registry.get(key)!());
+    }
+
+    const pending = loading.get(key);
+    if (pending) return Promise.resolve(pending);
+
+    if (typeof this.globalObject.__rayactDevFetch === 'function') {
+      try {
+        return Promise.resolve(this.loadModuleSync(moduleUrl));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
+
+    return this.loadModule(moduleUrl);
+  }
+
   async loadModule(moduleUrl: string): Promise<unknown> {
     if (typeof this.globalObject.__rayactDevFetch === 'function') {
       return this.loadModuleSync(moduleUrl);
@@ -314,6 +362,7 @@ export class ModuleHmrRuntime {
   private evalModule(moduleUrl: string, source: string): void {
     const g = this.globalObject;
     const previousRequire = g.__rayactRequire;
+    const previousRequireAsync = g.__rayactRequireAsync;
     const previousRegister = g.__rayactRegisterModule;
     try {
       // Register before eval so Sources always reflects the exact transformed
@@ -329,6 +378,7 @@ export class ModuleHmrRuntime {
       throw error;
     } finally {
       g.__rayactRequire = previousRequire;
+      g.__rayactRequireAsync = previousRequireAsync;
       g.__rayactRegisterModule = previousRegister;
     }
   }
@@ -336,6 +386,9 @@ export class ModuleHmrRuntime {
   private performRefresh(): void {
     try {
       this.globalObject.__REACT_REFRESH__?.performReactRefresh();
+      // The update applied — drop any error overlay left over from a previous
+      // broken save, so editing the code back to working restores the app.
+      this.bridge?.clearError?.();
     } catch (error) {
       this.globalObject.console?.error?.('[rayact:hmr] refresh failed', error);
     }
@@ -398,6 +451,16 @@ export class ModuleHmrRuntime {
     if (type === 'update') {
       const updates = message.updates as Array<{ type?: string; path?: string; timestamp?: number }> | undefined;
       if (!updates?.length) return;
+      // An uncaught render error tears down the React root, and Fast Refresh
+      // cannot revive a crashed fiber root — a partial update would apply to a
+      // tree that no longer renders, leaving the error screen up forever. Once
+      // the app is in a failed state, escalate the next update to a full entry
+      // reload (the same thing Metro does after a red box).
+      if (this.bridge?.hasError?.()) {
+        this.globalObject.console?.info?.('[rayact:hmr] app is in an error state — full reload instead of hot update');
+        await this.reloadEntry();
+        return;
+      }
       for (const update of updates) {
         if (update.type !== 'js-update' || !update.path) continue;
         const path = update.path.split(/[?#]/, 1)[0];
@@ -425,8 +488,11 @@ export class ModuleHmrRuntime {
     const key = normalizeModuleUrl(entryUrl);
     this.globalObject.__rayactModuleRegistry?.delete(key);
     this.globalObject.__rayactModuleLoading?.delete(key);
+    // Re-evaluating the entry calls render() again, which rebuilds the React
+    // root from scratch — the only way back from a crashed tree.
     await this.loadModule(entryUrl);
     this.performRefresh();
+    this.bridge?.clearError?.();
   }
 
   private devFetchTextSync(url: string): string {

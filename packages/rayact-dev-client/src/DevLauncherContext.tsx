@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { addShakeListener } from '@rayact/sensors';
 import type { DevLauncherTheme } from './devLauncherTheme.js';
 import { FALLBACK_THEME } from './devLauncherTheme.js';
 import {
@@ -160,6 +161,13 @@ export function DevLauncherProvider({ children }: { children: React.ReactNode })
   // and hid Inspector and Diagnostics on iOS and Android.
   const g = globalThis as { __rayactToggleDevMenu?: () => void };
   g.__rayactToggleDevMenu = () => setDevMenuOpen(open => !open);
+
+  useEffect(() => {
+    const subscription = addShakeListener(() => {
+      setDevMenuOpen(open => !open);
+    });
+    return () => subscription.remove();
+  }, []);
 
   const setUrl = useCallback((u: string) => {
     setUrlState(u);

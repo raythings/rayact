@@ -30,6 +30,7 @@ export async function runPrebuildCommand(flags: CliFlags): Promise<void> {
     configNativeModules: config.nativeModules,
     android: config.android,
     ios: config.ios,
+    linking: config.linking,
     force: flags.force
   });
 

@@ -87,6 +87,14 @@ extern "C" {
 #include "../android/engine_runtime.hpp"
 #endif
 
+namespace rayact {
+#if defined(__ANDROID__)
+std::string androidPlatformCall(const char* module, const char* method, const char* payloadJson);
+#elif defined(RAYACT_IOS)
+std::string iosPlatformCall(const char* module, const char* method, const char* payloadJson);
+#endif
+}
+
 // Forward declarations
 static JSValue JS_initRaylib(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_renderRect(JSContext*, JSValue, int, JSValueConst*);
@@ -111,6 +119,7 @@ static JSValue JS_resolveAssetPath(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_readAssetBytes(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_keyboardCapture(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_keyboardDismiss(JSContext*, JSValue, int, JSValueConst*);
+static JSValue JS_platformCall(JSContext*, JSValue, int, JSValueConst*);
 
 // Global variables
 #if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
@@ -402,6 +411,14 @@ static void registerNativeFunctions(JSContext* ctx) {
             JS_SetPropertyStr(ctx, out, "droppedFrames", JS_NewInt64(ctx, (int64_t)g_diagnosticDropped));
             JS_SetPropertyStr(ctx, out, "jankyFrames", JS_NewInt64(ctx, (int64_t)g_diagnosticJanky));
             JS_SetPropertyStr(ctx, out, "sampleFrames", JS_NewInt64(ctx, (int64_t)g_diagnosticSamples));
+            // Layout + paint cost of the last frame. yogaNodesBuilt is the
+            // per-frame layout-tree rebuild size: it tracks the whole node
+            // tree today, and should track the visible window once lists are
+            // virtualized.
+            const raym3::v2::RenderStats stats = raym3::v2::GetLastRenderStats();
+            JS_SetPropertyStr(ctx, out, "yogaNodesBuilt", JS_NewInt32(ctx, stats.yogaNodesBuilt));
+            JS_SetPropertyStr(ctx, out, "visitedNodes", JS_NewInt32(ctx, stats.nodeCount));
+            JS_SetPropertyStr(ctx, out, "paintedNodes", JS_NewInt32(ctx, stats.paintedCount));
             return out;
         }, "__rayactGetFrameDiagnostics", 0));
 
@@ -564,6 +581,12 @@ static void registerNativeFunctions(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_focusTextInput, "focusTextInput", 2));
     JS_SetPropertyStr(ctx, global, "setScrollOffset",
                       JS_NewCFunction(ctx, JS_setScrollOffset, "setScrollOffset", 3));
+    JS_SetPropertyStr(ctx, global, "__rayactClipboardRead",
+                      JS_NewCFunction(ctx, JS_rayactClipboardRead, "__rayactClipboardRead", 0));
+    JS_SetPropertyStr(ctx, global, "__rayactClipboardWrite",
+                      JS_NewCFunction(ctx, JS_rayactClipboardWrite, "__rayactClipboardWrite", 1));
+    JS_SetPropertyStr(ctx, global, "__rayactClipboardHasString",
+                      JS_NewCFunction(ctx, JS_rayactClipboardHasString, "__rayactClipboardHasString", 0));
     JS_SetPropertyStr(ctx, global, "__rayactSetAccessibilityFocus",
                       JS_NewCFunction(ctx, JS_setAccessibilityFocus, "__rayactSetAccessibilityFocus", 1));
     JS_SetPropertyStr(ctx, global, "__rayactGetReducedMotion",
@@ -760,6 +783,8 @@ static void registerNativeFunctions(JSContext* ctx) {
     }
 #endif
     rayact::installModuleBindings(ctx, global);
+    JS_SetPropertyStr(ctx, global, "platformCall",
+                      JS_NewCFunction(ctx, JS_platformCall, "platformCall", 4));
 #if !RAYACT_RELEASE_HOST && (!defined(RAYACT_PLATFORM_NET_BACKEND) || defined(__ANDROID__) || defined(RAYACT_IOS) || defined(RAYACT_WEB))
     JS_SetPropertyStr(ctx, global, "rayactDevFetch",
                       JS_NewCFunction(ctx, JS_rayactDevFetch, "rayactDevFetch", 1));
@@ -771,6 +796,59 @@ static void registerNativeFunctions(JSContext* ctx) {
     rayact::workletRuntimeInit();
 
     JS_FreeValue(ctx, global);
+}
+
+static JSValue JS_platformCall(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 2) return JS_ThrowTypeError(ctx, "platformCall requires a module and method");
+    const char* module = JS_ToCString(ctx, argv[0]);
+    const char* method = JS_ToCString(ctx, argv[1]);
+    if (!module || !method) {
+        if (module) JS_FreeCString(ctx, module);
+        if (method) JS_FreeCString(ctx, method);
+        return JS_ThrowTypeError(ctx, "platformCall module and method must be strings");
+    }
+
+    std::string payloadJson = "null";
+    if (argc >= 3 && !JS_IsUndefined(argv[2])) {
+        JSValue json = JS_JSONStringify(ctx, argv[2], JS_UNDEFINED, JS_UNDEFINED);
+        if (!JS_IsException(json)) {
+            const char* text = JS_ToCString(ctx, json);
+            if (text) {
+                payloadJson = text;
+                JS_FreeCString(ctx, text);
+            }
+        } else {
+            JSValue exception = JS_GetException(ctx);
+            JS_FreeValue(ctx, exception);
+        }
+        JS_FreeValue(ctx, json);
+    }
+
+    std::string resultJson;
+#if defined(__ANDROID__)
+    resultJson = rayact::androidPlatformCall(module, method, payloadJson.c_str());
+#elif defined(RAYACT_IOS)
+    resultJson = rayact::iosPlatformCall(module, method, payloadJson.c_str());
+#else
+    resultJson = "{\"ok\":false,\"error\":\"Platform modules are unavailable on this host\"}";
+#endif
+    JS_FreeCString(ctx, module);
+    JS_FreeCString(ctx, method);
+
+    JSValue result = JS_ParseJSON(ctx, resultJson.c_str(), resultJson.size(), "<platformCall>");
+    if (JS_IsException(result)) {
+        JSValue exception = JS_GetException(ctx);
+        JS_FreeValue(ctx, exception);
+        result = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, result, "ok", JS_NewBool(ctx, false));
+        JS_SetPropertyStr(ctx, result, "error", JS_NewString(ctx, "Invalid platform module response"));
+    }
+    if (argc >= 4 && JS_IsFunction(ctx, argv[3])) {
+        JSValue callbackResult = JS_Call(ctx, argv[3], JS_UNDEFINED, 1, &result);
+        JS_FreeValue(ctx, callbackResult);
+    }
+    JS_FreeValue(ctx, result);
+    return JS_UNDEFINED;
 }
 
 static JSValue JS_keyboardCapture(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
@@ -2018,11 +2096,20 @@ JSContext* engineContext() { return g_ctx; }
 
 void engineQueueTouch(int action, int id, float x, float y) {
     if (id != 0) return;
+    {
     std::lock_guard<std::mutex> lock(g_touchMutex);
+    // A move that lands while the press is still queued means the whole gesture
+    // arrived inside one frame; flag it so the release waits for the motion to
+    // be delivered on its own frame.
+    if (action != 0 && g_queuedTouch.pressed &&
+        (x != g_queuedTouch.pressPosition.x || y != g_queuedTouch.pressPosition.y))
+        g_queuedTouch.hasPendingMove = true;
     g_queuedTouch.position = {x, y};
     if (action == 0) {
         g_queuedTouch.pressed = true;
         g_queuedTouch.down = true;
+        g_queuedTouch.pressPosition = {x, y};
+        g_queuedTouch.hasPendingMove = false;
         g_touchPressFired = false; // new gesture — allow next onPress
     } else if (action == 1) {
         if (!g_touchPressFired) {
@@ -2030,6 +2117,14 @@ void engineQueueTouch(int action, int id, float x, float y) {
         }
         g_queuedTouch.down = false;
     }
+    // action == 2 is a move: the position write above is the whole effect.
+    // pressed/down are deliberately left alone so the in-flight gesture
+    // continues and the velocity tracker keeps sampling it.
+    }
+    // Wake the renderer. Frames are scheduled on demand, and a batched gesture
+    // is replayed over several frames (press / move / release), so without an
+    // explicit request the tail of the gesture would never be delivered.
+    engineRequestFrame();
 }
 
 void engineQueueWheel(float delta, float x, float y) {

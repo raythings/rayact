@@ -10,6 +10,7 @@ import type {
   IconProps,
   ImageProps,
   ListProps,
+  KeyboardStickyViewProps,
   MaterialComponentProps,
   ModalProps,
   NavigationBarProps,
@@ -246,8 +247,19 @@ function flattenStyleProp(style: unknown): Record<string, unknown> {
 }
 
 export function ScrollView(props: ScrollViewProps): React.ReactElement {
-  const { ref, contentContainerStyle, children, ...rest } =
+  const {
+    ref,
+    contentContainerStyle,
+    children,
+    onScroll,
+    onLayout,
+    onContentSizeChange,
+    ...rest
+  } =
     props as ScrollViewProps & { ref?: React.Ref<ScrollViewHandle>; children?: React.ReactNode };
+  const viewportRef = React.useRef({ width: 0, height: 0 });
+  const contentSizeRef = React.useRef({ width: 0, height: 0 });
+  const keyboard = useKeyboard();
 
   // react-native parity: children live in an implicit content container that
   // sizes to its content along the scroll axis. Without it, children are laid
@@ -258,13 +270,60 @@ export function ScrollView(props: ScrollViewProps): React.ReactElement {
     flexGrow: 0,
     flexShrink: 0,
     alignSelf: 'stretch',
+    ...(props.keyboardAware && keyboard.height > 0 ? { paddingBottom: keyboard.height } : {}),
     ...flattenStyleProp(contentContainerStyle)
   };
-  const content = React.createElement('rayact-view', { style: contentStyle }, children);
+  const content = React.createElement('rayact-view', {
+    style: contentStyle,
+    onLayout: (event: { nativeEvent: { layout: { width: number; height: number } } }) => {
+      const { width, height } = event.nativeEvent.layout;
+      const previous = contentSizeRef.current;
+      contentSizeRef.current = { width, height };
+      if (previous.width !== width || previous.height !== height) {
+        onContentSizeChange?.(width, height);
+      }
+    },
+  }, children);
 
-  if (!ref) return React.createElement('rayact-scroll-view', rest, content);
+  const wireScroll = (event: unknown) => {
+    if (!onScroll) return;
+    const candidate = event as {
+      x?: number;
+      y?: number;
+      nativeEvent?: { contentOffset?: { x?: number; y?: number } };
+    };
+    const x = candidate.nativeEvent?.contentOffset?.x ?? candidate.x ?? 0;
+    const y = candidate.nativeEvent?.contentOffset?.y ?? candidate.y ?? 0;
+    onScroll({
+      nativeEvent: {
+        contentOffset: { x, y },
+        contentSize: contentSizeRef.current,
+        layoutMeasurement: viewportRef.current,
+      },
+    });
+  };
 
-  const wire: Record<string, unknown> = { ...rest };
+  const wireLayout = (event: {
+    nativeEvent: { layout: { x: number; y: number; width: number; height: number } };
+  }) => {
+    const { width, height } = event.nativeEvent.layout;
+    viewportRef.current = { width, height };
+    onLayout?.(event);
+  };
+
+  if (!ref) {
+    return React.createElement('rayact-scroll-view', {
+      ...rest,
+      onScroll: wireScroll,
+      onLayout: wireLayout,
+    }, content);
+  }
+
+  const wire: Record<string, unknown> = {
+    ...rest,
+    onScroll: wireScroll,
+    onLayout: wireLayout,
+  };
   wire.ref = (inst: { node?: { id: number } } | null) => {
     if (!inst || inst.node == null) {
       assignRef(ref, null);
@@ -437,6 +496,24 @@ export function AvoidKeyboard(props: AvoidKeyboardProps): React.ReactElement {
     },
     children
   );
+}
+
+/** Keeps children immediately above the animated software-keyboard frame. */
+export function KeyboardStickyView(props: KeyboardStickyViewProps): React.ReactElement {
+  const { offset = 0, style, children, ...rest } = props;
+  const keyboard = useKeyboard();
+  return React.createElement(View, {
+    ...rest,
+    style: [
+      style,
+      {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: Math.max(0, keyboard.height + offset),
+      },
+    ],
+  }, children);
 }
 
 function createMaterialComponent(tag: string) {

@@ -3,8 +3,10 @@ package com.rayact.engine
 import android.os.StrictMode
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -40,6 +42,16 @@ object RayactMobileNetwork {
     private data class SocketRecord(val owner: Long, val socket: WebSocket)
     private val sockets = ConcurrentHashMap<Int, SocketRecord>()
     private val events = ConcurrentHashMap<Long, ConcurrentLinkedQueue<String>>()
+
+    // In-flight fetches, keyed by owner + the JS-side request id, so AbortSignal
+    // can reach the actual OkHttp Call. Entries are removed on every terminal
+    // path (response, failure, abort, engine teardown).
+    private val fetchCalls = ConcurrentHashMap<Pair<Long, Int>, Call>()
+
+    // OkHttp requires a (possibly empty) body for these verbs and rejects one on
+    // GET/HEAD. Spelled out rather than using okhttp3.internal.http.HttpMethod,
+    // which is not part of the stable API surface.
+    private val METHODS_REQUIRING_BODY = setOf("POST", "PUT", "PATCH", "PROPPATCH", "REPORT")
 
     @JvmStatic
     fun fetchTextFromNative(url: String): String {
@@ -99,32 +111,78 @@ object RayactMobileNetwork {
     // the response (or error) is delivered later via the per-owner event queue
     // and drained on the render thread, exactly like WebSocket events.
     @JvmStatic
-    fun fetchStart(owner: Long, requestId: Int, url: String) {
-        fetchCandidate(owner, requestId, devServerFetchCandidates(url), 0)
+    @JvmOverloads
+    fun fetchStart(
+        owner: Long,
+        requestId: Int,
+        url: String,
+        method: String = "GET",
+        headersJson: String = "{}",
+        body: String? = null
+    ) {
+        fetchCandidate(
+            owner, requestId, devServerFetchCandidates(url), 0,
+            method.ifEmpty { "GET" }, headersJson, body
+        )
     }
 
-    private fun fetchCandidate(owner: Long, requestId: Int, candidates: List<String>, index: Int) {
+    /**
+     * Cancel an in-flight fetch. OkHttp's [Call.cancel] tears the socket down for
+     * real, mid-connect or mid-body-read — a JS-side promise rejection alone would
+     * leave the request running and the server none the wiser.
+     */
+    @JvmStatic
+    fun fetchAbort(owner: Long, requestId: Int) {
+        fetchCalls.remove(owner to requestId)?.cancel()
+    }
+
+    private fun fetchCandidate(
+        owner: Long,
+        requestId: Int,
+        candidates: List<String>,
+        index: Int,
+        method: String,
+        headersJson: String,
+        body: String?
+    ) {
         val url = candidates[index]
         val request = try {
-            Request.Builder().url(url).build()
+            buildRequest(url, method, headersJson, body)
         } catch (e: Exception) {
-            enqueueFetch(owner, requestId, 0, "", e.message ?: "Invalid URL")
+            enqueueFetch(owner, requestId, 0, "", e.message ?: "Invalid request")
             return
         }
-        fetchClient.newCall(request).enqueue(object : Callback {
+        val call = fetchClient.newCall(request)
+        // Registered before enqueue so an abort arriving on the very next frame
+        // still finds the call. Overwritten on each candidate so the LAN fallback
+        // attempt stays cancellable too.
+        fetchCalls[owner to requestId] = call
+        call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                if (index + 1 < candidates.size) {
-                    fetchCandidate(owner, requestId, candidates, index + 1)
+                if (call.isCanceled()) {
+                    // Do NOT fall through to the next candidate: the caller asked
+                    // to stop, and retrying would immediately reopen a socket.
+                    fetchCalls.remove(owner to requestId, call)
+                    enqueueFetch(owner, requestId, 0, "", "aborted", canceled = true)
                     return
                 }
+                if (index + 1 < candidates.size) {
+                    fetchCandidate(owner, requestId, candidates, index + 1, method, headersJson, body)
+                    return
+                }
+                fetchCalls.remove(owner to requestId, call)
                 enqueueFetch(owner, requestId, 0, "", e.message ?: "Network request failed")
             }
 
             override fun onResponse(call: Call, response: Response) {
+                fetchCalls.remove(owner to requestId, call)
                 response.use {
                     val responseBody = it.body
                     val mimeType = responseBody?.contentType()?.toString().orEmpty()
                     val bytes = responseBody?.bytes() ?: ByteArray(0)
+                    // Map each byte to a char 0..255 so the body round-trips
+                    // through JSON unchanged; the JS side rebuilds the exact byte
+                    // array via charCodeAt & 0xff (and UTF-8-decodes for text()).
                     val sb = StringBuilder(bytes.size)
                     for (b in bytes) sb.append((b.toInt() and 0xff).toChar())
                     enqueueFetch(
@@ -134,6 +192,28 @@ object RayactMobileNetwork {
                 }
             }
         })
+    }
+
+    private fun buildRequest(url: String, method: String, headersJson: String, body: String?): Request {
+        val builder = Request.Builder().url(url)
+        var contentType: String? = null
+        if (headersJson.isNotEmpty()) {
+            val headers = JSONObject(headersJson)
+            for (name in headers.keys()) {
+                val value = headers.optString(name)
+                builder.header(name, value)
+                if (name.equals("content-type", ignoreCase = true)) contentType = value
+            }
+        }
+        val upper = method.uppercase()
+        // OkHttp rejects a body on GET/HEAD and requires one on POST/PUT/PATCH,
+        // so an omitted body still has to become an empty one for those verbs.
+        val requestBody = when {
+            body != null -> body.toRequestBody(contentType?.toMediaTypeOrNull())
+            upper in METHODS_REQUIRING_BODY -> ByteArray(0).toRequestBody(null)
+            else -> null
+        }
+        return builder.method(upper, requestBody).build()
     }
 
     /**
@@ -171,7 +251,8 @@ object RayactMobileNetwork {
         statusText: String = "",
         headers: JSONObject = JSONObject(),
         mimeType: String = "",
-        protocol: String = ""
+        protocol: String = "",
+        canceled: Boolean = false
     ) {
         val obj = JSONObject()
             .put("type", "fetch")
@@ -183,6 +264,9 @@ object RayactMobileNetwork {
             .put("mimeType", mimeType)
             .put("protocol", protocol)
         if (error.isNotEmpty()) obj.put("error", error)
+        // Distinguishes a deliberate abort from a network failure so the JS side
+        // can reject with AbortError instead of a generic Error.
+        if (canceled) obj.put("canceled", true)
         events.computeIfAbsent(owner) { ConcurrentLinkedQueue() }.add(obj.toString())
         try { nativeWakeRenderFrame(owner) } catch (_: UnsatisfiedLinkError) {}
     }
@@ -271,6 +355,11 @@ object RayactMobileNetwork {
     @JvmStatic fun closeAll(owner: Long) {
         sockets.entries.filter { it.value.owner == owner }.forEach { (id, record) ->
             if (sockets.remove(id, record)) record.socket.cancel()
+        }
+        // Drop in-flight fetches too: the JS context that owns their promises is
+        // going away, so leaving the sockets open would leak them.
+        fetchCalls.keys.filter { it.first == owner }.forEach { key ->
+            fetchCalls.remove(key)?.cancel()
         }
         events.remove(owner)
     }

@@ -14,7 +14,6 @@ final class DevLauncherController: UIViewController {
     private var projectLoadingView: UIView?
     private var activePane: ActivePane = .launcher
     private var projectLoadGeneration = 0
-    private var shakeDetector: DevShakeDetector?
     private var destroyed = false
     private var reloadInProgress = false
     private var projectBackBlockedUntil: TimeInterval = 0
@@ -79,7 +78,6 @@ final class DevLauncherController: UIViewController {
         if let session = activeSession() {
             DevClientBridge.attach(self, session: session)
         }
-        // Be first responder so shake (motionShake) reaches motionEnded below.
         becomeFirstResponder()
     }
 
@@ -391,15 +389,10 @@ final class DevLauncherController: UIViewController {
 
     private func startProjectDebugTools(session: RayactEngineSession, host: NavigationHost) {
         session.host.attachDevMenuOverlay(host)
-        shakeDetector?.stop()
-        shakeDetector = DevShakeDetector(session: session)
-        shakeDetector?.start()
     }
 
     private func stopProjectDebugTools() {
         ProjectHmrClient.stop()
-        shakeDetector?.stop()
-        shakeDetector = nil
         projectBackBlockedUntil = 0
     }
 
@@ -423,16 +416,11 @@ final class DevLauncherController: UIViewController {
         return false
     }
 
-    // DevShakeDetector (accelerometer) only fires on a real device. The
-    // simulator's Device ▸ Shake — and a real device's shake — also deliver a
-    // UIKit motionShake up the responder chain, so handle it here (this is the
-    // root VC, always in the chain) to toggle the active session's dev menu.
     override var canBecomeFirstResponder: Bool { true }
 
     override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
         if motion == .motionShake {
-            activeSession()?.nativeToggleDevMenu()
-            return
+            RayactPlatformRegistry.shared.emitSystemEvent("motionShake")
         }
         super.motionEnded(motion, with: event)
     }

@@ -1,0 +1,31 @@
+{
+  "name": "@rayact/webview",
+  "version": "0.0.4",
+  "description": "WebView component for Rayact",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "README.md", "rayact.module.json"],
+  "rayact": { "manifest": "rayact.module.json" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": { "@rayact/react": "0.0.4" },
+  "peerDependencies": { "react": "^19.0.0" },
+  "engines": { "node": ">=22" },
+  "publishConfig": { "access": "public", "provenance": true },
+  "license": "MIT",
+  "maintainers": ["Rayact Maintainers"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact-webview"
+  }
+}

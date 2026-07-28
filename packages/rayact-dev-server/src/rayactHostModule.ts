@@ -197,6 +197,15 @@ export function wrapRayactModule(registryKey: string, code: string, moduleUrl?: 
     'var __require=globalThis.__rayactRequire;',
     'var require=function(id){return __require(id,__moduleUrl);};',
     'var __vite_ssr_export_default__;',
+    'var __vite_ssr_import_meta__={url:__moduleUrl,env:{}};',
+    // Declared (not assigned) so it hoists above the body: ssrTransform may emit
+    // the call before this line in source order.
+    'function __vite_ssr_dynamic_import__(id) {',
+    '  try {',
+    '    var loadAsync = globalThis.__rayactRequireAsync;',
+    '    return Promise.resolve(loadAsync ? loadAsync(id, __moduleUrl) : __require(id, __moduleUrl));',
+    '  } catch (e) { return Promise.reject(e); }',
+    '}',
     'function __vite_ssr_exportName__(name, getter) {',
     '  Object.defineProperty(exports, name, { enumerable: true, get: getter });',
     '}',

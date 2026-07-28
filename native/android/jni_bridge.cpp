@@ -49,6 +49,7 @@
 #include "../desktop/dev_client_bridge.hpp"
 #include "../desktop/devtools.hpp"
 #include "../desktop/js_stdlib.hpp"
+#include "../shared/mobile_network_polyfill.h"
 #include "android_engine_instance.hpp"
 #include "../desktop/accessibility_bridge.hpp"
 #include "engine_runtime.hpp"
@@ -152,6 +153,8 @@ static PendingKeyboardInsets g_lastDeviceKeyboard;
 static std::mutex g_globalImeMutex;
 static std::string g_globalImeText;
 static std::atomic<int> g_imeNodeId{-1};
+static std::mutex g_linkingMutex;
+static std::vector<std::string> g_pendingLinkingUrls;
 
 std::string jstr(JNIEnv* env, jstring s) {
     if (!s) return {};
@@ -417,18 +420,47 @@ static std::vector<uint8_t> androidMobileFetchBytes(const char* url) {
     return result;
 }
 
-static void androidMobileFetchStart(jlong owner, int requestId, const char* url) {
+static void androidMobileFetchStart(jlong owner, int requestId, const char* url,
+                                    const char* method, const char* headersJson,
+                                    const char* body) {
     JNIEnv* env = nullptr;
     bool needDetach = false;
     if (!attachEnv(&env, &needDetach)) return;
     jclass cls = env->FindClass("com/rayact/engine/RayactMobileNetwork");
     if (cls) {
-        jmethodID m = env->GetStaticMethodID(cls, "fetchStart", "(JILjava/lang/String;)V");
+        jmethodID m = env->GetStaticMethodID(
+            cls, "fetchStart",
+            "(JILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
         if (m) {
             jstring jUrl = env->NewStringUTF(url ? url : "");
-            env->CallStaticVoidMethod(cls, m, owner, (jint)requestId, jUrl);
+            jstring jMethod = env->NewStringUTF(method ? method : "GET");
+            jstring jHeaders = env->NewStringUTF(headersJson ? headersJson : "{}");
+            // A null body is distinct from an empty one: OkHttp rejects a body
+            // on GET/HEAD, so it must stay absent rather than become "".
+            jstring jBody = body ? env->NewStringUTF(body) : nullptr;
+            env->CallStaticVoidMethod(cls, m, owner, (jint)requestId, jUrl, jMethod, jHeaders, jBody);
+            if (jBody) env->DeleteLocalRef(jBody);
+            env->DeleteLocalRef(jHeaders);
+            env->DeleteLocalRef(jMethod);
             env->DeleteLocalRef(jUrl);
         }
+        env->DeleteLocalRef(cls);
+    }
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+    }
+    if (needDetach) g_jvm->DetachCurrentThread();
+}
+
+static void androidMobileFetchAbort(jlong owner, int requestId) {
+    JNIEnv* env = nullptr;
+    bool needDetach = false;
+    if (!attachEnv(&env, &needDetach)) return;
+    jclass cls = env->FindClass("com/rayact/engine/RayactMobileNetwork");
+    if (cls) {
+        jmethodID m = env->GetStaticMethodID(cls, "fetchAbort", "(JI)V");
+        if (m) env->CallStaticVoidMethod(cls, m, owner, (jint)requestId);
         env->DeleteLocalRef(cls);
     }
     if (env->ExceptionCheck()) {
@@ -554,9 +586,27 @@ static JSValue JS_mobileFetchStart(JSContext* ctx, JSValue, int argc, JSValueCon
     int32_t id = 0;
     JS_ToInt32(ctx, &id, argv[0]);
     const char* url = JS_ToCString(ctx, argv[1]);
+    const char* method = argc > 2 ? JS_ToCString(ctx, argv[2]) : nullptr;
+    const char* headers = argc > 3 ? JS_ToCString(ctx, argv[3]) : nullptr;
+    // Undefined/null body stays null so the request is sent without one.
+    const char* body = (argc > 4 && !JS_IsUndefined(argv[4]) && !JS_IsNull(argv[4]))
+                           ? JS_ToCString(ctx, argv[4])
+                           : nullptr;
     AndroidEngineInstance* owner = androidEngineCurrent();
-    androidMobileFetchStart(owner ? owner->id : 0, (int)id, url);
+    androidMobileFetchStart(owner ? owner->id : 0, (int)id, url, method, headers, body);
+    if (body) JS_FreeCString(ctx, body);
+    if (headers) JS_FreeCString(ctx, headers);
+    if (method) JS_FreeCString(ctx, method);
     if (url) JS_FreeCString(ctx, url);
+    return JS_UNDEFINED;
+}
+
+static JSValue JS_mobileFetchAbort(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    int32_t id = 0;
+    JS_ToInt32(ctx, &id, argv[0]);
+    AndroidEngineInstance* owner = androidEngineCurrent();
+    androidMobileFetchAbort(owner ? owner->id : 0, (int)id);
     return JS_UNDEFINED;
 }
 
@@ -629,147 +679,6 @@ static JSValue JS_mobileWsPollEvents(JSContext* ctx, JSValue, int, JSValueConst*
     return JS_NewStringLen(ctx, events.data(), events.size());
 }
 
-static const char* kAndroidMobileNetworkPolyfill = R"JS(
-(function(G){
-  if (!G.Event) G.Event = function Event(type){ this.type=type; };
-  if (!G.EventTarget) {
-    G.EventTarget = function EventTarget(){ this.__listeners={}; };
-    G.EventTarget.prototype.addEventListener=function(type, fn){
-      if (!fn) return; (this.__listeners[type]||(this.__listeners[type]=[])).push(fn);
-    };
-    G.EventTarget.prototype.removeEventListener=function(type, fn){
-      var a=this.__listeners[type]; if(!a) return;
-      var i=a.indexOf(fn); if(i>=0) a.splice(i,1);
-    };
-    G.EventTarget.prototype.dispatchEvent=function(ev){
-      ev.target=this;
-      var prop=this['on'+ev.type]; if(typeof prop==='function') prop.call(this, ev);
-      var a=(this.__listeners&&this.__listeners[ev.type])||[];
-      for(var i=0;i<a.length;i++) a[i].call(this, ev);
-      return true;
-    };
-  }
-  if (!G.MessageEvent) G.MessageEvent = function MessageEvent(type, init){ G.Event.call(this,type); this.data=init&&init.data; };
-  if (!G.CloseEvent) G.CloseEvent = function CloseEvent(type, init){ G.Event.call(this,type); this.code=(init&&init.code)||1000; this.reason=(init&&init.reason)||''; this.wasClean=true; };
-  if (!G.ErrorEvent) G.ErrorEvent = function ErrorEvent(type, init){ G.Event.call(this,type); this.message=(init&&init.message)||''; };
-  if (!G.Headers) G.Headers = function Headers(init){ this._h=init||{}; };
-  if (!G.Response) {
-    G.Response = function Response(body, init){
-      this._body=body||'';
-      this._bytes=(init&&init.bytes) instanceof ArrayBuffer ? init.bytes : null;
-      this.status=(init&&init.status)||200;
-      this.statusText=(init&&init.statusText)||'OK';
-      this.ok=this.status>=200&&this.status<300;
-      this.url=(init&&init.url)||'';
-      this.headers=new G.Headers();
-    };
-    G.Response.prototype.text=function(){
-      if(this._bytes){
-        if(typeof G.TextDecoder==='function') return Promise.resolve(new G.TextDecoder('utf-8').decode(this._bytes));
-        var b=new Uint8Array(this._bytes), o='';
-        for(var j=0;j<b.length;j++) o+=String.fromCharCode(b[j]);
-        return Promise.resolve(o);
-      }
-      return Promise.resolve(String(this._body));
-    };
-    G.Response.prototype.json=function(){ return this.text().then(JSON.parse); };
-    G.Response.prototype.arrayBuffer=function(){
-      if(this._bytes) return Promise.resolve(this._bytes);
-      var s=String(this._body), n=s.length, buf=new ArrayBuffer(n), v=new Uint8Array(buf);
-      for(var i=0;i<n;i++) v[i]=s.charCodeAt(i)&0xff;
-      return Promise.resolve(buf);
-    };
-  }
-  G.__rayactNativeFetchSeq = G.__rayactNativeFetchSeq || 0;
-  G.__rayactNativeFetchPending = G.__rayactNativeFetchPending || {};
-  // Emit a CDP Network.* event to an attached DevTools frontend. No-op (and
-  // skips JSON building) when no frontend is listening.
-  function __ts(){ return Date.now()/1000; }
-  function __net(method, params){
-    if(!(G.__rayactDevtoolsActive && G.__rayactDevtoolsActive())) return;
-    try { G.__rayactDevtoolsNetwork(method, JSON.stringify(params)); } catch(e){}
-  }
-  function __storeBody(requestId, body){
-    if(!(G.__rayactDevtoolsActive && G.__rayactDevtoolsActive())) return;
-    try { G.__rayactDevtoolsStoreNetworkBody(requestId, body); } catch(e){}
-  }
-  if (typeof G.fetch !== 'function') {
-    // Asynchronous fetch: hands the request to the native dispatcher and
-    // resolves later from the network drain. Never blocks the render thread.
-    G.fetch=function(url, opts){
-      var target=String(url);
-      var id=++G.__rayactNativeFetchSeq;
-      var reqId='rayact-fetch-'+id;
-      var httpMethod=(opts&&opts.method)||'GET';
-      __net('Network.requestWillBeSent',{requestId:reqId,loaderId:'rayact-loader',documentURL:target,request:{url:target,method:httpMethod,headers:(opts&&opts.headers)||{}},timestamp:__ts(),wallTime:Date.now()/1000,initiator:{type:'script'},type:'Fetch'});
-      return new Promise(function(resolve, reject){
-        G.__rayactNativeFetchPending[id]={resolve:resolve, reject:reject, url:target, reqId:reqId};
-        try { G.__rayactNativeFetchStart(id, target); }
-        catch(e){ delete G.__rayactNativeFetchPending[id]; __net('Network.loadingFailed',{requestId:reqId,timestamp:__ts(),type:'Fetch',errorText:String(e&&e.message||e),canceled:false}); reject(e); }
-      });
-    };
-  }
-  if (typeof G.WebSocket !== 'function') {
-    function WebSocket(url) {
-      G.EventTarget.call(this);
-      this.url=String(url); this.readyState=0; this.protocol=''; this.extensions='';
-      this.binaryType='arraybuffer'; this.bufferedAmount=0;
-      this.onopen=null; this.onmessage=null; this.onerror=null; this.onclose=null;
-      this.__id=G.__rayactNativeWsOpen(this.url);
-      this.__netId='rayact-ws-'+this.__id;
-      G.__rayactNativeWsSockets[this.__id]=this;
-      __net('Network.webSocketCreated',{requestId:this.__netId,url:this.url,initiator:{type:'script'}});
-      __net('Network.webSocketWillSendHandshakeRequest',{requestId:this.__netId,timestamp:__ts(),wallTime:Date.now()/1000,request:{headers:{}}});
-    }
-    WebSocket.CONNECTING=0; WebSocket.OPEN=1; WebSocket.CLOSING=2; WebSocket.CLOSED=3;
-    WebSocket.prototype=Object.create(G.EventTarget.prototype);
-    WebSocket.prototype.constructor=WebSocket;
-    WebSocket.prototype.CONNECTING=0; WebSocket.prototype.OPEN=1; WebSocket.prototype.CLOSING=2; WebSocket.prototype.CLOSED=3;
-    WebSocket.prototype.send=function(data){
-      if(this.readyState!==1) throw new Error('WebSocket not open');
-      G.__rayactNativeWsSend(this.__id, String(data));
-      __net('Network.webSocketFrameSent',{requestId:this.__netId,timestamp:__ts(),response:{opcode:1,mask:true,payloadData:String(data)}});
-    };
-    WebSocket.prototype.close=function(code, reason){
-      if(this.readyState===2||this.readyState===3) return;
-      this.readyState=2;
-      G.__rayactNativeWsClose(this.__id, code||1000, reason||'');
-    };
-    G.WebSocket=WebSocket;
-  }
-  G.__rayactNativeWsSockets = G.__rayactNativeWsSockets || {};
-  G.__rayactNativeNetworkDrain = function(){
-    var raw=G.__rayactNativeWsPollEvents();
-    if(!raw||raw==='[]') return;
-    var events=JSON.parse(raw);
-    for(var i=0;i<events.length;i++){
-      var ev=events[i];
-      if(ev.type==='fetch'){
-        var p=G.__rayactNativeFetchPending[ev.req];
-        if(!p) continue;
-        delete G.__rayactNativeFetchPending[ev.req];
-        if(ev.status===0){
-          __net('Network.loadingFailed',{requestId:p.reqId,timestamp:__ts(),type:'Fetch',errorText:ev.error||'Network request failed',canceled:false});
-          p.reject(new Error(ev.error||'Network request failed')); continue;
-        }
-        var s=ev.body||'', n=s.length, buf=new ArrayBuffer(n), v=new Uint8Array(buf);
-        for(var k=0;k<n;k++) v[k]=s.charCodeAt(k)&0xff;
-        __storeBody(p.reqId, buf);
-        __net('Network.responseReceived',{requestId:p.reqId,loaderId:'rayact-loader',timestamp:__ts(),type:'Fetch',response:{url:p.url,status:ev.status,statusText:ev.statusText||'',headers:ev.headers||{},mimeType:ev.mimeType||'application/octet-stream',protocol:ev.protocol||'',connectionReused:false,fromDiskCache:false,encodedDataLength:n}});
-        __net('Network.loadingFinished',{requestId:p.reqId,timestamp:__ts(),encodedDataLength:n});
-        p.resolve(new G.Response('',{status:ev.status, statusText:'', url:p.url, bytes:buf}));
-        continue;
-      }
-      var ws=G.__rayactNativeWsSockets[ev.id];
-      if(!ws) continue;
-      if(ev.type==='open'){ ws.readyState=1; __net('Network.webSocketHandshakeResponseReceived',{requestId:ws.__netId,timestamp:__ts(),response:{status:ev.status||101,statusText:ev.statusText||'Switching Protocols',headers:ev.headers||{}}}); ws.dispatchEvent(new G.Event('open')); }
-      else if(ev.type==='message'){ __net('Network.webSocketFrameReceived',{requestId:ws.__netId,timestamp:__ts(),response:{opcode:ev.binary?2:1,mask:false,payloadData:ev.data||''}}); ws.dispatchEvent(new G.MessageEvent('message',{data:ev.data||''})); }
-      else if(ev.type==='error'){ __net('Network.webSocketFrameError',{requestId:ws.__netId,timestamp:__ts(),errorMessage:ev.message||'WebSocket error'}); ws.dispatchEvent(new G.ErrorEvent('error',{message:ev.message||'WebSocket error'})); }
-      else if(ev.type==='close'){ ws.readyState=3; delete G.__rayactNativeWsSockets[ev.id]; __net('Network.webSocketClosed',{requestId:ws.__netId,timestamp:__ts()}); ws.dispatchEvent(new G.CloseEvent('close',{code:ev.code||1000,reason:ev.reason||''})); }
-    }
-  };
-})(globalThis);
-)JS";
 
 static void installAndroidMobileNetworkBindings(JSContext* ctx) {
     if (!ctx) return;
@@ -779,7 +688,9 @@ static void installAndroidMobileNetworkBindings(JSContext* ctx) {
     JS_SetPropertyStr(ctx, global, "__rayactNativeFetchBytes",
                       JS_NewCFunction(ctx, JS_mobileFetchBytes, "__rayactNativeFetchBytes", 1));
     JS_SetPropertyStr(ctx, global, "__rayactNativeFetchStart",
-                      JS_NewCFunction(ctx, JS_mobileFetchStart, "__rayactNativeFetchStart", 2));
+                      JS_NewCFunction(ctx, JS_mobileFetchStart, "__rayactNativeFetchStart", 5));
+    JS_SetPropertyStr(ctx, global, "__rayactNativeFetchAbort",
+                      JS_NewCFunction(ctx, JS_mobileFetchAbort, "__rayactNativeFetchAbort", 1));
     JS_SetPropertyStr(ctx, global, "__rayactDevtoolsActive",
                       JS_NewCFunction(ctx, JS_devtoolsActive, "__rayactDevtoolsActive", 0));
     JS_SetPropertyStr(ctx, global, "__rayactDevtoolsNetwork",
@@ -795,7 +706,7 @@ static void installAndroidMobileNetworkBindings(JSContext* ctx) {
     JS_SetPropertyStr(ctx, global, "__rayactNativeWsPollEvents",
                       JS_NewCFunction(ctx, JS_mobileWsPollEvents, "__rayactNativeWsPollEvents", 0));
     JS_FreeValue(ctx, global);
-    JSValue r = JS_Eval(ctx, kAndroidMobileNetworkPolyfill, strlen(kAndroidMobileNetworkPolyfill),
+    JSValue r = JS_Eval(ctx, rayact::kMobileNetworkPolyfill, strlen(rayact::kMobileNetworkPolyfill),
                         "android-mobile-network.js", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(r)) {
         JSValue exc = JS_GetException(ctx);
@@ -1809,6 +1720,18 @@ Java_com_rayact_engine_RayactEngineSession_nativeSetKeyboardInsets(
     // No dirty flag — see nativeSetSafeAreaInsets; contexts self-sync.
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngineSession_nativePushURL(
+    JNIEnv* env, jclass, jstring url) {
+    const std::string value = jstr(env, url);
+    if (value.empty()) return;
+    {
+        std::lock_guard<std::mutex> lock(g_linkingMutex);
+        g_pendingLinkingUrls.push_back(value);
+    }
+    androidEngineRequestGraphicsFrame();
+}
+
 // Destroy an EGL surface + engine screen. Idempotent.
 JNIEXPORT void JNICALL
 Java_com_rayact_engine_RayactEngineSession_nativeDestroySurface(JNIEnv*, jclass, jlong handle, jint surfaceId) {
@@ -2024,6 +1947,50 @@ Java_com_rayact_engine_RayactEngineSession_nativeRenderFrame(JNIEnv*, jclass, jl
     // External-view producer frames (AHB import + texture swap) and EditText
     // text-change events.
     drainExternalViewEvents();
+
+    {
+        std::vector<std::string> urls;
+        {
+            std::lock_guard<std::mutex> lock(g_linkingMutex);
+            urls.swap(g_pendingLinkingUrls);
+        }
+        JSContext* ctx = rayact::engineContext();
+        if (ctx && !urls.empty()) {
+            JSValue global = JS_GetGlobalObject(ctx);
+            JSValue initial = JS_GetPropertyStr(ctx, global, "__rayactLinkingInitialURL");
+            if (JS_IsUndefined(initial) || JS_IsNull(initial)) {
+                JS_SetPropertyStr(ctx, global, "__rayactLinkingInitialURL",
+                                  JS_NewString(ctx, urls.front().c_str()));
+            }
+            JS_FreeValue(ctx, initial);
+            JSValue listener = JS_GetPropertyStr(ctx, global, "__rayactOnURL");
+            const bool hasListener = JS_IsFunction(ctx, listener);
+            JSValue queue = JS_GetPropertyStr(ctx, global, "__rayactPendingURLs");
+            if (!JS_IsArray(queue)) {
+                JS_FreeValue(ctx, queue);
+                queue = JS_NewArray(ctx);
+                JS_SetPropertyStr(ctx, global, "__rayactPendingURLs", JS_DupValue(ctx, queue));
+            }
+            for (const std::string& url : urls) {
+                if (!hasListener) {
+                    JSValue push = JS_GetPropertyStr(ctx, queue, "push");
+                    JSValue value = JS_NewString(ctx, url.c_str());
+                    JSValue pushed = JS_Call(ctx, push, queue, 1, &value);
+                    JS_FreeValue(ctx, pushed);
+                    JS_FreeValue(ctx, value);
+                    JS_FreeValue(ctx, push);
+                } else {
+                    JSValue arg = JS_NewString(ctx, url.c_str());
+                    JSValue result = JS_Call(ctx, listener, JS_UNDEFINED, 1, &arg);
+                    JS_FreeValue(ctx, result);
+                    JS_FreeValue(ctx, arg);
+                }
+            }
+            JS_FreeValue(ctx, listener);
+            JS_FreeValue(ctx, queue);
+            JS_FreeValue(ctx, global);
+        }
+    }
 
     // Publish safe-area / keyboard insets to the CURRENT context's globalThis,
     // self-syncing from process-global device truth. Every frame we compare the
@@ -2368,6 +2335,49 @@ namespace rayact {
 
 std::vector<uint8_t> androidFetchBytes(const char* url) {
     return androidMobileFetchBytes(url);
+}
+
+std::string androidPlatformCall(const char* module, const char* method, const char* payloadJson) {
+    if (!g_jvm) return "{\"ok\":false,\"error\":\"Android runtime is unavailable\"}";
+    JNIEnv* env = nullptr;
+    bool needDetach = false;
+    jint rs = g_jvm->GetEnv((void**)&env, JNI_VERSION_1_6);
+    if (rs == JNI_EDETACHED) {
+        if (g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK)
+            return "{\"ok\":false,\"error\":\"Could not attach Android runtime thread\"}";
+        needDetach = true;
+    } else if (rs != JNI_OK) {
+        return "{\"ok\":false,\"error\":\"Could not access Android runtime\"}";
+    }
+    std::string result = "{\"ok\":false,\"error\":\"Platform registry is unavailable\"}";
+    jclass cls = env->FindClass("com/rayact/engine/RayactPlatformRegistry");
+    if (cls) {
+        jmethodID call = env->GetStaticMethodID(
+            cls,
+            "platformCallFromNative",
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+        if (call) {
+            jstring jModule = env->NewStringUTF(module ? module : "");
+            jstring jMethod = env->NewStringUTF(method ? method : "");
+            jstring jPayload = env->NewStringUTF(payloadJson ? payloadJson : "null");
+            jstring jResult = (jstring)env->CallStaticObjectMethod(cls, call, jModule, jMethod, jPayload);
+            if (jResult) {
+                result = jstr(env, jResult);
+                env->DeleteLocalRef(jResult);
+            }
+            env->DeleteLocalRef(jModule);
+            env->DeleteLocalRef(jMethod);
+            env->DeleteLocalRef(jPayload);
+        }
+        env->DeleteLocalRef(cls);
+    }
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        result = "{\"ok\":false,\"error\":\"Android platform module call failed\"}";
+    }
+    if (needDetach) g_jvm->DetachCurrentThread();
+    return result;
 }
 
 #if !RAYACT_RELEASE_HOST

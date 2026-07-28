@@ -21,9 +21,11 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@rayact/barcode-scanner": "0.0.4",
     "@rayact/navigation": "0.0.4",
     "@rayact/react": "0.0.4",
     "@rayact/runtime": "0.0.4",
+    "@rayact/sensors": "0.0.4",
     "@rayact/shared": "0.0.4"
   },
   "peerDependencies": {
