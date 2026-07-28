@@ -146,6 +146,28 @@ test('scanner, image picker, and haptics implementations are package-owned', () 
   assert.equal(hapticsManifest.ios.registrationType, 'RayactHapticsRegistration');
 });
 
+test('clipboard and external linking operations autolink from their packages', () => {
+  const clipboard = JSON.parse(fs.readFileSync(
+    path.resolve('packages/rayact-clipboard/rayact.module.json'),
+    'utf8',
+  ));
+  const linking = JSON.parse(fs.readFileSync(
+    path.resolve('packages/rayact-linking/rayact.module.json'),
+    'utf8',
+  ));
+  assert.equal(
+    clipboard.android.registrationClass,
+    'dev.rayact.clipboard.RayactClipboardRegistration',
+  );
+  assert.equal(clipboard.ios.registrationType, 'RayactClipboardRegistration');
+  assert.equal(
+    linking.android.registrationClass,
+    'dev.rayact.linking.RayactLinkingRegistration',
+  );
+  assert.equal(linking.android.manifest, 'android/AndroidManifest.xml');
+  assert.equal(linking.ios.registrationType, 'RayactLinkingRegistration');
+});
+
 test('module selection precedence supports autolink, configuration, disable, and the legacy warning', () => {
   assert.equal(mergeNativeModules(undefined, [pluginFixture]).length, 1);
   assert.deepEqual(

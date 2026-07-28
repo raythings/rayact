@@ -1,4 +1,10 @@
 type ClipboardHost = typeof globalThis & {
+  platformCall?: (
+    module: string,
+    method: string,
+    payload: unknown,
+    callback: (result: { ok: boolean; value?: unknown; error?: string }) => void,
+  ) => void;
   __rayactClipboardRead?: () => string;
   __rayactClipboardWrite?: (text: string) => void;
   __rayactClipboardHasString?: () => boolean;
@@ -16,8 +22,20 @@ function unavailable(): Error {
   return error;
 }
 
+function platformCall<T>(method: string, payload: unknown = {}): Promise<T> {
+  const host = globalThis as ClipboardHost;
+  if (!host.platformCall) return Promise.reject(unavailable());
+  let result: { ok: boolean; value?: unknown; error?: string } | undefined;
+  host.platformCall('clipboard', method, payload, value => { result = value; });
+  if (!result) return Promise.reject(new Error(`Clipboard operation did not complete: ${method}`));
+  return result.ok
+    ? Promise.resolve(result.value as T)
+    : Promise.reject(new Error(result.error || `Clipboard operation failed: ${method}`));
+}
+
 export async function getStringAsync(): Promise<string> {
   const host = globalThis as ClipboardHost;
+  if (host.platformCall) return platformCall<string>('getString');
   if (host.__rayactClipboardRead) return host.__rayactClipboardRead();
   if (host.navigator?.clipboard?.readText) return host.navigator.clipboard.readText();
   throw unavailable();
@@ -25,6 +43,7 @@ export async function getStringAsync(): Promise<string> {
 
 export async function setStringAsync(text: string): Promise<void> {
   const host = globalThis as ClipboardHost;
+  if (host.platformCall) return platformCall<void>('setString', { text: String(text) });
   if (host.__rayactClipboardWrite) {
     host.__rayactClipboardWrite(String(text));
     return;
@@ -38,6 +57,7 @@ export async function setStringAsync(text: string): Promise<void> {
 
 export async function hasStringAsync(): Promise<boolean> {
   const host = globalThis as ClipboardHost;
+  if (host.platformCall) return platformCall<boolean>('hasString');
   if (host.__rayactClipboardHasString) return host.__rayactClipboardHasString();
   return (await getStringAsync()).length > 0;
 }

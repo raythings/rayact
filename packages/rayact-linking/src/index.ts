@@ -2,6 +2,12 @@ export type URLEvent = { url: string };
 export type URLListener = (event: URLEvent) => void;
 
 type LinkingHost = typeof globalThis & {
+  platformCall?: (
+    module: string,
+    method: string,
+    payload: unknown,
+    callback: (result: { ok: boolean; value?: unknown; error?: string }) => void,
+  ) => void;
   __rayactLinkingInitialURL?: string | null;
   __rayactPendingURLs?: string[];
   __rayactOnURL?: (url: string) => void;
@@ -41,8 +47,22 @@ function devCall(method: string, data: unknown): Promise<unknown> {
   });
 }
 
+function platformCall<T>(method: string, data: unknown): Promise<T> {
+  if (!host.platformCall) return Promise.reject(new Error('Linking native bridge is unavailable'));
+  let result: { ok: boolean; value?: unknown; error?: string } | undefined;
+  host.platformCall('linking', method, data, value => { result = value; });
+  if (!result) return Promise.reject(new Error(`Linking operation did not complete: ${method}`));
+  return result.ok
+    ? Promise.resolve(result.value as T)
+    : Promise.reject(new Error(result.error || `Linking operation failed: ${method}`));
+}
+
 export async function openURL(url: string): Promise<void> {
   assertURL(url);
+  if (host.platformCall) {
+    await platformCall<boolean>('openURL', { url });
+    return;
+  }
   if (host.__rayactLinkingOpenURL) {
     const opened = await host.__rayactLinkingOpenURL(url);
     if (opened === false) throw new Error(`No application can open URL: ${url}`);
@@ -63,6 +83,7 @@ export async function openURL(url: string): Promise<void> {
 
 export async function canOpenURL(url: string): Promise<boolean> {
   const parsed = assertURL(url);
+  if (host.platformCall) return platformCall<boolean>('canOpenURL', { url });
   if (host.__rayactLinkingCanOpenURL) return host.__rayactLinkingCanOpenURL(url);
   if (host.devCall) return true;
   return ['http:', 'https:', 'mailto:', 'tel:'].includes(parsed.protocol) && typeof host.open === 'function';

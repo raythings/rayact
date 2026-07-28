@@ -15,6 +15,13 @@
   "permissions": [],
   "configurationSchema": { "type": "object", "additionalProperties": false },
   "officialDevApp": true,
-  "android": {},
-  "ios": {}
+  "android": {
+    "sourceDirs": ["android/src/main/java"],
+    "manifest": "android/AndroidManifest.xml",
+    "registrationClass": "dev.rayact.linking.RayactLinkingRegistration"
+  },
+  "ios": {
+    "sources": ["ios/RayactLinkingRegistration.swift"],
+    "registrationType": "RayactLinkingRegistration"
+  }
 }

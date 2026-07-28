@@ -15,6 +15,12 @@
   "permissions": [],
   "configurationSchema": { "type": "object", "additionalProperties": false },
   "officialDevApp": true,
-  "android": {},
-  "ios": {}
+  "android": {
+    "sourceDirs": ["android/src/main/java"],
+    "registrationClass": "dev.rayact.clipboard.RayactClipboardRegistration"
+  },
+  "ios": {
+    "sources": ["ios/RayactClipboardRegistration.swift"],
+    "registrationType": "RayactClipboardRegistration"
+  }
 }
