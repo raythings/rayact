@@ -1,12 +1,14 @@
 package com.rayact.engine
 
 import android.content.Context
+import android.app.Activity
 import android.view.View
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.lang.ref.WeakReference
 
 fun interface RayactPlatformModule {
     fun invoke(method: String, payload: ByteArray, completion: (Result<ByteArray>) -> Unit)
@@ -68,6 +70,7 @@ class RayactPlatformRegistry {
     companion object {
         val shared = RayactPlatformRegistry()
         private val initialized = AtomicBoolean(false)
+        @Volatile private var foregroundActivity = WeakReference<Activity>(null)
         private const val CALL_TIMEOUT_SECONDS = 15L
 
         /**
@@ -76,6 +79,7 @@ class RayactPlatformRegistry {
          * any optional package from the base application.
          */
         fun initialize(context: Context) {
+            if (context is Activity) attachActivity(context)
             if (!initialized.compareAndSet(false, true)) return
             runCatching {
                 val generated = Class.forName("com.rayact.generated.RayactGeneratedModules")
@@ -89,6 +93,13 @@ class RayactPlatformRegistry {
                 if (it !is ClassNotFoundException) throw it
             }
         }
+
+        fun attachActivity(activity: Activity) {
+            foregroundActivity = WeakReference(activity)
+        }
+
+        fun currentActivity(): Activity? =
+            foregroundActivity.get()?.takeUnless { it.isFinishing || it.isDestroyed }
 
         /**
          * Release-safe QuickJS bridge. Modules remain asynchronous internally;

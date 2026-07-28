@@ -17,10 +17,14 @@
   "officialDevApp": true,
   "android": {
     "dependencies": ["com.google.android.gms:play-services-code-scanner:16.1.0"],
-    "manifest": "android/AndroidManifest.xml"
+    "manifest": "android/AndroidManifest.xml",
+    "sourceDirs": ["android/src/main/java"],
+    "registrationClass": "dev.rayact.barcodescanner.RayactBarcodeScannerRegistration"
   },
   "ios": {
     "frameworks": ["AVFoundation", "Vision"],
+    "sources": ["ios/RayactBarcodeScannerRegistration.swift"],
+    "registrationType": "RayactBarcodeScannerRegistration",
     "infoPlist": {
       "NSCameraUsageDescription": "Scan a QR code to connect to a development server."
     }

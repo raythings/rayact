@@ -29,9 +29,28 @@ test('official dev app resolves canonical bundled native module identities', () 
     assert.match(module.jsPackage, /^@rayact\//, `${module.name} resolves to its npm package`);
   }
 
-  // The first-party modules the official dev app is expected to carry.
-  for (const expected of ['crash-reporter', 'mmkv', 'secure-store']) {
+  // C ABI modules are advertised in the bundle manifest.
+  for (const expected of ['crash-reporter', 'mmkv', 'secure-store', 'svg']) {
     assert.ok(names.includes(expected), `missing bundled module: ${expected}`);
+  }
+});
+
+test('official dev app explicitly depends on every optional first-party mobile capability', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'apps/dev-app/package.json'), 'utf8'));
+  for (const expected of [
+    '@rayact/barcode-scanner',
+    '@rayact/clipboard',
+    '@rayact/crash-reporter',
+    '@rayact/haptics',
+    '@rayact/image-picker',
+    '@rayact/linking',
+    '@rayact/mmkv',
+    '@rayact/secure-store',
+    '@rayact/sensors',
+    '@rayact/svg',
+    '@rayact/webview',
+  ]) {
+    assert.ok(manifest.dependencies[expected], `missing dev-app dependency: ${expected}`);
   }
 });
 

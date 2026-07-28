@@ -64,6 +64,11 @@ class ReleaseActivity : AppCompatActivity() {
         if (session.acquireGraphics()) host.recreateSurfacesAfterGraphicsResume()
     }
 
+    override fun onResume() {
+        super.onResume()
+        RayactPlatformRegistry.attachActivity(this)
+    }
+
     override fun onStop() {
         session.releaseGraphics()
         super.onStop()

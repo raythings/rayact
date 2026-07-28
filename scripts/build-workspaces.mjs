@@ -22,8 +22,10 @@ const buildOrder = [
   '@rayact/svg',
   '@rayact/barcode-scanner',
   '@rayact/clipboard',
+  '@rayact/haptics',
   '@rayact/image-picker',
   '@rayact/linking',
+  '@rayact/sensors',
   '@rayact/webview',
 ];
 

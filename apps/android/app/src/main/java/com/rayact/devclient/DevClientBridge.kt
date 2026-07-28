@@ -15,7 +15,6 @@ import android.provider.OpenableColumns
 import android.graphics.BitmapFactory
 import android.util.Base64
 import java.io.RandomAccessFile
-import java.lang.reflect.Proxy
 import com.rayact.app.BuildConfig
 import com.rayact.engine.RayactEngineSession
 import org.json.JSONArray
@@ -49,7 +48,6 @@ object DevClientBridge {
     @Volatile private var discoveryGeneration = 0
     private var lastCpuTicks = -1L
     private var lastCpuWallMs = -1L
-    @Volatile private var barcodeScanState = JSONObject().put("status", "idle").toString()
     @Volatile private var imagePickerState = JSONObject().put("status", "idle").toString()
     @Volatile private var imagePickerWantsBase64 = false
     const val REQUEST_IMAGE_PICKER = 58421
@@ -290,9 +288,6 @@ object DevClientBridge {
             }
             "getConnectError" -> DevServerLoader.lastError ?: ""
             "isConnectLoading" -> DevServerLoader.loading
-            "scanQR" -> { startQrScan(); null }
-            "startBarcodeScan" -> { startRawBarcodeScan(); null }
-            "pollBarcodeScan" -> barcodeScanState
             "startImagePicker" -> { startImagePicker(data?.optBoolean("base64", false) == true); null }
             "pollImagePicker" -> imagePickerState
             "pollLinkingURL", "getInitialURL" -> RayactEngineSession.pollPendingURL()
@@ -415,110 +410,6 @@ object DevClientBridge {
         discoveryListener = null
     }
 
-    private fun startQrScan() {
-        launchQrScan(
-            onSuccess = { raw ->
-                Thread {
-                    val candidates = parseQrCandidates(raw)
-                    val best = pickBestServer(candidates) ?: candidates.firstOrNull()
-                    if (best == null) {
-                        Log.w(TAG, "scanQR: no candidates in '$raw'")
-                        return@Thread
-                    }
-                    Log.i(TAG, "scanQR chose $best from $candidates")
-                    openProjectFromNative(best)
-                }.start()
-            },
-            onCanceled = { Log.i(TAG, "scanQR canceled") },
-            onFailure = { Log.e(TAG, "scanQR failed", it) },
-        )
-    }
-
-    private fun startRawBarcodeScan() {
-        barcodeScanState = JSONObject().put("status", "pending").toString()
-        launchQrScan(
-            onSuccess = { raw ->
-                barcodeScanState = JSONObject()
-                    .put("status", "success")
-                    .put("data", raw)
-                    .put("format", "qr")
-                    .toString()
-            },
-            onCanceled = {
-                barcodeScanState = JSONObject().put("status", "canceled").toString()
-            },
-            onFailure = { error ->
-                barcodeScanState = JSONObject()
-                    .put("status", "error")
-                    .put("error", error.message ?: "Native barcode scan failed")
-                    .toString()
-            },
-        )
-    }
-
-    private fun launchQrScan(
-        onSuccess: (String) -> Unit,
-        onCanceled: () -> Unit,
-        onFailure: (Throwable) -> Unit,
-    ) {
-        val activity = liveActivity()
-        if (activity == null) {
-            onFailure(IllegalStateException("No live activity"))
-            return
-        }
-        activity.runOnUiThread {
-            try {
-                val builder = Class.forName("com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions\$Builder")
-                    .getDeclaredConstructor().newInstance()
-                builder.javaClass.methods.first { it.name == "setBarcodeFormats" }
-                    .invoke(builder, 256, intArrayOf())
-                builder.javaClass.methods.firstOrNull { it.name == "enableAutoZoom" }?.invoke(builder)
-                val options = builder.javaClass.methods.first { it.name == "build" }.invoke(builder)
-                val scanning = Class.forName("com.google.mlkit.vision.codescanner.GmsBarcodeScanning")
-                val scanner = scanning.methods.first { it.name == "getClient" && it.parameterCount == 2 }
-                    .invoke(null, activity, options)
-                val task = scanner.javaClass.methods.first { it.name == "startScan" }.invoke(scanner)
-                fun listener(typeName: String, body: (Array<out Any?>?) -> Unit): Any {
-                    val type = Class.forName(typeName)
-                    return Proxy.newProxyInstance(type.classLoader, arrayOf(type)) { _, method, args ->
-                        if (method.name.startsWith("on")) body(args)
-                        null
-                    }
-                }
-                val success = listener("com.google.android.gms.tasks.OnSuccessListener") { args ->
-                    val code = args?.firstOrNull()
-                    val raw = code?.javaClass?.methods?.firstOrNull { it.name == "getRawValue" }?.invoke(code) as? String
-                    if (raw.isNullOrEmpty()) onFailure(IllegalStateException("Scanner returned an empty value"))
-                    else onSuccess(raw)
-                }
-                val canceled = listener("com.google.android.gms.tasks.OnCanceledListener") { onCanceled() }
-                val failure = listener("com.google.android.gms.tasks.OnFailureListener") { args ->
-                    val error = args?.firstOrNull() as? Throwable
-                        ?: IllegalStateException("Native barcode scan failed")
-                    // Some Google Code Scanner versions report the system UI's
-                    // back/cancel action as a generic ML Kit failure instead of
-                    // completing the Task through OnCanceledListener.
-                    if (error.message?.trim()?.equals("Failed to scan code.", ignoreCase = true) == true) {
-                        onCanceled()
-                    } else {
-                        onFailure(error)
-                    }
-                }
-                task.javaClass.methods.first { it.name == "addOnSuccessListener" && it.parameterCount == 1 }.invoke(task, success)
-                task.javaClass.methods.first { it.name == "addOnCanceledListener" && it.parameterCount == 1 }.invoke(task, canceled)
-                task.javaClass.methods.first { it.name == "addOnFailureListener" && it.parameterCount == 1 }.invoke(task, failure)
-            } catch (error: Throwable) {
-                Log.e(TAG, "Unable to launch barcode scanner", error)
-                onFailure(
-                    IllegalStateException(
-                        "Barcode scanner package is unavailable: ${error.javaClass.simpleName}: ${error.message}",
-                        error,
-                    ),
-                )
-            }
-        }
-    }
-
     private fun startImagePicker(base64: Boolean) {
         val activity = liveActivity()
         if (activity == null) {
@@ -578,40 +469,6 @@ object DevClientBridge {
         }.start()
     }
 
-    private fun parseQrCandidates(raw: String): List<String> {
-        val trimmed = raw.trim().replace("\\/", "/")
-        if (trimmed.startsWith("[")) {
-            runCatching {
-                val arr = JSONArray(trimmed)
-                val out = ArrayList<String>(arr.length())
-                for (i in 0 until arr.length()) {
-                    val s = arr.optString(i).trim()
-                    if (s.isNotEmpty()) out.add(DevServerLoader.normalizeBase(s))
-                }
-                if (out.isNotEmpty()) return out.distinct()
-            }
-        }
-        return listOf(DevServerLoader.normalizeBase(trimmed))
-    }
-
-    private fun pickBestServer(candidates: List<String>): String? {
-        if (candidates.size <= 1) {
-            val only = candidates.firstOrNull() ?: return null
-            return if (DevServerLoader.probeManifest(only)) only else null
-        }
-        val pool = java.util.concurrent.Executors.newFixedThreadPool(candidates.size)
-        try {
-            val ecs = java.util.concurrent.ExecutorCompletionService<String?>(pool)
-            for (c in candidates) ecs.submit { if (DevServerLoader.probeManifest(c)) c else null }
-            repeat(candidates.size) {
-                val winner = runCatching { ecs.take().get() }.getOrNull()
-                if (winner != null) return winner
-            }
-            return null
-        } finally {
-            pool.shutdownNow()
-        }
-    }
 }
 
 fun devCallFromNative(method: String, dataJson: String?): String {

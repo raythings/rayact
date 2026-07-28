@@ -1,7 +1,7 @@
 {
-  "name": "@rayact/barcode-scanner",
+  "name": "@rayact/haptics",
   "version": "0.0.4",
-  "description": "System barcode and QR scanner for Rayact",
+  "description": "Optional haptic feedback APIs for Rayact",
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -11,7 +11,7 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist", "README.md", "rayact.module.json", "android", "ios"],
+  "files": ["dist", "android", "ios", "README.md", "rayact.module.json"],
   "rayact": { "manifest": "rayact.module.json" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -24,6 +24,6 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/raythings/rayact.git",
-    "directory": "packages/rayact-barcode-scanner"
+    "directory": "packages/rayact-haptics"
   }
 }

@@ -1,8 +1,6 @@
-import AVFoundation
 import Darwin
 import Foundation
 import UIKit
-import Vision
 import PhotosUI
 import UniformTypeIdentifiers
 
@@ -36,8 +34,6 @@ enum DevClientBridge {
     private static var browser: NetServiceBrowser?
 
     private static var devCallResultStorage: [CChar] = [0]
-    private static let barcodeLock = NSLock()
-    private static var barcodeScanState = "{\"status\":\"idle\"}"
     private static let imagePickerLock = NSLock()
     private static var imagePickerState = "{\"status\":\"idle\"}"
     private static var imagePickerDelegate: RayactImagePickerDelegate?
@@ -268,16 +264,6 @@ enum DevClientBridge {
             return DevServerLoader.lastError ?? ""
         case "isConnectLoading":
             return DevServerLoader.loading
-        case "scanQR":
-            startQrScan()
-            return nil
-        case "startBarcodeScan":
-            startRawBarcodeScan()
-            return nil
-        case "pollBarcodeScan":
-            barcodeLock.lock()
-            defer { barcodeLock.unlock() }
-            return barcodeScanState
         case "startImagePicker":
             startImagePicker(base64: data?["base64"] as? Bool ?? false)
             return nil
@@ -476,57 +462,6 @@ enum DevClientBridge {
         return nil
     }
 
-    private static func startQrScan() {
-        guard let vc = activeViewController ?? devHostViewController else {
-            print("[DevClientBridge] scanQR: no live view controller")
-            return
-        }
-        DispatchQueue.main.async {
-            let scanner = QRScannerViewController()
-            scanner.onResult = { raw in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let candidates = parseQrCandidates(raw)
-                    let best = pickBestServer(candidates) ?? candidates.first
-                    if let best {
-                        print("[DevClientBridge] scanQR chose \(best) from \(candidates)")
-                        openProjectFromNative(url: best)
-                    } else {
-                        print("[DevClientBridge] scanQR: no candidates in '\(raw)'")
-                    }
-                }
-            }
-            scanner.modalPresentationStyle = .fullScreen
-            vc.present(scanner, animated: true)
-        }
-    }
-
-    private static func setBarcodeState(_ value: [String: Any]) {
-        guard let data = try? JSONSerialization.data(withJSONObject: value),
-              let json = String(data: data, encoding: .utf8) else { return }
-        barcodeLock.lock()
-        barcodeScanState = json
-        barcodeLock.unlock()
-    }
-
-    private static func startRawBarcodeScan() {
-        guard let vc = activeViewController ?? devHostViewController else {
-            setBarcodeState(["status": "error", "error": "No live view controller"])
-            return
-        }
-        setBarcodeState(["status": "pending"])
-        DispatchQueue.main.async {
-            let scanner = QRScannerViewController()
-            scanner.onResult = { raw in
-                setBarcodeState(["status": "success", "data": raw, "format": "qr"])
-            }
-            scanner.onCancel = {
-                setBarcodeState(["status": "canceled"])
-            }
-            scanner.modalPresentationStyle = .fullScreen
-            vc.present(scanner, animated: true)
-        }
-    }
-
     fileprivate static func setImagePickerState(_ value: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: value),
               let json = String(data: data, encoding: .utf8) else { return }
@@ -553,39 +488,6 @@ enum DevClientBridge {
         }
     }
 
-    private static func parseQrCandidates(_ raw: String) -> [String] {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\\/", with: "/")
-        if trimmed.hasPrefix("["),
-           let data = trimmed.data(using: .utf8),
-           let arr = try? JSONSerialization.jsonObject(with: data) as? [String] {
-            let out = arr.map { DevServerLoader.normalizeBase($0.trimmingCharacters(in: .whitespacesAndNewlines)) }.filter { !$0.isEmpty }
-            if !out.isEmpty { return Array(Set(out)) }
-        }
-        return [DevServerLoader.normalizeBase(trimmed)]
-    }
-
-    private static func pickBestServer(_ candidates: [String]) -> String? {
-        if candidates.count <= 1 {
-            guard let only = candidates.first else { return nil }
-            return DevServerLoader.probeManifest(baseUrl: only) ? only : nil
-        }
-        let group = DispatchGroup()
-        let lock = NSLock()
-        var winner: String?
-        for candidate in candidates {
-            group.enter()
-            DispatchQueue.global(qos: .userInitiated).async {
-                if DevServerLoader.probeManifest(baseUrl: candidate) {
-                    lock.lock()
-                    if winner == nil { winner = candidate }
-                    lock.unlock()
-                }
-                group.leave()
-            }
-        }
-        _ = group.wait(timeout: .now() + 3)
-        return winner
-    }
 }
 
 private final class DiscoveryDelegate: NSObject, NetServiceBrowserDelegate, NetServiceDelegate {
@@ -682,80 +584,5 @@ private final class RayactImagePickerDelegate: NSObject, PHPickerViewControllerD
                 DevClientBridge.setImagePickerState(["status": "error", "error": error.localizedDescription])
             }
         }
-    }
-}
-
-private final class QRScannerViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDelegate {
-    var onResult: ((String) -> Void)?
-    var onCancel: (() -> Void)?
-
-    private let captureSession = AVCaptureSession()
-    private let queue = DispatchQueue(label: "com.rayact.qrscan")
-    private var handled = false
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = .black
-
-        guard let device = AVCaptureDevice.default(for: .video),
-              let input = try? AVCaptureDeviceInput(device: device) else { return }
-        captureSession.addInput(input)
-        let output = AVCaptureVideoDataOutput()
-        output.setSampleBufferDelegate(self, queue: queue)
-        captureSession.addOutput(output)
-
-        let preview = AVCaptureVideoPreviewLayer(session: captureSession)
-        preview.videoGravity = .resizeAspectFill
-        preview.frame = view.bounds
-        view.layer.addSublayer(preview)
-
-        let cancel = UIButton(type: .system)
-        cancel.setTitle("Cancel", for: .normal)
-        cancel.tintColor = .white
-        cancel.translatesAutoresizingMaskIntoConstraints = false
-        cancel.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
-        view.addSubview(cancel)
-        NSLayoutConstraint.activate([
-            cancel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
-            cancel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-        ])
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        (view.layer.sublayers?.first { $0 is AVCaptureVideoPreviewLayer })?.frame = view.bounds
-    }
-
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        queue.async { self.captureSession.startRunning() }
-    }
-
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-        queue.async { self.captureSession.stopRunning() }
-    }
-
-    @objc private func cancelTapped() {
-        dismiss(animated: true) { self.onCancel?() }
-    }
-
-    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard !handled else { return }
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        let request = VNDetectBarcodesRequest { [weak self] req, _ in
-            guard let self, !self.handled,
-                  let results = req.results as? [VNBarcodeObservation],
-                  let payload = results.first(where: { $0.symbology == .qr })?.payloadStringValue,
-                  !payload.isEmpty else { return }
-            self.handled = true
-            DispatchQueue.main.async {
-                self.dismiss(animated: true) {
-                    self.onResult?(payload)
-                }
-            }
-        }
-        request.symbologies = [.qr]
-        try? VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:]).perform([request])
     }
 }

@@ -65,6 +65,29 @@ final class RayactPlatformRegistry {
         return modules[name] != nil
     }
 
+    static func foregroundViewController() -> UIViewController? {
+        dispatchPrecondition(condition: .onQueue(.main))
+        let root = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .rootViewController
+        return topViewController(from: root)
+    }
+
+    private static func topViewController(from controller: UIViewController?) -> UIViewController? {
+        if let presented = controller?.presentedViewController {
+            return topViewController(from: presented)
+        }
+        if let navigation = controller as? UINavigationController {
+            return topViewController(from: navigation.visibleViewController)
+        }
+        if let tabs = controller as? UITabBarController {
+            return topViewController(from: tabs.selectedViewController)
+        }
+        return controller
+    }
+
     func emitSystemEvent(_ type: String, payload: [String: Any] = [:]) {
         lock.lock()
         let installedModules = Array(modules.values)

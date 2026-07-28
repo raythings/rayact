@@ -183,6 +183,7 @@
 		77421B4ED24C40F240DD9419 /* test262.conf in Resources */ = {isa = PBXBuildFile; fileRef = 595E57CC00CEEEC3D3D2C3B3 /* test262.conf */; };
 		77C99E137700A8F6500441FC /* rsvg_tess_fill.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D03DDDC3CAD0DA5DFC0D1AF4 /* rsvg_tess_fill.cpp */; };
 		78356034A860CDD81EAD7FF2 /* Switch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A6823BC8335C79C6CD1BC7EE /* Switch.cpp */; };
+		7981C44E9D8F76143694DE55 /* RayactHapticsRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 064FE048FD9149B0E8885A4C /* RayactHapticsRegistration.swift */; };
 		7A4B23999FB8B6F78A1AA124 /* DevMenuOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADA048B96ADC9AFDA99C4C08 /* DevMenuOverlay.swift */; };
 		7AFAD6CC6B790B2B900DC357 /* RangeSlider.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4ADA129237C4AD20879A6BB1 /* RangeSlider.cpp */; };
 		7B647ADE10FFBC547FC6B847 /* worklet_runtime.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 70D8D848C09D583397C08FB7 /* worklet_runtime.cpp */; };
@@ -311,6 +312,7 @@
 		CF07B500A35042E1F6D722C8 /* test262-fast.conf in Resources */ = {isa = PBXBuildFile; fileRef = 779530731ADFBA7776BCD386 /* test262-fast.conf */; };
 		D0588FD07A9B4997E5DF02E9 /* Text.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EF9A50956BDA73CBC0F0D322 /* Text.cpp */; };
 		D072984889A46AB829AEAFAC /* Menu.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F7CC4B0DDADC8CDFC8DD8FF3 /* Menu.cpp */; };
+		D1233D589D4D8DEC143BE84A /* RayactBarcodeScannerRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 139352FBDFA27A7E60616518 /* RayactBarcodeScannerRegistration.swift */; };
 		D132F200EA7DCC2728242D71 /* Badge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B842A810A8740B2243A790FD /* Badge.cpp */; };
 		D2C063F01A3ED9FE03C936AC /* worker_draw.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F5872521C5CBC2EC3791272C /* worker_draw.cpp */; };
 		D3F87CC8851D88C2A13479D5 /* IconRenderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A542F6F40A2E3A2B38CECD8D /* IconRenderer.cpp */; };
@@ -385,6 +387,7 @@
 		0496DF4A4603751341FC16FD /* AssertFatal.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = AssertFatal.cpp; sourceTree = "<group>"; };
 		0505A61CF3B74FC77872B757 /* AbsoluteLayout.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = AbsoluteLayout.cpp; sourceTree = "<group>"; };
 		05F70DD7DDDC9C7206B25D03 /* devtools_ios.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = devtools_ios.cpp; sourceTree = "<group>"; };
+		064FE048FD9149B0E8885A4C /* RayactHapticsRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactHapticsRegistration.swift; sourceTree = "<group>"; };
 		07412C116ED17EEBC93CAE53 /* SegmentedButton.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SegmentedButton.cpp; sourceTree = "<group>"; };
 		0843C3B037B28BE2C80615D4 /* Animations.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Animations.cpp; sourceTree = "<group>"; };
 		0B2B14115148E4551DD6759E /* worker_wasm.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = worker_wasm.hpp; sourceTree = "<group>"; };
@@ -399,6 +402,7 @@
 		125987C1814763C5DD732C3C /* gesture_recognizer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = gesture_recognizer.cpp; sourceTree = "<group>"; };
 		131E130C48A79923A9CC645E /* DevServerLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevServerLoader.swift; sourceTree = "<group>"; };
 		1354574C79B5EE1A0B8671AB /* worker_js.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = worker_js.cpp; sourceTree = "<group>"; };
+		139352FBDFA27A7E60616518 /* RayactBarcodeScannerRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactBarcodeScannerRegistration.swift; sourceTree = "<group>"; };
 		13B32CCF88CFB21B68DA7B56 /* RayactIOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = RayactIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		15B78893FEC9E2EB16EAEA93 /* Chip.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Chip.cpp; sourceTree = "<group>"; };
 		161ECA68BB5DDAA75415F0FD /* platform_ios.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = platform_ios.cpp; sourceTree = "<group>"; };
@@ -812,6 +816,22 @@
 			path = rendering;
 			sourceTree = "<group>";
 		};
+		4F40DE555414AD387D7D98A2 /* barcode-scanner */ = {
+			isa = PBXGroup;
+			children = (
+				DC48895A501CB8F7C3A598C1 /* Sources */,
+			);
+			path = "barcode-scanner";
+			sourceTree = "<group>";
+		};
+		6389149A67C0A02451E527EC /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				064FE048FD9149B0E8885A4C /* RayactHapticsRegistration.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
 		67F8619766ABAE407D6B39C7 /* algorithm */ = {
 			isa = PBXGroup;
 			children = (
@@ -1052,6 +1072,8 @@
 			isa = PBXGroup;
 			children = (
 				24F487096F5E169EF7F1AFCC /* RayactGeneratedModules.swift */,
+				4F40DE555414AD387D7D98A2 /* barcode-scanner */,
+				D20B0DD45F53B1F168F5FB99 /* haptics */,
 				05EDCCFA8E3F9B215A4AF704 /* sensors */,
 			);
 			path = Autolinked;
@@ -1183,6 +1205,14 @@
 			path = fonts;
 			sourceTree = "<group>";
 		};
+		D20B0DD45F53B1F168F5FB99 /* haptics */ = {
+			isa = PBXGroup;
+			children = (
+				6389149A67C0A02451E527EC /* Sources */,
+			);
+			path = haptics;
+			sourceTree = "<group>";
+		};
 		D5890124F8F5B365BC2A3DFD /* yoga */ = {
 			isa = PBXGroup;
 			children = (
@@ -1204,6 +1234,14 @@
 			);
 			name = yoga;
 			path = ../../third_party/yoga/yoga;
+			sourceTree = "<group>";
+		};
+		DC48895A501CB8F7C3A598C1 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				139352FBDFA27A7E60616518 /* RayactBarcodeScannerRegistration.swift */,
+			);
+			path = Sources;
 			sourceTree = "<group>";
 		};
 		DC5ADB45C711D52BCF5C2139 /* src */ = {
@@ -1549,11 +1587,13 @@
 				B42F038E071BA6FEA29CA0D2 /* ProjectHmrClient.swift in Sources */,
 				498347526014CBE05C94F61C /* RadioButton.cpp in Sources */,
 				386BE0BEB14BBDAAD0F44BBA /* RangeSlider.cpp in Sources */,
+				D1233D589D4D8DEC143BE84A /* RayactBarcodeScannerRegistration.swift in Sources */,
 				15DA274669E506B6C6693415 /* RayactDevToolsTransport.swift in Sources */,
 				0CCE1126D396A593E53F71C4 /* RayactEngineHostCallbacks.swift in Sources */,
 				7C9AD967B12DEF49FF0AA129 /* RayactEngineSession.swift in Sources */,
 				87ED24D835BC9673D11EF92A /* RayactGeneratedModules.swift in Sources */,
 				3E4B2B92F752CF94F424BE21 /* RayactHTTP.swift in Sources */,
+				7981C44E9D8F76143694DE55 /* RayactHapticsRegistration.swift in Sources */,
 				3A62D21DEF7029A946CC1E8E /* RayactHost.swift in Sources */,
 				F2FED92558BF715FE5DBB2AB /* RayactHostCallbacksBridge.swift in Sources */,
 				15BCDF543FED685FFE548917 /* RayactMetalView.swift in Sources */,
@@ -1894,7 +1934,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
-				EXCLUDED_SOURCE_FILE_NAMES = "devtools.cpp cdp_handler.cpp dev_client_bridge.cpp desktop_dev_loader.cpp desktop_mdns.cpp DevClientBridge.swift DevLauncherController.swift DevMenuOverlay.swift DevServerLoader.swift DevShakeDetector.swift ProjectHmrClient.swift RayactDevToolsTransport.swift";
+				EXCLUDED_SOURCE_FILE_NAMES = "devtools.cpp cdp_handler.cpp dev_client_bridge.cpp desktop_dev_loader.cpp desktop_mdns.cpp DevClientBridge.swift DevLauncherController.swift DevMenuOverlay.swift DevServerLoader.swift ProjectHmrClient.swift RayactDevToolsTransport.swift";
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) RAYACT_PLATFORM_NET_BACKEND=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1";
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = "$(inherited) ../../packages/rayact-svg/native ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";

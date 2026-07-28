@@ -30,10 +30,11 @@ type ScannerHost = typeof globalThis & {
   };
   navigator?: Navigator;
   document?: Document;
-  devCall?: (
+  platformCall?: (
+    module: string,
     method: string,
     data: unknown,
-    callback: (result: unknown) => void
+    callback: (result: { ok: boolean; value?: unknown; error?: string }) => void
   ) => void;
 };
 
@@ -43,23 +44,29 @@ export async function isAvailableAsync(): Promise<boolean> {
   if (host.__rayactBarcodeScannerIsAvailable) {
     return host.__rayactBarcodeScannerIsAvailable();
   }
-  return !!host.devCall || (!!host.BarcodeDetector && !!host.navigator?.mediaDevices?.getUserMedia);
+  if (host.document) {
+    return !!host.BarcodeDetector && !!host.navigator?.mediaDevices?.getUserMedia;
+  }
+  return platformCall<boolean>('isAvailable').catch(() => false);
 }
 
-function devCall(method: string, data?: unknown): Promise<unknown> {
+function platformCall<T>(method: string, data: unknown = {}): Promise<T> {
   return new Promise((resolve, reject) => {
-    if (!host.devCall) {
+    if (!host.platformCall) {
       reject(new Error('Barcode scanner native bridge is unavailable'));
       return;
     }
-    host.devCall(method, data, resolve);
+    host.platformCall('barcode-scanner', method, data, result => {
+      if (result?.ok) resolve(result.value as T);
+      else reject(new Error(result?.error || `Barcode scanner operation failed: ${method}`));
+    });
   });
 }
 
-async function scanDevClient(options: ScanOptions): Promise<BarcodeResult> {
-  await devCall('startBarcodeScan', options);
+async function scanNative(options: ScanOptions): Promise<BarcodeResult> {
+  await platformCall('startScan', options);
   for (;;) {
-    const raw = await devCall('pollBarcodeScan');
+    const raw = await platformCall<unknown>('pollScan');
     const state = typeof raw === 'string' ? JSON.parse(raw) as {
       status: string;
       data?: string;
@@ -133,8 +140,8 @@ async function scanWeb(options: ScanOptions): Promise<BarcodeResult> {
 
 export async function scanAsync(options: ScanOptions = {}): Promise<BarcodeResult> {
   if (host.__rayactBarcodeScannerScan) return host.__rayactBarcodeScannerScan(options);
-  if (host.devCall) return scanDevClient(options);
-  return scanWeb(options);
+  if (host.document) return scanWeb(options);
+  return scanNative(options);
 }
 
 export default { scanAsync, isAvailableAsync };

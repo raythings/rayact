@@ -113,6 +113,7 @@ class DevLauncherActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        RayactPlatformRegistry.attachActivity(this)
         activeSession()?.let { DevClientBridge.attach(this, it) }
     }
 

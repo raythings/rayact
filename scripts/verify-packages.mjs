@@ -209,7 +209,9 @@ try {
     }
     if (!manifest.name.startsWith('@rayact/template-') && names.some(name =>
       !name.startsWith('dist/templates/') &&
-      ((/(^|\/)src\//.test(name) && !name.startsWith('native/src/')) ||
+      ((/(^|\/)src\//.test(name) &&
+        !name.startsWith('native/src/') &&
+        !name.startsWith('android/src/main/')) ||
         (/\.tsx?$/.test(name) && !/\.d\.ts$/.test(name)))
     )) {
       throw new Error(`${manifest.name}: source file leaked into tarball`);

@@ -29106,19 +29106,22 @@ ${stack}` : message;
     };
   }
   const host = globalThis;
-  function devCall$1(method, data) {
+  function platformCall(method, data = {}) {
     return new Promise((resolve, reject) => {
-      if (!host.devCall) {
+      if (!host.platformCall) {
         reject(new Error("Barcode scanner native bridge is unavailable"));
         return;
       }
-      host.devCall(method, data, resolve);
+      host.platformCall("barcode-scanner", method, data, (result) => {
+        if (result?.ok) resolve(result.value);
+        else reject(new Error(result?.error || `Barcode scanner operation failed: ${method}`));
+      });
     });
   }
-  async function scanDevClient(options) {
-    await devCall$1("startBarcodeScan", options);
+  async function scanNative(options) {
+    await platformCall("startScan", options);
     for (; ; ) {
-      const raw = await devCall$1("pollBarcodeScan");
+      const raw = await platformCall("pollScan");
       const state2 = typeof raw === "string" ? JSON.parse(raw) : raw;
       if (state2.status === "success" && state2.data) {
         return {
@@ -29192,8 +29195,8 @@ ${stack}` : message;
   }
   async function scanAsync(options = {}) {
     if (host.__rayactBarcodeScannerScan) return host.__rayactBarcodeScannerScan(options);
-    if (host.devCall) return scanDevClient(options);
-    return scanWeb(options);
+    if (host.document) return scanWeb(options);
+    return scanNative(options);
   }
   const normalizeDevToolsState = (raw) => {
     const value = typeof raw === "string" ? JSON.parse(raw) : raw;

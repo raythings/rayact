@@ -96,6 +96,40 @@ test('sensor implementations are package-owned and dev hosts only forward generi
   assert.equal(manifest.ios.registrationType, 'RayactSensorsRegistration');
 });
 
+test('barcode scanner and haptics implementations are package-owned', () => {
+  const androidBridge = fs.readFileSync(
+    path.resolve('packages/template-android/app/src/main/java/com/rayact/devclient/DevClientBridge.kt'),
+    'utf8',
+  );
+  const iosBridge = fs.readFileSync(
+    path.resolve('packages/template-ios/DevClientBridge.swift'),
+    'utf8',
+  );
+  const androidScanner = fs.readFileSync(
+    path.resolve('packages/rayact-barcode-scanner/android/src/main/java/dev/rayact/barcodescanner/RayactBarcodeScannerRegistration.kt'),
+    'utf8',
+  );
+  const iosScanner = fs.readFileSync(
+    path.resolve('packages/rayact-barcode-scanner/ios/RayactBarcodeScannerRegistration.swift'),
+    'utf8',
+  );
+  const hapticsManifest = JSON.parse(fs.readFileSync(
+    path.resolve('packages/rayact-haptics/rayact.module.json'),
+    'utf8',
+  ));
+
+  assert.doesNotMatch(androidBridge, /GmsBarcode|startBarcodeScan|pollBarcodeScan/);
+  assert.doesNotMatch(iosBridge, /AVFoundation|Vision|QRScanner|startBarcodeScan|pollBarcodeScan/);
+  assert.match(androidScanner, /GmsBarcodeScanning/);
+  assert.match(iosScanner, /import AVFoundation/);
+  assert.match(iosScanner, /VNDetectBarcodesRequest/);
+  assert.equal(
+    hapticsManifest.android.registrationClass,
+    'dev.rayact.haptics.RayactHapticsRegistration',
+  );
+  assert.equal(hapticsManifest.ios.registrationType, 'RayactHapticsRegistration');
+});
+
 test('module selection precedence supports autolink, configuration, disable, and the legacy warning', () => {
   assert.equal(mergeNativeModules(undefined, [pluginFixture]).length, 1);
   assert.deepEqual(
