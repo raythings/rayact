@@ -65,7 +65,9 @@ export {
   applyIosProjectIdentity,
   copyAndroidPluginArtifacts,
   writeAndroidModuleBuildFiles,
+  writeAndroidPlatformAutolinking,
   copyIosPluginArtifacts,
+  writeIosPlatformAutolinking,
   copyDesktopPluginArtifacts,
   type PrebuildOptions
 } from './prebuild.js';

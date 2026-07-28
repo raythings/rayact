@@ -64,6 +64,39 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "android": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "project": { "type": "string" },
+        "registrationClass": { "type": "string" },
+        "dependencies": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "manifest": { "type": "string" },
+        "sourceDirs": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "resourceDirs": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }
+      }
+    },
+    "ios": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sources": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "registrationType": { "type": "string" },
+        "frameworks": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "resources": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "infoPlist": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" },
+              { "type": "array", "items": { "type": "string" } }
+            ]
+          }
+        }
+      }
+    },
     "artifacts": {
       "type": "array",
       "items": {

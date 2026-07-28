@@ -9,7 +9,9 @@ import {
   copyAndroidPluginArtifacts,
   copyIosPluginArtifacts,
   mergeNativeModules,
-  resolveRayactPlugins
+  resolveRayactPlugins,
+  writeAndroidPlatformAutolinking,
+  writeIosPlatformAutolinking
 } from '../../dist/prebuild/index.js';
 
 const manifestFixture = (overrides = {}) => ({
@@ -160,4 +162,72 @@ test('iOS custom module XCFrameworks are copied and linked into generated client
 
   assert.ok(fs.existsSync(path.join(iosDir, 'Frameworks/Modules/Sample.xcframework/Info.plist')));
   assert.match(fs.readFileSync(path.join(iosDir, 'project.yml'), 'utf8'), /Frameworks\/Modules\/Sample\.xcframework/);
+});
+
+test('platform autolinking emits only selected Android package wiring', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rayact-platform-android-'));
+  const androidDir = path.join(root, 'android');
+  const packageDir = path.join(root, 'sample');
+  fs.mkdirSync(path.join(androidDir, 'app/src/main/java'), { recursive: true });
+  fs.mkdirSync(path.join(packageDir, 'android/src/main/java'), { recursive: true });
+  fs.writeFileSync(path.join(packageDir, 'android/AndroidManifest.xml'), [
+    '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+    '<uses-permission android:name="android.permission.CAMERA"/>',
+    '<application><meta-data android:name="sample" android:value="true"/></application>',
+    '</manifest>',
+  ].join(''));
+  const plugin = {
+    ...pluginFixture,
+    packageDir,
+    manifest: manifestFixture({
+      platforms: ['android'],
+      android: {
+        registrationClass: 'dev.rayact.sample.SampleRegistration',
+        dependencies: ['com.example:sample:1.0.0'],
+        manifest: 'android/AndroidManifest.xml',
+        sourceDirs: ['android/src/main/java'],
+      },
+    }),
+  };
+
+  writeAndroidPlatformAutolinking(androidDir, [plugin]);
+  assert.match(fs.readFileSync(path.join(androidDir, 'rayact-autolink.gradle'), 'utf8'), /com\.example:sample:1\.0\.0/);
+  assert.match(fs.readFileSync(path.join(androidDir, 'app/src/main/java/com/rayact/generated/RayactGeneratedModules.kt'), 'utf8'), /SampleRegistration/);
+  assert.match(fs.readFileSync(path.join(androidDir, 'rayact-autolink-manifest/src/main/AndroidManifest.xml'), 'utf8'), /android\.permission\.CAMERA/);
+
+  writeAndroidPlatformAutolinking(androidDir, []);
+  assert.doesNotMatch(fs.readFileSync(path.join(androidDir, 'rayact-autolink.gradle'), 'utf8'), /sample/i);
+  assert.doesNotMatch(fs.readFileSync(path.join(androidDir, 'rayact-autolink-manifest/src/main/AndroidManifest.xml'), 'utf8'), /CAMERA/);
+});
+
+test('platform autolinking copies iOS sources and contributes frameworks and plist values', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rayact-platform-ios-'));
+  const iosDir = path.join(root, 'ios');
+  const packageDir = path.join(root, 'sample');
+  fs.mkdirSync(path.join(packageDir, 'ios'), { recursive: true });
+  fs.mkdirSync(iosDir, { recursive: true });
+  fs.writeFileSync(path.join(packageDir, 'ios/Sample.swift'), 'final class Sample {}');
+  fs.writeFileSync(path.join(iosDir, 'project.yml'), '    # RAYACT_AUTOLINKED_PLATFORM_DEPENDENCIES\n');
+  const plist = '<?xml version="1.0"?><plist><dict></dict></plist>';
+  fs.writeFileSync(path.join(iosDir, 'Info.plist'), plist);
+  fs.writeFileSync(path.join(iosDir, 'Info-Release.plist'), plist);
+  const plugin = {
+    ...pluginFixture,
+    packageDir,
+    manifest: manifestFixture({
+      platforms: ['ios'],
+      ios: {
+        sources: ['ios/Sample.swift'],
+        registrationType: 'SampleRegistration',
+        frameworks: ['AVFoundation'],
+        infoPlist: { NSCameraUsageDescription: 'Scan QR codes' },
+      },
+    }),
+  };
+
+  writeIosPlatformAutolinking(iosDir, [plugin]);
+  assert.ok(fs.existsSync(path.join(iosDir, 'Autolinked/sample/Sources/Sample.swift')));
+  assert.match(fs.readFileSync(path.join(iosDir, 'Autolinked/RayactGeneratedModules.swift'), 'utf8'), /SampleRegistration/);
+  assert.match(fs.readFileSync(path.join(iosDir, 'project.yml'), 'utf8'), /AVFoundation\.framework/);
+  assert.match(fs.readFileSync(path.join(iosDir, 'Info.plist'), 'utf8'), /NSCameraUsageDescription/);
 });

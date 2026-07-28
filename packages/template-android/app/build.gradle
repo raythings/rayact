@@ -65,3 +65,8 @@ dependencies {
     debugImplementation 'com.google.android.gms:play-services-code-scanner:16.1.0'
     releaseCompileOnly 'com.google.android.gms:play-services-code-scanner:16.1.0'
 }
+
+def rayactAutolink = file('../../rayact-autolink.gradle')
+if (rayactAutolink.exists()) {
+    apply from: rayactAutolink
+}

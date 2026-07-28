@@ -61,16 +61,25 @@ function validateManifest(manifest: RayactModuleManifest, pkgName: string, file:
   if (manifest.package !== pkgName) invalid(`package must be ${pkgName}`);
   if (!Array.isArray(manifest.platforms) || !Array.isArray(manifest.architectures)) invalid('platforms and architectures must be arrays');
   if (!Array.isArray(manifest.artifacts)) invalid('artifacts must be an array');
-  for (const artifact of manifest.artifacts) {
-    if (path.isAbsolute(artifact.path) || artifact.path.split(/[\\/]/).includes('..')) {
-      invalid(`artifact path escapes the package: ${artifact.path}`);
+  const validatePackagePath = (value: string, field: string): void => {
+    if (path.isAbsolute(value) || value.split(/[\\/]/).includes('..')) {
+      invalid(`${field} path escapes the package: ${value}`);
     }
+  };
+  for (const artifact of manifest.artifacts) {
+    validatePackagePath(artifact.path, 'artifact');
     if (!/^[a-f0-9]{64}$/.test(artifact.sha256)) invalid(`invalid SHA-256 for ${artifact.path}`);
     if (!manifest.platforms.includes(artifact.platform)) invalid(`artifact platform is not declared: ${artifact.platform}`);
     if (artifact.architecture !== 'universal' && !manifest.architectures.includes(artifact.architecture)) {
       invalid(`artifact architecture is not declared: ${artifact.architecture}`);
     }
   }
+  if (manifest.android?.project) validatePackagePath(manifest.android.project, 'android.project');
+  if (manifest.android?.manifest) validatePackagePath(manifest.android.manifest, 'android.manifest');
+  for (const source of manifest.android?.sourceDirs ?? []) validatePackagePath(source, 'android.sourceDirs');
+  for (const resource of manifest.android?.resourceDirs ?? []) validatePackagePath(resource, 'android.resourceDirs');
+  for (const source of manifest.ios?.sources ?? []) validatePackagePath(source, 'ios.sources');
+  for (const resource of manifest.ios?.resources ?? []) validatePackagePath(resource, 'ios.resources');
 }
 
 function compareVersions(left: string, right: string): number {

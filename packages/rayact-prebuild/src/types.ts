@@ -8,6 +8,34 @@ export interface RayactModuleArtifact {
   sha256: string;
 }
 
+export interface RayactAndroidModule {
+  /** Package-relative Gradle library project directory. */
+  project?: string;
+  /** Fully-qualified class implementing RayactPlatformModuleRegistration. */
+  registrationClass?: string;
+  /** Maven coordinates added to the application when no Gradle project is used. */
+  dependencies?: string[];
+  /** Package-relative AndroidManifest.xml fragment merged into the application. */
+  manifest?: string;
+  /** Package-relative Java/Kotlin source directories compiled by the application. */
+  sourceDirs?: string[];
+  /** Package-relative Android resource directories. */
+  resourceDirs?: string[];
+}
+
+export interface RayactIosModule {
+  /** Package-relative Swift/Objective-C/C++ source files or directories. */
+  sources?: string[];
+  /** Swift type conforming to RayactPlatformModuleRegistration. */
+  registrationType?: string;
+  /** Apple system frameworks linked by the generated application target. */
+  frameworks?: string[];
+  /** Package-relative resources copied into the application bundle. */
+  resources?: string[];
+  /** Info.plist keys contributed only while this package is selected. */
+  infoPlist?: Record<string, string | number | boolean | string[]>;
+}
+
 /** Canonical package-owned native metadata (`rayact.module.json`, schema v1). */
 export interface RayactModuleManifest {
   $schema?: string;
@@ -39,6 +67,10 @@ export interface RayactModuleManifest {
   nativeDefines?: string[];
   /** Sources compiled into the Emscripten host; web has no dynamic loading. */
   webSources?: string[];
+  /** Optional Android UI/platform integration owned by this package. */
+  android?: RayactAndroidModule;
+  /** Optional iOS UI/platform integration owned by this package. */
+  ios?: RayactIosModule;
 }
 
 /** Modern rayact.config.json entry. Installed modules autolink unless disabled. */
