@@ -64,6 +64,7 @@ export {
   applyAndroidProjectIdentity,
   applyIosProjectIdentity,
   applyLinkingConfiguration,
+  updateAndroidHostInfrastructure,
   copyAndroidPluginArtifacts,
   writeAndroidModuleBuildFiles,
   writeAndroidPlatformAutolinking,

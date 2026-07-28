@@ -54,6 +54,26 @@ function validateLinkingSchemes(schemes: readonly string[]): string[] {
   return normalized;
 }
 
+/**
+ * Native project directories are intentionally reusable, but the registry,
+ * platform-view host, and dev launcher are Rayact-owned infrastructure. Keep
+ * those files current when prebuilding an existing app so newly installed
+ * optional modules compile against the same host contract as the template.
+ */
+export function updateAndroidHostInfrastructure(templateDir: string, androidDir: string): void {
+  const managedFiles = [
+    'app/src/main/java/com/rayact/engine/RayactPlatformRegistry.kt',
+    'app/src/main/java/com/rayact/engine/RayactPlatformViews.kt',
+    'app/src/main/java/com/rayact/app/DevLauncherActivity.kt',
+  ];
+  for (const relative of managedFiles) {
+    const source = path.join(templateDir, relative);
+    const destination = path.join(androidDir, relative);
+    if (!fs.existsSync(source) || !fs.existsSync(path.dirname(destination))) continue;
+    fs.copyFileSync(source, destination);
+  }
+}
+
 function insertBeforeRootPlistClose(xml: string, entries: string): string {
   const close = xml.lastIndexOf('</dict>');
   if (close < 0) throw new Error('Invalid plist: missing root </dict>');
@@ -707,6 +727,7 @@ export async function runPrebuild(options: PrebuildOptions): Promise<{
 
   if (fs.existsSync(androidDir) && !options.force && fs.existsSync(path.join(androidDir, 'gradlew'))) {
     console.warn(`Updating prebuilt jniLibs in existing Android project: ${androidDir}`);
+    updateAndroidHostInfrastructure(templateAndroid, androidDir);
     await copyAndroidPrebuilts(projectRoot, androidDir, enabledPlugins);
   } else {
     if (fs.existsSync(androidDir)) {
