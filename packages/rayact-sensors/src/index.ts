@@ -37,12 +37,12 @@ function call<T>(method: string, payload: unknown = {}): Promise<T> {
   if (!host.platformCall) {
     return Promise.reject(new Error('Rayact sensors are unavailable on this platform'));
   }
-  return new Promise<T>((resolve, reject) => {
-    host.platformCall!('sensors', method, payload, response => {
-      if (response?.ok) resolve(response.value as T);
-      else reject(new Error(response?.error || `Sensor operation failed: ${method}`));
-    });
-  });
+  let response: PlatformResponse | undefined;
+  host.platformCall('sensors', method, payload, value => { response = value; });
+  if (!response) return Promise.reject(new Error(`Sensor operation did not complete: ${method}`));
+  return response.ok
+    ? Promise.resolve(response.value as T)
+    : Promise.reject(new Error(response.error || `Sensor operation failed: ${method}`));
 }
 
 async function drainEvents(): Promise<void> {

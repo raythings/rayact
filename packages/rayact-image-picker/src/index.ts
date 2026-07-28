@@ -50,16 +50,15 @@ export async function requestMediaLibraryPermissionsAsync(): Promise<PermissionR
 }
 
 function platformCall<T>(method: string, data: unknown = {}): Promise<T> {
-  return new Promise((resolve, reject) => {
-    if (!host.platformCall) {
-      reject(new Error('Image picker native bridge is unavailable'));
-      return;
-    }
-    host.platformCall('image-picker', method, data, result => {
-      if (result?.ok) resolve(result.value as T);
-      else reject(new Error(result?.error || `Image picker operation failed: ${method}`));
-    });
-  });
+  if (!host.platformCall) {
+    return Promise.reject(new Error('Image picker native bridge is unavailable'));
+  }
+  let result: { ok: boolean; value?: unknown; error?: string } | undefined;
+  host.platformCall('image-picker', method, data, value => { result = value; });
+  if (!result) return Promise.reject(new Error(`Image picker operation did not complete: ${method}`));
+  return result.ok
+    ? Promise.resolve(result.value as T)
+    : Promise.reject(new Error(result.error || `Image picker operation failed: ${method}`));
 }
 
 async function launchNative(options: ImagePickerOptions): Promise<ImagePickerResult> {

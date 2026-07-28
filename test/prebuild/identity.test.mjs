@@ -46,6 +46,7 @@ test('prebuild refreshes Rayact-owned Android host infrastructure in an existing
   const managed = [
     'app/src/main/java/com/rayact/engine/RayactPlatformRegistry.kt',
     'app/src/main/java/com/rayact/engine/RayactPlatformViews.kt',
+    'app/src/main/java/com/rayact/engine/RayactMobileNetwork.kt',
     'app/src/main/java/com/rayact/app/DevLauncherActivity.kt',
   ];
 

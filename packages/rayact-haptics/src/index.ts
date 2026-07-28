@@ -20,12 +20,12 @@ function call(method: string, payload: unknown = {}): Promise<void> {
     }
     return Promise.reject(new Error('Haptic feedback is unavailable on this platform'));
   }
-  return new Promise((resolve, reject) => {
-    host.platformCall!('haptics', method, payload, result => {
-      if (result?.ok) resolve();
-      else reject(new Error(result?.error || 'Haptic feedback failed'));
-    });
-  });
+  let result: { ok: boolean; error?: string } | undefined;
+  host.platformCall('haptics', method, payload, value => { result = value; });
+  if (!result) return Promise.reject(new Error('Haptic feedback did not complete'));
+  return result.ok
+    ? Promise.resolve()
+    : Promise.reject(new Error(result.error || 'Haptic feedback failed'));
 }
 
 export function selectionAsync(): Promise<void> {

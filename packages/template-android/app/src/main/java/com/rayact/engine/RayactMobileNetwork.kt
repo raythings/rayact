@@ -1,6 +1,7 @@
 package com.rayact.engine
 
 import android.os.StrictMode
+import android.util.Log
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -170,6 +171,11 @@ object RayactMobileNetwork {
                     fetchCandidate(owner, requestId, candidates, index + 1, method, headersJson, body)
                     return
                 }
+                Log.w(
+                    "RayactMobileNetwork",
+                    "fetch failed ${method.uppercase()} $url: ${e.message}",
+                    e,
+                )
                 fetchCalls.remove(owner to requestId, call)
                 enqueueFetch(owner, requestId, 0, "", e.message ?: "Network request failed")
             }

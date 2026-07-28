@@ -64,6 +64,7 @@ export function updateAndroidHostInfrastructure(templateDir: string, androidDir:
   const managedFiles = [
     'app/src/main/java/com/rayact/engine/RayactPlatformRegistry.kt',
     'app/src/main/java/com/rayact/engine/RayactPlatformViews.kt',
+    'app/src/main/java/com/rayact/engine/RayactMobileNetwork.kt',
     'app/src/main/java/com/rayact/app/DevLauncherActivity.kt',
   ];
   for (const relative of managedFiles) {
@@ -123,6 +124,12 @@ export function applyLinkingConfiguration(
       if (!fs.existsSync(file)) continue;
       let xml = fs.readFileSync(file, 'utf8');
       if (xml.includes('<!-- RAYACT_LINKING_INTENT_FILTERS -->')) {
+        xml = xml.replace(
+          /\s*<intent-filter>[\s\S]*?<\/intent-filter>/g,
+          block => schemes.some(scheme =>
+            block.includes(`<data android:scheme="${scheme}" />`)
+          ) ? '' : block
+        );
         xml = xml.replace('<!-- RAYACT_LINKING_INTENT_FILTERS -->', `${filters}\n            <!-- RAYACT_LINKING_INTENT_FILTERS -->`);
       } else {
         xml = xml.replace(
@@ -134,18 +141,22 @@ export function applyLinkingConfiguration(
     }
   }
   if (iosDir && schemes.length) {
-    const value = schemes.map(scheme => [
-        '\t<dict>',
-        '\t\t<key>CFBundleURLName</key>',
-        `\t\t<string>${scheme}</string>`,
-        '\t\t<key>CFBundleURLSchemes</key>',
-        `\t\t<array><string>${scheme}</string></array>`,
-        '\t</dict>',
-      ].join('\n')).join('\n');
     for (const name of ['Info.plist', 'Info-Release.plist']) {
       const file = path.join(iosDir, name);
       if (!fs.existsSync(file)) continue;
       let xml = fs.readFileSync(file, 'utf8');
+      const missing = schemes.filter(scheme =>
+        !xml.includes(`<array><string>${scheme}</string></array>`)
+      );
+      if (!missing.length) continue;
+      const value = missing.map(scheme => [
+          '\t<dict>',
+          '\t\t<key>CFBundleURLName</key>',
+          `\t\t<string>${scheme}</string>`,
+          '\t\t<key>CFBundleURLSchemes</key>',
+          `\t\t<array><string>${scheme}</string></array>`,
+          '\t</dict>',
+        ].join('\n')).join('\n');
       xml = appendPlistArray(xml, 'CFBundleURLTypes', value);
       fs.writeFileSync(file, xml);
     }

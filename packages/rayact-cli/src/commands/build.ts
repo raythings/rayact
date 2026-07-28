@@ -364,7 +364,14 @@ async function buildAndroidApk(
   const variant = flags.debug ? 'Debug' : 'Release';
   const gradlew = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
   console.log(`Building APK (:app:assemble${variant}) ...`);
-  const gradle = spawnSync(gradlew, [`:app:assemble${variant}`], {
+  // Source modules and the engine live outside the generated Android project.
+  // Gradle's native merge tasks do not consistently notice that CMake replaced
+  // one of those external outputs, which can package yesterday's .so after a
+  // successful native rebuild. Re-run the packaging graph for source builds;
+  // prebuilt consumer apps retain the normal incremental path.
+  const gradleArgs = [`:app:assemble${variant}`];
+  if (sourceTargets.length > 0) gradleArgs.push('--rerun-tasks');
+  const gradle = spawnSync(gradlew, gradleArgs, {
     cwd: androidDir,
     stdio: 'inherit',
     shell: process.platform === 'win32'

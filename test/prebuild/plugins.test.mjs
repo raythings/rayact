@@ -364,6 +364,12 @@ test('platform autolinking copies iOS sources and contributes frameworks and pli
 
 test('linking and module plist values are inserted at the root and preserve existing schemes', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rayact-linking-ios-'));
+  const androidMain = path.join(root, 'android/app/src/main');
+  fs.mkdirSync(androidMain, { recursive: true });
+  fs.writeFileSync(
+    path.join(androidMain, 'AndroidManifest.xml'),
+    '<manifest><application><activity><!-- RAYACT_LINKING_INTENT_FILTERS --></activity></application></manifest>',
+  );
   const plist = `<?xml version="1.0"?><plist><dict>
     <key>CFBundleURLTypes</key><array><dict>
       <key>CFBundleURLName</key><string>rayact</string>
@@ -373,10 +379,14 @@ test('linking and module plist values are inserted at the root and preserve exis
   </dict></plist>`;
   fs.writeFileSync(path.join(root, 'Info.plist'), plist);
   fs.writeFileSync(path.join(root, 'Info-Release.plist'), plist);
-  applyLinkingConfiguration(null, root, ['codesitter']);
+  applyLinkingConfiguration(path.join(root, 'android'), root, ['codesitter']);
+  applyLinkingConfiguration(path.join(root, 'android'), root, ['codesitter']);
+  const android = fs.readFileSync(path.join(androidMain, 'AndroidManifest.xml'), 'utf8');
+  assert.equal((android.match(/android:scheme="codesitter"/g) ?? []).length, 1);
   const output = fs.readFileSync(path.join(root, 'Info.plist'), 'utf8');
   assert.match(output, /<string>rayact<\/string>/);
   assert.match(output, /<string>codesitter<\/string>/);
+  assert.equal((output.match(/<string>codesitter<\/string>/g) ?? []).length, 2);
   const atsEnd = output.indexOf('</dict>', output.indexOf('<key>NSAppTransportSecurity</key>'));
   assert.ok(output.indexOf('<string>codesitter</string>') < output.indexOf('<key>NSAppTransportSecurity</key>'));
   assert.doesNotMatch(output.slice(output.indexOf('<key>NSAppTransportSecurity</key>'), atsEnd), /codesitter/);

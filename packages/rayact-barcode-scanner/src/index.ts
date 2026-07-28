@@ -51,16 +51,15 @@ export async function isAvailableAsync(): Promise<boolean> {
 }
 
 function platformCall<T>(method: string, data: unknown = {}): Promise<T> {
-  return new Promise((resolve, reject) => {
-    if (!host.platformCall) {
-      reject(new Error('Barcode scanner native bridge is unavailable'));
-      return;
-    }
-    host.platformCall('barcode-scanner', method, data, result => {
-      if (result?.ok) resolve(result.value as T);
-      else reject(new Error(result?.error || `Barcode scanner operation failed: ${method}`));
-    });
-  });
+  if (!host.platformCall) {
+    return Promise.reject(new Error('Barcode scanner native bridge is unavailable'));
+  }
+  let result: { ok: boolean; value?: unknown; error?: string } | undefined;
+  host.platformCall('barcode-scanner', method, data, value => { result = value; });
+  if (!result) return Promise.reject(new Error(`Barcode scanner operation did not complete: ${method}`));
+  return result.ok
+    ? Promise.resolve(result.value as T)
+    : Promise.reject(new Error(result.error || `Barcode scanner operation failed: ${method}`));
 }
 
 async function scanNative(options: ScanOptions): Promise<BarcodeResult> {
