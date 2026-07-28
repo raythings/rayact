@@ -31,10 +31,11 @@ type PickerHost = typeof globalThis & {
   document?: Document;
   FileReader?: typeof FileReader;
   Image?: typeof Image;
-  devCall?: (
+  platformCall?: (
+    module: string,
     method: string,
     data: unknown,
-    callback: (result: unknown) => void
+    callback: (result: { ok: boolean; value?: unknown; error?: string }) => void
   ) => void;
 };
 
@@ -44,24 +45,27 @@ export async function requestMediaLibraryPermissionsAsync(): Promise<PermissionR
   if (host.__rayactImagePickerRequestPermission) {
     return host.__rayactImagePickerRequestPermission();
   }
-  if (host.document || host.devCall) return { granted: true, canAskAgain: true, status: 'granted' };
-  return { granted: false, canAskAgain: false, status: 'denied' };
+  if (host.document) return { granted: true, canAskAgain: true, status: 'granted' };
+  return platformCall<PermissionResponse>('requestPermission');
 }
 
-function devCall(method: string, data?: unknown): Promise<unknown> {
+function platformCall<T>(method: string, data: unknown = {}): Promise<T> {
   return new Promise((resolve, reject) => {
-    if (!host.devCall) {
+    if (!host.platformCall) {
       reject(new Error('Image picker native bridge is unavailable'));
       return;
     }
-    host.devCall(method, data, resolve);
+    host.platformCall('image-picker', method, data, result => {
+      if (result?.ok) resolve(result.value as T);
+      else reject(new Error(result?.error || `Image picker operation failed: ${method}`));
+    });
   });
 }
 
-async function launchDevClient(options: ImagePickerOptions): Promise<ImagePickerResult> {
-  await devCall('startImagePicker', options);
+async function launchNative(options: ImagePickerOptions): Promise<ImagePickerResult> {
+  await platformCall('startPicker', options);
   for (;;) {
-    const raw = await devCall('pollImagePicker');
+    const raw = await platformCall<unknown>('pollPicker');
     const state = typeof raw === 'string' ? JSON.parse(raw) : raw;
     if (state.status === 'success') return { canceled: false, assets: state.assets };
     if (state.status === 'canceled') return { canceled: true, assets: null };
@@ -125,11 +129,8 @@ export async function launchImageLibraryAsync(
   options: ImagePickerOptions = {},
 ): Promise<ImagePickerResult> {
   if (host.__rayactImagePickerLaunch) return host.__rayactImagePickerLaunch(options);
-  if (host.devCall) return launchDevClient(options);
   if (host.document) return launchWeb(options);
-  const error = new Error('Image library picker is unavailable on this platform');
-  error.name = 'RayactImagePickerUnavailableError';
-  throw error;
+  return launchNative(options);
 }
 
 export default { requestMediaLibraryPermissionsAsync, launchImageLibraryAsync };

@@ -1,7 +1,5 @@
 import Foundation
 import UIKit
-import PhotosUI
-import UniformTypeIdentifiers
 
 enum DevClientBridge {
     private static var pendingLinkingURLs: [String] = []
@@ -33,9 +31,6 @@ enum DevClientBridge {
     private static var browser: NetServiceBrowser?
 
     private static var devCallResultStorage: [CChar] = [0]
-    private static let imagePickerLock = NSLock()
-    private static var imagePickerState = "{\"status\":\"idle\"}"
-    private static var imagePickerDelegate: RayactImagePickerDelegate?
 
     static let devCallCallback: RayactNativeBridge.DevCallFn = { methodPtr, dataJsonPtr in
         let method = methodPtr.map { String(cString: $0) } ?? ""
@@ -263,13 +258,6 @@ enum DevClientBridge {
             return DevServerLoader.lastError ?? ""
         case "isConnectLoading":
             return DevServerLoader.loading
-        case "startImagePicker":
-            startImagePicker(base64: data?["base64"] as? Bool ?? false)
-            return nil
-        case "pollImagePicker":
-            imagePickerLock.lock()
-            defer { imagePickerLock.unlock() }
-            return imagePickerState
         default:
             return nil
         }
@@ -415,32 +403,6 @@ enum DevClientBridge {
         DevServerLoader.prefetch(baseUrl: serverUrl)
     }
 
-    fileprivate static func setImagePickerState(_ value: [String: Any]) {
-        guard let data = try? JSONSerialization.data(withJSONObject: value),
-              let json = String(data: data, encoding: .utf8) else { return }
-        imagePickerLock.lock()
-        imagePickerState = json
-        imagePickerLock.unlock()
-    }
-
-    private static func startImagePicker(base64: Bool) {
-        guard let vc = activeViewController ?? devHostViewController else {
-            setImagePickerState(["status": "error", "error": "No live view controller"])
-            return
-        }
-        setImagePickerState(["status": "pending"])
-        DispatchQueue.main.async {
-            var configuration = PHPickerConfiguration(photoLibrary: .shared())
-            configuration.filter = .images
-            configuration.selectionLimit = 1
-            let picker = PHPickerViewController(configuration: configuration)
-            let delegate = RayactImagePickerDelegate(includeBase64: base64)
-            imagePickerDelegate = delegate
-            picker.delegate = delegate
-            vc.present(picker, animated: true)
-        }
-    }
-
 }
 
 private final class DiscoveryDelegate: NSObject, NetServiceBrowserDelegate, NetServiceDelegate {
@@ -489,53 +451,5 @@ func devCallFromNative(method: String, dataJson: String?) -> String {
             return json
         }
         return "null"
-    }
-}
-
-private final class RayactImagePickerDelegate: NSObject, PHPickerViewControllerDelegate {
-    private let includeBase64: Bool
-    init(includeBase64: Bool) { self.includeBase64 = includeBase64 }
-
-    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-        picker.dismiss(animated: true)
-        guard let result = results.first else {
-            DevClientBridge.setImagePickerState(["status": "canceled"])
-            return
-        }
-        let provider = result.itemProvider
-        guard let type = provider.registeredTypeIdentifiers.first(where: {
-            UTType($0)?.conforms(to: .image) == true
-        }) else {
-            DevClientBridge.setImagePickerState(["status": "error", "error": "Selected item is not an image"])
-            return
-        }
-        provider.loadDataRepresentation(forTypeIdentifier: type) { data, error in
-            guard let data, let image = UIImage(data: data) else {
-                DevClientBridge.setImagePickerState([
-                    "status": "error",
-                    "error": error?.localizedDescription ?? "Unable to decode selected image",
-                ])
-                return
-            }
-            let ext = UTType(type)?.preferredFilenameExtension ?? "img"
-            let fileName = provider.suggestedName.map { "\($0).\(ext)" } ?? "image.\(ext)"
-            let url = FileManager.default.temporaryDirectory
-                .appendingPathComponent(UUID().uuidString)
-                .appendingPathExtension(ext)
-            do {
-                try data.write(to: url, options: .atomic)
-                var asset: [String: Any] = [
-                    "uri": url.absoluteString,
-                    "mimeType": UTType(type)?.preferredMIMEType ?? "image/*",
-                    "width": Int(image.size.width * image.scale),
-                    "height": Int(image.size.height * image.scale),
-                    "fileName": fileName,
-                ]
-                if self.includeBase64 { asset["base64"] = data.base64EncodedString() }
-                DevClientBridge.setImagePickerState(["status": "success", "assets": [asset]])
-            } catch {
-                DevClientBridge.setImagePickerState(["status": "error", "error": error.localizedDescription])
-            }
-        }
     }
 }

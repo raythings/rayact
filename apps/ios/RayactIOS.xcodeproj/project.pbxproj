@@ -246,6 +246,7 @@
 		AA4EB0BBE4E733EF16E2A671 /* rtextures.c in Sources */ = {isa = PBXBuildFile; fileRef = 2946B84A4A7FF9FF1C43DFC2 /* rtextures.c */; };
 		AAB5AD349E5D678534F951CB /* accessibility_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A176FB6E02D45A0F886BAECD /* accessibility_bridge.cpp */; };
 		AB26A09F3A1B1E49D384E222 /* Layout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 34CDCD40C0C701946B2232F9 /* Layout.cpp */; };
+		ABBC2A67413F143F5BF3D960 /* RayactImagePickerRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09F8BFE43B1B3641775DECF1 /* RayactImagePickerRegistration.swift */; };
 		AC30CC98E9364E1F1F05872D /* m3_function.c in Sources */ = {isa = PBXBuildFile; fileRef = F3A43D53B829B514AC4FCBD1 /* m3_function.c */; };
 		ADFBA51BFE00F4CE13FFE980 /* SystemAppearance.mm in Sources */ = {isa = PBXBuildFile; fileRef = 78460481074191BFF35CD1D8 /* SystemAppearance.mm */; };
 		AEB7DD0BF6E2EB77866AD698 /* SvgModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F580CD4E2F9FFAA4B1341D35 /* SvgModel.cpp */; };
@@ -390,6 +391,7 @@
 		064FE048FD9149B0E8885A4C /* RayactHapticsRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactHapticsRegistration.swift; sourceTree = "<group>"; };
 		07412C116ED17EEBC93CAE53 /* SegmentedButton.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SegmentedButton.cpp; sourceTree = "<group>"; };
 		0843C3B037B28BE2C80615D4 /* Animations.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Animations.cpp; sourceTree = "<group>"; };
+		09F8BFE43B1B3641775DECF1 /* RayactImagePickerRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactImagePickerRegistration.swift; sourceTree = "<group>"; };
 		0B2B14115148E4551DD6759E /* worker_wasm.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = worker_wasm.hpp; sourceTree = "<group>"; };
 		0B8B502FEB56CFC73F60E738 /* net.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = net.hpp; sourceTree = "<group>"; };
 		0D41062625106E61244E9CD1 /* FlexDirection.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FlexDirection.h; sourceTree = "<group>"; };
@@ -816,6 +818,22 @@
 			path = rendering;
 			sourceTree = "<group>";
 		};
+		3841FB6A01A22E9F7CD7B3EB /* image-picker */ = {
+			isa = PBXGroup;
+			children = (
+				3F620E65B76DD55215EE1C4E /* Sources */,
+			);
+			path = "image-picker";
+			sourceTree = "<group>";
+		};
+		3F620E65B76DD55215EE1C4E /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				09F8BFE43B1B3641775DECF1 /* RayactImagePickerRegistration.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
 		4F40DE555414AD387D7D98A2 /* barcode-scanner */ = {
 			isa = PBXGroup;
 			children = (
@@ -1074,6 +1092,7 @@
 				24F487096F5E169EF7F1AFCC /* RayactGeneratedModules.swift */,
 				4F40DE555414AD387D7D98A2 /* barcode-scanner */,
 				D20B0DD45F53B1F168F5FB99 /* haptics */,
+				3841FB6A01A22E9F7CD7B3EB /* image-picker */,
 				05EDCCFA8E3F9B215A4AF704 /* sensors */,
 			);
 			path = Autolinked;
@@ -1596,6 +1615,7 @@
 				7981C44E9D8F76143694DE55 /* RayactHapticsRegistration.swift in Sources */,
 				3A62D21DEF7029A946CC1E8E /* RayactHost.swift in Sources */,
 				F2FED92558BF715FE5DBB2AB /* RayactHostCallbacksBridge.swift in Sources */,
+				ABBC2A67413F143F5BF3D960 /* RayactImagePickerRegistration.swift in Sources */,
 				15BCDF543FED685FFE548917 /* RayactMetalView.swift in Sources */,
 				727ED2D364206A452B0691AA /* RayactMobileNetwork.swift in Sources */,
 				B3CDA4E49203E1A34EE4392E /* RayactNativeBridge.swift in Sources */,

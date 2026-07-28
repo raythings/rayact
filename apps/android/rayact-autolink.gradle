@@ -2,7 +2,7 @@
 android {
     sourceSets {
         main {
-            java.srcDirs += ['/Volumes/Storage/Projects/rayact/rayact/packages/rayact-barcode-scanner/android/src/main/java', '/Volumes/Storage/Projects/rayact/rayact/packages/rayact-haptics/android/src/main/java', '/Volumes/Storage/Projects/rayact/rayact/packages/rayact-sensors/android/src/main/java', '/Volumes/Storage/Projects/rayact/rayact/packages/rayact-webview/android/src/main/java']
+            java.srcDirs += ['/Volumes/Storage/Projects/rayact/rayact/packages/rayact-barcode-scanner/android/src/main/java', '/Volumes/Storage/Projects/rayact/rayact/packages/rayact-haptics/android/src/main/java', '/Volumes/Storage/Projects/rayact/rayact/packages/rayact-image-picker/android/src/main/java', '/Volumes/Storage/Projects/rayact/rayact/packages/rayact-sensors/android/src/main/java', '/Volumes/Storage/Projects/rayact/rayact/packages/rayact-webview/android/src/main/java']
         }
     }
 }

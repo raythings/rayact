@@ -96,7 +96,7 @@ test('sensor implementations are package-owned and dev hosts only forward generi
   assert.equal(manifest.ios.registrationType, 'RayactSensorsRegistration');
 });
 
-test('barcode scanner and haptics implementations are package-owned', () => {
+test('scanner, image picker, and haptics implementations are package-owned', () => {
   const androidBridge = fs.readFileSync(
     path.resolve('packages/template-android/app/src/main/java/com/rayact/devclient/DevClientBridge.kt'),
     'utf8',
@@ -113,16 +113,32 @@ test('barcode scanner and haptics implementations are package-owned', () => {
     path.resolve('packages/rayact-barcode-scanner/ios/RayactBarcodeScannerRegistration.swift'),
     'utf8',
   );
+  const androidImagePicker = fs.readFileSync(
+    path.resolve('packages/rayact-image-picker/android/src/main/java/dev/rayact/imagepicker/RayactImagePickerRegistration.kt'),
+    'utf8',
+  );
+  const iosImagePicker = fs.readFileSync(
+    path.resolve('packages/rayact-image-picker/ios/RayactImagePickerRegistration.swift'),
+    'utf8',
+  );
   const hapticsManifest = JSON.parse(fs.readFileSync(
     path.resolve('packages/rayact-haptics/rayact.module.json'),
     'utf8',
   ));
 
-  assert.doesNotMatch(androidBridge, /GmsBarcode|startBarcodeScan|pollBarcodeScan/);
-  assert.doesNotMatch(iosBridge, /AVFoundation|Vision|QRScanner|startBarcodeScan|pollBarcodeScan/);
+  assert.doesNotMatch(
+    androidBridge,
+    /GmsBarcode|startBarcodeScan|pollBarcodeScan|MediaStore\.ACTION_PICK_IMAGES|startImagePicker/,
+  );
+  assert.doesNotMatch(
+    iosBridge,
+    /AVFoundation|Vision|QRScanner|startBarcodeScan|pollBarcodeScan|PhotosUI|PHPicker|startImagePicker/,
+  );
   assert.match(androidScanner, /GmsBarcodeScanning/);
   assert.match(iosScanner, /import AVFoundation/);
   assert.match(iosScanner, /VNDetectBarcodesRequest/);
+  assert.match(androidImagePicker, /MediaStore\.ACTION_PICK_IMAGES/);
+  assert.match(iosImagePicker, /PHPickerViewController/);
   assert.equal(
     hapticsManifest.android.registrationClass,
     'dev.rayact.haptics.RayactHapticsRegistration',

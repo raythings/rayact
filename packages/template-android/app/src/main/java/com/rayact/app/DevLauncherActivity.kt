@@ -96,12 +96,9 @@ class DevLauncherActivity : AppCompatActivity() {
         }
     }
 
-    @Deprecated("Activity result bridge for the optional image picker")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == DevClientBridge.REQUEST_IMAGE_PICKER) {
-            DevClientBridge.onImagePickerResult(resultCode, data)
-        }
+        RayactPlatformRegistry.shared.emitActivityResult(requestCode, resultCode, data)
     }
 
     override fun onStart() {

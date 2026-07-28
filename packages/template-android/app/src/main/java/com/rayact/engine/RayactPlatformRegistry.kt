@@ -2,6 +2,7 @@ package com.rayact.engine
 
 import android.content.Context
 import android.app.Activity
+import android.content.Intent
 import android.view.View
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
@@ -66,6 +67,18 @@ class RayactPlatformRegistry {
 
     fun hasModule(name: String): Boolean = modules.containsKey(name)
     fun hasViewFactory(kind: String): Boolean = viewFactories.containsKey(kind)
+
+    fun emitActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        val payload = JSONObject()
+            .put("requestCode", requestCode)
+            .put("resultCode", resultCode)
+            .put("uri", data?.dataString ?: JSONObject.NULL)
+            .toString()
+            .toByteArray(Charsets.UTF_8)
+        modules.values.forEach { module ->
+            module.invoke("__activityResult", payload) { }
+        }
+    }
 
     companion object {
         val shared = RayactPlatformRegistry()

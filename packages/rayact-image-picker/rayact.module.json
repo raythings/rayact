@@ -15,6 +15,13 @@
   "permissions": [],
   "configurationSchema": { "type": "object", "additionalProperties": false },
   "officialDevApp": true,
-  "android": {},
-  "ios": { "frameworks": ["PhotosUI", "UniformTypeIdentifiers"] }
+  "android": {
+    "sourceDirs": ["android/src/main/java"],
+    "registrationClass": "dev.rayact.imagepicker.RayactImagePickerRegistration"
+  },
+  "ios": {
+    "frameworks": ["PhotosUI", "UniformTypeIdentifiers"],
+    "sources": ["ios/RayactImagePickerRegistration.swift"],
+    "registrationType": "RayactImagePickerRegistration"
+  }
 }

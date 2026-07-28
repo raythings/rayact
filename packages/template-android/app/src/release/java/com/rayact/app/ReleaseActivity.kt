@@ -59,6 +59,15 @@ class ReleaseActivity : AppCompatActivity() {
         session.deliverURL(intent.dataString)
     }
 
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: android.content.Intent?,
+    ) {
+        super.onActivityResult(requestCode, resultCode, data)
+        RayactPlatformRegistry.shared.emitActivityResult(requestCode, resultCode, data)
+    }
+
     override fun onStart() {
         super.onStart()
         if (session.acquireGraphics()) host.recreateSurfacesAfterGraphicsResume()

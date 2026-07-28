@@ -10,10 +10,6 @@ import android.net.nsd.NsdServiceInfo
 import android.util.Log
 import android.os.Debug
 import android.os.SystemClock
-import android.provider.MediaStore
-import android.provider.OpenableColumns
-import android.graphics.BitmapFactory
-import android.util.Base64
 import java.io.RandomAccessFile
 import com.rayact.app.BuildConfig
 import com.rayact.engine.RayactEngineSession
@@ -48,9 +44,6 @@ object DevClientBridge {
     @Volatile private var discoveryGeneration = 0
     private var lastCpuTicks = -1L
     private var lastCpuWallMs = -1L
-    @Volatile private var imagePickerState = JSONObject().put("status", "idle").toString()
-    @Volatile private var imagePickerWantsBase64 = false
-    const val REQUEST_IMAGE_PICKER = 58421
 
     fun init(context: Context, session: RayactEngineSession? = null) {
         appContext = context.applicationContext
@@ -285,8 +278,6 @@ object DevClientBridge {
             }
             "getConnectError" -> DevServerLoader.lastError ?: ""
             "isConnectLoading" -> DevServerLoader.loading
-            "startImagePicker" -> { startImagePicker(data?.optBoolean("base64", false) == true); null }
-            "pollImagePicker" -> imagePickerState
             "pollLinkingURL", "getInitialURL" -> RayactEngineSession.pollPendingURL()
             else -> null
         }
@@ -391,65 +382,6 @@ object DevClientBridge {
             runCatching { nsdManager?.stopServiceDiscovery(listener) }
         }
         discoveryListener = null
-    }
-
-    private fun startImagePicker(base64: Boolean) {
-        val activity = liveActivity()
-        if (activity == null) {
-            imagePickerState = JSONObject().put("status", "error").put("error", "No live activity").toString()
-            return
-        }
-        imagePickerWantsBase64 = base64
-        imagePickerState = JSONObject().put("status", "pending").toString()
-        activity.runOnUiThread {
-            val intent = if (android.os.Build.VERSION.SDK_INT >= 33) {
-                Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*")
-            } else {
-                Intent(Intent.ACTION_OPEN_DOCUMENT)
-                    .addCategory(Intent.CATEGORY_OPENABLE)
-                    .setType("image/*")
-            }
-            runCatching { activity.startActivityForResult(intent, REQUEST_IMAGE_PICKER) }
-                .onFailure {
-                    imagePickerState = JSONObject().put("status", "error")
-                        .put("error", it.message ?: "Unable to open image picker").toString()
-                }
-        }
-    }
-
-    fun onImagePickerResult(resultCode: Int, intent: Intent?) {
-        if (resultCode != Activity.RESULT_OK || intent?.data == null) {
-            imagePickerState = JSONObject().put("status", "canceled").toString()
-            return
-        }
-        val context = appContext ?: return
-        val uri = intent.data!!
-        Thread {
-            runCatching {
-                val resolver = context.contentResolver
-                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
-                var name: String? = null
-                resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-                    if (cursor.moveToFirst()) name = cursor.getString(0)
-                }
-                val asset = JSONObject()
-                    .put("uri", uri.toString())
-                    .put("mimeType", resolver.getType(uri) ?: "image/*")
-                    .put("width", options.outWidth.coerceAtLeast(0))
-                    .put("height", options.outHeight.coerceAtLeast(0))
-                    .put("fileName", name ?: JSONObject.NULL)
-                if (imagePickerWantsBase64) {
-                    val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: ByteArray(0)
-                    asset.put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP))
-                }
-                imagePickerState = JSONObject().put("status", "success")
-                    .put("assets", JSONArray().put(asset)).toString()
-            }.onFailure {
-                imagePickerState = JSONObject().put("status", "error")
-                    .put("error", it.message ?: "Unable to read selected image").toString()
-            }
-        }.start()
     }
 
 }
