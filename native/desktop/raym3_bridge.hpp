@@ -147,6 +147,8 @@ void refreshStylesForColorScheme(JSContext* ctx);
 // Re-resolve every node's className against the current stylesheet state. Used
 // after CSS custom properties change so var()-derived styles pick up new values.
 void refreshClassNameStyles(JSContext* ctx);
+// Drop every cached className→Style resolution (stylesheet/theme/vars changed).
+void invalidateClassStyleCache();
 void setSafeAreaInsets(float top, float right, float bottom, float left);
 void resolvePopoverAnchors();
 void installAnimatedStyleBuffer(JSContext* ctx, JSValue global);

@@ -1532,9 +1532,17 @@ static JSValue JS_rayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst
     std::string error;
     if (!httpGet(url, body, error)) {
         fprintf(stderr, "rayactDevFetch: %s\n", error.c_str());
-        body.clear();
+        body = "Error: [rayact:devfetch] " + error;
     }
 #endif
+    // An empty body is never valid module source: evaluating it registers no
+    // module, the importer then reads null, and the real cause (a 404 for a
+    // mistyped import, a dropped adb reverse) surfaces much later as an
+    // unrelated TypeError — or, on Android, as a hard crash. Hand the module
+    // runtime an error string it knows how to show instead.
+    if (body.empty()) {
+        body = std::string("Error: [rayact:devfetch] empty response from ") + url;
+    }
     JS_FreeCString(ctx, url);
     return JS_NewString(ctx, body.c_str());
 }

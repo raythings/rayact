@@ -11,6 +11,7 @@ import type { Server as HttpServer } from 'node:http';
 import { REACT_DEVTOOLS_BACKEND_SETUP_ID, reactDevtoolsBackendSource } from '@rayact/devtools/react';
 import { mergeNativeModules, resolveRayactPlugins, type RayactNativeModuleEntry } from '@rayact/prebuild';
 import { loadRayactConfig, resolveAppName } from './config.js';
+import { rayactCssInlineModule } from './rayactHostModule.js';
 
 const require = createRequire(import.meta.url);
 
@@ -595,13 +596,24 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
       }
 
       if (id.startsWith('\0rayact-css:')) {
-        // Web included: the host preloads app-assets.json entries into MEMFS
-        // before boot, so importCSS resolves the same project-relative path on
-        // every platform. (Historically web returned an empty module because
-        // the file did not exist in the WASM filesystem.)
         const encoded = id.slice('\0rayact-css:'.length, -'.js'.length);
         const cssFile = decodeURIComponent(encoded);
         const nativePath = toNativeCssPath(cssFile, root);
+        // Development: importCSS() resolves against the DEVICE filesystem,
+        // where the project only exists in a bundled build — on a dev-server
+        // device it silently produced zero classes and the app rendered
+        // unstyled with no diagnostic. Inline the stylesheet text into the
+        // module instead (the server has it right here), so the device parses
+        // it via importCSSText with no second fetch and no path resolution.
+        // HMR still works: editing the file invalidates this module and the
+        // js-update re-serves it with the fresh text.
+        if (mode === 'development') {
+          const cssModule = rayactCssInlineModule(cssFile, nativePath);
+          if (cssModule) return cssModule;
+        }
+        // Release/dev-client bundles: the build stages the file next to the
+        // bundle and the host preloads it (web: MEMFS via app-assets.json), so
+        // the project-relative path resolves on every platform.
         return [
           `const cssClasses = globalThis.importCSS(${JSON.stringify(nativePath)});`,
           'export default cssClasses;'
@@ -682,6 +694,17 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
           `})().catch(function(err){`,
           `  var msg = err && err.message ? err.message : String(err);`,
           `  if (globalThis.console) globalThis.console.error('[rayact:bootstrap]', msg);`,
+          `  // Without this the app is simply a black screen: the bootstrap`,
+          `  // failure only ever reached logcat, so a bad module, an unreachable`,
+          `  // dev server or a stale bundle all looked identical (and looked like`,
+          `  // an app bug). Put it on the error overlay the same way a build`,
+          `  // error is reported.`,
+          `  try {`,
+          `    var bridge = getDefaultRuntime().bridge;`,
+          `    if (bridge && bridge.showError) {`,
+          `      bridge.showError('Bootstrap failed: ' + msg, err && err.stack ? err.stack : undefined);`,
+          `    }`,
+          `  } catch (_) {}`,
           `});`
         ].join('\n');
       }

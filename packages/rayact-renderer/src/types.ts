@@ -102,6 +102,12 @@ export interface TextStyle {
   color?: ColorValue;
   fontSize?: number;
   lineHeight?: number;
+  /** Unitless CSS `line-height` — a multiple of the resolved font size. */
+  lineHeightRatio?: number;
+  /** Clamp to at most this many lines (CSS `-webkit-line-clamp`). */
+  maxLines?: number;
+  /** Applied to the last line when `maxLines` truncates. */
+  ellipsizeMode?: 'head' | 'middle' | 'tail' | 'clip';
   letterSpacing?: number;
   fontFamily?: string;
   fontWeight?: number | string;
@@ -308,6 +314,10 @@ export interface SafeAreaProps extends BaseProps {
 
 export interface TextProps extends BaseProps {
   text?: string;
+  /** Clamp to at most this many lines. 0 / undefined = unlimited. */
+  numberOfLines?: number;
+  /** How the clamped line ends. Default `clip` (react-native's default is `tail`). */
+  ellipsizeMode?: 'head' | 'middle' | 'tail' | 'clip';
   selectable?: boolean;
   selectionColor?: ColorValue;
   onSelectionChange?: (event: {
@@ -509,6 +519,30 @@ export interface FlatListProps<T = unknown> extends Omit<ScrollViewProps, 'child
   refreshing?: boolean;
   onRefresh?: () => void;
   initialNumToRender?: number;
+  /**
+   * Cell recycling (default true). Mounted cells are a stable pool: moving the
+   * window reassigns `item`/`index`/position on existing cells instead of
+   * unmounting and remounting rows, so a scroll costs prop updates rather than
+   * React mounts. Row-local `useState` therefore SURVIVES recycling — derive
+   * from props, or reset on the item key. Set false for the legacy
+   * unmount/remount windowing.
+   */
+  recycleItems?: boolean;
+  /**
+   * Rows with different shapes should return different types, so each type
+   * recycles within its own pool and cells always reconcile against the same
+   * element tree.
+   */
+  getItemType?: (item: T, index: number) => string | number;
+  /** Cache-buster for rows that read state outside `item`. */
+  extraData?: unknown;
+  /**
+   * How far ahead (ms of travel at the current velocity) to pre-mount cells
+   * when flinging. Higher = fewer blank cells, more mounted rows.
+   */
+  overscanLeadMs?: number;
+  /** Idle cells kept per type before the pool shrinks. */
+  maxIdleSlotsPerType?: number;
 }
 
 export interface ModalProps extends BaseProps {

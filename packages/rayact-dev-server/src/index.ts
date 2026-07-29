@@ -7,7 +7,18 @@ export {
   writeRayactBuild
 } from './bundler.js';
 export type { RayactAssetRecord, RayactBuildMode, RayactBuildOutput } from './bundler.js';
-export { adbInstall, adbLaunch, cleanupLegacyAdbCdpForwards, parseAdbForwards, setupAdbReverse } from './adb.js';
+export {
+  adbInstall,
+  adbLaunch,
+  cleanupLegacyAdbCdpForwards,
+  hasAdbReverse,
+  listAdbDevices,
+  parseAdbDevices,
+  parseAdbForwards,
+  setupAdbReverse,
+  startAdbReverseWatcher
+} from './adb.js';
+export type { AdbReverseWatcher, AdbReverseWatcherOptions } from './adb.js';
 export { compileToBytecode } from './compile.js';
 export {
   loadRayactConfig,

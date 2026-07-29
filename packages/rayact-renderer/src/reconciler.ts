@@ -30,12 +30,23 @@ import {
   emitDispose,
   emitInsert,
   emitRemove,
+  emitSetClassName,
   emitSetRoot,
+  emitSetStyle,
   emitSetText,
   flushCommands,
   internString,
   styleEncSize,
 } from './commandBuffer.js';
+import { emitDirtySlab } from './commandBuffer.js';
+import {
+  claimSlot,
+  clearSlabPresent,
+  releaseSlot,
+  slabEnabled,
+  styleAllHot,
+  writeSlabStyle,
+} from './styleSlab.js';
 import { TYPE } from './protocol.js';
 
 // --- host-config profiler (gated by globalThis.__RAYACT_PROF) ---------------
@@ -68,6 +79,7 @@ function profFlush(): void {
 import {
   perfIncCreated,
   perfIncBinaryCreateFallback,
+  perfIncBinaryUpdateFallback,
   perfIncDisposed,
   perfIncUpdated,
   perfMarkCommitEnd,
@@ -254,7 +266,7 @@ function isText(instance: Child): instance is RayactTextInstance {
 }
 
 const sharedBinaryCreateProps = new Set<string>([
-  'style', 'children', 'key', 'ref',
+  'style', 'children', 'key', 'ref', 'className',
   ...eventProps,
 ]);
 
@@ -421,6 +433,7 @@ function disposeSubtreeNative(instance: RayactHostInstance): void {
     disposeSubtreeNative(grandchild);
   }
   if (binaryEnabled()) {
+    releaseSlot(instance.node.id);
     emitDispose(instance.node.id);
     perfIncDisposed();
     return;
@@ -581,6 +594,81 @@ function diffProps(oldProps: Record<string, unknown>, newProps: Record<string, u
   return changed || oldProps.children !== newProps.children ? payload : null;
 }
 
+// --- binary style updates (opcode 12) ---------------------------------------
+// Native SET_STYLE is a MERGE (per-key assignment into the retained Style), so
+// a key that was set before and is now absent/null would silently keep its old
+// value. Detect that and force the sync fallback, which replays the whole
+// style through the bridge's replace semantics.
+function styleHasRemovedKeys(oldStyle: unknown, newStyle: unknown): boolean {
+  if (oldStyle == null) return false;
+  // Arrays / non-objects can't be key-compared — treat as removable → fallback.
+  if (typeof oldStyle !== 'object' || Array.isArray(oldStyle)) return true;
+  if (newStyle == null) {
+    // Old had keys, new has none → everything removed (unless old was empty).
+    for (const k in oldStyle as Record<string, unknown>) {
+      if ((oldStyle as Record<string, unknown>)[k] != null) return true;
+    }
+    return false;
+  }
+  if (typeof newStyle !== 'object' || Array.isArray(newStyle)) return true;
+  const oldObj = oldStyle as Record<string, unknown>;
+  const newObj = newStyle as Record<string, unknown>;
+  for (const k in oldObj) {
+    const ov = oldObj[k];
+    if (ov == null) continue;
+    if (k === 'text' && typeof ov === 'object' && !Array.isArray(ov)) {
+      if (styleHasRemovedKeys(ov, newObj[k])) return true;
+      continue;
+    }
+    if (newObj[k] == null) return true;
+  }
+  return false;
+}
+
+// Attempt an opcode-12 binary style update. Returns true when the update was
+// emitted into the command buffer (caller must skip the sync path). Gates:
+// style-only payload (checked by caller), no removed keys, codec-representable.
+function tryBinaryStyleUpdate(
+  instance: RayactHostInstance,
+  oldStyle: unknown,
+  newStyle: unknown,
+): boolean {
+  if (styleHasRemovedKeys(oldStyle, newStyle)) {
+    perfIncBinaryUpdateFallback(instance.type, 'style-key-removed');
+    return false;
+  }
+  // Fast lane: every set key has a StyleSlab field → write the values straight
+  // into the shared arena and emit only a 3-word DIRTY_SLAB marker.
+  if (slabEnabled() && styleAllHot(newStyle)) {
+    const slot = claimSlot(instance.node.id);
+    if (slot >= 0) {
+      writeSlabStyle(slot, newStyle as Record<string, unknown>);
+      emitDirtySlab(instance.node.id, slot);
+      return true;
+    }
+    perfIncBinaryUpdateFallback(instance.type, 'slab-full');
+    // Arena exhausted — fall through to the opcode-12 stream.
+  }
+  const styleBytes = styleEncSize(newStyle);
+  if (styleBytes < 0) {
+    perfIncBinaryUpdateFallback(instance.type, 'unsupported-style');
+    return false;
+  }
+  // Mixed hot/cold delta going through the stream: drop the slab's presence
+  // for these keys so a later slab apply can't resurrect stale values.
+  if (slabEnabled()) clearSlabPresent(instance.node.id, newStyle);
+  emitSetStyle(instance.node.id, newStyle as Record<string, unknown> | null | undefined, styleBytes);
+  return true;
+}
+
+// A sync bridge call for a node that may already have buffered binary ops in
+// this commit (e.g. a binary hide followed by a sync fallback) would apply out
+// of order — drain the arena first so per-node ordering is preserved. Same
+// mid-commit split the encoder itself does on arena overflow (harmless).
+function flushBeforeSyncFallback(): void {
+  if (binaryEnabled()) flushCommands();
+}
+
 function scanAndBindSharedValues(nodeId: number, style: unknown) {
   if (!style) return;
   if (Array.isArray(style)) {
@@ -612,7 +700,27 @@ function tryCreateBinaryNode(
   normalizedType: HostNodeType,
   props: Record<string, unknown>,
 ): { id: number; type: HostNodeType } | null {
+  const node = tryCreateBinaryNodeInner(normalizedType, props);
+  if (node) {
+    // CSS class base rides the same stream: native resolves the interned class
+    // list through its flyweight cache and layers it UNDER the create style.
+    const cn = props.className;
+    if (typeof cn === 'string' && cn.length > 0) {
+      emitSetClassName(node.id, internString(cn));
+    }
+  }
+  return node;
+}
+
+function tryCreateBinaryNodeInner(
+  normalizedType: HostNodeType,
+  props: Record<string, unknown>,
+): { id: number; type: HostNodeType } | null {
   if (!binaryEnabled()) return null;
+  if (props.className != null && typeof props.className !== 'string') {
+    perfIncBinaryCreateFallback(normalizedType, 'unsupported-classname');
+    return null;
+  }
   if (hasEventHandler(props)) {
     perfIncBinaryCreateFallback(normalizedType, 'event-handler');
     return null;
@@ -911,10 +1019,28 @@ export const RayactReconciler = __reconcilerGlobal.__RAYACT_RECONCILER__ ?? (__r
       instance.props = newProps;
       const payload = diffProps(oldProps, newProps);
       if (payload) {
-        const handled = nativeFastPath.updateNode
-          ? updateNodeFast(instance.node.id, instance.type, oldProps, newProps)
-          : false;
+        let handled = false;
+        if (binaryEnabled()) {
+          // Binary path only for pure style updates: any other prop (value,
+          // className, source, …) forces the whole payload down the sync path
+          // so a style write can't be reordered against a sibling prop write.
+          let styleOnly = true;
+          let hasKeys = false;
+          for (const k in payload) {
+            hasKeys = true;
+            if (k !== 'style') { styleOnly = false; break; }
+          }
+          if (styleOnly && hasKeys) {
+            handled = tryBinaryStyleUpdate(instance, oldProps.style, payload.style);
+          } else if (hasKeys) {
+            perfIncBinaryUpdateFallback(instance.type, 'non-style-props');
+          }
+        }
+        if (!handled && nativeFastPath.updateNode) {
+          handled = updateNodeFast(instance.node.id, instance.type, oldProps, newProps);
+        }
         if (!handled) {
+          flushBeforeSyncFallback();
           getDefaultRuntime().bridge.updateNode(instance.node, payload);
         }
       }
@@ -938,6 +1064,13 @@ export const RayactReconciler = __reconcilerGlobal.__RAYACT_RECONCILER__ ?? (__r
 
   commitMount: () => {},
   hideInstance: (instance: RayactHostInstance) => {
+    if (binaryEnabled()) {
+      // display:'none' is always codec-representable, so hides never fall back
+      // — which keeps a hide→unhide pair on one node path-sticky (both binary)
+      // whenever the unhide style encodes too.
+      emitSetStyle(instance.node.id, { display: 'none' });
+      return;
+    }
     if (nativeFastPath.batch) {
       enqueueMutation({ op: 'setStyle', nodeId: instance.node.id, style: { display: 'none' } });
       return;
@@ -946,6 +1079,19 @@ export const RayactReconciler = __reconcilerGlobal.__RAYACT_RECONCILER__ ?? (__r
   },
   hideTextInstance: () => {},
   unhideInstance: (instance: RayactHostInstance, props: Record<string, unknown>) => {
+    if (binaryEnabled()) {
+      // Undo the binary hide via merge semantics: re-emit the node's style with
+      // an explicit display reset (the style's own display wins if present).
+      const style = { display: 'flex', ...(props.style as Record<string, unknown> | undefined) };
+      const styleBytes = styleEncSize(style);
+      if (styleBytes >= 0) {
+        emitSetStyle(instance.node.id, style, styleBytes);
+        return;
+      }
+      perfIncBinaryUpdateFallback(instance.type, 'unsupported-style');
+      // Sync fallback below must not reorder against the buffered binary hide.
+      flushBeforeSyncFallback();
+    }
     if (nativeFastPath.batch && props.style) {
       enqueueMutation({ op: 'setStyle', nodeId: instance.node.id, style: props.style as Record<string, unknown> });
       return;

@@ -13645,19 +13645,27 @@
     dirty: 5
   };
   let sharedFloatArray$2 = null;
+  let sharedFloatBuffer$2 = null;
+  function animatedStyleView$2() {
+    const globalObj2 = globalThis;
+    const buffer = globalObj2.__rayactAnimatedStyleBuffer ?? globalObj2.__rayactSharedStyleBuffer;
+    if (!buffer) return null;
+    if (buffer !== sharedFloatBuffer$2) {
+      sharedFloatBuffer$2 = buffer;
+      sharedFloatArray$2 = new Float32Array(buffer);
+    }
+    return sharedFloatArray$2;
+  }
   function writeSharedStyle$1(nodeId, property, value) {
     const propOffset = OFFSETS$3[property];
     if (propOffset !== void 0) {
       const globalObj2 = globalThis;
-      const buffer = globalObj2.__rayactAnimatedStyleBuffer ?? globalObj2.__rayactSharedStyleBuffer;
-      if (buffer && !sharedFloatArray$2) {
-        sharedFloatArray$2 = new Float32Array(buffer);
-      }
-      if (sharedFloatArray$2) {
+      const sharedFloatArray2 = animatedStyleView$2();
+      if (sharedFloatArray2) {
         const index = nodeId * SLAB_SIZE$2 + propOffset;
         const dirtyIndex = nodeId * SLAB_SIZE$2 + OFFSETS$3.dirty;
-        sharedFloatArray$2[index] = value;
-        sharedFloatArray$2[dirtyIndex] = 1;
+        sharedFloatArray2[index] = value;
+        sharedFloatArray2[dirtyIndex] = 1;
       }
       if (typeof globalObj2.__rayactSetAnimatedStyle === "function") {
         globalObj2.__rayactSetAnimatedStyle(nodeId, {
@@ -22461,6 +22469,16 @@ ${stack}` : message;
     dirty: 5
   };
   let sharedFloatArray$1 = null;
+  let sharedFloatBuffer$1 = null;
+  function animatedStyleView$1() {
+    const buffer = globalObj.__rayactAnimatedStyleBuffer ?? globalObj.__rayactSharedStyleBuffer;
+    if (!buffer) return null;
+    if (buffer !== sharedFloatBuffer$1) {
+      sharedFloatBuffer$1 = buffer;
+      sharedFloatArray$1 = new Float32Array(buffer);
+    }
+    return sharedFloatArray$1;
+  }
   function withTiming(target, duration = 300) {
     return {
       type: "timing",
@@ -22494,13 +22512,10 @@ ${stack}` : message;
         this.propertyOffset = propOffset;
         this.index = nodeId * SLAB_SIZE$1 + propOffset;
         this.dirtyIndex = nodeId * SLAB_SIZE$1 + OFFSETS$2.dirty;
-        const buffer = globalObj.__rayactAnimatedStyleBuffer ?? globalObj.__rayactSharedStyleBuffer;
-        if (buffer && !sharedFloatArray$1) {
-          sharedFloatArray$1 = new Float32Array(buffer);
-        }
-        if (sharedFloatArray$1) {
-          sharedFloatArray$1[this.index] = this.initialValue;
-          sharedFloatArray$1[this.dirtyIndex] = 1;
+        const view2 = animatedStyleView$1();
+        if (view2) {
+          view2[this.index] = this.initialValue;
+          view2[this.dirtyIndex] = 1;
         }
         if (typeof globalObj.__rayactRegisterAnimatedNode === "function") {
           globalObj.__rayactRegisterAnimatedNode(nodeId, {
@@ -22510,26 +22525,20 @@ ${stack}` : message;
       }
     }
     get value() {
-      const buffer = globalObj.__rayactAnimatedStyleBuffer ?? globalObj.__rayactSharedStyleBuffer;
-      if (buffer && !sharedFloatArray$1) {
-        sharedFloatArray$1 = new Float32Array(buffer);
-      }
-      return this.index !== -1 && sharedFloatArray$1 ? sharedFloatArray$1[this.index] : this.initialValue;
+      const view2 = animatedStyleView$1();
+      return this.index !== -1 && view2 ? view2[this.index] : this.initialValue;
     }
     set value(newValue) {
-      const buffer = globalObj.__rayactAnimatedStyleBuffer ?? globalObj.__rayactSharedStyleBuffer;
-      if (buffer && !sharedFloatArray$1) {
-        sharedFloatArray$1 = new Float32Array(buffer);
-      }
+      const view2 = animatedStyleView$1();
       if (typeof newValue === "number") {
         if (this.fallbackFrameId !== null) {
           cancelAnimationFrame(this.fallbackFrameId);
           this.fallbackFrameId = null;
         }
         this.initialValue = newValue;
-        if (this.index !== -1 && sharedFloatArray$1) {
-          sharedFloatArray$1[this.index] = newValue;
-          sharedFloatArray$1[this.dirtyIndex] = 1;
+        if (this.index !== -1 && view2) {
+          view2[this.index] = newValue;
+          view2[this.dirtyIndex] = 1;
         }
         if (this.nodeId !== null && this.propertyOffset !== -1 && typeof globalObj.__rayactSetAnimatedStyle === "function") {
           globalObj.__rayactSetAnimatedStyle(this.nodeId, {
@@ -22562,22 +22571,19 @@ ${stack}` : message;
         const t = config.duration <= 0 ? 1 : Math.min(1, elapsed / config.duration);
         const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
         const val = fromVal + diff * eased;
-        const buffer = globalObj.__rayactAnimatedStyleBuffer ?? globalObj.__rayactSharedStyleBuffer;
-        if (buffer && !sharedFloatArray$1) {
-          sharedFloatArray$1 = new Float32Array(buffer);
-        }
-        if (this.index !== -1 && sharedFloatArray$1) {
-          sharedFloatArray$1[this.index] = val;
-          sharedFloatArray$1[this.dirtyIndex] = 1;
+        const view2 = animatedStyleView$1();
+        if (this.index !== -1 && view2) {
+          view2[this.index] = val;
+          view2[this.dirtyIndex] = 1;
         } else {
           this.initialValue = val;
         }
         if (t < 1) {
           this.fallbackFrameId = requestAnimationFrame(step);
         } else {
-          if (this.index !== -1 && sharedFloatArray$1) {
-            sharedFloatArray$1[this.index] = config.target;
-            sharedFloatArray$1[this.dirtyIndex] = 1;
+          if (this.index !== -1 && view2) {
+            view2[this.index] = config.target;
+            view2[this.dirtyIndex] = 1;
           } else {
             this.initialValue = config.target;
           }
@@ -22611,7 +22617,8 @@ ${stack}` : message;
     updated: 0,
     disposed: 0,
     mutationCount: 0,
-    binaryCreateFallbacks: 0
+    binaryCreateFallbacks: 0,
+    binaryUpdateFallbacks: 0
   };
   let commitStart = 0;
   function enabled() {
@@ -22643,13 +22650,15 @@ ${stack}` : message;
       "updated.nodes": counters.updated,
       "disposed.nodes": counters.disposed,
       "mutation.count": counters.mutationCount,
-      "binary.create.fallbacks": counters.binaryCreateFallbacks
+      "binary.create.fallbacks": counters.binaryCreateFallbacks,
+      "binary.update.fallbacks": counters.binaryUpdateFallbacks
     });
     counters.created = 0;
     counters.updated = 0;
     counters.disposed = 0;
     counters.mutationCount = 0;
     counters.binaryCreateFallbacks = 0;
+    counters.binaryUpdateFallbacks = 0;
   }
   function perfIncCreated() {
     counters.created++;
@@ -22672,6 +22681,14 @@ ${stack}` : message;
     if (!enabled()) return;
     counters.binaryCreateFallbacks++;
     perfLog$1("binary.create.fallback", {
+      type,
+      reason
+    });
+  }
+  function perfIncBinaryUpdateFallback(type, reason) {
+    if (!enabled()) return;
+    counters.binaryUpdateFallbacks++;
+    perfLog$1("binary.update.fallback", {
       type,
       reason
     });
@@ -22781,10 +22798,16 @@ ${stack}` : message;
     CREATE: 10,
     //      nodeId, typeId, styleN, [styleEntry...]
     CREATE_PARAM: 11,
+    // nodeId, typeId, stringId, flags, size, color, variantId, styleN, [styleEntry...]
+    SET_STYLE: 12,
     //   nodeId, styleN, [styleEntry...]
     NEW_STRING: 13,
     //  stringId, byteLen, <utf8, padded to 4>
-    SET_TEXT: 14
+    SET_TEXT: 14,
+    //    nodeId, stringId
+    // --- reserved ---
+    SET_CLASSNAME: 15,
+    DIRTY_SLAB: 18
   };
   const TYPE = {
     VIEW: 1,
@@ -22841,10 +22864,20 @@ ${stack}` : message;
     fontSize: 40,
     lineHeight: 41,
     letterSpacing: 42,
+    lineHeightRatio: 43,
+    maxLines: 44,
+    borderTopWidth: 45,
+    borderRightWidth: 46,
+    borderBottomWidth: 47,
+    borderLeftWidth: 48,
     // colors (uint32)
     backgroundColor: 50,
     borderColor: 51,
     color: 52,
+    borderTopColor: 53,
+    borderRightColor: 54,
+    borderBottomColor: 55,
+    borderLeftColor: 56,
     // enums (int)
     flexDirection: 60,
     justifyContent: 61,
@@ -22854,7 +22887,8 @@ ${stack}` : message;
     position: 65,
     overflow: 66,
     pointerEvents: 67,
-    flexWrap: 68
+    flexWrap: 68,
+    ellipsizeMode: 69
   };
   const ENUM_VALUES = {
     flexDirection: {
@@ -22907,12 +22941,19 @@ ${stack}` : message;
     pointerEvents: {
       none: 0,
       auto: 1
+    },
+    // react-native `ellipsizeMode`; `clip` is the default (hard cut, no ellipsis).
+    ellipsizeMode: {
+      clip: 0,
+      tail: 1,
+      head: 2,
+      middle: 3
     }
   };
   let view = null;
   let capacity = 0;
   let cursor = 0;
-  function init() {
+  function init$1() {
     if (view) return true;
     const g = globalThis;
     const buf = g.__rayactCommandBuffer;
@@ -22922,7 +22963,7 @@ ${stack}` : message;
     return true;
   }
   function binaryEnabled() {
-    return globalThis.__RAYACT_USE_BINARY === true && init();
+    return globalThis.__RAYACT_USE_BINARY === true && init$1();
   }
   let nextNodeId = 0;
   function allocNodeId() {
@@ -23063,6 +23104,12 @@ ${stack}` : message;
     w32(options.variantId ?? 0);
     writeStyleRun(style);
   }
+  function emitSetStyle(nodeId, style, styleBytes = styleEncSize(style)) {
+    ensureSpace(8 + styleBytes);
+    w32(CMD.SET_STYLE);
+    w32(nodeId);
+    writeStyleRun(style);
+  }
   function utf8ByteLen(s) {
     let n = 0;
     for (let i = 0; i < s.length; i++) {
@@ -23127,6 +23174,18 @@ ${stack}` : message;
     w32(nodeId);
     w32(stringId);
   }
+  function emitSetClassName(nodeId, stringId) {
+    ensureSpace(12);
+    w32(CMD.SET_CLASSNAME);
+    w32(nodeId);
+    w32(stringId);
+  }
+  function emitDirtySlab(nodeId, slot) {
+    ensureSpace(12);
+    w32(CMD.DIRTY_SLAB);
+    w32(nodeId);
+    w32(slot);
+  }
   function flushCommands() {
     if (!view || cursor === 0) return;
     const g = globalThis;
@@ -23136,6 +23195,153 @@ ${stack}` : message;
     g.__rayactFlushCommands(len);
     const end = typeof performance !== "undefined" ? performance.now() : Date.now();
     perfLogBatch(end - start, len >> 2);
+  }
+  const WORDS = 48;
+  const GEN = 0;
+  const DIRTY = 1;
+  const PRESENT_LO = 2;
+  const PRESENT_HI = 3;
+  const NODE_ID = 39;
+  const FIRST_FIELD = 4;
+  const FIELD = {
+    translateX: [4, false],
+    translateY: [5, false],
+    scale: [6, false],
+    rotation: [7, false],
+    opacity: [8, false],
+    borderRadius: [9, false],
+    borderWidth: [10, false],
+    backgroundColor: [11, true],
+    borderColor: [12, true],
+    color: [13, true],
+    width: [14, false],
+    height: [15, false],
+    minWidth: [16, false],
+    minHeight: [17, false],
+    maxWidth: [18, false],
+    maxHeight: [19, false],
+    flexGrow: [20, false],
+    flexShrink: [21, false],
+    flexBasis: [22, false],
+    top: [23, false],
+    right: [24, false],
+    bottom: [25, false],
+    left: [26, false],
+    marginTop: [27, false],
+    marginRight: [28, false],
+    marginBottom: [29, false],
+    marginLeft: [30, false],
+    paddingTop: [31, false],
+    paddingRight: [32, false],
+    paddingBottom: [33, false],
+    paddingLeft: [34, false],
+    rowGap: [35, false],
+    columnGap: [36, false]
+  };
+  let f32 = null;
+  let u32 = null;
+  let slotCount = 0;
+  function init() {
+    if (u32) return true;
+    const g = globalThis;
+    const buf = g.__rayactStyleSlab;
+    if (!buf) return false;
+    f32 = new Float32Array(buf);
+    u32 = new Uint32Array(buf);
+    slotCount = buf.byteLength / 4 / WORDS | 0;
+    return true;
+  }
+  function slabEnabled() {
+    return globalThis.__RAYACT_USE_STYLE_SLAB === true && init();
+  }
+  const slotByNode = /* @__PURE__ */ new Map();
+  const freeSlots = [];
+  let nextSlot = 0;
+  function claimSlot(nodeId) {
+    const existing2 = slotByNode.get(nodeId);
+    if (existing2 !== void 0) return existing2;
+    let slot;
+    if (freeSlots.length > 0) {
+      slot = freeSlots.pop();
+    } else if (nextSlot < slotCount) {
+      slot = nextSlot++;
+    } else {
+      return -1;
+    }
+    slotByNode.set(nodeId, slot);
+    const base = slot * WORDS;
+    u32[base + PRESENT_LO] = 0;
+    u32[base + PRESENT_HI] = 0;
+    u32[base + DIRTY] = 0;
+    u32[base + NODE_ID] = nodeId;
+    return slot;
+  }
+  function releaseSlot(nodeId) {
+    const slot = slotByNode.get(nodeId);
+    if (slot === void 0) return;
+    slotByNode.delete(nodeId);
+    freeSlots.push(slot);
+  }
+  function styleAllHot(style) {
+    if (style == null || typeof style !== "object" || Array.isArray(style)) return false;
+    let any = false;
+    for (const k in style) {
+      const v = style[k];
+      if (v == null) continue;
+      if (FIELD[k] === void 0 || typeof v !== "number") return false;
+      any = true;
+    }
+    return any;
+  }
+  function writeSlabStyle(slot, style) {
+    const base = slot * WORDS;
+    const U = u32;
+    const F = f32;
+    const g = U[base + GEN];
+    U[base + GEN] = g + 1;
+    let lo = U[base + PRESENT_LO];
+    let hi = U[base + PRESENT_HI];
+    for (const k in style) {
+      const v = style[k];
+      if (v == null) continue;
+      const field = FIELD[k];
+      const idx = field[0];
+      if (field[1]) U[base + idx] = v;
+      else F[base + idx] = v;
+      const bit = idx - FIRST_FIELD;
+      if (bit < 32) lo |= 1 << bit;
+      else hi |= 1 << bit - 32;
+    }
+    U[base + PRESENT_LO] = lo;
+    U[base + PRESENT_HI] = hi;
+    U[base + DIRTY] = 1;
+    U[base + GEN] = g + 2;
+  }
+  function clearSlabPresent(nodeId, style) {
+    const slot = slotByNode.get(nodeId);
+    if (slot === void 0) return;
+    if (style == null || typeof style !== "object" || Array.isArray(style)) return;
+    const base = slot * WORDS;
+    const U = u32;
+    let lo = U[base + PRESENT_LO];
+    let hi = U[base + PRESENT_HI];
+    const clearKey = (k) => {
+      const field = FIELD[k];
+      if (field === void 0) return;
+      const bit = field[0] - FIRST_FIELD;
+      if (bit < 32) lo &= ~(1 << bit);
+      else hi &= ~(1 << bit - 32);
+    };
+    for (const k in style) {
+      const v = style[k];
+      if (k === "text" && v && typeof v === "object" && !Array.isArray(v)) {
+        for (const tk in v) clearKey(tk);
+        continue;
+      }
+      clearKey(k);
+    }
+    U[base + PRESENT_LO] = lo;
+    U[base + PRESENT_HI] = hi;
   }
   const prof = {
     create: 0,
@@ -23233,7 +23439,7 @@ ${stack}` : message;
   function isText(instance) {
     return instance.kind === "text";
   }
-  const sharedBinaryCreateProps = /* @__PURE__ */ new Set(["style", "children", "key", "ref", ...eventProps]);
+  const sharedBinaryCreateProps = /* @__PURE__ */ new Set(["style", "children", "key", "ref", "className", ...eventProps]);
   function hasOnlyProps(props, allowed) {
     for (const key in props) {
       if (!allowed.has(key)) return false;
@@ -23387,6 +23593,7 @@ ${stack}` : message;
       disposeSubtreeNative(grandchild);
     }
     if (binaryEnabled()) {
+      releaseSlot(instance.node.id);
       emitDispose(instance.node.id);
       perfIncDisposed();
       return;
@@ -23526,6 +23733,55 @@ ${stack}` : message;
     }
     return changed || oldProps.children !== newProps.children ? payload : null;
   }
+  function styleHasRemovedKeys(oldStyle, newStyle) {
+    if (oldStyle == null) return false;
+    if (typeof oldStyle !== "object" || Array.isArray(oldStyle)) return true;
+    if (newStyle == null) {
+      for (const k in oldStyle) {
+        if (oldStyle[k] != null) return true;
+      }
+      return false;
+    }
+    if (typeof newStyle !== "object" || Array.isArray(newStyle)) return true;
+    const oldObj = oldStyle;
+    const newObj = newStyle;
+    for (const k in oldObj) {
+      const ov = oldObj[k];
+      if (ov == null) continue;
+      if (k === "text" && typeof ov === "object" && !Array.isArray(ov)) {
+        if (styleHasRemovedKeys(ov, newObj[k])) return true;
+        continue;
+      }
+      if (newObj[k] == null) return true;
+    }
+    return false;
+  }
+  function tryBinaryStyleUpdate(instance, oldStyle, newStyle) {
+    if (styleHasRemovedKeys(oldStyle, newStyle)) {
+      perfIncBinaryUpdateFallback(instance.type, "style-key-removed");
+      return false;
+    }
+    if (slabEnabled() && styleAllHot(newStyle)) {
+      const slot = claimSlot(instance.node.id);
+      if (slot >= 0) {
+        writeSlabStyle(slot, newStyle);
+        emitDirtySlab(instance.node.id, slot);
+        return true;
+      }
+      perfIncBinaryUpdateFallback(instance.type, "slab-full");
+    }
+    const styleBytes = styleEncSize(newStyle);
+    if (styleBytes < 0) {
+      perfIncBinaryUpdateFallback(instance.type, "unsupported-style");
+      return false;
+    }
+    if (slabEnabled()) clearSlabPresent(instance.node.id, newStyle);
+    emitSetStyle(instance.node.id, newStyle, styleBytes);
+    return true;
+  }
+  function flushBeforeSyncFallback() {
+    if (binaryEnabled()) flushCommands();
+  }
   function scanAndBindSharedValues(nodeId, style) {
     if (!style) return;
     if (Array.isArray(style)) {
@@ -23553,7 +23809,21 @@ ${stack}` : message;
     }
   }
   function tryCreateBinaryNode(normalizedType, props) {
+    const node = tryCreateBinaryNodeInner(normalizedType, props);
+    if (node) {
+      const cn = props.className;
+      if (typeof cn === "string" && cn.length > 0) {
+        emitSetClassName(node.id, internString(cn));
+      }
+    }
+    return node;
+  }
+  function tryCreateBinaryNodeInner(normalizedType, props) {
     if (!binaryEnabled()) return null;
+    if (props.className != null && typeof props.className !== "string") {
+      perfIncBinaryCreateFallback(normalizedType, "unsupported-classname");
+      return null;
+    }
     if (hasEventHandler(props)) {
       perfIncBinaryCreateFallback(normalizedType, "event-handler");
       return null;
@@ -23862,8 +24132,28 @@ ${stack}` : message;
         instance.props = newProps;
         const payload = diffProps(oldProps, newProps);
         if (payload) {
-          const handled = nativeFastPath.updateNode ? updateNodeFast(instance.node.id, instance.type, oldProps, newProps) : false;
+          let handled = false;
+          if (binaryEnabled()) {
+            let styleOnly = true;
+            let hasKeys = false;
+            for (const k in payload) {
+              hasKeys = true;
+              if (k !== "style") {
+                styleOnly = false;
+                break;
+              }
+            }
+            if (styleOnly && hasKeys) {
+              handled = tryBinaryStyleUpdate(instance, oldProps.style, payload.style);
+            } else if (hasKeys) {
+              perfIncBinaryUpdateFallback(instance.type, "non-style-props");
+            }
+          }
+          if (!handled && nativeFastPath.updateNode) {
+            handled = updateNodeFast(instance.node.id, instance.type, oldProps, newProps);
+          }
           if (!handled) {
+            flushBeforeSyncFallback();
             getDefaultRuntime().bridge.updateNode(instance.node, payload);
           }
         }
@@ -23886,6 +24176,12 @@ ${stack}` : message;
     commitMount: () => {
     },
     hideInstance: (instance) => {
+      if (binaryEnabled()) {
+        emitSetStyle(instance.node.id, {
+          display: "none"
+        });
+        return;
+      }
       if (nativeFastPath.batch) {
         enqueueMutation({
           op: "setStyle",
@@ -23903,6 +24199,19 @@ ${stack}` : message;
     hideTextInstance: () => {
     },
     unhideInstance: (instance, props) => {
+      if (binaryEnabled()) {
+        const style = {
+          display: "flex",
+          ...props.style
+        };
+        const styleBytes = styleEncSize(style);
+        if (styleBytes >= 0) {
+          emitSetStyle(instance.node.id, style, styleBytes);
+          return;
+        }
+        perfIncBinaryUpdateFallback(instance.type, "unsupported-style");
+        flushBeforeSyncFallback();
+      }
       if (nativeFastPath.batch && props.style) {
         enqueueMutation({
           op: "setStyle",
@@ -28675,12 +28984,12 @@ ${stack}` : message;
     if (!host2.platformCall) {
       return Promise.reject(new Error("Rayact sensors are unavailable on this platform"));
     }
-    return new Promise((resolve, reject) => {
-      host2.platformCall("sensors", method, payload, (response) => {
-        if (response?.ok) resolve(response.value);
-        else reject(new Error(response?.error || `Sensor operation failed: ${method}`));
-      });
+    let response;
+    host2.platformCall("sensors", method, payload, (value) => {
+      response = value;
     });
+    if (!response) return Promise.reject(new Error(`Sensor operation did not complete: ${method}`));
+    return response.ok ? Promise.resolve(response.value) : Promise.reject(new Error(response.error || `Sensor operation failed: ${method}`));
   }
   async function drainEvents() {
     const events = await call$1("drainEvents").catch(() => []);
@@ -29107,16 +29416,15 @@ ${stack}` : message;
   }
   const host = globalThis;
   function platformCall(method, data = {}) {
-    return new Promise((resolve, reject) => {
-      if (!host.platformCall) {
-        reject(new Error("Barcode scanner native bridge is unavailable"));
-        return;
-      }
-      host.platformCall("barcode-scanner", method, data, (result) => {
-        if (result?.ok) resolve(result.value);
-        else reject(new Error(result?.error || `Barcode scanner operation failed: ${method}`));
-      });
+    if (!host.platformCall) {
+      return Promise.reject(new Error("Barcode scanner native bridge is unavailable"));
+    }
+    let result;
+    host.platformCall("barcode-scanner", method, data, (value) => {
+      result = value;
     });
+    if (!result) return Promise.reject(new Error(`Barcode scanner operation did not complete: ${method}`));
+    return result.ok ? Promise.resolve(result.value) : Promise.reject(new Error(result.error || `Barcode scanner operation failed: ${method}`));
   }
   async function scanNative(options) {
     await platformCall("startScan", options);
@@ -29888,7 +30196,22 @@ ${stack}` : message;
     }, typeof children === "function" ? children(state2) : children);
   });
   function Text(props) {
-    return React.createElement("rayact-text", props);
+    const {
+      numberOfLines,
+      ellipsizeMode,
+      style,
+      ...rest
+    } = props;
+    if (numberOfLines == null && ellipsizeMode == null) {
+      return React.createElement("rayact-text", props);
+    }
+    const clamp = {};
+    if (numberOfLines != null) clamp.maxLines = numberOfLines;
+    clamp.ellipsizeMode = ellipsizeMode ?? "tail";
+    return React.createElement("rayact-text", {
+      ...rest,
+      style: [style, clamp]
+    });
   }
   function Button(props) {
     return React.createElement("rayact-button", props);
@@ -37246,19 +37569,27 @@ ${stack}` : message;
     dirty: 5
   };
   let sharedFloatArray = null;
+  let sharedFloatBuffer = null;
+  function animatedStyleView() {
+    const globalObj2 = globalThis;
+    const buffer = globalObj2.__rayactAnimatedStyleBuffer ?? globalObj2.__rayactSharedStyleBuffer;
+    if (!buffer) return null;
+    if (buffer !== sharedFloatBuffer) {
+      sharedFloatBuffer = buffer;
+      sharedFloatArray = new Float32Array(buffer);
+    }
+    return sharedFloatArray;
+  }
   function writeSharedStyle(nodeId, property, value) {
     const propOffset = OFFSETS[property];
     if (propOffset !== void 0) {
       const globalObj2 = globalThis;
-      const buffer = globalObj2.__rayactAnimatedStyleBuffer ?? globalObj2.__rayactSharedStyleBuffer;
-      if (buffer && !sharedFloatArray) {
-        sharedFloatArray = new Float32Array(buffer);
-      }
-      if (sharedFloatArray) {
+      const sharedFloatArray2 = animatedStyleView();
+      if (sharedFloatArray2) {
         const index = nodeId * SLAB_SIZE + propOffset;
         const dirtyIndex = nodeId * SLAB_SIZE + OFFSETS.dirty;
-        sharedFloatArray[index] = value;
-        sharedFloatArray[dirtyIndex] = 1;
+        sharedFloatArray2[index] = value;
+        sharedFloatArray2[dirtyIndex] = 1;
       }
       if (typeof globalObj2.__rayactSetAnimatedStyle === "function") {
         globalObj2.__rayactSetAnimatedStyle(nodeId, {

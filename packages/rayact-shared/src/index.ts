@@ -352,3 +352,55 @@ export namespace Platform {
     return specifics.default;
   }
 }
+
+// ─── Module-bus sync invoke (shared-slab fast path) ─────────────────────────
+// Prefers __rayact_invoke_shared (hosts ≥ 0.0.5): args are written into a
+// per-context shared slab and the result is read back from it — no argument
+// copy, no per-call ArrayBuffer allocation. Falls back transparently to
+// __rayact_invoke on older hosts. The returned Uint8Array for the fast path is
+// a VIEW over the slab: decode/copy it before the next invoke.
+type InvokeGlobals = {
+  __rayact_invoke?: (name: string, method: string, args?: ArrayBufferLike) => ArrayBuffer;
+  __rayact_invoke_shared?: (name: string, method: string, argByteLen: number) => number;
+  __rayact_invoke_slab?: () => number;
+  __rayact_invoke_take?: () => ArrayBuffer;
+  __rayact_module_buffer?: (id: number) => ArrayBuffer;
+};
+
+let invokeSlab: Uint8Array | null = null;
+let invokeSlabChecked = false;
+
+function slabView(): Uint8Array | null {
+  if (invokeSlabChecked) return invokeSlab;
+  invokeSlabChecked = true;
+  const g = globalThis as InvokeGlobals;
+  if (
+    typeof g.__rayact_invoke_shared === 'function' &&
+    typeof g.__rayact_invoke_slab === 'function' &&
+    typeof g.__rayact_module_buffer === 'function'
+  ) {
+    try {
+      invokeSlab = new Uint8Array(g.__rayact_module_buffer(g.__rayact_invoke_slab()));
+    } catch {
+      invokeSlab = null;
+    }
+  }
+  return invokeSlab;
+}
+
+/**
+ * Synchronous module-bus invoke. The result view is only valid until the next
+ * invoke — copy (`.slice()`) if it must outlive it.
+ */
+export function invokeSync(name: string, method: string, args?: Uint8Array): Uint8Array {
+  const g = globalThis as InvokeGlobals;
+  const slab = slabView();
+  const argLen = args ? args.byteLength : 0;
+  if (slab && argLen <= slab.byteLength) {
+    if (args && argLen > 0) slab.set(args);
+    const res = g.__rayact_invoke_shared!(name, method, argLen);
+    if (res >= 0) return slab.subarray(0, res);
+    return new Uint8Array(g.__rayact_invoke_take!());
+  }
+  return new Uint8Array(g.__rayact_invoke!(name, method, args ? args.buffer : undefined));
+}

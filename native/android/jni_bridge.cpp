@@ -2418,30 +2418,53 @@ std::string androidDevCall(const char* method, const char* dataJson) {
     return result;
 }
 
+// Error sentinel handed back to the JS module runtime. Mirrors
+// DevServerLoader.DEV_FETCH_ERROR_PREFIX: leading "Error:" so ModuleHmrRuntime
+// refuses to eval it as module source and shows it instead.
+static const char* kDevFetchErrorPrefix = "Error: [rayact:devfetch]";
+
 std::string androidDevFetch(const char* url) {
-    if (!g_jvm || !url) return "";
+    if (!g_jvm || !url) return std::string(kDevFetchErrorPrefix) + " no JVM attached";
     JNIEnv* env = nullptr;
     bool needDetach = false;
     jint rs = g_jvm->GetEnv((void**)&env, JNI_VERSION_1_6);
     if (rs == JNI_EDETACHED) {
-        if (g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) return "";
+        if (g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK)
+            return std::string(kDevFetchErrorPrefix) + " could not attach the fetch thread to the JVM";
         needDetach = true;
     } else if (rs != JNI_OK) {
-        return "";
+        return std::string(kDevFetchErrorPrefix) + " no JNI environment for this thread";
     }
     std::string result;
+    std::string failure;
     jclass cls = env->FindClass("com/rayact/devclient/DevServerLoader");
-    if (cls) {
+    if (!cls) {
+        // Clear before any further JNI call: a pending exception makes every
+        // subsequent JNI call undefined behaviour, and CheckJNI aborts the
+        // process outright rather than returning an error.
+        if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); }
+        failure = "DevServerLoader class not found";
+    } else {
         jmethodID m = env->GetStaticMethodID(cls, "devFetchFromNative",
             "(Ljava/lang/String;)Ljava/lang/String;");
-        if (m) {
+        if (!m) {
+            if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); }
+            failure = "DevServerLoader.devFetchFromNative missing";
+        } else {
             jstring jUrl = env->NewStringUTF(url);
             jstring jResult = (jstring)env->CallStaticObjectMethod(cls, m, jUrl);
-            if (jResult) {
+            // Check *immediately* after the call, before DeleteLocalRef.
+            if (env->ExceptionCheck()) {
+                env->ExceptionDescribe();
+                env->ExceptionClear();
+                failure = "dev fetch threw in Java";
+            } else if (jResult) {
                 result = jstr(env, jResult);
-                env->DeleteLocalRef(jResult);
+            } else {
+                failure = "dev fetch returned no data";
             }
-            env->DeleteLocalRef(jUrl);
+            if (jResult) env->DeleteLocalRef(jResult);
+            if (jUrl) env->DeleteLocalRef(jUrl);
         }
         env->DeleteLocalRef(cls);
     }
@@ -2450,6 +2473,15 @@ std::string androidDevFetch(const char* url) {
         env->ExceptionClear();
     }
     if (needDetach) g_jvm->DetachCurrentThread();
+    if (!failure.empty()) {
+        return std::string(kDevFetchErrorPrefix) + " " + failure + " (" + url + ")";
+    }
+    if (result.empty()) {
+        // An empty body is never a valid module: evaluating it registers
+        // nothing, the importer receives null, and the failure surfaces much
+        // later as an unrelated TypeError.
+        return std::string(kDevFetchErrorPrefix) + " empty response from " + url;
+    }
     return result;
 }
 

@@ -18,6 +18,13 @@ object DevServerLoader {
     private const val MAX_PREFETCH_ASSET_BYTES = 4 * 1024 * 1024L
     private const val MAX_PREFETCH_TOTAL_BYTES = 16 * 1024 * 1024L
     private const val MAX_PREFETCH_ASSETS = 32
+
+    /**
+     * Sentinel returned to JS instead of throwing across JNI. Starts with
+     * "Error:" so ModuleHmrRuntime's existing guard rejects it as source, and
+     * carries the tag so the overlay can say where the failure came from.
+     */
+    const val DEV_FETCH_ERROR_PREFIX = "Error: [rayact:devfetch]"
     private val executor = Executors.newSingleThreadExecutor()
     private val prefetchExecutor = Executors.newFixedThreadPool(2)
     @Volatile private var activeModuleBaseUrl: String? = null
@@ -67,7 +74,14 @@ object DevServerLoader {
                 .also { Log.i(TAG, "module.fetch.end ${android.os.SystemClock.elapsedRealtime() - startedAt}ms $effectiveUrl") }
         } catch (error: Exception) {
             Log.e(TAG, "module.fetch.failed ${android.os.SystemClock.elapsedRealtime() - startedAt}ms $effectiveUrl", error)
-            throw error
+            // Never throw across the JNI boundary. androidDevFetch() cannot make
+            // further JNI calls while a Java exception is pending (CheckJNI
+            // aborts the process — the "unresolvable import segfaults the host"
+            // report), and a swallowed exception used to surface as an empty
+            // module source: eval("") registers nothing, the importer sees null,
+            // and the app dies with no diagnostic. Hand the failure back as a
+            // string the JS module runtime recognises and shows as a red box.
+            "$DEV_FETCH_ERROR_PREFIX ${error.message ?: error.toString()} (while fetching $effectiveUrl)"
         } finally {
             StrictMode.setThreadPolicy(previous)
         }

@@ -1,4 +1,6 @@
 import type { Connect, ViteDevServer } from 'vite';
+import type { ServerResponse } from 'node:http';
+import fs from 'node:fs';
 import path from 'node:path';
 
 function normalizePath(filePath: string): string {
@@ -8,6 +10,36 @@ function normalizePath(filePath: string): string {
 function toNativeCssPath(filePath: string, root: string): string {
   const relative = normalizePath(path.relative(root, filePath));
   return relative.startsWith('..') ? normalizePath(filePath) : `./${relative}`;
+}
+
+/**
+ * Development CSS module: the stylesheet TEXT is inlined into the JS module.
+ *
+ * importCSS() resolves against the DEVICE filesystem, where the project only
+ * exists in a bundled build — on a dev-server device it silently produced zero
+ * classes and the app rendered completely unstyled with no diagnostic. The
+ * server has the file right here, so embed it and parse on-device with
+ * importCSSText. This also sidesteps path problems a fetch-based scheme has
+ * with `file:`-linked packages, whose real paths live outside the project root.
+ * HMR is unaffected: editing the file invalidates this module and the js-update
+ * re-serves it with the fresh text. Returns null if the file cannot be read
+ * (caller falls back to the importCSS path, which at least names the file).
+ */
+export function rayactCssInlineModule(cssFile: string, nativePath: string): string | null {
+  let cssText: string;
+  try {
+    cssText = fs.readFileSync(cssFile, 'utf8');
+  } catch {
+    return null;
+  }
+  const baseDir = nativePath.slice(0, Math.max(0, nativePath.lastIndexOf('/'))) || '.';
+  return [
+    `var __cssText = ${JSON.stringify(cssText)};`,
+    'var cssClasses = typeof globalThis.importCSSText === "function"',
+    `  ? globalThis.importCSSText(__cssText, ${JSON.stringify(baseDir)})`,
+    `  : (globalThis.importCSS ? globalThis.importCSS(${JSON.stringify(nativePath)}) : {});`,
+    'exports.default = cssClasses;'
+  ].join('\n');
 }
 
 async function transformRayactModule(
@@ -25,8 +57,9 @@ async function transformRayactModule(
       const encoded = viteId.slice('\0rayact-css:'.length, -'.js'.length);
       const cssFile = decodeURIComponent(encoded);
       const nativePath = toNativeCssPath(cssFile, vite.config.root);
+      const inlined = rayactCssInlineModule(cssFile, nativePath);
       return {
-        code: [
+        code: inlined ?? [
           `var cssClasses = globalThis.importCSS ? globalThis.importCSS(${JSON.stringify(nativePath)}) : {};`,
           'exports.default = cssClasses;'
         ].join('\n')
@@ -263,6 +296,29 @@ export async function warmRayactModuleGraph(
   return seen.size;
 }
 
+/**
+ * Module errors go back as an `Error:`-prefixed body, not a bare sentence.
+ *
+ * The device fetches modules through a synchronous shim that only returns text
+ * — it never sees the status code. A body like `Cannot resolve ./x from /y`
+ * was therefore handed to `eval()` as if it were module source, which turned a
+ * mistyped import into a meaningless SyntaxError (or, on Android, a crash).
+ * ModuleHmrRuntime treats a leading `Error:` as a failed load and shows it.
+ */
+function sendModuleError(
+  res: ServerResponse,
+  status: number,
+  tag: string,
+  message: string,
+  hint?: string
+): void {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'no-store');
+  res.end(`Error: [rayact:${tag}] ${message}${hint ? `\n${hint}` : ''}`);
+}
+
 export function createRayactModuleMiddleware(
   getVite: () => ViteDevServer | null
 ): Connect.NextHandleFunction {
@@ -272,8 +328,7 @@ export function createRayactModuleMiddleware(
 
     const vite = getVite();
     if (!vite) {
-      res.statusCode = 503;
-      res.end('Vite dev server not ready');
+      sendModuleError(res, 503, 'module', 'Vite dev server not ready');
       return;
     }
 
@@ -282,22 +337,27 @@ export function createRayactModuleMiddleware(
       const spec = parsed.searchParams.get('spec') ?? '';
       const from = parsed.searchParams.get('from') ?? '';
       if (!spec) {
-        res.statusCode = 400;
-        res.end('missing spec');
+        sendModuleError(res, 400, 'resolve', 'missing spec');
         return;
       }
       try {
         const resolved = await vite.pluginContainer.resolveId(spec, toViteImporter(from, vite.config.root), { ssr: true });
         const id = typeof resolved === 'string' ? resolved : resolved?.id;
         if (!id) {
-          res.statusCode = 404;
-          res.end(`Cannot resolve ${spec}${from ? ` from ${from}` : ''}`);
+          sendModuleError(
+            res,
+            404,
+            'resolve',
+            `Cannot resolve ${JSON.stringify(spec)}${from ? ` from ${from}` : ''}`,
+            spec.startsWith('.')
+              ? 'Check the path and extension, or that the file exists on disk.'
+              : 'Install the package, or check the spelling of the import.'
+          );
           return;
         }
         const result = await vite.transformRequest(id, { ssr: true });
         if (!result?.code) {
-          res.statusCode = 404;
-          res.end('Module not found');
+          sendModuleError(res, 404, 'resolve', `${spec} resolved to ${id} but produced no code`);
           return;
         }
         res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
@@ -307,8 +367,12 @@ export function createRayactModuleMiddleware(
         const registryKey = `/rayact/resolve?spec=${encodeURIComponent(spec)}&from=${encodeURIComponent(from)}`;
         res.end(wrapRayactModule(registryKey, withInlineSourceMap(result.code, result.map), id));
       } catch (error) {
-        res.statusCode = 500;
-        res.end(error instanceof Error ? error.stack ?? error.message : String(error));
+        sendModuleError(
+          res,
+          500,
+          'resolve',
+          error instanceof Error ? error.stack ?? error.message : String(error)
+        );
       }
       return;
     }
@@ -319,8 +383,13 @@ export function createRayactModuleMiddleware(
     try {
       const result = await transformRayactModule(vite, modulePath, query);
       if (!result?.code) {
-        res.statusCode = 404;
-        res.end('Module not found');
+        sendModuleError(
+          res,
+          404,
+          'module',
+          `Module not found: ${modulePath}`,
+          'The importer references a file that does not exist under the project root.'
+        );
         return;
       }
 
@@ -331,8 +400,12 @@ export function createRayactModuleMiddleware(
       const registryKey = `/rayact/m${modulePath}${query}`;
       res.end(wrapRayactModule(registryKey, withInlineSourceMap(result.code, result.map), modulePath));
     } catch (error) {
-      res.statusCode = 500;
-      res.end(error instanceof Error ? error.stack ?? error.message : String(error));
+      sendModuleError(
+        res,
+        500,
+        'module',
+        error instanceof Error ? error.stack ?? error.message : String(error)
+      );
     }
   };
 }

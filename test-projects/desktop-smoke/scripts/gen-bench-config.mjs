@@ -15,7 +15,11 @@ const scenario = process.env.RAYACT_BENCH_SCENARIO || 'fixed';
 const rowsRaw = Number.parseInt(process.env.RAYACT_BENCH_ROWS || '', 10);
 const rows = Number.isFinite(rowsRaw) && rowsRaw > 0 ? rowsRaw : 10000;
 
-const VALID = new Set(['fixed', 'variable', 'followend']);
+// 'raw' = every row mounted in a plain ScrollView (the old baseline),
+// 'flat' = the virtualized recycling FlatList.
+const list = process.env.RAYACT_BENCH_LIST === 'flat' ? 'flat' : 'raw';
+
+const VALID = new Set(['fixed', 'variable', 'followend', 'update']);
 if (!VALID.has(scenario)) {
   console.error(
     `gen-bench-config: unknown scenario ${JSON.stringify(scenario)} ` +
@@ -31,7 +35,8 @@ writeFileSync(
     `// project vite.config.ts never reaches the bundle. A generated module is the\n` +
     `// one parameterisation channel that survives every build path.\n` +
     `export const BENCH_SCENARIO = ${JSON.stringify(scenario)};\n` +
-    `export const BENCH_ROWS = ${rows};\n`
+    `export const BENCH_ROWS = ${rows};\n` +
+    `export const BENCH_LIST = ${JSON.stringify(list)};\n`
 );
 
-console.log(`gen-bench-config: scenario=${scenario} rows=${rows}`);
+console.log(`gen-bench-config: scenario=${scenario} rows=${rows} list=${list}`);

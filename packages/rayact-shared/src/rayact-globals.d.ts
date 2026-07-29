@@ -50,6 +50,16 @@ declare global {
     method: string,
     args?: ArrayBufferLike
   ) => Promise<ArrayBuffer>;
+  /**
+   * Shared-slab sync invoke (hosts ≥ 0.0.5; feature-detect before use).
+   * Args are pre-written into the invoke slab (see __rayact_invoke_slab /
+   * __rayact_module_buffer); the result is written back into it. A negative
+   * return means the result overflowed the slab — fetch with
+   * __rayact_invoke_take().
+   */
+  const __rayact_invoke_shared: (name: string, method: string, argByteLen: number) => number;
+  const __rayact_invoke_slab: () => number;
+  const __rayact_invoke_take: () => ArrayBuffer;
 
   /** Workers. */
   const spawnWorker: (

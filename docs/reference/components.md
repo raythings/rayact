@@ -182,6 +182,13 @@ React-native `TextInput` prop surface mapped onto the native editing engine
 
 Refs receive a `TextInputHandle`: `focus()`, `blur()`, `node`.
 
+Sizing follows react-native: a `TextInput` has no intrinsic width and fills its
+parent, exactly like any auto-width child under the default
+`align-items: stretch`. It only falls back to an intrinsic width when stretching
+cannot apply — inside a `flex-direction: row` parent, or under a parent that sets
+`align-items` to something other than `stretch` — so a field in a row is still
+visible. Give it `flex: 1` (or an explicit `width`) to control it there.
+
 `TextField` is the Material 3 outlined/filled field (label, supporting text,
 leading/trailing icons) over the same engine.
 

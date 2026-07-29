@@ -292,6 +292,11 @@ transitionPropertyFromName(const std::string& name) {
         {"translate-x", P::TranslateX},     {"translate-y", P::TranslateY},
         {"scale", P::Scale},                {"rotation", P::Rotation},
         {"width", P::Width},                {"height", P::Height},
+        // The inline/animated style names, accepted here too: a transition
+        // written as `transition: translateX 200ms` used to register nothing
+        // and never tick, with no warning that the name was wrong.
+        {"translateX", P::TranslateX},      {"translateY", P::TranslateY},
+        {"rotate", P::Rotation},
     };
     auto it = kMap.find(name);
     if (it == kMap.end()) return std::nullopt;
@@ -478,11 +483,90 @@ static bool parseKeyframeValue(const std::string& prop, const std::string& value
 
 // ─── JS object builder ────────────────────────────────────────────────────────
 
-static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& props) {
+// Logical (writing-mode relative) box properties → the physical edges the
+// layout engine understands. Tailwind v4 emits `padding-inline` / `padding-block`
+// for `px-*` / `py-*`, so without this every padded row in a v4 project
+// collapsed to zero. Resolved for left-to-right; Yoga owns real RTL flipping.
+static const std::vector<std::pair<std::string, std::vector<std::string>>>&
+logicalBoxExpansions() {
+    static const std::vector<std::pair<std::string, std::vector<std::string>>> kMap = {
+        {"padding-inline",       {"padding-left", "padding-right"}},
+        {"padding-block",        {"padding-top", "padding-bottom"}},
+        {"padding-inline-start", {"padding-left"}},
+        {"padding-inline-end",   {"padding-right"}},
+        {"padding-block-start",  {"padding-top"}},
+        {"padding-block-end",    {"padding-bottom"}},
+        {"margin-inline",        {"margin-left", "margin-right"}},
+        {"margin-block",         {"margin-top", "margin-bottom"}},
+        {"margin-inline-start",  {"margin-left"}},
+        {"margin-inline-end",    {"margin-right"}},
+        {"margin-block-start",   {"margin-top"}},
+        {"margin-block-end",     {"margin-bottom"}},
+        {"inset-inline-start",   {"left"}},
+        {"inset-inline-end",     {"right"}},
+        {"inset-block-start",    {"top"}},
+        {"inset-block-end",      {"bottom"}},
+        {"border-start-start-radius", {"border-radius"}},
+        {"border-end-end-radius",     {"border-radius"}},
+    };
+    return kMap;
+}
+
+// `padding-inline: 4px 12px` sets start then end; a single value sets both.
+// Splits on top-level spaces only (splitTopLevel): normalizeCssProps runs
+// BEFORE var()/calc() expansion, so a value like `calc(var(--spacing) * 2)`
+// still contains spaces inside its parentheses — the naive splitTrim tore it
+// into three garbage tokens and every Tailwind `px-*`/`py-*` collapsed to
+// zero padding.
+static std::vector<std::string> logicalEdgeValues(const std::string& value, size_t sides) {
+    auto parts = splitTopLevel(value, ' ');
+    if (sides == 1 || parts.size() <= 1) return {value, value};
+    return {parts[0], parts[1]};
+}
+
+/**
+ * Rewrite properties the layout engine cannot see into ones it can.
+ *
+ * Two classes of rewrite, both driven by real Tailwind v4 output:
+ *  - logical box properties (`padding-inline`, `margin-block-end`, …)
+ *  - transform aliases: CSS authors write `translateX`, the engine's transition
+ *    and animation tables are keyed on `translate-x`. A misspelt name used to
+ *    register silently and never tick.
+ * A physical property declared explicitly always wins over one derived here.
+ */
+static CSSPropMap normalizeCssProps(const CSSPropMap& props) {
+    CSSPropMap out = props;
+    for (const auto& [logical, physical] : logicalBoxExpansions()) {
+        auto it = props.find(logical);
+        if (it == props.end()) continue;
+        const auto values = logicalEdgeValues(it->second, physical.size());
+        for (size_t i = 0; i < physical.size(); ++i) {
+            const std::string& target = physical[i];
+            if (props.count(target)) continue;  // explicit physical value wins
+            out[target] = physical.size() == 1 ? it->second : values[i];
+        }
+        out.erase(logical);
+    }
+    static const std::pair<const char*, const char*> kAliases[] = {
+        {"translateX", "translate-x"}, {"translateY", "translate-y"},
+        {"rotate", "rotation"},        {"borderRadius", "border-radius"},
+        {"backgroundColor", "background-color"},
+    };
+    for (const auto& [alias, canonical] : kAliases) {
+        auto it = out.find(alias);
+        if (it == out.end()) continue;
+        if (!out.count(canonical)) out[canonical] = it->second;
+        out.erase(it);
+    }
+    return out;
+}
+
+static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& rawProps) {
     JSValue obj     = JS_NewObject(ctx);
     JSValue textObj = JS_NewObject(ctx);
     bool hasText    = false;
 
+    const CSSPropMap props = normalizeCssProps(rawProps);
     for (auto& [prop, rawVal] : props) {
         std::string val = evaluateCalc(cleanValue(substituteVars(rawVal)));
         if (val.empty()) continue;
@@ -503,13 +587,50 @@ static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& props) {
         // ── text sub-properties ──────────────────────────────────────────
         if (prop == "color")           { JS_SetPropertyStr(ctx, textObj, "color",        JS_NewFloat64(ctx, parseColor(val)));  hasText=true; continue; }
         if (prop == "font-size")       { JS_SetPropertyStr(ctx, textObj, "fontSize",     JS_NewFloat64(ctx, parseLength(val))); hasText=true; continue; }
-        if (prop == "line-height")     { JS_SetPropertyStr(ctx, textObj, "lineHeight",   JS_NewFloat64(ctx, parseLength(val))); hasText=true; continue; }
+        if (prop == "line-height") {
+            // A unitless line-height is a RATIO of the font size, not a length:
+            // `line-height: 1.5` means 1.5em. Reading it as 1.5dp collapsed
+            // every wrapped paragraph into overlapping lines — the shape
+            // Tailwind v4 emits for `leading-*` and for its text-size utilities.
+            // The ratio is resolved against the node's own resolved font size.
+            const std::string lh = trimStr(val);
+            bool unitless = !lh.empty() &&
+                            lh.find_first_not_of("0123456789.+-eE") == std::string::npos;
+            if (toLower(lh) == "normal") { hasText = true; continue; }  // engine default
+            if (unitless) {
+                try {
+                    JS_SetPropertyStr(ctx, textObj, "lineHeightRatio",
+                                      JS_NewFloat64(ctx, std::stof(lh)));
+                } catch (...) {}
+            } else {
+                JS_SetPropertyStr(ctx, textObj, "lineHeight", JS_NewFloat64(ctx, parseLength(val)));
+            }
+            hasText = true;
+            continue;
+        }
         if (prop == "letter-spacing")  { JS_SetPropertyStr(ctx, textObj, "letterSpacing",JS_NewFloat64(ctx, parseLength(val))); hasText=true; continue; }
         // Passed through as strings; applyStyleProps maps them onto the
         // TextStyle enums (weight accepts both names and numeric 100..900).
         if (prop == "font-weight")     { JS_SetPropertyStr(ctx, textObj, "fontWeight",   JS_NewString(ctx, val.c_str())); hasText=true; continue; }
         if (prop == "font-style")      { JS_SetPropertyStr(ctx, textObj, "fontStyle",    JS_NewString(ctx, toLower(val).c_str())); hasText=true; continue; }
         if (prop == "text-align")      { JS_SetPropertyStr(ctx, textObj, "textAlign",    JS_NewString(ctx, toLower(val).c_str())); hasText=true; continue; }
+        // CSS line clamping. `-webkit-line-clamp: 2` is the web spelling of
+        // react-native's numberOfLines; `text-overflow` picks the ellipsis mode.
+        if (prop == "-webkit-line-clamp" || prop == "line-clamp") {
+            try {
+                JS_SetPropertyStr(ctx, textObj, "maxLines",
+                                  JS_NewFloat64(ctx, std::stof(trimStr(val))));
+                hasText = true;
+                // An author writing line-clamp expects an ellipsis, as on the web.
+                JS_SetPropertyStr(ctx, textObj, "ellipsizeMode", JS_NewString(ctx, "tail"));
+            } catch (...) {}
+            continue;
+        }
+        if (prop == "text-overflow") {
+            JS_SetPropertyStr(ctx, textObj, "textOverflow", JS_NewString(ctx, toLower(val).c_str()));
+            hasText = true;
+            continue;
+        }
         if (prop == "font-family") {
             // Strip surrounding quotes: "Roboto" → Roboto, 'My Font' → My Font
             std::string name = val;
@@ -559,10 +680,46 @@ static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& props) {
                 JS_SetPropertyStr(ctx, obj, "borderColor", JS_NewFloat64(ctx, parseColor(m.str())));
             continue;
         }
-        if (prop == "border-width" || prop == "border-top-width" ||
-            prop == "border-right-width" || prop == "border-bottom-width" ||
-            prop == "border-left-width") {
-            JS_SetPropertyStr(ctx, obj, "borderWidth", JS_NewFloat64(ctx, parseLength(val)));
+        if (prop == "border-width") {
+            // Uniform `border-width: 1px` stays the single shared field — the
+            // per-edge keys force the renderer onto the edge-by-edge painter,
+            // which cannot round corners, so emitting them for a uniform border
+            // squared off every `border-radius` card. Only a genuinely uneven
+            // shorthand (`border-width: 1px 0`) goes per-edge.
+            auto vals = parseEdgeShorthand(val);
+            if (vals[0]==vals[1] && vals[1]==vals[2] && vals[2]==vals[3]) {
+                JS_SetPropertyStr(ctx, obj, "borderWidth", JS_NewFloat64(ctx, vals[0]));
+            } else {
+                JS_SetPropertyStr(ctx, obj, "borderTopWidth",    JS_NewFloat64(ctx, vals[0]));
+                JS_SetPropertyStr(ctx, obj, "borderRightWidth",  JS_NewFloat64(ctx, vals[1]));
+                JS_SetPropertyStr(ctx, obj, "borderBottomWidth", JS_NewFloat64(ctx, vals[2]));
+                JS_SetPropertyStr(ctx, obj, "borderLeftWidth",   JS_NewFloat64(ctx, vals[3]));
+            }
+            continue;
+        }
+        if (prop == "border-top-width" || prop == "border-right-width" ||
+            prop == "border-bottom-width" || prop == "border-left-width") {
+            JS_SetPropertyStr(ctx, obj, camelCase(prop).c_str(), JS_NewFloat64(ctx, parseLength(val)));
+            continue;
+        }
+        if (prop == "border-top-color" || prop == "border-right-color" ||
+            prop == "border-bottom-color" || prop == "border-left-color") {
+            JS_SetPropertyStr(ctx, obj, camelCase(prop).c_str(), JS_NewFloat64(ctx, parseColor(val)));
+            continue;
+        }
+        // `border-top: 1px solid red` and friends — width + colour for one edge.
+        if (prop == "border-top" || prop == "border-right" ||
+            prop == "border-bottom" || prop == "border-left") {
+            const std::string side = camelCase(prop);  // borderTop
+            auto parts = splitTrim(val, ' ');
+            if (!parts.empty())
+                JS_SetPropertyStr(ctx, obj, (side + "Width").c_str(),
+                                  JS_NewFloat64(ctx, parseLength(parts[0])));
+            static const std::regex sideColorRe(CssColorTokenPattern(), std::regex::icase);
+            std::smatch m;
+            if (std::regex_search(val, m, sideColorRe))
+                JS_SetPropertyStr(ctx, obj, (side + "Color").c_str(),
+                                  JS_NewFloat64(ctx, parseColor(m.str())));
             continue;
         }
 
@@ -635,8 +792,21 @@ static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& props) {
             std::string parentKey = prop.substr(0, dash);
             std::string subKey    = prop.substr(dash + 1);
             JSValue existing = JS_GetPropertyStr(ctx, obj, parentKey.c_str());
-            JSValue edgeObj = JS_IsObject(existing) ? existing : JS_NewObject(ctx);
-            if (!JS_IsObject(existing)) JS_FreeValue(ctx, existing);
+            JSValue edgeObj;
+            if (JS_IsObject(existing)) {
+                edgeObj = existing;
+            } else {
+                edgeObj = JS_NewObject(ctx);
+                // A uniform `padding: 8px` already written as a scalar has to be
+                // carried onto the other three sides, or `padding: 8px;
+                // padding-left: 0` would silently drop top/right/bottom.
+                double uniform = 0;
+                if (JS_IsNumber(existing) && JS_ToFloat64(ctx, &uniform, existing) == 0) {
+                    for (const char* side : {"top", "right", "bottom", "left"})
+                        JS_SetPropertyStr(ctx, edgeObj, side, JS_NewFloat64(ctx, uniform));
+                }
+                JS_FreeValue(ctx, existing);
+            }
             JS_SetPropertyStr(ctx, edgeObj, subKey.c_str(), JS_NewFloat64(ctx, parseLength(val)));
             JS_SetPropertyStr(ctx, obj, parentKey.c_str(), edgeObj);
             continue;
@@ -647,7 +817,7 @@ static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& props) {
             "width","height","min-width","min-height","max-width","max-height",
             "border-radius","flex-grow","flex-shrink","flex-basis",
             "gap","row-gap","column-gap","opacity","elevation","scale",
-            "translate-x","translate-y","top","right","bottom","left",
+            "translate-x","translate-y","rotation","top","right","bottom","left",
         };
         if (std::find(kLength.begin(), kLength.end(), prop) != kLength.end()) {
             // Percentage dimensions are resolved by Yoga against the parent, so
@@ -1027,6 +1197,8 @@ static void parseCSSIntoStylesheet(const std::string& css,
         }
         tok = parser.get_next_token();
     }
+    // New/changed rules make every cached className resolution stale.
+    invalidateClassStyleCache();
 }
 
 // ─── class name resolution ────────────────────────────────────────────────────

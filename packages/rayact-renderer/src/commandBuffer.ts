@@ -228,8 +228,14 @@ export function emitCreateParam(
   writeStyleRun(style);
 }
 
-export function emitSetStyle(nodeId: number, style: StyleObj | null | undefined): void {
-  ensureSpace(8 + styleEncSize(style));
+// `styleBytes` is the precomputed styleEncSize(style); callers on the update
+// hot path validate once and pass it through (same contract as emitCreate).
+export function emitSetStyle(
+  nodeId: number,
+  style: StyleObj | null | undefined,
+  styleBytes = styleEncSize(style),
+): void {
+  ensureSpace(8 + styleBytes);
   w32(CMD.SET_STYLE);
   w32(nodeId);
   writeStyleRun(style);
@@ -302,6 +308,26 @@ export function emitSetText(nodeId: number, stringId: number): void {
   w32(CMD.SET_TEXT);
   w32(nodeId);
   w32(stringId);
+}
+
+// CSS class base for a binary-created node. Native resolves the interned class
+// list via its className flyweight cache and merges it under the node's
+// existing (inline) style — mirroring the sync parseStyle order.
+export function emitSetClassName(nodeId: number, stringId: number): void {
+  ensureSpace(12);
+  w32(CMD.SET_CLASSNAME);
+  w32(nodeId);
+  w32(stringId);
+}
+
+// StyleSlab apply marker: the style payload itself was written directly into
+// the shared slab (styleSlab.ts); this 3-word op just tells native WHEN to
+// apply the entry relative to the surrounding structural ops.
+export function emitDirtySlab(nodeId: number, slot: number): void {
+  ensureSpace(12);
+  w32(CMD.DIRTY_SLAB);
+  w32(nodeId);
+  w32(slot);
 }
 
 // --- flush ------------------------------------------------------------------

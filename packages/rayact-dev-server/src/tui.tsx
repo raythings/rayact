@@ -9,7 +9,7 @@ import { render as inkRender, Box, Text, useApp, useInput } from 'ink';
 import qrcode from 'qrcode-terminal';
 import { startRayactDevServer } from './server.js';
 import { loadRayactConfig } from './config.js';
-import { setupAdbReverse } from './adb.js';
+import { setupAdbReverse, startAdbReverseWatcher, type AdbReverseWatcher } from './adb.js';
 import { startWebDevBridge, type WebDevBridge } from './webDev.js';
 import { resolveDesktopBinPrebuilt as resolveDesktopPrebuilt } from '@rayact/prebuild';
 import type { RayactBuildMode } from './bundler.js';
@@ -51,6 +51,7 @@ let mode: Mode = 'tui';
 let inkInstance: ReturnType<typeof inkRender> | null = null;
 let activeServer: RayactDevServer | null = null;
 let activeWebBridge: WebDevBridge | null = null;
+let activeReverseWatcher: AdbReverseWatcher | null = null;
 let cliArgs: ParsedArgs;
 let devMinify = false;
 let devBytecode = false;
@@ -93,10 +94,28 @@ function onLogModeKey(str: string, key: { ctrl?: boolean; name?: string }): void
 }
 
 async function closeDevSession(): Promise<void> {
+  activeReverseWatcher?.stop();
+  activeReverseWatcher = null;
   await activeWebBridge?.close();
   activeWebBridge = null;
   await activeServer?.close();
   activeServer = null;
+}
+
+/**
+ * Keep `adb reverse` alive for as long as the dev server runs, on every plain
+ * `rayact dev` — not only `--android` and not only once at startup.
+ *
+ * The mapping dies with the cable, an adb server restart, a device reboot, or a
+ * swap to a different phone. When it does, the device stops receiving hot
+ * updates while the server happily keeps building: "HMR randomly stopped
+ * working", nothing logged on either side.
+ */
+function ensureAdbReverseWatcher(localUrl: string, report: (line: string) => void): void {
+  if (activeReverseWatcher) return;
+  activeReverseWatcher = startAdbReverseWatcher(localUrl, {
+    onApply: (serial, port) => report(`adb reverse tcp:${port} -> ${serial}`)
+  });
 }
 
 async function maybeStartWebBridge(
@@ -277,6 +296,9 @@ function RayactCli({ args, onEnterLogMode }: RayactCliProps) {
           setStatus(ok
             ? `Server ready + adb reverse configured`
             : `Server ready (adb reverse skipped — no device?)`);
+        }
+        if (args.platform !== 'web') {
+          ensureAdbReverseWatcher(started.localUrl, line => setStatus(line));
         }
       })
       .catch(error => {
@@ -479,6 +501,9 @@ export function startDevTui(args: ParsedArgs): void {
           process.stdout.write(ok
             ? '  adb reverse configured\n'
             : '  adb reverse skipped - no device?\n');
+        }
+        if (args.platform !== 'web') {
+          ensureAdbReverseWatcher(started.localUrl, line => process.stdout.write(`  ${line}\n`));
         }
       })
       .catch(error => {

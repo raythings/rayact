@@ -129,13 +129,43 @@ type GlobalHmr = RayactGlobal & {
   __rayactRegisterDebugScript?: (url: string, source: string) => void;
   __rayactApplyModuleUpdate?: (path: string, source: string) => void;
   __rayactDevFetch?: (url: string) => string;
+  __rayactDevServerUrl?: string;
   __rayactHmrRuntime?: ModuleHmrRuntime;
   __RAYACT_HMR_ACTIVE__?: boolean;
+  /** Set by hosts whose native HMR client (ProjectHmrClient) owns the socket. */
+  __RAYACT_NATIVE_HMR__?: boolean;
   __RAYACT_VENDOR__?: Record<string, Record<string, unknown>>;
   __REACT_REFRESH__?: { performReactRefresh: () => void };
   __rayactPlatform?: { os?: string; target?: string; version?: string };
   navigator?: { userAgent?: string };
 };
+
+/**
+ * Reject anything that is not module source before it reaches `eval()`.
+ *
+ * The device's sync fetch shim returns text only — no status code — so a
+ * failed load used to arrive as either an error sentence or an empty string
+ * and get evaluated anyway. An empty module registers nothing, so the importer
+ * silently received `null` and blew up somewhere unrelated; on Android the
+ * same path could take the process down with no JS error at all. Every failure
+ * mode now throws here, naming the module that failed.
+ */
+export function assertModuleSource(text: string, url: string): string {
+  if (!text || !text.trim()) {
+    throw new Error(`Empty module response for ${url} — the dev server returned no source.`);
+  }
+  const head = text.slice(0, 400);
+  if (/^\s*(Error|SyntaxError|TypeError|ReferenceError):/.test(head)) {
+    throw new Error(`${head.trim().slice(0, 300)}\n  while loading ${url}`);
+  }
+  // Plain-text failures that predate the tagged sentinel (older dev servers,
+  // proxies, captive-portal pages) never parse as JS; catch the common shapes
+  // instead of letting eval() report a bogus SyntaxError.
+  if (/^\s*(Cannot resolve|Module not found|Vite dev server not ready|missing spec)\b/.test(head)) {
+    throw new Error(`${head.trim().slice(0, 300)}\n  while loading ${url}`);
+  }
+  return text;
+}
 
 export class ModuleHmrRuntime {
   private readonly globalObject: GlobalHmr;
@@ -150,6 +180,10 @@ export class ModuleHmrRuntime {
     this.serverUrl = options.serverUrl.replace(/\/+$/, '');
     this.bridge = options.bridge;
     this.globalObject = (options.global ?? globalThis) as GlobalHmr;
+    // Published for modules that have to reach the dev server on their own —
+    // notably `import './x.css'`, which fetches the stylesheet text instead of
+    // reading a project-relative path that only exists in a bundled build.
+    this.globalObject.__rayactDevServerUrl = this.serverUrl;
     this.installRegistry();
     this.globalObject.__rayactHmrRuntime = this;
     this.globalObject.__rayactApplyModuleUpdate = (path, source) => {
@@ -395,6 +429,15 @@ export class ModuleHmrRuntime {
   }
 
   private connectHmr(hmrUrl?: string): void {
+    // The host's native HMR client (ProjectHmrClient) already owns the socket
+    // and applies updates through __rayactApplyModuleUpdate. Opening a second,
+    // JS-side socket (possible now that WebSocket is real on mobile) applied
+    // every js-update twice — an entry-module edit then ran the entry's
+    // side effects twice concurrently, which could wedge the app.
+    if (this.globalObject.__RAYACT_NATIVE_HMR__) {
+      this.globalObject.console?.info?.('[rayact:hmr] native transport owns the socket — JS client idle');
+      return;
+    }
     const WebSocketCtor = this.globalObject.WebSocket;
     if (typeof WebSocketCtor !== 'function') {
       this.globalObject.console?.info?.('[rayact:hmr] WebSocket unavailable — native transport expected');
@@ -470,7 +513,15 @@ export class ModuleHmrRuntime {
           const source = await this.devFetchText(toRayactModuleUrl(moduleUrl, this.serverUrl));
           this.applyModuleUpdate(path, source);
         } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
           this.globalObject.console?.error?.('[rayact:hmr] module update failed', path, error);
+          // Silent hot-update failures are indistinguishable from "HMR is
+          // broken": the file saves, nothing changes on screen, nothing is
+          // reported. Put it on the error overlay like a build error.
+          this.bridge?.showError?.(
+            `Hot update failed for ${path}\n${message}`,
+            error instanceof Error ? error.stack : undefined
+          );
         }
       }
       return;
@@ -500,11 +551,7 @@ export class ModuleHmrRuntime {
     if (typeof g.__rayactDevFetch !== 'function') {
       throw new Error('Sync module load requires __rayactDevFetch()');
     }
-    const text = g.__rayactDevFetch(url);
-    if (text.startsWith('Error:') || text.startsWith('SyntaxError:')) {
-      throw new Error(text.slice(0, 300));
-    }
-    return text;
+    return assertModuleSource(g.__rayactDevFetch(url), url);
   }
 
   private async devFetchText(url: string): Promise<string> {
@@ -520,13 +567,10 @@ export class ModuleHmrRuntime {
       const response = await fetchFn(url) as { text(): Promise<string>; ok?: boolean; status?: number };
       text = await response.text();
       if (response.ok === false) {
-        throw new Error(`Module fetch failed (${response.status}): ${text.slice(0, 200)}`);
+        throw new Error(`Module fetch failed (${response.status}) for ${url}: ${text.slice(0, 200)}`);
       }
     }
-    if (text.startsWith('Error:') || text.startsWith('SyntaxError:')) {
-      throw new Error(text.slice(0, 300));
-    }
-    return text;
+    return assertModuleSource(text, url);
   }
 
   disconnect(): void {

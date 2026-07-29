@@ -41,8 +41,34 @@
 #include <set>
 #include <string>
 #include <rlgl.h>
+#if defined(RAYACT_ANDROID) || defined(__ANDROID__)
+#include <sys/system_properties.h>
+#endif
+
+// Retained-layout modes (see resolveRetainedLayoutMode).
+enum : int { kRetainedLayoutOff = 0, kRetainedLayoutOn = 1, kRetainedLayoutVerify = 2 };
 
 namespace {
+
+// Retained-layout mode, resolved once. Default ON: the mirror produces the same
+// result as the per-frame rebuild (verified 0-divergence) without allocating
+// and freeing the whole Yoga tree every frame.
+//   RAYACT_RETAINED_LAYOUT=off|0   → legacy rebuild
+//   RAYACT_RETAINED_LAYOUT=verify  → legacy authoritative + mirror compared
+//   android: setprop debug.rayact.retainedlayout <same values>
+int resolveRetainedLayoutMode() {
+    const char* mode = std::getenv("RAYACT_RETAINED_LAYOUT");
+#if defined(RAYACT_ANDROID) || defined(__ANDROID__)
+    char prop[PROP_VALUE_MAX] = {0};
+    if (__system_property_get("debug.rayact.retainedlayout", prop) > 0 && prop[0] != '\0')
+        mode = prop;
+#endif
+    if (!mode || !mode[0]) return kRetainedLayoutOn;
+    if (std::strcmp(mode, "verify") == 0) return kRetainedLayoutVerify;
+    if (mode[0] == '0' || std::strcmp(mode, "off") == 0) return kRetainedLayoutOff;
+    return kRetainedLayoutOn;
+}
+
 struct GlobalKeyMapping {
     int raylibKey;
     const char* key;
@@ -500,7 +526,30 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     raym3::v2::TickScrollMomentum(g_root);
     raym3::v2::TickTransitions(g_root);
     raym3::v2::TickAnimations(g_root);
-    raym3::v2::UpdateLayout(g_root, bounds);
+    // Layout: retained mirror (default) or the legacy rebuild-every-frame path.
+    //   on|1     — retained is authoritative (no per-frame Yoga alloc/free)
+    //   verify   — legacy authoritative, mirror runs alongside and is compared
+    //   off|0    — legacy only
+    static const int retainedMode = resolveRetainedLayoutMode();
+    if (retainedMode == kRetainedLayoutOn) {
+        raym3::v2::RetainedUpdateLayout(g_root, bounds);
+    } else {
+        raym3::v2::UpdateLayout(g_root, bounds);
+        if (retainedMode == kRetainedLayoutVerify) {
+            auto rs = raym3::v2::RetainedLayoutVerify(g_root, bounds, /*maxLogPerCall=*/4);
+            static int rsFrame = 0;
+            static int rsDiverged = 0;
+            rsDiverged += rs.divergences;
+            if (++rsFrame % 120 == 0) {
+                TraceLog(LOG_INFO,
+                         "RETAINED-LAYOUT frame=%d reconciled=%d created=%d freed=%d "
+                         "diverged(last120)=%d",
+                         rsFrame, rs.nodesReconciled, rs.yogaNodesCreated,
+                         rs.yogaNodesFreed, rsDiverged);
+                rsDiverged = 0;
+            }
+        }
+    }
     resolvePopoverAnchors();
 
     Vector2 mouse = GetMousePosition();
@@ -623,7 +672,14 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
 #else
     SetMouseScale(1.0f, 1.0f); // Desktop/web mouse positions are already logical.
 #endif
-    raym3::v2::Render(g_root, bounds, /*layoutAlreadyComputed=*/!forceLayout);
+    // forceLayout (resize / explicit relayout) wants a second pass after input
+    // and popover anchoring. In retained mode run the mirror again ourselves —
+    // Render's own re-layout would take the legacy rebuild path.
+    if (forceLayout && retainedMode == kRetainedLayoutOn)
+        raym3::v2::RetainedUpdateLayout(g_root, bounds);
+    raym3::v2::Render(g_root, bounds,
+                      /*layoutAlreadyComputed=*/!forceLayout ||
+                          retainedMode == kRetainedLayoutOn);
 #ifndef RAYACT_NO_WORKERS
     renderWorkerViews();
 #endif

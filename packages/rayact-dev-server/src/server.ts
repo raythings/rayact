@@ -746,6 +746,29 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
       return;
     }
 
+    // Raw stylesheet text for `import './x.css'` on a dev-server device.
+    // importCSS() reads the device filesystem, which only has the project in a
+    // bundled build; the module fetches this and calls importCSSText instead.
+    if (requestUrl.pathname === '/rayact/css') {
+      const requested = requestUrl.searchParams.get('path') ?? '';
+      const root = path.resolve(options.root ?? process.cwd());
+      const resolved = path.resolve(root, requested);
+      const insideRoot = resolved === root || resolved.startsWith(root + path.sep);
+      if (!requested || !insideRoot || !resolved.endsWith('.css')) {
+        sendText(response, 400, `Error: [rayact:css] refusing to serve ${requested || '(empty path)'}`);
+        return;
+      }
+      try {
+        const css = fs.readFileSync(resolved, 'utf8');
+        response.setHeader('Cache-Control', 'no-store');
+        response.setHeader('Access-Control-Allow-Origin', '*');
+        sendText(response, 200, css, 'text/css; charset=utf-8');
+      } catch (error) {
+        sendText(response, 404, `Error: [rayact:css] ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return;
+    }
+
     if (requestUrl.pathname === '/rayact/status') {
       sendJson(response, context.bootstrapError ? 500 : 200, {
         ok: !context.bootstrapError,

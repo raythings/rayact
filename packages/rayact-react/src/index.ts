@@ -54,7 +54,7 @@ export type {
 
 export { ExternalView, NativeTextInput } from './components.js';
 export type { TextInputHandle, ScrollViewHandle, ExternalViewProps } from './components.js';
-export { FlatList } from './FlatList.js';
+export { FlatList, List } from './FlatList.js';
 export type { FlatListHandle } from './FlatList.js';
 export {
   ActivityIndicator,
@@ -83,7 +83,6 @@ export {
   Icon,
   IconButton,
   Image,
-  List,
   MaterialList,
   LoadingIndicator,
   Menu,

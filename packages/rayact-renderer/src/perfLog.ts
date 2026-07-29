@@ -4,6 +4,7 @@ type PerfCounters = {
   disposed: number;
   mutationCount: number;
   binaryCreateFallbacks: number;
+  binaryUpdateFallbacks: number;
 };
 
 const counters: PerfCounters = {
@@ -12,6 +13,7 @@ const counters: PerfCounters = {
   disposed: 0,
   mutationCount: 0,
   binaryCreateFallbacks: 0,
+  binaryUpdateFallbacks: 0,
 };
 
 let commitStart = 0;
@@ -47,12 +49,14 @@ export function perfMarkCommitEnd(): void {
     'disposed.nodes': counters.disposed,
     'mutation.count': counters.mutationCount,
     'binary.create.fallbacks': counters.binaryCreateFallbacks,
+    'binary.update.fallbacks': counters.binaryUpdateFallbacks,
   });
   counters.created = 0;
   counters.updated = 0;
   counters.disposed = 0;
   counters.mutationCount = 0;
   counters.binaryCreateFallbacks = 0;
+  counters.binaryUpdateFallbacks = 0;
 }
 
 export function perfIncCreated(): void {
@@ -77,6 +81,12 @@ export function perfIncBinaryCreateFallback(type: string, reason: string): void 
   if (!enabled()) return;
   counters.binaryCreateFallbacks++;
   perfLog('binary.create.fallback', { type, reason });
+}
+
+export function perfIncBinaryUpdateFallback(type: string, reason: string): void {
+  if (!enabled()) return;
+  counters.binaryUpdateFallbacks++;
+  perfLog('binary.update.fallback', { type, reason });
 }
 
 export function perfNavPress(): void {

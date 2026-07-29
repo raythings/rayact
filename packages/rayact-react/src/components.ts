@@ -102,7 +102,20 @@ export const Pressable = React.forwardRef<any, PressableProps>((props, ref) => {
 });
 
 export function Text(props: TextProps): React.ReactElement {
-  return React.createElement('rayact-text', props);
+  const { numberOfLines, ellipsizeMode, style, ...rest } = props;
+  if (numberOfLines == null && ellipsizeMode == null) {
+    return React.createElement('rayact-text', props);
+  }
+  // Line clamping travels as style, not as a loose prop: style is the only
+  // channel the create/update fast path and the binary command buffer both
+  // carry. react-native defaults to a tail ellipsis once numberOfLines is set.
+  const clamp: Style = {};
+  if (numberOfLines != null) clamp.maxLines = numberOfLines;
+  clamp.ellipsizeMode = ellipsizeMode ?? 'tail';
+  return React.createElement('rayact-text', {
+    ...rest,
+    style: [style, clamp]
+  });
 }
 
 export function Button(props: ButtonProps): React.ReactElement {
@@ -348,18 +361,8 @@ export function ScrollView(props: ScrollViewProps): React.ReactElement {
   return React.createElement('rayact-scroll-view', wire, content);
 }
 
-export function List<T>(props: ListProps<T>): React.ReactElement {
-  const { data, renderItem, keyExtractor, estimatedItemSize: _estimatedItemSize, ...scrollProps } = props;
-  return React.createElement(
-    ScrollView,
-    scrollProps,
-    data.map((item, index) =>
-      React.createElement(React.Fragment, {
-        key: keyExtractor ? keyExtractor(item, index) : String(index)
-      }, renderItem({ item, index }))
-    )
-  );
-}
+// `List` now lives in FlatList.tsx (it is an alias for the virtualized list);
+// exporting it from there keeps components.ts out of an import cycle.
 
 export function Modal(props: ModalProps): React.ReactElement | null {
   if (props.visible === false) return null;

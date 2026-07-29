@@ -12,8 +12,8 @@
 import 'rayact/shared/material-icons';
 
 import React from 'react';
-import { View, Text, ScrollView, render } from 'rayact/react';
-import { BENCH_SCENARIO, BENCH_ROWS } from './bench-config';
+import { View, Text, ScrollView, FlatList, render } from 'rayact/react';
+import { BENCH_SCENARIO, BENCH_ROWS, BENCH_LIST } from './bench-config';
 
 const host = globalThis as any;
 
@@ -51,8 +51,59 @@ function buildRows(count: number, variable: boolean): Row[] {
   return rows;
 }
 
+// Update scenario: split host-config time (create/update emits) from React
+// core + flush in the console output ([prof] lines, per commit).
+if (SCENARIO === 'update') (globalThis as any).__RAYACT_PROF = true;
+
 const VARIABLE = SCENARIO === 'variable';
 const ROW_DATA = buildRows(ROWS, VARIABLE);
+
+// `update` scenario: every visible row's style changes every frame (packed
+// numeric colors + translateX — all binary-codec/slab-hot keys), so the run
+// measures the STYLE UPDATE path (opcode 12 / StyleSlab) under full React
+// reconcile load rather than create+scroll cost. A/B:
+//   RAYACT_STYLE_SLAB=0 → opcode-12 stream;  RAYACT_BINARY=0 → legacy bridge.
+function packRGBA(r: number, g: number, b: number): number {
+  return (((r & 0xff) << 24) | ((g & 0xff) << 16) | ((b & 0xff) << 8) | 0xff) >>> 0;
+}
+
+function UpdateRow({ row, tick }: { row: Row; tick: number }) {
+  const phase = (row.id * 37 + tick) & 0xff;
+  return (
+    <View
+      style={{
+        height: row.height,
+        paddingLeft: 16,
+        paddingRight: 16,
+        translateX: (phase - 128) / 16,
+        backgroundColor: packRGBA(240, 240 - (phase >> 2), 255 - (phase >> 3)),
+      }}
+    >
+      <Text style={{ fontSize: 12 }}>{row.title}</Text>
+    </View>
+  );
+}
+
+function UpdateList() {
+  const [tick, setTick] = React.useState(0);
+  React.useEffect(() => {
+    let cancelled = false;
+    const step = () => {
+      if (cancelled) return;
+      setTick((t) => (t + 1) | 0);
+      host.requestAnimationFrame?.(step);
+    };
+    host.requestAnimationFrame?.(step);
+    return () => { cancelled = true; };
+  }, []);
+  return (
+    <ScrollView style={{ flex: 1 }}>
+      {ROW_DATA.map((row) => (
+        <UpdateRow key={row.id} row={row} tick={tick} />
+      ))}
+    </ScrollView>
+  );
+}
 
 function BenchRow({ row }: { row: Row }) {
   return (
@@ -84,6 +135,20 @@ function BaselineList() {
         <BenchRow key={row.id} row={row} />
       ))}
     </ScrollView>
+  );
+}
+
+// Virtualized comparison: same rows, same data, through the recycling FlatList.
+// Mounted node count should track the viewport, not ROWS.
+function VirtualList() {
+  return (
+    <FlatList
+      style={{ flex: 1 }}
+      data={ROW_DATA}
+      keyExtractor={(row: Row) => String(row.id)}
+      estimatedItemSize={VARIABLE ? 130 : FIXED_ROW_HEIGHT}
+      renderItem={({ item }: { item: Row }) => <BenchRow row={item} />}
+    />
   );
 }
 
@@ -126,10 +191,12 @@ function Bench() {
     <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
       <View style={{ height: 48, justifyContent: 'center', paddingHorizontal: 16 }}>
         <Text style={{ fontSize: 14 }}>
-          {`${SCENARIO} · ${ROWS} rows`}
+          {`${SCENARIO} · ${ROWS} rows · ${BENCH_LIST}`}
         </Text>
       </View>
-      <BaselineList />
+      {SCENARIO === 'update'
+        ? <UpdateList />
+        : BENCH_LIST === 'flat' ? <VirtualList /> : <BaselineList />}
     </View>
   );
 }

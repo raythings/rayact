@@ -34,6 +34,12 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
         globalThis.__RAYACT_DEV_SERVER__ = ${org.json.JSONObject.quote(serverUrl)};
         globalThis.__rayactNativeDevtoolsTransport = true;
         globalThis.__rayactDevFetch = function(url) { return rayactDevFetch(url); };
+        // ProjectHmrClient owns the HMR socket on this host. Without this flag
+        // the JS runtime opens its OWN socket too (WebSocket is real on Android
+        // now), and every js-update is applied twice — for an entry module that
+        // meant two concurrent bootstrap() runs racing each other, which could
+        // wedge the app.
+        globalThis.__RAYACT_NATIVE_HMR__ = true;
     """.trimIndent()
 
     /**

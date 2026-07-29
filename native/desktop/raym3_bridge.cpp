@@ -6,6 +6,7 @@
 #include "color_parse.hpp"
 #include "commit_queue.hpp"
 #include "shadow_tree.hpp"
+#include "style_slab.hpp"
 #include "../core/config_loader.hpp"
 
 #include <raym3/v2/View.h>
@@ -26,6 +27,7 @@
 #include <raym3/components/ProgressIndicator.h>
 #include <raym3/components/RadioButton.h>
 #include <raym3/components/Switch.h>
+#include <raym3/styles/Stylesheet.h>
 #include <raym3/styles/Theme.h>
 #include <raylib.h>
 
@@ -144,6 +146,12 @@ static std::vector<int> g_deferredPressInCallbacks;
 static std::vector<int> g_deferredPressOutCallbacks;
 static std::vector<int> g_deferredLongPressCallbacks;
 static std::vector<int> g_deferredRequestCloseCallbacks;
+// Scroll is coalesced, not queued: a drag/fling moves the offset every frame,
+// and JS only ever cares about the latest position. One entry per node per
+// frame, dispatched with the other deferred input callbacks so a heavy JS
+// handler (e.g. a virtualized list recomputing its window) lands AFTER the
+// input phase instead of extending it.
+static std::vector<int> g_deferredScrollNodes;
 // Native-allocated node ids are ODD; JS-owned (command-buffer) ids are EVEN
 // (allocNodeId in commandBuffer.ts). Disjoint by parity so the two id spaces
 // never collide — robust against per-instance resets that set g_nextNodeId back
@@ -168,9 +176,26 @@ static constexpr int kAnimatedRotation = 4;
 static constexpr int kAnimatedDirty = 5;
 static constexpr int kAnimatedGeneration = 6;
 
+// JS sees this vector's storage as the external ArrayBuffer
+// __rayactAnimatedStyleBuffer, installed ONCE per runtime bootstrap
+// (installAnimatedStyleBuffer) — nothing re-points those Float32Array views on
+// a launcher↔project switch. The allocation must therefore never move for the
+// life of the process: park/restore copies CONTENTS through
+// Raym3RuntimeStorage, never the vector's storage. Moving it out used to free
+// a block a live runtime's view still pointed at → SIGSEGV in
+// JS_SetPropertyValue on the next animated style write.
 static std::vector<float> g_animatedStyleBuffer(
     (size_t)kAnimatedStyleMaxNodes * (size_t)kAnimatedStyleSlots, 0.0f);
 static std::set<int> g_animatedNodes;
+
+static constexpr size_t kAnimatedStyleBufferFloats =
+    (size_t)kAnimatedStyleMaxNodes * (size_t)kAnimatedStyleSlots;
+
+/** Allocate the arena if it is somehow unsized. Never call once JS holds a view. */
+static void ensureAnimatedStyleBuffer() {
+    if (g_animatedStyleBuffer.size() != kAnimatedStyleBufferFloats)
+        g_animatedStyleBuffer.assign(kAnimatedStyleBufferFloats, 0.0f);
+}
 
 struct StyleAnimation {
     int nodeId = 0;
@@ -698,9 +723,16 @@ static std::optional<Color> jsToColor(JSContext* ctx, JSValueConst v) {
     if (JS_IsString(v)) {
         const char* s = JS_ToCString(ctx, v);
         if (!s) return std::nullopt;
-        Color c = ParseCssColorToRaylib(s);
+        std::string text(s);
         JS_FreeCString(ctx, s);
-        return c;
+        // `style={{ color: 'var(--ink)' }}` used to parse as opaque black with
+        // no warning: var() was only ever expanded for stylesheet rules, never
+        // for an inline style. Resolve against the same custom properties (and
+        // the active colour scheme) the CSS path uses.
+        if (text.find("var(") != std::string::npos) {
+            text = raym3::Stylesheet::Global().SubstituteVars(text, raym3::Theme::IsDarkMode());
+        }
+        return ParseCssColorToRaylib(text.c_str());
     }
     uint32_t c;
     if (JS_ToUint32(ctx, &c, v) == 0) return colorFromUint(c);
@@ -1114,6 +1146,16 @@ static void queueRequestCloseCallback(int id) {
     g_deferredRequestCloseCallbacks.push_back(id);
 }
 
+static void emitScrollEvent(int id, const raym3::v2::NodePtr& node);
+
+static void queueScrollCallback(int id) {
+    // Coalesce: the offset is read from the node at drain time, so a second
+    // move in the same frame needs no second entry.
+    for (int pending : g_deferredScrollNodes)
+        if (pending == id) return;
+    g_deferredScrollNodes.push_back(id);
+}
+
 static void clearTransientInputCapture() {
     // raym3 input stores Node* values in hover/active/pendingPress. A press
     // callback can synchronously replace or dispose the scene, so drop those
@@ -1130,8 +1172,19 @@ void rayactDrainDeferredInputCallbacks() {
         g_deferredPressOutCallbacks.clear();
         g_deferredLongPressCallbacks.clear();
         g_deferredRequestCloseCallbacks.clear();
+        g_deferredScrollNodes.clear();
         clearTransientInputCapture();
         return;
+    }
+    // Scroll first: a list's window update should be committed before any press
+    // handler in the same frame observes the scene.
+    if (!g_deferredScrollNodes.empty()) {
+        std::vector<int> scrollIds;
+        scrollIds.swap(g_deferredScrollNodes);
+        for (int id : scrollIds) {
+            auto nit = g_nodes.find(id);
+            if (nit != g_nodes.end() && nit->second) emitScrollEvent(id, nit->second);
+        }
     }
     std::vector<int> requestCloseIds;
     std::vector<int> pressIds;
@@ -1461,6 +1514,23 @@ static std::optional<raym3::v2::EdgeValues> jsGetEdgeValues(JSContext* ctx, JSVa
     return ev;
 }
 
+static std::string styleLower(std::string v) {
+    std::transform(v.begin(), v.end(), v.begin(),
+                   [](unsigned char c) { return (char)std::tolower(c); });
+    return v;
+}
+
+// Maps react-native `ellipsizeMode` / CSS `text-overflow` onto the engine enum.
+static std::optional<raym3::v2::TextOverflow> textOverflowFromName(const std::string& raw) {
+    const std::string v = styleLower(raw);
+    if (v.empty()) return std::nullopt;
+    if (v == "tail" || v == "ellipsis") return raym3::v2::TextOverflow::Ellipsis;
+    if (v == "head")   return raym3::v2::TextOverflow::Head;
+    if (v == "middle") return raym3::v2::TextOverflow::Middle;
+    if (v == "clip")   return raym3::v2::TextOverflow::Clip;
+    return std::nullopt;
+}
+
 // Apply inline style props from a JS object onto an existing Style.
 // Only sets a field when the property is explicitly present in `obj`.
 // Called once for className-resolved base, once for inline overrides.
@@ -1536,6 +1606,16 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
     if (auto v = jsGetColor(ctx, obj, "rippleColor"))     s.rippleColor     = v;
     if (auto v = jsGetColor(ctx, obj, "borderColor"))     s.borderColor     = v;
     if (auto v = jsGetFloat(ctx, obj, "borderWidth"))     s.borderWidth     = v;
+    // Per-edge borders (CSS `border-bottom`, RN `borderTopColor`, …). Unset
+    // edges fall back to the shared colour/width in the renderer.
+    if (auto v = jsGetColor(ctx, obj, "borderTopColor"))    s.borderTopColor    = v;
+    if (auto v = jsGetColor(ctx, obj, "borderRightColor"))  s.borderRightColor  = v;
+    if (auto v = jsGetColor(ctx, obj, "borderBottomColor")) s.borderBottomColor = v;
+    if (auto v = jsGetColor(ctx, obj, "borderLeftColor"))   s.borderLeftColor   = v;
+    if (auto v = jsGetFloat(ctx, obj, "borderTopWidth"))    s.borderTopWidth    = v;
+    if (auto v = jsGetFloat(ctx, obj, "borderRightWidth"))  s.borderRightWidth  = v;
+    if (auto v = jsGetFloat(ctx, obj, "borderBottomWidth")) s.borderBottomWidth = v;
+    if (auto v = jsGetFloat(ctx, obj, "borderLeftWidth"))   s.borderLeftWidth   = v;
     if (auto v = jsGetFloat(ctx, obj, "borderRadius"))    s.borderRadius    = v;
     {
         std::string shadowCss = jsGetString(ctx, obj, "boxShadowCss");
@@ -1657,6 +1737,14 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
         }
         if (auto v = jsGetFloat(ctx, textObj, "lineHeight")) {
             s.text.lineHeight = v;
+            s.text.lineHeightRatio = std::nullopt;
+            hasNestedLineHeight = true;
+        }
+        // Unitless CSS `line-height: 1.5` — kept as a ratio so it resolves
+        // against whatever font size ends up on the node.
+        if (auto v = jsGetFloat(ctx, textObj, "lineHeightRatio")) {
+            s.text.lineHeightRatio = v;
+            s.text.lineHeight = std::nullopt;
             hasNestedLineHeight = true;
         }
         if (auto v = jsGetFloat(ctx, textObj, "letterSpacing")) {
@@ -1703,6 +1791,18 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
             else
                 s.text.whiteSpace = raym3::v2::WhiteSpace::Normal;
         }
+        // react-native numberOfLines / ellipsizeMode, also reachable as CSS
+        // `-webkit-line-clamp` / `text-overflow`. Both were declared on the JS
+        // side and read by nothing: a label with no break opportunity wrapped
+        // one character per line instead of ending in an ellipsis.
+        if (auto v = jsGetFloat(ctx, textObj, "maxLines"))
+            s.text.maxLines = (int)*v;
+        if (auto v = jsGetFloat(ctx, textObj, "numberOfLines"))
+            s.text.maxLines = (int)*v;
+        if (auto mode = textOverflowFromName(jsGetString(ctx, textObj, "ellipsizeMode")))
+            s.text.overflow = mode;
+        else if (auto css = textOverflowFromName(jsGetString(ctx, textObj, "textOverflow")))
+            s.text.overflow = css;
         std::string wb = jsGetString(ctx, textObj, "wordBreak");
         if (!wb.empty()) {
             if (wb == "keep-all" || wb == "keepAll")
@@ -1722,10 +1822,27 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
         if (auto v = jsGetColor(ctx, obj, "color")) s.text.color = v;
     }
     if (!hasNestedLineHeight) {
-        if (auto v = jsGetFloat(ctx, obj, "lineHeight")) s.text.lineHeight = v;
+        if (auto v = jsGetFloat(ctx, obj, "lineHeight")) {
+            s.text.lineHeight = v;
+            s.text.lineHeightRatio = std::nullopt;
+        } else if (auto ratio = jsGetFloat(ctx, obj, "lineHeightRatio")) {
+            s.text.lineHeightRatio = ratio;
+            s.text.lineHeight = std::nullopt;
+        }
     }
     if (!hasNestedLetterSpacing) {
         if (auto v = jsGetFloat(ctx, obj, "letterSpacing")) s.text.letterSpacing = v;
+    }
+    // Flat RN props: <Text numberOfLines={2} ellipsizeMode="tail" />
+    if (!s.text.maxLines) {
+        if (auto v = jsGetFloat(ctx, obj, "numberOfLines")) s.text.maxLines = (int)*v;
+        else if (auto v2 = jsGetFloat(ctx, obj, "maxLines")) s.text.maxLines = (int)*v2;
+    }
+    if (!s.text.overflow) {
+        if (auto mode = textOverflowFromName(jsGetString(ctx, obj, "ellipsizeMode")))
+            s.text.overflow = mode;
+        else if (auto css = textOverflowFromName(jsGetString(ctx, obj, "textOverflow")))
+            s.text.overflow = css;
     }
     if (!hasNestedWeight) {
         if (auto v = jsGetFontWeight(ctx, obj, "weight")) s.text.weight = v;
@@ -1794,18 +1911,36 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
     }
 }
 
+// ─── className flyweight cache ──────────────────────────────────────────────
+// Resolving a class list (CSS selector match + JS style object build + parse
+// back into a Style) is the dominant cost of CSS-driven scenes, and it repeats
+// per NODE while the result only varies per unique CLASS LIST. Cache the fully
+// resolved Style + StateStyles keyed by the class string; invalidate whenever
+// the stylesheet, CSS variables, theme, or media context change (all of which
+// funnel through refreshClassNameStyles / importCSS).
+struct ResolvedClassEntry {
+    raym3::v2::Style style;
+    raym3::v2::StateStyles states;
+    bool hasStates = false;
+};
+static std::unordered_map<std::string, ResolvedClassEntry> g_classStyleCache;
+
+void invalidateClassStyleCache() { g_classStyleCache.clear(); }
+
+static const ResolvedClassEntry& resolveClassEntryCached(JSContext* ctx,
+                                                         const std::string& cls);
+
 static raym3::v2::Style parseStyle(JSContext* ctx, JSValue obj) {
     raym3::v2::Style style;
     if (!JS_IsObject(obj)) return style;
 
-    // 1. Resolve className base (space-separated class names, no leading dot needed)
+    // 1. Resolve className base (space-separated class names, no leading dot
+    //    needed) — one CSS resolution per unique class list via the cache.
     JSValue classVal = JS_GetPropertyStr(ctx, obj, "className");
     if (!JS_IsUndefined(classVal) && !JS_IsNull(classVal)) {
         const char* classStr = JS_ToCString(ctx, classVal);
         if (classStr && classStr[0]) {
-            JSValue base = resolveClassNames(ctx, classStr);
-            applyStyleProps(ctx, base, style);  // populate from CSS classes
-            JS_FreeValue(ctx, base);
+            style = resolveClassEntryCached(ctx, classStr).style;
         }
         JS_FreeCString(ctx, classStr);
     }
@@ -1842,6 +1977,50 @@ static void parseStateVariant(JSContext* ctx, JSValue statesObj, const char* key
     JS_FreeValue(ctx, v);
 }
 
+// Fill the flyweight cache for one class list: one resolveClassNames call, one
+// style parse, one state-variant parse — everything downstream is a lookup.
+static const ResolvedClassEntry& resolveClassEntryCached(JSContext* ctx,
+                                                         const std::string& cls) {
+    auto it = g_classStyleCache.find(cls);
+    if (it != g_classStyleCache.end()) return it->second;
+    ResolvedClassEntry e;
+    JSValue resolved = resolveClassNames(ctx, cls);
+    applyStyleProps(ctx, resolved, e.style);
+    JSValue states = JS_GetPropertyStr(ctx, resolved, "stateStyles");
+    if (JS_IsObject(states)) {
+        parseStateVariant(ctx, states, "hovered",  e.style, e.states.hovered);
+        parseStateVariant(ctx, states, "pressed",  e.style, e.states.pressed);
+        parseStateVariant(ctx, states, "focused",  e.style, e.states.focused);
+        parseStateVariant(ctx, states, "disabled", e.style, e.states.disabled);
+        e.hasStates = e.states.hovered || e.states.pressed || e.states.focused ||
+                      e.states.disabled;
+    }
+    JS_FreeValue(ctx, states);
+    JS_FreeValue(ctx, resolved);
+    // unordered_map references are stable across inserts.
+    return g_classStyleCache.emplace(cls, std::move(e)).first->second;
+}
+
+// True when `obj` has exactly one own enumerable property: className. The
+// cached StateStyles are based on the class-only style, so they are only valid
+// verbatim for className-only style objects (the overwhelmingly common case
+// for CSS-driven scenes); anything with inline props re-bases below.
+static bool isClassNameOnlyStyle(JSContext* ctx, JSValue obj) {
+    JSPropertyEnum* tab = nullptr;
+    uint32_t count = 0;
+    if (JS_GetOwnPropertyNames(ctx, &tab, &count, obj,
+                               JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) != 0)
+        return false;
+    bool only = count == 1;
+    if (only) {
+        const char* name = JS_AtomToCString(ctx, tab[0].atom);
+        only = name && std::strcmp(name, "className") == 0;
+        if (name) JS_FreeCString(ctx, name);
+    }
+    JS_FreePropertyEnum(ctx, tab, count);
+    return only;
+}
+
 // Collect `stateStyles` from a resolved className object and/or inline props.
 static void captureStateStyles(JSContext* ctx, JSValue obj, const raym3::v2::Style& base) {
     g_lastStateStyles = {};
@@ -1853,6 +2032,17 @@ static void captureStateStyles(JSContext* ctx, JSValue obj, const raym3::v2::Sty
     if (JS_IsString(classVal)) {
         const char* classStr = JS_ToCString(ctx, classVal);
         if (classStr && classStr[0]) {
+            // className-only style object → the cached variants apply verbatim.
+            if (isClassNameOnlyStyle(ctx, obj)) {
+                const ResolvedClassEntry& e = resolveClassEntryCached(ctx, classStr);
+                if (e.hasStates) {
+                    g_lastStateStyles = e.states;
+                    g_lastStateStylesValid = true;
+                }
+                JS_FreeCString(ctx, classStr);
+                JS_FreeValue(ctx, classVal);
+                return;
+            }
             JSValue resolved = resolveClassNames(ctx, classStr);
             states = JS_GetPropertyStr(ctx, resolved, "stateStyles");
             JS_FreeValue(ctx, resolved);
@@ -1929,23 +2119,27 @@ void refreshStylesForColorScheme(JSContext* ctx) {
 
 void refreshClassNameStyles(JSContext* ctx) {
     if (!ctx) return;
+    // The stylesheet / variables / theme / media context changed — every cached
+    // resolution is stale. Re-resolution below is one parse per unique class
+    // LIST (flyweight cache), not per node, and skips the per-node JS object
+    // round-trip entirely.
+    invalidateClassStyleCache();
     for (auto& [id, node] : g_nodes) {
         auto cn = g_nodeClassNames.find(id);
         if (cn == g_nodeClassNames.end() || cn->second.empty()) continue;
 
-        JSValue styleObj = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, styleObj, "className", JS_NewString(ctx, cn->second.c_str()));
-        raym3::v2::Style parsed = parseStyleWithStates(ctx, styleObj);
-        JS_FreeValue(ctx, styleObj);
-
+        const ResolvedClassEntry& e = resolveClassEntryCached(ctx, cn->second);
         // Re-resolve CSS but keep inline layout props (width, height, margin, etc.)
         // that were set on createView/setStyle alongside className.
-        node->style = raym3::v2::MergeStyles(node->style, parsed);
-        applyCapturedStateStyles(node);
+        node->style = raym3::v2::MergeStyles(node->style, e.style);
+        // Same contract as applyCapturedStateStyles: leave existing stateStyles
+        // untouched when the classes declare none.
+        if (e.hasStates) node->stateStyles = e.states;
     }
 }
 
 void installAnimatedStyleBuffer(JSContext* ctx, JSValue global) {
+    ensureAnimatedStyleBuffer();
     if (g_animatedStyleBuffer.empty()) return;
     JSValue buffer = JS_NewArrayBuffer(
         ctx,
@@ -2438,7 +2632,18 @@ JSValue JS_createModal(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     raym3::v2::ViewProps props;
     props.style.position = raym3::v2::PositionType::Absolute;
     props.style.inset.all = 0.0f;
-    props.style.backgroundColor = Color{0, 0, 0, 96};
+    // Give the container definite viewport-sized bounds, not just insets: a
+    // child with `flex: 1` had nothing to grow into and shrink-wrapped to its
+    // content in the top-left corner (the "dialog stuck to the left" symptom).
+    props.style.widthPercent = 100.0f;
+    props.style.heightPercent = 100.0f;
+    // `backdropColor` was declared on ModalProps and read by nobody — the scrim
+    // was always this fixed 37% black, so callers painted their own.
+    Color scrim{0, 0, 0, 96};
+    if (argc >= 1 && JS_IsObject(argv[0])) {
+        if (auto custom = jsGetColor(ctx, argv[0], "backdropColor")) scrim = *custom;
+    }
+    props.style.backgroundColor = scrim;
     props.zIndex = 1000;
     if (argc >= 1 && JS_IsObject(argv[0])) {
         props.style = raym3::v2::MergeStyles(props.style, parseStyle(ctx, argv[0]));
@@ -2705,11 +2910,10 @@ JSValue JS_focusTextInput(JSContext* ctx, JSValue, int argc, JSValueConst* argv)
 // pass a huge y and rely on the clamp. Clearing scrollVelocity* and (for a y
 // set) auto-scroll-to-end follow matches a user-initiated scroll.
 //
-// BUG: this does NOT cancel an in-flight fling. scrollVelocityY has been
-// vestigial since the spline refactor (the momentum tick re-derives an
-// absolute target from flingStartOffsetY every frame), so the write here is
-// silently reverted on the next tick while a fling is running. Traced below;
-// funnelled through ScrollTo() in the scroll-core rework.
+// An in-flight fling is cancelled first: the momentum tick re-derives an
+// absolute target from flingStartOffsetY every frame, so without CancelFling
+// this write would be silently reverted on the next tick (the bug that made
+// scrollToIndex unreliable during momentum).
 JSValue JS_setScrollOffset(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (argc < 3) return JS_ThrowTypeError(ctx, "setScrollOffset: expected (nodeId, x, y)");
     int id = 0;
@@ -2732,14 +2936,21 @@ JSValue JS_setScrollOffset(JSContext* ctx, JSValue, int argc, JSValueConst* argv
                                           raym3::v2::ScrollWriteSource::Js, 'y',
                                           it->second->scrollOffsetY,
                                           static_cast<float>(y));
-        if (it->second->flingActive)
+        if (it->second->flingActive) {
             raym3::v2::ScrollTraceEvent(
-                "js setScrollOffset y=%.2f DURING FLING (write will be reverted)",
-                y);
+                "js setScrollOffset y=%.2f during fling — cancelling fling", y);
+            raym3::v2::CancelFling(it->second);
+        }
         it->second->scrollOffsetY = static_cast<float>(y);
         it->second->scrollVelocityY = 0.0f;
         it->second->scrollFollowEnd = false;
     }
+    // Notify listeners the same way a drag does. Without this a programmatic
+    // scroll is invisible to JS, so a virtualized list never re-windows after
+    // its own scrollToIndex/scrollToOffset. The offset written above may still
+    // be clamped by the next layout pass; the queued callback reads the node at
+    // drain time, so JS sees the settled value.
+    if (g_scrollCallbacks.count(id)) queueScrollCallback(id);
     workerRequestRenderFrame();
     return JS_UNDEFINED;
 }
@@ -3731,11 +3942,7 @@ JSValue JS_setOnScroll(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (it == g_nodes.end()) return JS_ThrowTypeError(ctx, "setOnScroll: invalid node id");
     setStoredCallback(ctx, id, argv[1], g_scrollCallbacks);
     if (JS_IsFunction(ctx, argv[1]) && it->second)
-        it->second->onScroll = [id]() {
-            auto nit = g_nodes.find(id);
-            if (nit != g_nodes.end() && nit->second)
-                emitScrollEvent(id, nit->second);
-        };
+        it->second->onScroll = [id]() { queueScrollCallback(id); };
     else if (it->second)
         it->second->onScroll = nullptr;
     return JS_UNDEFINED;
@@ -5385,7 +5592,10 @@ void raym3BridgeExportRuntimeStorage(Raym3RuntimeStorage& out) {
     out.longPressCallbacks = std::move(g_longPressCallbacks);
     out.nodeClassNames = std::move(g_nodeClassNames);
     out.nodeParents = std::move(g_nodeParents);
-    out.animatedStyleBuffer = std::move(g_animatedStyleBuffer);
+    // COPY, never move: the storage is JS-visible for the life of the process
+    // (see g_animatedStyleBuffer). Moving it here freed the block that another
+    // live runtime's Float32Array still pointed at.
+    out.animatedStyleBuffer = g_animatedStyleBuffer;
     out.animatedNodes = std::move(g_animatedNodes);
     out.styleAnimations = std::move(g_styleAnimations);
     out.changeTextCallbacks = std::move(g_changeTextCallbacks);
@@ -5424,11 +5634,15 @@ void raym3BridgeImportRuntimeStorage(const Raym3RuntimeStorage& in) {
     g_longPressCallbacks = in.longPressCallbacks;
     g_nodeClassNames = in.nodeClassNames;
     g_nodeParents = in.nodeParents;
-    if (!in.animatedStyleBuffer.empty()) {
-        g_animatedStyleBuffer = in.animatedStyleBuffer;
+    // Restore CONTENTS in place — assigning/replacing the vector would move the
+    // storage out from under the JS-visible ArrayBuffer (see
+    // g_animatedStyleBuffer).
+    ensureAnimatedStyleBuffer();
+    if (in.animatedStyleBuffer.size() == g_animatedStyleBuffer.size()) {
+        std::copy(in.animatedStyleBuffer.begin(), in.animatedStyleBuffer.end(),
+                  g_animatedStyleBuffer.begin());
     } else {
-        g_animatedStyleBuffer.assign(
-            (size_t)kAnimatedStyleMaxNodes * (size_t)kAnimatedStyleSlots, 0.0f);
+        std::fill(g_animatedStyleBuffer.begin(), g_animatedStyleBuffer.end(), 0.0f);
     }
     g_animatedNodes = in.animatedNodes;
     g_styleAnimations = in.styleAnimations;
@@ -5460,14 +5674,18 @@ void raym3BridgeClearRuntimeGlobals() {
     g_screenStack.clear();
     g_nodes.clear();
     g_root = nullptr;
+    raym3::v2::RetainedLayoutReset();
+    invalidateClassStyleCache();
     g_pressCallbacks.clear();
     g_pressInCallbacks.clear();
     g_pressOutCallbacks.clear();
     g_longPressCallbacks.clear();
     g_nodeClassNames.clear();
     g_nodeParents.clear();
-    g_animatedStyleBuffer.assign(
-        (size_t)kAnimatedStyleMaxNodes * (size_t)kAnimatedStyleSlots, 0.0f);
+    // Zero in place — assign() on a moved-from/short vector would reallocate and
+    // strand the JS-visible ArrayBuffer (see g_animatedStyleBuffer).
+    ensureAnimatedStyleBuffer();
+    std::fill(g_animatedStyleBuffer.begin(), g_animatedStyleBuffer.end(), 0.0f);
     g_animatedNodes.clear();
     g_styleAnimations.clear();
     g_changeTextCallbacks.clear();
@@ -5548,6 +5766,8 @@ void cleanupRaym3Bridge(JSContext* ctx, bool unloadGpuCaches) {
     g_scrollCallbacks.clear();
     g_requestCloseCallbacks.clear();
     g_nodes.clear();
+    raym3::v2::RetainedLayoutReset();
+    invalidateClassStyleCache();
     g_nativeControlStates.clear();
     g_materialComponentKinds.clear();
     g_safeAreaBaseStyles.clear();
@@ -6845,6 +7065,8 @@ enum RayactCmdOp : int32_t {
     RCMD_SET_STYLE  = 12,  // nodeId, styleRun
     RCMD_NEW_STRING = 13,  // stringId, byteLen, <utf8 padded>
     RCMD_SET_TEXT   = 14,  // nodeId, stringId
+    RCMD_SET_CLASSNAME = 15, // nodeId, stringId — CSS class base via flyweight cache
+    RCMD_DIRTY_SLAB = 18,  // nodeId, slabSlot — apply StyleSlab entry (style_slab.hpp)
 };
 enum RayactCmdType : int32_t {
     RTYPE_VIEW = 1,
@@ -6935,11 +7157,23 @@ size_t applyStyleEntryBinary(int32_t keyId, const uint8_t* val, raym3::v2::Style
         case 38: s.scale        = cmdReadF64(val); return 8;
         case 39: s.rotation     = cmdReadF64(val); return 8;
         case 40: s.text.fontSize      = cmdReadF64(val); return 8;
-        case 41: s.text.lineHeight    = cmdReadF64(val); return 8;
+        case 41: s.text.lineHeight    = cmdReadF64(val);
+                 s.text.lineHeightRatio = std::nullopt; return 8;
         case 42: s.text.letterSpacing = cmdReadF64(val); return 8;
+        case 43: s.text.lineHeightRatio = cmdReadF64(val);
+                 s.text.lineHeight = std::nullopt; return 8;
+        case 44: s.text.maxLines = (int)cmdReadF64(val); return 8;
+        case 45: s.borderTopWidth    = cmdReadF64(val); return 8;
+        case 46: s.borderRightWidth  = cmdReadF64(val); return 8;
+        case 47: s.borderBottomWidth = cmdReadF64(val); return 8;
+        case 48: s.borderLeftWidth   = cmdReadF64(val); return 8;
         case 50: s.backgroundColor = colorFromUint(cmdReadU32(val)); return 4;
         case 51: s.borderColor     = colorFromUint(cmdReadU32(val)); return 4;
         case 52: s.text.color      = colorFromUint(cmdReadU32(val)); return 4;
+        case 53: s.borderTopColor    = colorFromUint(cmdReadU32(val)); return 4;
+        case 54: s.borderRightColor  = colorFromUint(cmdReadU32(val)); return 4;
+        case 55: s.borderBottomColor = colorFromUint(cmdReadU32(val)); return 4;
+        case 56: s.borderLeftColor   = colorFromUint(cmdReadU32(val)); return 4;
         case 60: switch (cmdReadI32(val)) {
             case 0: s.flexDirection = raym3::v2::FlexDirection::Row; break;
             case 1: s.flexDirection = raym3::v2::FlexDirection::Column; break;
@@ -6991,6 +7225,12 @@ size_t applyStyleEntryBinary(int32_t keyId, const uint8_t* val, raym3::v2::Style
             case 1: s.flexWrap = raym3::v2::FlexWrap::Wrap; break;
             case 2: s.flexWrap = raym3::v2::FlexWrap::WrapReverse; break;
         } return 4;
+        case 69: switch (cmdReadI32(val)) {  // ellipsizeMode
+            case 0: s.text.overflow = raym3::v2::TextOverflow::Clip; break;
+            case 1: s.text.overflow = raym3::v2::TextOverflow::Ellipsis; break;
+            case 2: s.text.overflow = raym3::v2::TextOverflow::Head; break;
+            case 3: s.text.overflow = raym3::v2::TextOverflow::Middle; break;
+        } return 4;
         default: return 0;  // unknown key — desync guard (JS validates before emit)
     }
 }
@@ -7010,6 +7250,79 @@ size_t readStyleRun(const uint8_t* base, size_t off, size_t len, raym3::v2::Styl
         off += vbytes;
     }
     return off;
+}
+
+// === StyleSlab (style_slab.hpp) =========================================
+// Fixed hot-style arena; JS writes fields directly through typed-array views
+// over __rayactStyleSlab, then emits RCMD_DIRTY_SLAB so the entry is applied
+// at the right point in the command stream.
+std::vector<uint32_t> g_styleSlab;  // kStyleSlabSlots × kStyleSlabWords
+
+inline float slabF32(const uint32_t* e, uint32_t idx) {
+    float f;
+    std::memcpy(&f, e + idx, sizeof(float));
+    return f;
+}
+
+// Merge every present hot field of `e` into `s` (same per-field optional
+// assignment semantics as applyStyleEntryBinary).
+void applySlabEntryToStyle(const uint32_t* e, raym3::v2::Style& s) {
+    using namespace rayact;
+    uint32_t lo = e[kSlabPresentLo];
+    uint32_t hi = e[kSlabPresentHi];
+    auto has = [&](uint32_t field) -> bool {
+        uint32_t bit = field - kSlabFirstField;
+        return bit < 32 ? (lo >> bit) & 1u : (hi >> (bit - 32)) & 1u;
+    };
+    if (has(kSlabTranslateX))   s.translateX   = slabF32(e, kSlabTranslateX);
+    if (has(kSlabTranslateY))   s.translateY   = slabF32(e, kSlabTranslateY);
+    if (has(kSlabScale))        s.scale        = slabF32(e, kSlabScale);
+    if (has(kSlabRotation))     s.rotation     = slabF32(e, kSlabRotation);
+    if (has(kSlabOpacity))      s.opacity      = slabF32(e, kSlabOpacity);
+    if (has(kSlabBorderRadius)) s.borderRadius = slabF32(e, kSlabBorderRadius);
+    if (has(kSlabBorderWidth))  s.borderWidth  = slabF32(e, kSlabBorderWidth);
+    if (has(kSlabBackgroundColor)) s.backgroundColor = colorFromUint(e[kSlabBackgroundColor]);
+    if (has(kSlabBorderColor))     s.borderColor     = colorFromUint(e[kSlabBorderColor]);
+    if (has(kSlabTextColor))       s.text.color      = colorFromUint(e[kSlabTextColor]);
+    if (has(kSlabWidth))      s.width      = slabF32(e, kSlabWidth);
+    if (has(kSlabHeight))     s.height     = slabF32(e, kSlabHeight);
+    if (has(kSlabMinWidth))   s.minWidth   = slabF32(e, kSlabMinWidth);
+    if (has(kSlabMinHeight))  s.minHeight  = slabF32(e, kSlabMinHeight);
+    if (has(kSlabMaxWidth))   s.maxWidth   = slabF32(e, kSlabMaxWidth);
+    if (has(kSlabMaxHeight))  s.maxHeight  = slabF32(e, kSlabMaxHeight);
+    if (has(kSlabFlexGrow))   s.flexGrow   = slabF32(e, kSlabFlexGrow);
+    if (has(kSlabFlexShrink)) s.flexShrink = slabF32(e, kSlabFlexShrink);
+    if (has(kSlabFlexBasis))  s.flexBasis  = slabF32(e, kSlabFlexBasis);
+    if (has(kSlabTop))    s.inset.top    = slabF32(e, kSlabTop);
+    if (has(kSlabRight))  s.inset.right  = slabF32(e, kSlabRight);
+    if (has(kSlabBottom)) s.inset.bottom = slabF32(e, kSlabBottom);
+    if (has(kSlabLeft))   s.inset.left   = slabF32(e, kSlabLeft);
+    if (has(kSlabMarginTop))     s.margin.top     = slabF32(e, kSlabMarginTop);
+    if (has(kSlabMarginRight))   s.margin.right   = slabF32(e, kSlabMarginRight);
+    if (has(kSlabMarginBottom))  s.margin.bottom  = slabF32(e, kSlabMarginBottom);
+    if (has(kSlabMarginLeft))    s.margin.left    = slabF32(e, kSlabMarginLeft);
+    if (has(kSlabPaddingTop))    s.padding.top    = slabF32(e, kSlabPaddingTop);
+    if (has(kSlabPaddingRight))  s.padding.right  = slabF32(e, kSlabPaddingRight);
+    if (has(kSlabPaddingBottom)) s.padding.bottom = slabF32(e, kSlabPaddingBottom);
+    if (has(kSlabPaddingLeft))   s.padding.left   = slabF32(e, kSlabPaddingLeft);
+    if (has(kSlabRowGap))    s.rowGap    = slabF32(e, kSlabRowGap);
+    if (has(kSlabColumnGap)) s.columnGap = slabF32(e, kSlabColumnGap);
+}
+
+// Seqlock read: copy the entry out, retrying while JS is mid-write (odd
+// generation) or the generation moved under us. Single-threaded engines never
+// retry; this guards the future threaded mode.
+bool readSlabEntry(uint32_t slot, uint32_t out[rayact::kStyleSlabWords]) {
+    using namespace rayact;
+    if (slot >= kStyleSlabSlots || g_styleSlab.empty()) return false;
+    const uint32_t* e = g_styleSlab.data() + (size_t)slot * kStyleSlabWords;
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        uint32_t g1 = e[kSlabGeneration];
+        if (g1 & 1u) continue;
+        std::memcpy(out, e, kStyleSlabWords * sizeof(uint32_t));
+        if (e[kSlabGeneration] == g1) return true;
+    }
+    return false;
 }
 
 void createNodeFromBuffer(int id, int typeId, const raym3::v2::Style& style) {
@@ -7281,12 +7594,19 @@ static void applyCommandBufferCtx(const uint8_t* base, size_t len, RcmdWorkerCtx
                 if (off + 4 > len) return;
                 int id = cmdReadI32(base + off);
                 off += 4;
-                raym3::v2::Style delta;
-                off = readStyleRun(base, off, len, delta);
                 auto it = g_nodes.find(mapRef(id));
                 if (it != g_nodes.end() && it->second) {
-                    it->second->style = raym3::v2::MergeStyles(it->second->style, delta);
+                    // In-place merge: each decoded entry assigns one optional
+                    // directly on the retained style — identical semantics to
+                    // MergeStyles(old, delta) without copying the whole ~60-
+                    // optional Style struct per update.
+                    off = readStyleRun(base, off, len, it->second->style);
                     rayact::shadowTree().setStyle((uint32_t)it->first, it->second->style);
+                } else {
+                    // Unknown node: still consume the run to keep the stream
+                    // in sync.
+                    raym3::v2::Style scratch;
+                    off = readStyleRun(base, off, len, scratch);
                 }
                 break;
             }
@@ -7311,6 +7631,53 @@ static void applyCommandBufferCtx(const uint8_t* base, size_t len, RcmdWorkerCtx
                     it->second->text = sit->second;
                     it->second->preparedTextCache.reset();
                 }
+                break;
+            }
+            case RCMD_SET_CLASSNAME: {
+                if (off + 8 > len) return;
+                int id = cmdReadI32(base + off);
+                int strId = cmdReadI32(base + off + 4);
+                off += 8;
+                auto sit = strings.find(strId);
+                auto it = g_nodes.find(mapRef(id));
+                if (sit == strings.end() || it == g_nodes.end() || !it->second) break;
+                const std::string& cls = sit->second;
+                if (cls.empty()) break;
+                g_nodeClassNames[it->first] = cls;
+                if (g_bridge_ctx) {
+                    const ResolvedClassEntry& e = resolveClassEntryCached(g_bridge_ctx, cls);
+                    // Class base goes UNDER the create-style (inline) props —
+                    // same precedence as parseStyle (class first, inline over).
+                    it->second->style = raym3::v2::MergeStyles(e.style, it->second->style);
+                    if (e.hasStates) it->second->stateStyles = e.states;
+                    rayact::shadowTree().setStyle((uint32_t)it->first, it->second->style);
+                    // Start any CSS animation declared by the classes (mirror
+                    // JS_createView's mount behavior).
+                    if (it->second->style.animations)
+                        raym3::v2::ApplyStyleWithAnimations(it->second, it->second->style,
+                                                            it->second->style);
+                }
+                break;
+            }
+            case RCMD_DIRTY_SLAB: {
+                if (off + 8 > len) return;
+                int id = cmdReadI32(base + off);
+                int32_t slot = cmdReadI32(base + off + 4);
+                off += 8;
+                // Workers never emit slab ops — their id namespace can't own
+                // slab slots. Treat one in a worker stream as a desync.
+                if (wc) return;
+                uint32_t entry[rayact::kStyleSlabWords];
+                if (slot < 0 || !readSlabEntry((uint32_t)slot, entry)) break;
+                // Stale-slot guard: the entry must still belong to this node
+                // (JS reuses freed slots).
+                if (cmdReadI32(reinterpret_cast<const uint8_t*>(entry + rayact::kSlabNodeId)) != id) break;
+                auto it = g_nodes.find(id);
+                if (it != g_nodes.end() && it->second) {
+                    applySlabEntryToStyle(entry, it->second->style);
+                    rayact::shadowTree().setStyle((uint32_t)it->first, it->second->style);
+                }
+                g_styleSlab[(size_t)slot * rayact::kStyleSlabWords + rayact::kSlabDirty] = 0;
                 break;
             }
             default:
@@ -7388,5 +7755,35 @@ void installCommandBuffer(JSContext* ctx, JSValue global) {
         JS_SetPropertyStr(ctx, global, "__RAYACT_USE_BINARY", JS_TRUE);
         // Id-space separation is by parity (native odd / JS even), not a base
         // offset — see nextNativeNodeId(). Nothing to set here.
+    }
+
+    // StyleSlab (style_slab.hpp): hot-style arena, JS writes fields directly.
+    // Requires the binary stream (RCMD_DIRTY_SLAB carries the apply ordering),
+    // so it is gated on `enable` too. Rollback: RAYACT_STYLE_SLAB=0 /
+    // debug.rayact.styleslab.
+    bool slabEnable = enable;
+    if (const char* env = std::getenv("RAYACT_STYLE_SLAB")) {
+        slabEnable = enable && env[0] != '\0' && env[0] != '0';
+    }
+#if defined(RAYACT_ANDROID) || defined(__ANDROID__)
+    {
+        char prop[PROP_VALUE_MAX] = {0};
+        if (__system_property_get("debug.rayact.styleslab", prop) > 0 && prop[0] != '\0') {
+            slabEnable = enable && prop[0] != '0';
+        }
+    }
+#endif
+    if (slabEnable) {
+        if (g_styleSlab.empty())
+            g_styleSlab.resize((size_t)rayact::kStyleSlabSlots * rayact::kStyleSlabWords, 0u);
+        JSValue slab = JS_NewArrayBuffer(
+            ctx,
+            reinterpret_cast<uint8_t*>(g_styleSlab.data()),
+            g_styleSlab.size() * sizeof(uint32_t),
+            nullptr,
+            nullptr,
+            false);
+        JS_SetPropertyStr(ctx, global, "__rayactStyleSlab", slab);
+        JS_SetPropertyStr(ctx, global, "__RAYACT_USE_STYLE_SLAB", JS_TRUE);
     }
 }

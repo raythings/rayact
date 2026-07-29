@@ -28,6 +28,7 @@ export { createDevClient, installConsoleForwarding } from './devClient.js';
 export { loadFont, loadIcons, loadEmoji } from './fonts.js';
 export type { FontSource, IconSetVariants } from './fonts.js';
 export {
+  assertModuleSource,
   installModuleHmrRuntime,
   ModuleHmrRuntime,
   normalizeModuleUrl,

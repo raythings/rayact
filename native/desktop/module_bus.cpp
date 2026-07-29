@@ -40,8 +40,9 @@ bool busHas(const char* name) {
   return g_modules.count(name) != 0;
 }
 
-bool busInvoke(const std::string& name, const std::string& method,
-               const std::string& args, std::string& out, int* errcode) {
+bool busInvokeBytes(const std::string& name, const std::string& method,
+                    const uint8_t* args, size_t argsLen, std::string& out,
+                    int* errcode) {
   RayactModule mod;
   {
     std::lock_guard<std::mutex> lk(g_regMtx);
@@ -52,7 +53,7 @@ bool busInvoke(const std::string& name, const std::string& method,
     }
     mod = it->second;
   }
-  RayactBytes in{args.empty() ? nullptr : (const uint8_t*)args.data(), args.size()};
+  RayactBytes in{argsLen ? args : nullptr, argsLen};
   RayactBytes res{nullptr, 0};
   int rc = mod.invoke(mod.self, method.c_str(), in, &res);
   if (rc != 0) {
@@ -66,14 +67,19 @@ bool busInvoke(const std::string& name, const std::string& method,
   return true;
 }
 
+bool busInvoke(const std::string& name, const std::string& method,
+               const std::string& args, std::string& out, int* errcode) {
+  return busInvokeBytes(name, method, (const uint8_t*)args.data(), args.size(),
+                        out, errcode);
+}
+
 int busInvokeRaw(const char* name, size_t nameLen, const char* method,
                  size_t methodLen, const uint8_t* args, size_t argsLen,
                  uint8_t* out, size_t outCap) {
   std::string n(name, nameLen), m(method, methodLen);
-  std::string a((const char*)(args ? args : (const uint8_t*)""), argsLen);
   std::string res;
   int err = 0;
-  if (!busInvoke(n, m, a, res, &err)) return err < 0 ? err : -1;
+  if (!busInvokeBytes(n, m, args, argsLen, res, &err)) return err < 0 ? err : -1;
   if (res.size() > outCap) return (int)res.size(); // caller retries with bigger buffer
   if (!res.empty()) memcpy(out, res.data(), res.size());
   return (int)res.size();
@@ -248,7 +254,16 @@ struct BusCtx {
   // Shared-buffer views handed to this context, so they can be detached when the
   // owning module drops the slab or the context goes away.
   std::map<int32_t, JSValue> buffers;
+  // Per-context sync-invoke slab (__rayact_invoke_shared): JS writes args into
+  // it, native writes the result back into it — no arg copy, no result
+  // ArrayBuffer allocation. Per-context because workers invoke from their own
+  // threads. Lazily created; JS obtains the view via __rayact_module_buffer.
+  int32_t invokeSlabId = 0;
+  // Result that didn't fit the slab, fetched by __rayact_invoke_take.
+  std::string overflow;
 };
+
+constexpr size_t kInvokeSlabBytes = 256 * 1024;
 
 std::mutex g_ctxMtx;
 std::unordered_map<JSContext*, BusCtx*> g_ctxMap;
@@ -378,6 +393,78 @@ JSValue jsModuleBuffer(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
   return buf;
 }
 
+// __rayact_invoke_slab() → id of this context's sync-invoke slab (created on
+// first use). JS maps it once via __rayact_module_buffer(id) and reuses the
+// view for every __rayact_invoke_shared call.
+JSValue jsInvokeSlab(JSContext* ctx, JSValue, int, JSValueConst*) {
+  BusCtx* bc = getBusCtx(ctx);
+  if (!bc) return JS_ThrowInternalError(ctx, "module bus not installed on context");
+  if (bc->invokeSlabId == 0) {
+    void* ptr = nullptr;
+    bc->invokeSlabId = hostSharedBufferCreate(kInvokeSlabBytes, &ptr);
+    if (bc->invokeSlabId < 0) {
+      bc->invokeSlabId = 0;
+      return JS_ThrowInternalError(ctx, "invoke slab allocation failed");
+    }
+  }
+  return JS_NewInt32(ctx, bc->invokeSlabId);
+}
+
+// __rayact_invoke_shared(name, method, argByteLen) → resultByteLen.
+// Args are read in place from the invoke slab and the result is written back
+// into it — the only per-call copy left is the module writing its own out
+// buffer. A result larger than the slab is stashed on the context and
+// signalled as a negative length; JS fetches it via __rayact_invoke_take().
+JSValue jsInvokeShared(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+  if (argc < 3)
+    return JS_ThrowTypeError(ctx, "__rayact_invoke_shared(name, method, argByteLen)");
+  BusCtx* bc = getBusCtx(ctx);
+  if (!bc || bc->invokeSlabId == 0)
+    return JS_ThrowInternalError(ctx, "invoke slab not initialized");
+  const char* n = JS_ToCString(ctx, argv[0]);
+  const char* m = JS_ToCString(ctx, argv[1]);
+  if (!n || !m) {
+    if (n) JS_FreeCString(ctx, n);
+    if (m) JS_FreeCString(ctx, m);
+    return JS_EXCEPTION;
+  }
+  std::string name = n, method = m;
+  JS_FreeCString(ctx, n);
+  JS_FreeCString(ctx, m);
+  int64_t argLen = 0;
+  JS_ToInt64(ctx, &argLen, argv[2]);
+  size_t slabSize = 0;
+  uint8_t* slab = (uint8_t*)hostSharedBufferPtr(bc->invokeSlabId, &slabSize);
+  if (!slab || argLen < 0 || (size_t)argLen > slabSize)
+    return JS_ThrowRangeError(ctx, "invoke slab args out of range");
+
+  std::string out;
+  int err = 0;
+  if (!busInvokeBytes(name, method, slab, (size_t)argLen, out, &err)) {
+    if (err == kBusNoModule)
+      return JS_ThrowReferenceError(
+          ctx, "rayact module '%s' not available — install the plugin", name.c_str());
+    return JS_ThrowInternalError(ctx, "module '%s'.%s failed (%d)", name.c_str(),
+                                 method.c_str(), err);
+  }
+  if (out.size() <= slabSize) {
+    if (!out.empty()) memcpy(slab, out.data(), out.size());
+    return JS_NewInt64(ctx, (int64_t)out.size());
+  }
+  bc->overflow = std::move(out);
+  return JS_NewInt64(ctx, -(int64_t)bc->overflow.size());
+}
+
+// __rayact_invoke_take() → ArrayBuffer copy of the stashed overflow result.
+JSValue jsInvokeTake(JSContext* ctx, JSValue, int, JSValueConst*) {
+  BusCtx* bc = getBusCtx(ctx);
+  if (!bc) return JS_ThrowInternalError(ctx, "module bus not installed on context");
+  JSValue ab = makeArrayBuffer(ctx, bc->overflow);
+  bc->overflow.clear();
+  bc->overflow.shrink_to_fit();
+  return ab;
+}
+
 // Detach any view whose slab the owning module has dropped, then let the slab go.
 void reapDroppedBuffers(JSContext* ctx, BusCtx* bc) {
   if (bc->buffers.empty()) return;
@@ -419,6 +506,12 @@ void installModuleBindings(JSContext* ctx, JSValue global) {
                     JS_NewCFunction(ctx, jsInvokeAsync, "__rayact_invoke_async", 3));
   JS_SetPropertyStr(ctx, global, "__rayact_module_buffer",
                     JS_NewCFunction(ctx, jsModuleBuffer, "__rayact_module_buffer", 1));
+  JS_SetPropertyStr(ctx, global, "__rayact_invoke_slab",
+                    JS_NewCFunction(ctx, jsInvokeSlab, "__rayact_invoke_slab", 0));
+  JS_SetPropertyStr(ctx, global, "__rayact_invoke_shared",
+                    JS_NewCFunction(ctx, jsInvokeShared, "__rayact_invoke_shared", 3));
+  JS_SetPropertyStr(ctx, global, "__rayact_invoke_take",
+                    JS_NewCFunction(ctx, jsInvokeTake, "__rayact_invoke_take", 0));
 }
 
 void drainModuleEvents(JSContext* ctx) {
@@ -473,6 +566,9 @@ void shutdownModuleBus(JSContext* ctx) {
       reapSlabLocked(slab);
     }
   }
+  // The invoke slab is context-owned — drop it (frees once the view detach
+  // above released the last reference).
+  if (bc->invokeSlabId != 0) hostSharedBufferDrop(bc->invokeSlabId);
   delete bc;
 }
 

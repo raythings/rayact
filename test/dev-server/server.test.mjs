@@ -45,6 +45,33 @@ test('manifest advertises the pinned DevTools frontend and capabilities', async 
     assert.ok(manifest.capabilities.includes('network-passive'));
     assert.ok(manifest.capabilities.includes('tracing-basic'));
     assert.ok(manifest.capabilities.includes('memory-counters'));
+    // importCSS() resolves against the DEVICE filesystem, which only has the
+    // project in a bundled build; a dev-server device fetches the text here and
+    // hands it to importCSSText instead.
+    const cssOk = await fetch(
+      `${server.localUrl}/rayact/css?path=${encodeURIComponent('packages/rayact-react/src/avoid-keyboard.css')}`
+    );
+    assert.equal(cssOk.status, 200);
+    assert.match(cssOk.headers.get('content-type') ?? '', /text\/css/);
+    assert.ok((await cssOk.text()).length > 0);
+
+    const cssTraversal = await fetch(
+      `${server.localUrl}/rayact/css?path=${encodeURIComponent('../../../etc/passwd')}`
+    );
+    assert.equal(cssTraversal.status, 400);
+    assert.match(await cssTraversal.text(), /^Error: \[rayact:css\]/);
+
+    // The device's sync fetch shim only sees text, so an unresolvable import has
+    // to announce itself in the body; otherwise it reaches eval() as source.
+    const unresolvable = await fetch(
+      `${server.localUrl}/rayact/resolve?spec=${encodeURIComponent('./definitely-not-here')}` +
+      `&from=${encodeURIComponent('/test-projects/release-consumer-smoke/src/App.tsx')}`
+    );
+    assert.equal(unresolvable.status, 404);
+    const unresolvableBody = await unresolvable.text();
+    assert.match(unresolvableBody, /^Error: \[rayact:resolve\]/);
+    assert.match(unresolvableBody, /definitely-not-here/);
+
     const frontend = await fetch(server.devtoolsUrl);
     assert.equal(frontend.status, 200);
 

@@ -31,6 +31,12 @@ bool busHas(const char* name);
 bool busInvoke(const std::string& name, const std::string& method,
                const std::string& args, std::string& out, int* errcode = nullptr);
 
+// Same, but reads args in place (no copy) — the caller guarantees the bytes
+// stay valid for the duration of the call.
+bool busInvokeBytes(const std::string& name, const std::string& method,
+                    const uint8_t* args, size_t argsLen, std::string& out,
+                    int* errcode = nullptr);
+
 enum { kBusNoModule = -1000 };
 
 // Host struct handed to plugins at load time.

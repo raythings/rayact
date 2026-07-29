@@ -12,6 +12,22 @@ const OFFSETS = {
 };
 
 let sharedFloatArray: Float32Array | null = null;
+let sharedFloatBuffer: ArrayBuffer | null = null;
+
+/**
+ * View over the native animated-style arena. Re-derived whenever the host swaps
+ * the global — a cached view over a replaced ArrayBuffer would write into
+ * memory the engine no longer owns.
+ */
+function animatedStyleView(): Float32Array | null {
+  const buffer = globalObj.__rayactAnimatedStyleBuffer ?? globalObj.__rayactSharedStyleBuffer;
+  if (!buffer) return null;
+  if (buffer !== sharedFloatBuffer) {
+    sharedFloatBuffer = buffer;
+    sharedFloatArray = new Float32Array(buffer);
+  }
+  return sharedFloatArray;
+}
 
 export interface AnimationConfig {
   type: 'spring' | 'timing';
@@ -50,14 +66,10 @@ export class SharedValue {
       this.index = nodeId * SLAB_SIZE + propOffset;
       this.dirtyIndex = nodeId * SLAB_SIZE + OFFSETS.dirty;
 
-      const buffer = globalObj.__rayactAnimatedStyleBuffer ?? globalObj.__rayactSharedStyleBuffer;
-      if (buffer && !sharedFloatArray) {
-        sharedFloatArray = new Float32Array(buffer);
-      }
-
-      if (sharedFloatArray) {
-        sharedFloatArray[this.index] = this.initialValue;
-        sharedFloatArray[this.dirtyIndex] = 1.0;
+      const view = animatedStyleView();
+      if (view) {
+        view[this.index] = this.initialValue;
+        view[this.dirtyIndex] = 1.0;
       }
       if (typeof globalObj.__rayactRegisterAnimatedNode === 'function') {
         globalObj.__rayactRegisterAnimatedNode(nodeId, { [property]: this.initialValue });
@@ -66,18 +78,12 @@ export class SharedValue {
   }
 
   get value(): number {
-    const buffer = globalObj.__rayactAnimatedStyleBuffer ?? globalObj.__rayactSharedStyleBuffer;
-    if (buffer && !sharedFloatArray) {
-      sharedFloatArray = new Float32Array(buffer);
-    }
-    return (this.index !== -1 && sharedFloatArray) ? sharedFloatArray[this.index] : this.initialValue;
+    const view = animatedStyleView();
+    return (this.index !== -1 && view) ? view[this.index] : this.initialValue;
   }
 
   set value(newValue: number | AnimationConfig) {
-    const buffer = globalObj.__rayactAnimatedStyleBuffer ?? globalObj.__rayactSharedStyleBuffer;
-    if (buffer && !sharedFloatArray) {
-      sharedFloatArray = new Float32Array(buffer);
-    }
+    const view = animatedStyleView();
 
     if (typeof newValue === 'number') {
       if (this.fallbackFrameId !== null) {
@@ -85,9 +91,9 @@ export class SharedValue {
         this.fallbackFrameId = null;
       }
       this.initialValue = newValue;
-      if (this.index !== -1 && sharedFloatArray) {
-        sharedFloatArray[this.index] = newValue;
-        sharedFloatArray[this.dirtyIndex] = 1.0;
+      if (this.index !== -1 && view) {
+        view[this.index] = newValue;
+        view[this.dirtyIndex] = 1.0;
       }
       if (this.nodeId !== null && this.propertyOffset !== -1 && typeof globalObj.__rayactSetAnimatedStyle === 'function') {
         globalObj.__rayactSetAnimatedStyle(this.nodeId, { [this.propertyName()]: newValue });
@@ -127,14 +133,11 @@ export class SharedValue {
       const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
       const val = fromVal + diff * eased;
 
-      const buffer = globalObj.__rayactAnimatedStyleBuffer ?? globalObj.__rayactSharedStyleBuffer;
-      if (buffer && !sharedFloatArray) {
-        sharedFloatArray = new Float32Array(buffer);
-      }
+      const view = animatedStyleView();
 
-      if (this.index !== -1 && sharedFloatArray) {
-        sharedFloatArray[this.index] = val;
-        sharedFloatArray[this.dirtyIndex] = 1.0;
+      if (this.index !== -1 && view) {
+        view[this.index] = val;
+        view[this.dirtyIndex] = 1.0;
       } else {
         this.initialValue = val;
       }
@@ -142,9 +145,9 @@ export class SharedValue {
       if (t < 1) {
         this.fallbackFrameId = requestAnimationFrame(step);
       } else {
-        if (this.index !== -1 && sharedFloatArray) {
-          sharedFloatArray[this.index] = config.target;
-          sharedFloatArray[this.dirtyIndex] = 1.0;
+        if (this.index !== -1 && view) {
+          view[this.index] = config.target;
+          view[this.dirtyIndex] = 1.0;
         } else {
           this.initialValue = config.target;
         }

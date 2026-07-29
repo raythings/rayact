@@ -1,13 +1,11 @@
-declare const __rayact_invoke: (
-  name: string,
-  method: string,
-  args?: ArrayBufferLike
-) => ArrayBuffer;
+import { invokeSync } from '@rayact/shared';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-const invoke = (method: string, bytes = new Uint8Array()) =>
-  new Uint8Array(__rayact_invoke('kv', method, bytes.buffer));
+// invokeSync uses the shared-slab fast path when the host provides it (no arg
+// copy, no result ArrayBuffer allocation). Results are decoded immediately, so
+// the view-until-next-invoke contract is satisfied.
+const invoke = (method: string, bytes = new Uint8Array()) => invokeSync('kv', method, bytes);
 
 export const KV = {
   set(key: string, value: string): void {

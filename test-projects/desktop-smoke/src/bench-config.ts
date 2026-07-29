@@ -3,4 +3,5 @@
 // project vite.config.ts never reaches the bundle. A generated module is the
 // one parameterisation channel that survives every build path.
 export const BENCH_SCENARIO = "fixed";
-export const BENCH_ROWS = 100;
+export const BENCH_ROWS = 10000;
+export const BENCH_LIST = "flat";

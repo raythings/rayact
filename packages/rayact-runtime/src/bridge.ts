@@ -21,15 +21,29 @@ const OFFSETS = {
 };
 
 let sharedFloatArray: Float32Array | null = null;
+let sharedFloatBuffer: ArrayBuffer | null = null;
+
+/**
+ * View over the native animated-style arena. Re-derived whenever the host swaps
+ * the global — a cached view over a replaced ArrayBuffer would write into
+ * memory the engine no longer owns.
+ */
+function animatedStyleView(): Float32Array | null {
+  const globalObj = globalThis as any;
+  const buffer = globalObj.__rayactAnimatedStyleBuffer ?? globalObj.__rayactSharedStyleBuffer;
+  if (!buffer) return null;
+  if (buffer !== sharedFloatBuffer) {
+    sharedFloatBuffer = buffer;
+    sharedFloatArray = new Float32Array(buffer);
+  }
+  return sharedFloatArray;
+}
 
 function writeSharedStyle(nodeId: number, property: string, value: number) {
   const propOffset = OFFSETS[property as keyof typeof OFFSETS];
   if (propOffset !== undefined) {
     const globalObj = globalThis as any;
-    const buffer = globalObj.__rayactAnimatedStyleBuffer ?? globalObj.__rayactSharedStyleBuffer;
-    if (buffer && !sharedFloatArray) {
-      sharedFloatArray = new Float32Array(buffer);
-    }
+    const sharedFloatArray = animatedStyleView();
     if (sharedFloatArray) {
       const index = nodeId * SLAB_SIZE + propOffset;
       const dirtyIndex = nodeId * SLAB_SIZE + OFFSETS.dirty;

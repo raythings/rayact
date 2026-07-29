@@ -16,10 +16,19 @@
         <meta-data
             android:name="com.google.mlkit.vision.DEPENDENCIES"
             android:value="barcode_ui" />
+        <!-- Required for the IME inset to reach JS. Left unset, Android resolves
+             this window to ADJUST_PAN, which suppresses WindowInsets ime()
+             dispatch entirely — RayactSurfaceView's insets listener then only
+             ever sees systemBars, so useKeyboard()/AvoidKeyboard/
+             KeyboardStickyView all read height 0 and never move off the bottom
+             edge. The pan itself is invisible here because the content is a
+             full-screen SurfaceView raylib paints, so the keyboard simply
+             covers whatever sits at the bottom. -->
         <activity
             android:name="com.rayact.app.DevLauncherActivity"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|density|uiMode"
+            android:windowSoftInputMode="adjustResize"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -59,11 +59,15 @@ export const SK = {
   top: 32, right: 33, bottom: 34, left: 35,
   translateX: 36, translateY: 37, scale: 38, rotation: 39,
   fontSize: 40, lineHeight: 41, letterSpacing: 42,
+  lineHeightRatio: 43, maxLines: 44,
+  borderTopWidth: 45, borderRightWidth: 46, borderBottomWidth: 47, borderLeftWidth: 48,
   // colors (uint32)
   backgroundColor: 50, borderColor: 51, color: 52,
+  borderTopColor: 53, borderRightColor: 54, borderBottomColor: 55, borderLeftColor: 56,
   // enums (int)
   flexDirection: 60, justifyContent: 61, alignItems: 62, alignSelf: 63,
   display: 64, position: 65, overflow: 66, pointerEvents: 67, flexWrap: 68,
+  ellipsizeMode: 69,
 } as const;
 
 export type StyleKey = keyof typeof SK;
@@ -78,10 +82,14 @@ export const F64_KEYS = new Set<string>([
   'opacity', 'borderRadius', 'borderWidth', 'elevation',
   'top', 'right', 'bottom', 'left',
   'translateX', 'translateY', 'scale', 'rotation',
-  'fontSize', 'lineHeight', 'letterSpacing',
+  'fontSize', 'lineHeight', 'letterSpacing', 'lineHeightRatio', 'maxLines',
+  'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
 ]);
 
-export const COLOR_KEYS = new Set<string>(['backgroundColor', 'borderColor', 'color']);
+export const COLOR_KEYS = new Set<string>([
+  'backgroundColor', 'borderColor', 'color',
+  'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor',
+]);
 
 // Enum string → int. MUST match native applyStyleKeyBinary.
 export const ENUM_VALUES: Record<string, Record<string, number>> = {
@@ -94,6 +102,8 @@ export const ENUM_VALUES: Record<string, Record<string, number>> = {
   position: { absolute: 0, relative: 1, fixed: 2 },
   overflow: { hidden: 0, scroll: 1, visible: 2 },
   pointerEvents: { none: 0, auto: 1 },
+  // react-native `ellipsizeMode`; `clip` is the default (hard cut, no ellipsis).
+  ellipsizeMode: { clip: 0, tail: 1, head: 2, middle: 3 },
 };
 
 export type CmdOpcode = (typeof CMD)[keyof typeof CMD];
