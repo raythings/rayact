@@ -1,0 +1,10 @@
+{
+  "name": "webview-smoke",
+  "rayactAppKey": "webview-smoke",
+  "devServer": {
+    "host": "0.0.0.0",
+    "port": 8082,
+    "cdpPort": 9230
+  },
+  "entry": "src/App.tsx"
+}

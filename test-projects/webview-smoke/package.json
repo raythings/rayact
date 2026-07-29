@@ -1,0 +1,12 @@
+{
+  "name": "webview-smoke",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Standalone smoke app for @rayact/webview on Android (adb) and iOS (simulator).",
+  "dependencies": {
+    "@rayact/webview": "*",
+    "rayact": "*",
+    "react": "^19.0.0"
+  }
+}
