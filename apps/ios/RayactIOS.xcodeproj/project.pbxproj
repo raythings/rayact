@@ -56,6 +56,7 @@
 		1CD3157CB91BB83C6CA0D917 /* config_loader.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F7053D1A9402E92BD2189BFC /* config_loader.cpp */; };
 		1DCEA2C01E99AC6608B02B29 /* unicode_download.sh in Resources */ = {isa = PBXBuildFile; fileRef = D93EDE6AE087FBDE206BC5D2 /* unicode_download.sh */; };
 		1E28D84F1AD986DF8F475877 /* ios_engine_instance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EE0F30DA7DE7D611C4DB1AD6 /* ios_engine_instance.cpp */; };
+		2160C315FC2355FA733075D6 /* RayactClipboardRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 250D7BADDE3CE98731867A3E /* RayactClipboardRegistration.swift */; };
 		21CE15B28BCDCFF8A94F408C /* LayoutNode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B76037309E6EA19C79832353 /* LayoutNode.cpp */; };
 		22FB7658CE410B82B35939F2 /* YGNodeStyle.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2E2665334F34A0BE8CDCD2BC /* YGNodeStyle.cpp */; };
 		23C3808D2732443AE859140C /* m3_compile.c in Sources */ = {isa = PBXBuildFile; fileRef = 1A975362667BD597D2506176 /* m3_compile.c */; };
@@ -78,6 +79,7 @@
 		32D560D5DE4574CE9C962FA0 /* worker_wasm.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C58A0CFF34752083F59A291E /* worker_wasm.cpp */; };
 		33BDE968D6EAB368B4A48F98 /* kv_store.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5652D373531BC05A07AF0E14 /* kv_store.cpp */; };
 		33C5777855FC285C8558821F /* YGNodeLayout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FF147B193D6F2772911F3C38 /* YGNodeLayout.cpp */; };
+		345BBFC95B9B054D8477C62F /* Gradient.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 784D5054FF39E29FEBD3F3BB /* Gradient.cpp */; };
 		349F2F879479D48ACFDEE00F /* View3D.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 26A2363B4CBAC90587376E4F /* View3D.cpp */; };
 		361A16594C5FA547BFF5024D /* m3_exec.c in Sources */ = {isa = PBXBuildFile; fileRef = 52155F1D199F9A0244BFE97D /* m3_exec.c */; };
 		3620C3A7E1CE32BEC4597587 /* Renderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3C34A484593D51A0FD3FE50B /* Renderer.cpp */; };
@@ -181,6 +183,8 @@
 		75FC46EA046DC480BE8CA6F7 /* rayactpack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 77FCB5613F3516AB0744BDE9 /* rayactpack.cpp */; };
 		760CDAF3F5BF0866AA55D0A9 /* m3_core.c in Sources */ = {isa = PBXBuildFile; fileRef = 75A2A660FA80E67CEA4DCD9E /* m3_core.c */; };
 		77421B4ED24C40F240DD9419 /* test262.conf in Resources */ = {isa = PBXBuildFile; fileRef = 595E57CC00CEEEC3D3D2C3B3 /* test262.conf */; };
+		77C2D29BFDF014FABB22F93B /* RayactLinkingRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B26A3FCCD057897279F6B1C6 /* RayactLinkingRegistration.swift */; };
+		77C396704244D99C035E85D4 /* rlgl_stencil_gl.c in Sources */ = {isa = PBXBuildFile; fileRef = 3AA5676FCBA3D8D5374F1E4C /* rlgl_stencil_gl.c */; };
 		77C99E137700A8F6500441FC /* rsvg_tess_fill.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D03DDDC3CAD0DA5DFC0D1AF4 /* rsvg_tess_fill.cpp */; };
 		78356034A860CDD81EAD7FF2 /* Switch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A6823BC8335C79C6CD1BC7EE /* Switch.cpp */; };
 		7981C44E9D8F76143694DE55 /* RayactHapticsRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 064FE048FD9149B0E8885A4C /* RayactHapticsRegistration.swift */; };
@@ -268,6 +272,7 @@
 		B515274692716764B1514243 /* Density.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 68469D2FE07DBA277E1658B0 /* Density.cpp */; };
 		B5CED7E033874AC24BF72E85 /* Components.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E2CEE3EBA53166EBF92326B7 /* Components.cpp */; };
 		B674CC7DE84151560BED4F1F /* rtext.c in Sources */ = {isa = PBXBuildFile; fileRef = 033D06CBD69C1A750204C7F1 /* rtext.c */; };
+		B7D975EC561B5A0933FF7370 /* RayactWebViewRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CEBBD77EECA9108C3F9DED2 /* RayactWebViewRegistration.swift */; };
 		B81F127C71B41115425C7181 /* TextField.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F5B08C908128E9379859CC94 /* TextField.cpp */; };
 		B870195D94778C6A4768EFD9 /* SystemAppearance.mm in Sources */ = {isa = PBXBuildFile; fileRef = 78460481074191BFF35CD1D8 /* SystemAppearance.mm */; };
 		B963FBE2A50396EC5152C63E /* raylib_gpu_shim.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4B55935367B2CD94AF932DD3 /* raylib_gpu_shim.cpp */; };
@@ -280,11 +285,14 @@
 		BD7FA53D9617BC4E0D31C4C3 /* m3_parse.c in Sources */ = {isa = PBXBuildFile; fileRef = 4DD415575E09D0EE82B83F4C /* m3_parse.c */; };
 		BD8D1CF27329927B935827C6 /* module_bus.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 831D0F39EBE86FFE17FFF5B0 /* module_bus.cpp */; };
 		BD99106D9D2242E0C4D697D4 /* rsvg_render.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0222954B96DFCCF6BF6C8980 /* rsvg_render.cpp */; };
+		BDA893C7B0AD093D5E9823FF /* RayactPlatformViewHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 630B7B658CF3F69C2775ED11 /* RayactPlatformViewHost.swift */; };
+		BE1ABF6A75F6CEE9AA174BFC /* rlgl_stencil_gl.c in Sources */ = {isa = PBXBuildFile; fileRef = 3AA5676FCBA3D8D5374F1E4C /* rlgl_stencil_gl.c */; };
 		BE79C0406D8CAE69BD5D69A7 /* Ripple.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BF2DA98AEDA8C4CD32294A86 /* Ripple.cpp */; };
 		BE8005CECDFFB06DD4410989 /* SvgModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F580CD4E2F9FFAA4B1341D35 /* SvgModel.cpp */; };
 		BEB519CE03A4F74CD4930842 /* Snackbar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 22018002A09CFD74E653EA9C /* Snackbar.cpp */; };
 		BED80B977E8614175592B343 /* Slider.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E92FF35319D5631AC5E15853 /* Slider.cpp */; };
 		BF07E90A7FA534638EC68BED /* m3_extensions.c in Sources */ = {isa = PBXBuildFile; fileRef = 3719A70FF9FB36517B19379F /* m3_extensions.c */; };
+		C062AA9FD48F2A50FE3CCC74 /* RayactNativeTextInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30F92F3A298C1FC88A041828 /* RayactNativeTextInput.swift */; };
 		C0CDFD46ADDEBDA206D8E5B9 /* LayoutResults.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FADFB3523E24CBEFA34FAF8E /* LayoutResults.cpp */; };
 		C149A66B9B9FFA69425370CA /* raysvg.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0D64A69A148C5022990C6411 /* raysvg.cpp */; };
 		C1AF0795FCB63DA225E38E44 /* View3D.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 26A2363B4CBAC90587376E4F /* View3D.cpp */; };
@@ -324,6 +332,7 @@
 		D6EBA1156B07921DB450D1DC /* CSSUtils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4B39956F06DD9AC33A73C936 /* CSSUtils.cpp */; };
 		D71158D8D64B7926AB3CC8B4 /* Cache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A0BD219E6A1366278E61EBCB /* Cache.cpp */; };
 		D7E59D744503CCF444433CB1 /* Text.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EF9A50956BDA73CBC0F0D322 /* Text.cpp */; };
+		D94E329F219A96EDF49983A6 /* Gradient.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 784D5054FF39E29FEBD3F3BB /* Gradient.cpp */; };
 		D94F2AF9C28C53A16A01675B /* m3_module.c in Sources */ = {isa = PBXBuildFile; fileRef = BC38A370866BEEDE4CC8DE7C /* m3_module.c */; };
 		D99132B5214B01EF3563A232 /* theme_bridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11D8580FA38B56405E57F90C /* theme_bridge.cpp */; };
 		E116E94D2A5E34457E96FFB2 /* IconButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3D39846B38E4EB78300E70AB /* IconButton.cpp */; };
@@ -425,6 +434,7 @@
 		22B96FC50B0BD6D4BFE09371 /* Edge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Edge.h; sourceTree = "<group>"; };
 		2349AA101E797DF097B7183D /* FloatingActionButton.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = FloatingActionButton.cpp; sourceTree = "<group>"; };
 		24F487096F5E169EF7F1AFCC /* RayactGeneratedModules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactGeneratedModules.swift; sourceTree = "<group>"; };
+		250D7BADDE3CE98731867A3E /* RayactClipboardRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactClipboardRegistration.swift; sourceTree = "<group>"; };
 		25205A3983407A326A8FA64A /* quickjs_bridge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = quickjs_bridge.cpp; sourceTree = "<group>"; };
 		25B7FE4A12BC024FA7A69E8D /* tree-sitter-typescript.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "tree-sitter-typescript.h"; sourceTree = "<group>"; };
 		26A2363B4CBAC90587376E4F /* View3D.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = View3D.cpp; sourceTree = "<group>"; };
@@ -442,6 +452,7 @@
 		2EDA5ACC9660444D2043B5D7 /* Input.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Input.cpp; sourceTree = "<group>"; };
 		2EDBDE36DAE581834D13867D /* YGNode.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = YGNode.cpp; sourceTree = "<group>"; };
 		30D8ED92E5026B9EA1E91ABF /* dev_client_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = dev_client_bridge.hpp; sourceTree = "<group>"; };
+		30F92F3A298C1FC88A041828 /* RayactNativeTextInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactNativeTextInput.swift; sourceTree = "<group>"; };
 		31656B737E95A2F23DEBE135 /* InputLayer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = InputLayer.cpp; sourceTree = "<group>"; };
 		31F943538A558EB7C99C35BD /* Transitions.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Transitions.cpp; sourceTree = "<group>"; };
 		32646D3D3C2A74F0CC05ACB2 /* FlexLine.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = FlexLine.cpp; sourceTree = "<group>"; };
@@ -453,10 +464,12 @@
 		3719A70FF9FB36517B19379F /* m3_extensions.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_extensions.c; sourceTree = "<group>"; };
 		390CE3FE919320CBB64E90B5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		394F9D7799DD790573E5CC67 /* TextMeasureCache.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TextMeasureCache.cpp; sourceTree = "<group>"; };
+		3AA5676FCBA3D8D5374F1E4C /* rlgl_stencil_gl.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rlgl_stencil_gl.c; sourceTree = "<group>"; };
 		3B3DC4ACB5FED967F2EBDA22 /* Icon.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Icon.cpp; sourceTree = "<group>"; };
 		3B66654088E57B2DA773C955 /* libregexp.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = libregexp.c; sourceTree = "<group>"; };
 		3C34A484593D51A0FD3FE50B /* Renderer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Renderer.cpp; sourceTree = "<group>"; };
 		3C76BCB0EA862114A65CFFF8 /* rsvg_clip.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = rsvg_clip.cpp; sourceTree = "<group>"; };
+		3CEBBD77EECA9108C3F9DED2 /* RayactWebViewRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactWebViewRegistration.swift; sourceTree = "<group>"; };
 		3D39846B38E4EB78300E70AB /* IconButton.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = IconButton.cpp; sourceTree = "<group>"; };
 		3E118070D437B07CF353421F /* MeasureMode.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MeasureMode.h; sourceTree = "<group>"; };
 		3EF74AB989F743A13EF9ED27 /* RayactHTTP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactHTTP.swift; sourceTree = "<group>"; };
@@ -496,6 +509,7 @@
 		608D8FD85290A241F5A21DED /* Align.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Align.h; sourceTree = "<group>"; };
 		60C506A65430CF60588D22FB /* ProjectHmrClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectHmrClient.swift; sourceTree = "<group>"; };
 		62D5F1BAB64A9A455402D29E /* rmodels.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rmodels.c; sourceTree = "<group>"; };
+		630B7B658CF3F69C2775ED11 /* RayactPlatformViewHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactPlatformViewHost.swift; sourceTree = "<group>"; };
 		6492F076A3C93508C738F9B5 /* TextSelectionOverlay.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TextSelectionOverlay.cpp; sourceTree = "<group>"; };
 		655B49C34306178B7F165E66 /* gpu_api.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = gpu_api.hpp; sourceTree = "<group>"; };
 		66C69168EE966ECD7A706D46 /* fib32.wasm.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = fib32.wasm.h; sourceTree = "<group>"; };
@@ -520,6 +534,7 @@
 		77D94C1DADD5AB4D125DE57D /* Node.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Node.cpp; sourceTree = "<group>"; };
 		77FCB5613F3516AB0744BDE9 /* rayactpack.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = rayactpack.cpp; sourceTree = "<group>"; };
 		78460481074191BFF35CD1D8 /* SystemAppearance.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SystemAppearance.mm; sourceTree = "<group>"; };
+		784D5054FF39E29FEBD3F3BB /* Gradient.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Gradient.cpp; sourceTree = "<group>"; };
 		7917706AECFD76A3C61A1BC2 /* SvgRenderer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SvgRenderer.cpp; sourceTree = "<group>"; };
 		7BB87A76EC7C75004E1CAD68 /* CalculateLayout.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CalculateLayout.cpp; sourceTree = "<group>"; };
 		7CEAC7C9987393E458BB8849 /* FlexDirection.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FlexDirection.h; sourceTree = "<group>"; };
@@ -583,6 +598,7 @@
 		B0963FCAEEDCA30D0A2BD71B /* Baseline.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Baseline.h; sourceTree = "<group>"; };
 		B0C5482E94942DF05E7860D2 /* m3_env.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_env.c; sourceTree = "<group>"; };
 		B146E609AC0016988E08B024 /* quickjs-libc.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "quickjs-libc.c"; sourceTree = "<group>"; };
+		B26A3FCCD057897279F6B1C6 /* RayactLinkingRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactLinkingRegistration.swift; sourceTree = "<group>"; };
 		B2BE3D74E24095983E79169E /* Overflow.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Overflow.h; sourceTree = "<group>"; };
 		B3FBF2187FCB8F5B48BA59B3 /* dev_client_bridge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = dev_client_bridge.cpp; sourceTree = "<group>"; };
 		B41AFF549810185CB5F306B0 /* plugin_loader.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = plugin_loader.cpp; sourceTree = "<group>"; };
@@ -675,6 +691,7 @@
 		FADFB3523E24CBEFA34FAF8E /* LayoutResults.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = LayoutResults.cpp; sourceTree = "<group>"; };
 		FB9CB89502355E46CAB1C5E8 /* secure_store_mac.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = secure_store_mac.mm; sourceTree = "<group>"; };
 		FD79277A49A59E148C2863ED /* ios_bridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ios_bridge.mm; sourceTree = "<group>"; };
+		FE32AC5ED1A5EB1F4AB06327 /* style_slab.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = style_slab.hpp; sourceTree = "<group>"; };
 		FF147B193D6F2772911F3C38 /* YGNodeLayout.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = YGNodeLayout.cpp; sourceTree = "<group>"; };
 		FF5EFD75635045D7F31B8AF4 /* Theme.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Theme.cpp; sourceTree = "<group>"; };
 		FF9239B7D3A72E7AEED1ECF5 /* PixelGrid.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = PixelGrid.cpp; sourceTree = "<group>"; };
@@ -722,6 +739,14 @@
 			);
 			name = ios;
 			path = ../../native/ios;
+			sourceTree = "<group>";
+		};
+		0E304245E85DD45EF3CED75D /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				B26A3FCCD057897279F6B1C6 /* RayactLinkingRegistration.swift */,
+			);
+			path = Sources;
 			sourceTree = "<group>";
 		};
 		0E40E57E68CA15CA4D50C80F /* utils */ = {
@@ -826,6 +851,14 @@
 			path = "image-picker";
 			sourceTree = "<group>";
 		};
+		3ABB2D09B7C7B0AC0F21A5CE /* clipboard */ = {
+			isa = PBXGroup;
+			children = (
+				9591607685A8108F3F557A88 /* Sources */,
+			);
+			path = clipboard;
+			sourceTree = "<group>";
+		};
 		3F620E65B76DD55215EE1C4E /* Sources */ = {
 			isa = PBXGroup;
 			children = (
@@ -895,6 +928,14 @@
 			path = "../../third_party/raylib-backends/backends/rlmt";
 			sourceTree = "<group>";
 		};
+		7A065D3F80B693D713F93C55 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				3CEBBD77EECA9108C3F9DED2 /* RayactWebViewRegistration.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
 		7DEB412F2E661EF949B2CE29 /* core */ = {
 			isa = PBXGroup;
 			children = (
@@ -923,6 +964,14 @@
 			path = debug;
 			sourceTree = "<group>";
 		};
+		9591607685A8108F3F557A88 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				250D7BADDE3CE98731867A3E /* RayactClipboardRegistration.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
 		9995CFFC55728107EE89E355 /* numeric */ = {
 			isa = PBXGroup;
 			children = (
@@ -941,6 +990,7 @@
 				68469D2FE07DBA277E1658B0 /* Density.cpp */,
 				1CF8EAFC4FD8B1B033557097 /* EmojiFont.cpp */,
 				4FAAD9A25EC18CD490DB9A8F /* EmojiRasterizerApple.mm */,
+				784D5054FF39E29FEBD3F3BB /* Gradient.cpp */,
 				A542F6F40A2E3A2B38CECD8D /* IconRenderer.cpp */,
 				2EDA5ACC9660444D2043B5D7 /* Input.cpp */,
 				C4149BFBCA91BDC435ADB975 /* MaterialDefaults.cpp */,
@@ -1038,8 +1088,10 @@
 				A4E0D57F836EE51563FCBE41 /* quickjs_bridge.hpp */,
 				4509BE0DB4D7D7B1ED6BEAF8 /* raym3_bridge.cpp */,
 				D465C5675F029FD7EE39C14D /* raym3_bridge.hpp */,
+				3AA5676FCBA3D8D5374F1E4C /* rlgl_stencil_gl.c */,
 				C2FF8D3204D04C57EF6C3CE5 /* shadow_tree.cpp */,
 				6D0420A8A055553874A0C9D7 /* shadow_tree.hpp */,
+				FE32AC5ED1A5EB1F4AB06327 /* style_slab.hpp */,
 				49E704D3FE6E22A46FA74C75 /* system_appearance.cpp */,
 				6C6010B0A4149AF8F68CD4FA /* system_appearance.hpp */,
 				11D8580FA38B56405E57F90C /* theme_bridge.cpp */,
@@ -1086,14 +1138,25 @@
 			path = "../../packages/rayact-crash-reporter/native";
 			sourceTree = "<group>";
 		};
+		B30D1542F7349DD149F50C83 /* webview */ = {
+			isa = PBXGroup;
+			children = (
+				7A065D3F80B693D713F93C55 /* Sources */,
+			);
+			path = webview;
+			sourceTree = "<group>";
+		};
 		B7E36FED1707B6C0EE6A47B4 /* Autolinked */ = {
 			isa = PBXGroup;
 			children = (
 				24F487096F5E169EF7F1AFCC /* RayactGeneratedModules.swift */,
 				4F40DE555414AD387D7D98A2 /* barcode-scanner */,
+				3ABB2D09B7C7B0AC0F21A5CE /* clipboard */,
 				D20B0DD45F53B1F168F5FB99 /* haptics */,
 				3841FB6A01A22E9F7CD7B3EB /* image-picker */,
+				CDC668664BDD5F4734A8C341 /* linking */,
 				05EDCCFA8E3F9B215A4AF704 /* sensors */,
+				B30D1542F7349DD149F50C83 /* webview */,
 			);
 			path = Autolinked;
 			sourceTree = "<group>";
@@ -1156,7 +1219,9 @@
 				C768E6E1A5A2A97A150ED997 /* RayactMetalView.swift */,
 				6BC286521C505F7F1AD4DB95 /* RayactMobileNetwork.swift */,
 				BA3C7D1E2BC8A5A32056664A /* RayactNativeBridge.swift */,
+				30F92F3A298C1FC88A041828 /* RayactNativeTextInput.swift */,
 				852E7399569C594258CB32F3 /* RayactPlatformRegistry.swift */,
+				630B7B658CF3F69C2775ED11 /* RayactPlatformViewHost.swift */,
 				67BDFB073956694F1E0D55E1 /* RayactRenderScheduler.swift */,
 				96196FB533595CED1263FDFB /* RayactScreenViewController.swift */,
 				C863A2828BD0228178D84024 /* RayactSurfaceView.swift */,
@@ -1213,6 +1278,14 @@
 			);
 			name = core;
 			path = ../../native/core;
+			sourceTree = "<group>";
+		};
+		CDC668664BDD5F4734A8C341 /* linking */ = {
+			isa = PBXGroup;
+			children = (
+				0E304245E85DD45EF3CED75D /* Sources */,
+			);
+			path = linking;
 			sourceTree = "<group>";
 		};
 		D1FA6A0474596C9B966084DF /* fonts */ = {
@@ -1582,6 +1655,7 @@
 				51BCE200DDB7822DD7183F1D /* FlexLine.cpp in Sources */,
 				1577608A9789B12F0FA486D2 /* FloatingActionButton.cpp in Sources */,
 				9BD0E98122F875EC2B1E70D2 /* FontManager.cpp in Sources */,
+				345BBFC95B9B054D8477C62F /* Gradient.cpp in Sources */,
 				6EF4E8EB480D270827EA75EC /* IOSBundledAssets.swift in Sources */,
 				ED9D226B6297B05B0228E2F9 /* Icon.cpp in Sources */,
 				5B351EE64377A8ED540964D0 /* IconButton.cpp in Sources */,
@@ -1607,6 +1681,7 @@
 				498347526014CBE05C94F61C /* RadioButton.cpp in Sources */,
 				386BE0BEB14BBDAAD0F44BBA /* RangeSlider.cpp in Sources */,
 				D1233D589D4D8DEC143BE84A /* RayactBarcodeScannerRegistration.swift in Sources */,
+				2160C315FC2355FA733075D6 /* RayactClipboardRegistration.swift in Sources */,
 				15DA274669E506B6C6693415 /* RayactDevToolsTransport.swift in Sources */,
 				0CCE1126D396A593E53F71C4 /* RayactEngineHostCallbacks.swift in Sources */,
 				7C9AD967B12DEF49FF0AA129 /* RayactEngineSession.swift in Sources */,
@@ -1616,14 +1691,18 @@
 				3A62D21DEF7029A946CC1E8E /* RayactHost.swift in Sources */,
 				F2FED92558BF715FE5DBB2AB /* RayactHostCallbacksBridge.swift in Sources */,
 				ABBC2A67413F143F5BF3D960 /* RayactImagePickerRegistration.swift in Sources */,
+				77C2D29BFDF014FABB22F93B /* RayactLinkingRegistration.swift in Sources */,
 				15BCDF543FED685FFE548917 /* RayactMetalView.swift in Sources */,
 				727ED2D364206A452B0691AA /* RayactMobileNetwork.swift in Sources */,
 				B3CDA4E49203E1A34EE4392E /* RayactNativeBridge.swift in Sources */,
+				C062AA9FD48F2A50FE3CCC74 /* RayactNativeTextInput.swift in Sources */,
 				A69B1F81BD16B6E526FA68F0 /* RayactPlatformRegistry.swift in Sources */,
+				BDA893C7B0AD093D5E9823FF /* RayactPlatformViewHost.swift in Sources */,
 				0AA922A924C0C14035AED05B /* RayactRenderScheduler.swift in Sources */,
 				BC8B81AB58B3CE0814462B83 /* RayactScreenViewController.swift in Sources */,
 				A35D9475BA99EE74A727A6AB /* RayactSensorsRegistration.swift in Sources */,
 				59B9264006E4AF897A8E9C1E /* RayactSurfaceView.swift in Sources */,
+				B7D975EC561B5A0933FF7370 /* RayactWebViewRegistration.swift in Sources */,
 				597026D389546C1142B889FE /* ReleaseViewController.swift in Sources */,
 				72D223B8411CBD028D9474EF /* RenderContext.cpp in Sources */,
 				FF214DB072614CB1C62AA854 /* RenderQueue.cpp in Sources */,
@@ -1715,6 +1794,7 @@
 				944FD0C549D5A987A55307A9 /* raym3_bridge.cpp in Sources */,
 				9B173DE95F86DDCF8C69FEA0 /* raysvg.cpp in Sources */,
 				6D503DB88D62F54F3F24B0AF /* rcore_ios_metal_overlay.c in Sources */,
+				77C396704244D99C035E85D4 /* rlgl_stencil_gl.c in Sources */,
 				4C7A7E876C47316F1D3C1430 /* rlmt.mm in Sources */,
 				EE121A68EDFC1E76D103F2AB /* rmodels.c in Sources */,
 				8D2BC51FD45F2099DE163954 /* rshapes.c in Sources */,
@@ -1781,6 +1861,7 @@
 				9668C4FFE59AD49E5B81CF68 /* FlexLine.cpp in Sources */,
 				51497134BDA5919DC1F5F7C3 /* FloatingActionButton.cpp in Sources */,
 				8AEC684306E9F88EB3A1EA06 /* FontManager.cpp in Sources */,
+				D94E329F219A96EDF49983A6 /* Gradient.cpp in Sources */,
 				BC4F528470673EAD1C0D51F3 /* Icon.cpp in Sources */,
 				E116E94D2A5E34457E96FFB2 /* IconButton.cpp in Sources */,
 				D3F87CC8851D88C2A13479D5 /* IconRenderer.cpp in Sources */,
@@ -1887,6 +1968,7 @@
 				708E61F339EB260E7C79BE4E /* raym3_bridge.cpp in Sources */,
 				C149A66B9B9FFA69425370CA /* raysvg.cpp in Sources */,
 				EBDD171D03B19AD0852FCA08 /* rcore_ios_metal_overlay.c in Sources */,
+				BE1ABF6A75F6CEE9AA174BFC /* rlgl_stencil_gl.c in Sources */,
 				C933B8705F043DEFC2B1DD98 /* rlmt.mm in Sources */,
 				30DB880E984FF777D388B7A7 /* rmodels.c in Sources */,
 				F740CA37F5C53C449326250E /* rshapes.c in Sources */,
@@ -1965,7 +2047,7 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_CFLAGS = "$(inherited) -DRAYACT_ENABLE_DEVTOOLS=0 -DRAYACT_RELEASE_HOST=1";
-				OTHER_LDFLAGS = "$(inherited) -framework Metal -framework QuartzCore -framework UIKit -framework CoreFoundation -framework Security";
+				OTHER_LDFLAGS = "$(inherited) -framework Metal -framework QuartzCore -framework UIKit -framework CoreFoundation -framework Security -framework WebKit";
 				PRODUCT_BUNDLE_IDENTIFIER = com.rayact.app;
 				PRODUCT_NAME = Rayact;
 				SDKROOT = iphoneos;
@@ -2139,7 +2221,7 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_CFLAGS = "$(inherited) -DRAYACT_ENABLE_DEVTOOLS=1";
-				OTHER_LDFLAGS = "$(inherited) -framework Metal -framework QuartzCore -framework UIKit -framework CoreFoundation -framework Security";
+				OTHER_LDFLAGS = "$(inherited) -framework Metal -framework QuartzCore -framework UIKit -framework CoreFoundation -framework Security -framework WebKit";
 				PRODUCT_BUNDLE_IDENTIFIER = com.rayact.app;
 				PRODUCT_NAME = Rayact;
 				SDKROOT = iphoneos;

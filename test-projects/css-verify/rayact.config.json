@@ -1,0 +1,6 @@
+{
+  "name": "css-verify",
+  "rayactAppKey": "css-verify",
+  "devServer": { "host": "0.0.0.0", "port": 8084, "cdpPort": 9232 },
+  "entry": "src/App.tsx"
+}

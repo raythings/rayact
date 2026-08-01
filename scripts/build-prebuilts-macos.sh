@@ -107,7 +107,15 @@ if [[ "$DO_IOS" -eq 1 ]]; then
   mkdir -p "$IOS_PKG/resources/fonts"
   if [[ -d "$ROOT/resources/fonts" ]]; then
     cp "$ROOT/resources/fonts/"* "$IOS_PKG/resources/fonts/"
-    echo "  copied resources/fonts"
+    # iOS rasterizes emoji with CoreText (EmojiRasterizerApple.mm), so the
+    # bundled ~10.7 MB CBDT font is never read on this platform.
+    rm -f "$IOS_PKG/resources/fonts/NotoColorEmoji.ttf"
+    echo "  copied resources/fonts (minus the unused bundled emoji font)"
+    # Drop the variable-font tables stb_truetype cannot read (~88% of the
+    # Material Symbols files). `rayact build` slims again at staging time, but
+    # doing it here keeps the published npm package small too.
+    node "$ROOT/tools/fonts/slim-fonts.mjs" "$IOS_PKG/resources/fonts" \
+      || echo "  WARNING: font slimming skipped — prebuilt ships full-size fonts"
   else
     echo "  WARNING: $ROOT/resources/fonts not found — prebuilt will ship without fonts"
   fi

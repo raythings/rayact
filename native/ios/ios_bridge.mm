@@ -928,6 +928,13 @@ extern "C" void RayactIOSSessionSetKeyboardInsets(RayactIOSHandle handle, float 
     g_lastDeviceKeyboard.durationMs = durationMs;
 }
 
+extern "C" void RayactIOSSessionExternalViewEvent(
+    RayactIOSHandle handle, int nodeId, const char* payload) {
+    InstanceScope scope(handle);
+    std::lock_guard<std::mutex> lock(g_engineMutex);
+    rayactExternalViewEmitText(nodeId, payload ? payload : "");
+}
+
 extern "C" void RayactIOSPushURL(const char* url) {
     if (!url || !*url) return;
     {
@@ -988,6 +995,19 @@ extern "C" bool RayactIOSSessionRenderFrame(RayactIOSHandle handle, int64_t fram
     IOSEngineInstance* inst = iosEngineInstanceFromHandle(handle);
     if (!inst || !inst->graphicsActive.load(std::memory_order_acquire)) return false;
     if (iosEngineCurrent() != inst) inst->setCurrent();
+    // g_surfaces is the authoritative state for the current instance while it
+    // is active. The instance snapshot is only synchronized when switching
+    // runtimes, so consulting inst->surfaces here can miss a surface created
+    // earlier in the same activation and leave its RenderContext without the
+    // platform-view embedder.
+    for (const auto& [surfaceId, surface] : g_surfaces) {
+        auto& context = engineGetScreenRenderContext(surfaceId);
+        context.surfaceId = static_cast<uint64_t>(surfaceId);
+        context.platformDensity = std::max(0.1f, surface.density);
+        context.layoutDensity = layoutDensityForWidth(
+            surface.pendingWidth, surface.density);
+        context.externalViewEmbedder = inst->externalViewEmbedder.get();
+    }
     if (g_surfaces.empty()) return false;
     if (!iosEngineGraphicsValid()) return false;
 

@@ -1,0 +1,10 @@
+{
+  "name": "svg-smoke",
+  "rayactAppKey": "svg-smoke",
+  "devServer": {
+    "host": "0.0.0.0",
+    "port": 8086,
+    "cdpPort": 9234
+  },
+  "entry": "src/App.tsx"
+}

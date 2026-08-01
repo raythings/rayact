@@ -1,6 +1,7 @@
 package com.rayact.app
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
@@ -133,6 +134,20 @@ class RayactSurfaceView @JvmOverloads constructor(
 
     init {
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+        reportSystemAppearance(resources.configuration)
+    }
+
+    private fun reportSystemAppearance(configuration: Configuration) {
+        val isDark =
+            configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+                Configuration.UI_MODE_NIGHT_YES
+        session.setSystemAppearance(isDark)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        reportSystemAppearance(newConfig)
+        session.host.renderScheduler.requestFrame()
     }
 
     override fun getAccessibilityNodeProvider(): AccessibilityNodeProvider = semanticProvider
@@ -600,6 +615,7 @@ class RayactSurfaceView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        reportSystemAppearance(resources.configuration)
         ViewCompat.requestApplyInsets(this)
     }
 
@@ -652,6 +668,10 @@ class RayactSurfaceView @JvmOverloads constructor(
     override fun surfaceCreated(holder: SurfaceHolder) {
         updateSafeAreaInsets()
         if (surfaceId > 0) {
+            (parent as? RayactPlatformViewContainer)?.let {
+                com.rayact.engine.RayactPlatformViews.unregisterScreen(surfaceId, it)
+                it.surfaceId = 0
+            }
             session.destroySurface(surfaceId)
             surfaceId = 0
         }
@@ -662,6 +682,10 @@ class RayactSurfaceView @JvmOverloads constructor(
             return
         }
         surfaceId = sid
+        (parent as? RayactPlatformViewContainer)?.let { container ->
+            container.surfaceId = sid
+            com.rayact.engine.RayactPlatformViews.registerScreen(sid, container)
+        }
         surfaceReadyListener?.invoke(sid)
         surfaceReadyListener = null
         session.host.registerImeView(this)
@@ -693,6 +717,10 @@ class RayactSurfaceView @JvmOverloads constructor(
         val surface = holder.surface
         if (!surface.isValid) return
         if (surfaceId > 0) {
+            (parent as? RayactPlatformViewContainer)?.let {
+                com.rayact.engine.RayactPlatformViews.unregisterScreen(surfaceId, it)
+                it.surfaceId = 0
+            }
             session.destroySurface(surfaceId)
             surfaceId = 0
         }
@@ -712,6 +740,10 @@ class RayactSurfaceView @JvmOverloads constructor(
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         if (surfaceId > 0) {
+            (parent as? RayactPlatformViewContainer)?.let {
+                com.rayact.engine.RayactPlatformViews.unregisterScreen(surfaceId, it)
+                it.surfaceId = 0
+            }
             session.host.unregisterImeView(this)
             session.destroySurface(surfaceId)
             surfaceId = 0
@@ -746,7 +778,8 @@ class RayactSurfaceView @JvmOverloads constructor(
         }
         val action = when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> RayactEngineSession.TOUCH_DOWN
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> RayactEngineSession.TOUCH_UP
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> RayactEngineSession.TOUCH_UP
+            MotionEvent.ACTION_CANCEL -> RayactEngineSession.TOUCH_CANCEL
             else -> RayactEngineSession.TOUCH_MOVE
         }
         val idx = event.actionIndex

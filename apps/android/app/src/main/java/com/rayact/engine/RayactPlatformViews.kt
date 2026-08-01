@@ -4,6 +4,7 @@ import android.app.Presentation
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.RectF
 import android.hardware.HardwareBuffer
@@ -13,6 +14,7 @@ import android.media.Image
 import android.media.ImageReader
 import android.os.Handler
 import android.os.Looper
+import android.os.Build
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -22,6 +24,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
@@ -29,6 +32,11 @@ import android.view.inputmethod.InputConnectionWrapper
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
+import com.rayact.app.RayactPlatformViewContainer
+import com.rayact.app.RayactOverlaySurfaceView
+import com.rayact.app.RayactOverlayTextureView
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -56,13 +64,261 @@ object RayactPlatformViews {
     private interface PlatformHost {
         val screenRect: RectF
         fun resize(width: Int, height: Int, densityDpi: Int)
-        fun setProp(key: String, value: String)
+        fun setProperties(properties: Map<String, Any?>)
         fun forwardTouch(event: MotionEvent)
+        fun applyComposition(compositionJson: String) {}
+        fun preservesFrameworkUnderlay(): Boolean = false
+        fun resolveGesture(accepted: Boolean) {}
+        fun hierarchyView(): View? = null
         fun ensureImeFocus() {}
         fun dispose()
     }
 
     private val hosts = ConcurrentHashMap<Int, PlatformHost>()
+    private data class PendingView(
+        val surfaceId: Int,
+        val kind: String,
+        val properties: MutableMap<String, Any?>,
+        var rect: RectF? = null,
+        var densityDpi: Int = 0,
+        // The engine session whose node tree owns this view. surfaceIds are
+        // per-instance (launcher and project both use surface 1), so without
+        // the owner a registerScreen for a NEW session would resurrect the
+        // previous session's platform views into the new screen.
+        var owner: RayactEngineSession? = null,
+    )
+    private val pendingViews = ConcurrentHashMap<Int, PendingView>()
+    private val screenContainers =
+        ConcurrentHashMap<Int, RayactPlatformViewContainer>()
+    private data class ScreenComposition(
+        val width: Float,
+        val height: Float,
+        val density: Float,
+        val entries: MutableList<Pair<Int, String>> = mutableListOf(),
+        // Which overlay planes composite() actually handed out this frame.
+        // endFrame must hide the rest — an unused overlay still shows its
+        // stale last-presented buffer otherwise.
+        var usedSurfaceOverlay: Boolean = false,
+        var usedTextureOverlays: Int = 0,
+    )
+    private val frameCompositions =
+        ConcurrentHashMap<Int, ScreenComposition>()
+    private val overlayViews =
+        ConcurrentHashMap<Int, RayactOverlaySurfaceView>()
+    // Interleavable TextureView overlays for non-final slice boundaries,
+    // indexed by boundary order within a frame. The final boundary keeps the
+    // zero-copy RayactOverlaySurfaceView (legitimately above everything).
+    private val textureOverlays =
+        ConcurrentHashMap<Int, MutableList<RayactOverlayTextureView>>()
+    // Boundary count observed on the previous frame. composite() must answer
+    // synchronously on the render thread, so "is this the final boundary?"
+    // is predicted from the last frame; a count change corrects itself on the
+    // next frame (one-frame layering transition, Flutter-style pooling).
+    private val expectedBoundaries = ConcurrentHashMap<Int, Int>()
+
+    fun registerScreen(surfaceId: Int, container: RayactPlatformViewContainer) {
+        screenContainers[surfaceId] = container
+        mainHandler.post {
+            RayactPlatformRegistry.initialize(container.context)
+            for ((nodeId, pending) in pendingViews) {
+                if (pending.surfaceId != surfaceId) continue
+                // Same-session surface recreation (background/resume) restores
+                // its views; a dead or foreign session's views must not be
+                // resurrected under the new screen.
+                val owner = pending.owner
+                if (owner != null && !owner.isAlive()) {
+                    hosts.remove(nodeId)?.dispose()
+                    pendingViews.remove(nodeId)
+                    continue
+                }
+                if (owner != null && owner !== session()) continue
+                if (!isEditorKind(pending.kind)) ensureOverlay(surfaceId)
+                attachPendingView(nodeId, pending, container.context)
+            }
+        }
+    }
+
+    /**
+     * Dispose every platform view owned by [session]. Called when an engine
+     * session is torn down (launcher ↔ project switch, project reload): the
+     * JS side never unmounts those nodes, so without this the native views
+     * stay attached to the shared container forever.
+     */
+    fun releaseSession(session: RayactEngineSession) {
+        mainHandler.post {
+            val owned = pendingViews.filter { it.value.owner === session }.keys.toList()
+            for (nodeId in owned) {
+                hosts.remove(nodeId)?.dispose()
+                pendingViews.remove(nodeId)
+            }
+            if (owned.isNotEmpty()) {
+                Log.i(TAG, "releaseSession disposed ${owned.size} platform view(s)")
+            }
+        }
+    }
+
+    fun unregisterScreen(surfaceId: Int, container: RayactPlatformViewContainer) {
+        screenContainers.remove(surfaceId, container)
+        mainHandler.post {
+            val owned = pendingViews.filterValues { it.surfaceId == surfaceId }.keys
+            for (nodeId in owned) {
+                hosts.remove(nodeId)?.dispose()
+            }
+            overlayViews.remove(surfaceId)?.let { overlay ->
+                container.removeView(overlay)
+            }
+            textureOverlays.remove(surfaceId)?.forEach { overlay ->
+                container.removeView(overlay)
+            }
+            expectedBoundaries.remove(surfaceId)
+            frameCompositions.remove(surfaceId)
+        }
+    }
+
+    /**
+     * Editor kinds render as a transparent editing layer directly above the
+     * base renderer surface: raym3 keeps the field chrome on the base surface
+     * (preserveFrameworkUnderlay) and only glyph editing floats. They never
+     * force an overlay allocation on their own — a top-z overlay SurfaceView
+     * escapes the screen/fragment stack, so a launcher screen with just a URL
+     * field would ghost over any screen pushed above it.
+     */
+    private fun isEditorKind(kind: String): Boolean =
+        kind == "textfield" || kind == "rayact.internal.text-input"
+
+    private fun overlayId(surfaceId: Int): Long =
+        (surfaceId.toLong() shl 32) or 1L
+
+    private fun textureOverlayId(surfaceId: Int, index: Int): Long =
+        (surfaceId.toLong() shl 32) or (2L + index)
+
+    /** Main-thread only. Grows the per-surface TextureView overlay pool. */
+    private fun ensureTextureOverlays(surfaceId: Int, count: Int) {
+        if (count <= 0) return
+        val container = screenContainers[surfaceId] ?: return
+        val session = session() ?: return
+        val list = textureOverlays.getOrPut(surfaceId) { mutableListOf() }
+        while (list.size < count) {
+            val overlay = RayactOverlayTextureView(
+                container.context, session,
+                textureOverlayId(surfaceId, list.size))
+            list.add(overlay)
+            container.addView(
+                overlay,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                ),
+            )
+        }
+    }
+
+    private fun ensureOverlay(surfaceId: Int) {
+        if (overlayViews.containsKey(surfaceId)) return
+        val container = screenContainers[surfaceId] ?: return
+        val session = session() ?: return
+        val overlay = RayactOverlaySurfaceView(
+            container.context, session, overlayId(surfaceId))
+        overlayViews[surfaceId] = overlay
+        container.addView(
+            overlay,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        Log.i(
+            TAG,
+            "surface $surfaceId composition=${if (Build.VERSION.SDK_INT >= 34) "HCPP" else "HC"}",
+        )
+    }
+
+    fun beginFrame(surfaceId: Int, width: Float, height: Float, density: Float) {
+        frameCompositions[surfaceId] =
+            ScreenComposition(width, height, density)
+    }
+
+    fun composite(surfaceId: Int, nodeId: Int, compositionJson: String): Long {
+        val composition = frameCompositions[surfaceId] ?: return 0L
+        val boundaryIndex = composition.entries.size
+        composition.entries.add(nodeId to compositionJson)
+        // Non-final boundaries render into interleavable TextureView overlays
+        // so their slice sits below the next platform view; only the final
+        // boundary may use the top-z SurfaceView overlay.
+        val expected = expectedBoundaries[surfaceId] ?: 1
+        if (boundaryIndex < expected - 1) {
+            val overlay = textureOverlays[surfaceId]?.getOrNull(boundaryIndex)
+            if (overlay?.registered == true) {
+                composition.usedTextureOverlays =
+                    maxOf(composition.usedTextureOverlays, boundaryIndex + 1)
+                return overlay.registeredSurfaceId
+            }
+            return 0L
+        }
+        // Final boundary: editor kinds sandwich directly on the base surface
+        // (chrome below via preserveFrameworkUnderlay, EditText view above).
+        // Handing them the top-z SurfaceView overlay would lift everything
+        // painted after the field above every screen in the window.
+        if (isEditorKind(pendingViews[nodeId]?.kind ?: "")) return 0L
+        val overlay = overlayViews[surfaceId]
+        if (overlay?.registered == true) {
+            composition.usedSurfaceOverlay = true
+            return overlay.registeredSurfaceId
+        }
+        return 0L
+    }
+
+    fun endFrame(surfaceId: Int) {
+        val composition = frameCompositions.remove(surfaceId) ?: return
+        val boundaryCount = composition.entries.size
+        expectedBoundaries[surfaceId] = boundaryCount.coerceAtLeast(1)
+        mainHandler.post {
+            val container = screenContainers[surfaceId] ?: return@post
+            val overlay = overlayViews[surfaceId]
+            // Grow the TextureView pool for the next frame (composite() only
+            // hands out already-registered overlays).
+            ensureTextureOverlays(surfaceId, boundaryCount - 1)
+            val textures = textureOverlays[surfaceId]
+            // Explicit interleave: [renderer, pv0, texOv0, pv1, texOv1, …,
+            // pvN-1, SurfaceView overlay]. Slice i (raym3 content painted
+            // after platform view i) must sit above pv_i and below pv_{i+1} —
+            // that is exactly what lets a filled text field's chrome render
+            // beneath its own EditText while still covering a WebView below.
+            composition.entries.forEachIndexed { index, (nodeId, payload) ->
+                val host = hosts[nodeId] ?: return@forEachIndexed
+                host.applyComposition(payload)
+                host.hierarchyView()?.let(container::bringChildToFront)
+                if (index < composition.usedTextureOverlays) {
+                    textures?.getOrNull(index)?.let { tex ->
+                        tex.visibility = View.VISIBLE
+                        container.bringChildToFront(tex)
+                    }
+                }
+            }
+            // Park pool members this frame didn't composite into: an unused
+            // overlay keeps presenting its stale last buffer otherwise.
+            textures?.forEachIndexed { index, tex ->
+                if (index >= composition.usedTextureOverlays) tex.visibility = View.INVISIBLE
+            }
+            if (overlay != null) {
+                overlay.scheduleHierarchyTransaction(
+                    visible = composition.usedSurfaceOverlay)
+                overlay.visibility =
+                    if (composition.usedSurfaceOverlay) View.VISIBLE else View.INVISIBLE
+                if (composition.usedSurfaceOverlay) container.bringChildToFront(overlay)
+            }
+            if (composition.entries.size > 2) {
+                Log.w(
+                    TAG,
+                    "${composition.entries.size} logical overlay slices on surface $surfaceId",
+                )
+            }
+        }
+    }
+
+    fun resolveGesture(surfaceId: Int, nodeId: Int, accepted: Boolean) {
+        mainHandler.post { hosts[nodeId]?.resolveGesture(accepted) }
+    }
 
     @Volatile
     private var boundSession: RayactEngineSession? = null
@@ -137,26 +393,58 @@ object RayactPlatformViews {
         return true
     }
 
-    fun onRect(nodeId: Int, kind: String, x: Float, y: Float, w: Float, h: Float) {
+    fun onCreate(surfaceId: Int, nodeId: Int, kind: String, propsJson: String) {
+        val initial = parseProperties(propsJson).toMutableMap()
+        mainHandler.post {
+            pendingViews[nodeId] =
+                PendingView(surfaceId, kind, initial, owner = session())
+            if (!isEditorKind(kind)) ensureOverlay(surfaceId)
+        }
+    }
+
+    fun onRect(surfaceId: Int, nodeId: Int, kind: String, x: Float, y: Float, w: Float, h: Float) {
         mainHandler.post {
             val ctx = session()?.host?.imeView?.context ?: run {
                 Log.e(TAG, "no context for platform view $nodeId")
                 return@post
             }
             RayactPlatformRegistry.initialize(ctx)
-            val host = hosts.getOrPut(nodeId) {
-                when (kind) {
-                    "textfield" -> TextFieldHost(nodeId, ctx)
-                    else -> {
-                        if (!RayactPlatformRegistry.shared.hasViewFactory(kind)) return@post
-                        RegisteredViewHost(nodeId, kind, ctx)
-                    }
+            val pending = pendingViews.getOrPut(nodeId) {
+                PendingView(surfaceId, kind, mutableMapOf(), owner = session())
+            }
+            if (pending.owner == null) pending.owner = session()
+            pending.rect = RectF(x, y, x + w, y + h)
+            pending.densityDpi = ctx.resources.displayMetrics.densityDpi
+            attachPendingView(nodeId, pending, ctx)
+        }
+    }
+
+    private fun attachPendingView(nodeId: Int, pending: PendingView, ctx: Context) {
+        val rect = pending.rect ?: return
+        var host = hosts[nodeId]
+        if (host == null) {
+            host = when (pending.kind) {
+                "textfield" -> TextFieldHost(nodeId, ctx).also {
+                    it.setProperties(pending.properties)
+                }
+                else -> {
+                    if (!RayactPlatformRegistry.shared.hasViewFactory(pending.kind)) return
+                    val screen = screenContainers[pending.surfaceId] ?: return
+                    HierarchyViewHost(
+                        nodeId, pending.kind, screen,
+                        pending.properties.toMap(),
+                    )
                 }
             }
-            host.screenRect.set(x, y, x + w, y + h)
-            host.resize(w.toInt().coerceAtLeast(1), h.toInt().coerceAtLeast(1),
-                        ctx.resources.displayMetrics.densityDpi)
+            hosts[nodeId] = host
         }
+        host.screenRect.set(rect)
+        host.resize(
+            rect.width().toInt().coerceAtLeast(1),
+            rect.height().toInt().coerceAtLeast(1),
+            pending.densityDpi.takeIf { it > 0 }
+                ?: ctx.resources.displayMetrics.densityDpi,
+        )
     }
 
     fun onInput(nodeId: Int, action: Int, lx: Float, ly: Float) {
@@ -164,14 +452,46 @@ object RayactPlatformViews {
         // tap path stays for hosts without direct event access (desktop).
     }
 
-    fun onProp(nodeId: Int, key: String, value: String) {
-        mainHandler.post { hosts[nodeId]?.setProp(key, value) }
+    fun onProps(nodeId: Int, propsJson: String) {
+        val patch = parseProperties(propsJson)
+        mainHandler.post {
+            val pending = pendingViews[nodeId]
+            if (pending != null) {
+                for ((key, value) in patch) {
+                    if (value == null) pending.properties.remove(key)
+                    else pending.properties[key] = value
+                }
+            }
+            hosts[nodeId]?.setProperties(patch)
+        }
     }
 
     fun onDispose(nodeId: Int) {
         mainHandler.post {
             hosts.remove(nodeId)?.dispose()
+            pendingViews.remove(nodeId)
         }
+    }
+
+    private fun parseProperties(json: String): Map<String, Any?> {
+        val objectValue = runCatching { JSONObject(json) }.getOrElse { return emptyMap() }
+        return jsonObjectToMap(objectValue)
+    }
+
+    private fun jsonObjectToMap(value: JSONObject): Map<String, Any?> =
+        buildMap {
+            val keys = value.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                put(key, jsonValue(value.opt(key)))
+            }
+        }
+
+    private fun jsonValue(value: Any?): Any? = when (value) {
+        null, JSONObject.NULL -> null
+        is JSONObject -> jsonObjectToMap(value)
+        is JSONArray -> List(value.length()) { index -> jsonValue(value.opt(index)) }
+        else -> value
     }
 
     internal fun setFocused(et: EditText?) {
@@ -252,115 +572,254 @@ object RayactPlatformViews {
             else super.getSystemService(name)
     }
 
-    /** Generic texture compositor for package-registered Android views. */
-    private class RegisteredViewHost(
+    /**
+     * Real in-hierarchy platform view. Unlike the transitional
+     * RegisteredViewHost below, this never creates a VirtualDisplay and is the
+     * production path for registered views such as WebView.
+     */
+    private class HierarchyViewHost(
         private val nodeId: Int,
-        private val kind: String,
-        private val context: Context,
+        kind: String,
+        private val container: RayactPlatformViewContainer,
+        initialProperties: Map<String, Any?>,
     ) : PlatformHost {
         override val screenRect = RectF()
-        private var reader: ImageReader? = null
-        private var virtualDisplay: VirtualDisplay? = null
-        private var presentation: Presentation? = null
-        private var controller: RayactPlatformViewController? = null
-        private var liveImage: Image? = null
-        private var previousImage: Image? = null
-        private var widthPx = 0
-        private var heightPx = 0
+        private val mutatorView = RayactMutatorView(container.context, nodeId)
+        private val controller: RayactPlatformViewController
+        private var frameworkUnderlay = false
+
+        init {
+            controller = RayactPlatformRegistry.shared.createView(
+                kind,
+                RayactPlatformViewContext(
+                    container.context, nodeId, initialProperties,
+                ) { payload ->
+                    session()?.nativeExternalViewTextChanged(nodeId, payload)
+                    session()?.host?.renderScheduler?.requestFrame()
+                },
+            ) ?: error("Platform view factory '$kind' disappeared")
+            mutatorView.addView(
+                controller.view,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                ),
+            )
+            container.addView(mutatorView)
+        }
 
         override fun resize(width: Int, height: Int, densityDpi: Int) {
-            if (width == widthPx && height == heightPx && virtualDisplay != null) return
-            widthPx = width
-            heightPx = height
-            val nextReader = ImageReader.newInstance(
-                width, height, android.graphics.ImageFormat.PRIVATE, 4,
-                HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE or HardwareBuffer.USAGE_GPU_COLOR_OUTPUT
-            )
-            nextReader.setOnImageAvailableListener({ source ->
-                val image = runCatching { source.acquireLatestImage() }.getOrNull()
-                    ?: return@setOnImageAvailableListener
-                image.hardwareBuffer?.let { buffer ->
-                    session()?.nativePushExternalViewFrame(nodeId, buffer)
-                    buffer.close()
+            mutatorView.layoutParams = FrameLayout.LayoutParams(width, height)
+            mutatorView.x = screenRect.left
+            mutatorView.y = screenRect.top
+            mutatorView.visibility = View.VISIBLE
+        }
+
+        override fun setProperties(properties: Map<String, Any?>) {
+            controller.setProperties(properties)
+        }
+
+        override fun forwardTouch(event: MotionEvent) {}
+
+        override fun applyComposition(compositionJson: String) {
+            val composition = runCatching { JSONObject(compositionJson) }.getOrNull()
+                ?: return
+            // The composition carries this frame's bounds (surface px) and is
+            // the only geometry the host still receives once the embedder is
+            // active: the engine skips the node's customRender — which is what
+            // pushes platformViewRect — for every view it composites. Relying
+            // on that first rect froze fields at their pre-layout position
+            // whenever layout settled later (collapsed rows inside a
+            // ScrollView all stacked in the top-left corner).
+            composition.optJSONObject("bounds")?.let { value ->
+                val x = value.optDouble("x").toFloat()
+                val y = value.optDouble("y").toFloat()
+                val w = value.optDouble("width").toFloat()
+                val h = value.optDouble("height").toFloat()
+                if (w > 0f && h > 0f &&
+                    (screenRect.left != x || screenRect.top != y ||
+                        screenRect.width() != w || screenRect.height() != h)
+                ) {
+                    screenRect.set(x, y, x + w, y + h)
+                    resize(w.toInt().coerceAtLeast(1), h.toInt().coerceAtLeast(1), 0)
                 }
-                previousImage?.close()
-                previousImage = liveImage
-                liveImage = image
-                session()?.host?.renderScheduler?.requestFrame()
-            }, mainHandler)
-            val display = virtualDisplay
-            if (display == null) {
-                val manager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
-                virtualDisplay = manager.createVirtualDisplay(
-                    "rayact-platform-$kind-$nodeId", width, height, densityDpi, nextReader.surface,
-                    DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
+            }
+            frameworkUnderlay =
+                composition.optBoolean("preservesFrameworkUnderlay", false)
+            var opacity = 1f
+            var clip: RectF? = null
+            var roundedRadius = 0f
+            val transform = Matrix()
+            val mutators = composition.optJSONArray("mutators") ?: JSONArray()
+            var ambientScale = 1f
+            for (index in 0 until mutators.length()) {
+                val mutator = mutators.optJSONObject(index) ?: continue
+                when (mutator.optString("kind")) {
+                    "opacity" ->
+                        opacity *= mutator.optDouble("opacity", 1.0).toFloat()
+                    "clipRect", "clipRoundedRect" -> {
+                        val value = mutator.optJSONObject("rect") ?: continue
+                        val next = RectF(
+                            value.optDouble("x").toFloat() - screenRect.left,
+                            value.optDouble("y").toFloat() - screenRect.top,
+                            value.optDouble("x").toFloat() -
+                                screenRect.left + value.optDouble("width").toFloat(),
+                            value.optDouble("y").toFloat() -
+                                screenRect.top + value.optDouble("height").toFloat(),
+                        )
+                        clip = clip?.also { it.intersect(next) } ?: next
+                        if (mutator.optString("kind") == "clipRoundedRect") {
+                            roundedRadius = mutator.optDouble("radius").toFloat()
+                        }
+                    }
+                    "transform" -> {
+                        val values = mutator.optJSONArray("matrix") ?: continue
+                        if (values.length() == 9) {
+                            val raw = FloatArray(9) {
+                                values.optDouble(it).toFloat()
+                            }
+                            if (ambientScale == 1f &&
+                                raw[0] > 0f && raw[4] > 0f &&
+                                raw[1] == 0f && raw[3] == 0f &&
+                                raw[2] == 0f && raw[5] == 0f) {
+                                // Mutator 0 is the engine's ambient dp→px
+                                // scale; the host already works in px.
+                                ambientScale = raw[0]
+                            } else {
+                                // The composed engine transform is
+                                // Ambient(dp→px) · T(dp); expressed in the
+                                // host's px space that is S·T·S⁻¹, i.e. the
+                                // same scale/skew with translation × density.
+                                // The old code divided every term by the
+                                // density, which turned a plain translate into
+                                // a 0.28x scale — fields rendered tiny in the
+                                // top-left corner.
+                                raw[2] *= ambientScale
+                                raw[5] *= ambientScale
+                                transform.postConcat(Matrix().apply { setValues(raw) })
+                            }
+                        }
+                    }
+                }
+            }
+            mutatorView.alpha = opacity.coerceIn(0f, 1f)
+            mutatorView.clipBounds = clip?.let {
+                Rect(
+                    it.left.toInt(), it.top.toInt(),
+                    it.right.toInt(), it.bottom.toInt(),
                 )
-                buildPresentation()
+            }
+            if (roundedRadius > 0f) {
+                mutatorView.outlineProvider =
+                    object : ViewOutlineProvider() {
+                        override fun getOutline(view: View, outline: android.graphics.Outline) {
+                            val bounds = view.clipBounds ?: Rect(0, 0, view.width, view.height)
+                            outline.setRoundRect(bounds, roundedRadius)
+                        }
+                    }
+                mutatorView.clipToOutline = true
             } else {
-                display.resize(width, height, densityDpi)
-                display.surface = nextReader.surface
+                mutatorView.clipToOutline = false
+                mutatorView.outlineProvider = null
             }
-            liveImage?.close(); liveImage = null
-            previousImage?.close(); previousImage = null
-            reader?.close()
-            reader = nextReader
-        }
-
-        private fun emit(payload: String) {
-            session()?.nativeExternalViewTextChanged(nodeId, payload)
-            session()?.host?.renderScheduler?.requestFrame()
-        }
-
-        private fun buildPresentation() {
-            val display = virtualDisplay?.display ?: return
-            val container = Presentation(context, display)
-            container.window?.setFlags(
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-            )
-            val nextController = RayactPlatformRegistry.shared.createView(
-                kind,
-                RayactPlatformViewContext(container.context, nodeId, ::emit),
-            ) ?: run {
-                container.dismiss()
-                return
+            if (Build.VERSION.SDK_INT >= 29) {
+                mutatorView.animationMatrix =
+                    if (transform.isIdentity) null else transform
             }
-            container.setContentView(nextController.view)
-            container.show()
-            presentation = container
-            controller = nextController
+            mutatorView.hitTestTransparent =
+                composition.optString("hitTestBehavior", "opaque") == "transparent"
         }
 
-        override fun setProp(key: String, value: String) {
-            controller?.setProperty(key, value)
+        override fun resolveGesture(accepted: Boolean) {
+            mutatorView.resolveGesture(accepted)
         }
 
-        override fun forwardTouch(event: MotionEvent) {
-            val target = presentation?.window?.decorView ?: return
-            val local = MotionEvent.obtain(event)
-            local.offsetLocation(-screenRect.left, -screenRect.top)
-            target.dispatchTouchEvent(local)
-            local.recycle()
-        }
+        override fun hierarchyView(): View = mutatorView
+
+        override fun preservesFrameworkUnderlay(): Boolean = frameworkUnderlay
 
         override fun ensureImeFocus() {
-            controller?.view?.requestFocus()
+            controller.view.requestFocus()
         }
 
         override fun dispose() {
-            controller?.dispose()
-            presentation?.dismiss()
-            virtualDisplay?.release()
-            liveImage?.close()
-            previousImage?.close()
-            reader?.close()
-            controller = null
-            presentation = null
-            virtualDisplay = null
-            reader = null
+            controller.dispose()
+            mutatorView.disposeSequence()
+            container.removeView(mutatorView)
         }
     }
 
+    private class RayactMutatorView(
+        context: Context,
+        private val nodeId: Int,
+    ) : FrameLayout(context) {
+        private val preservedEvents = ArrayList<MotionEvent>()
+        private var resolved: Boolean? = null
+        var hitTestTransparent = false
+
+        init {
+            clipChildren = false
+            clipToPadding = false
+        }
+
+        override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+            if (hitTestTransparent) return false
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                disposeSequence()
+                resolved = null
+            }
+            if (resolved == true) {
+                val handled = super.dispatchTouchEvent(event)
+                if (event.actionMasked == MotionEvent.ACTION_UP ||
+                    event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                    resolved = null
+                }
+                return handled
+            }
+            preservedEvents += MotionEvent.obtain(event)
+            val primaryIndex = event.findPointerIndex(0).let {
+                if (it >= 0) it else 0
+            }
+            val primaryAction = when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN ->
+                    RayactEngineSession.TOUCH_DOWN
+                MotionEvent.ACTION_UP ->
+                    RayactEngineSession.TOUCH_UP
+                MotionEvent.ACTION_CANCEL -> RayactEngineSession.TOUCH_CANCEL
+                MotionEvent.ACTION_POINTER_DOWN,
+                MotionEvent.ACTION_POINTER_UP -> null
+                else -> RayactEngineSession.TOUCH_MOVE
+            }
+            if (primaryAction != null) {
+                val offsetX = event.rawX - event.x
+                val offsetY = event.rawY - event.y
+                session()?.nativeTouch(
+                    primaryAction,
+                    event.getPointerId(primaryIndex),
+                    event.getX(primaryIndex) + offsetX,
+                    event.getY(primaryIndex) + offsetY,
+                )
+            }
+            session()?.host?.renderScheduler?.requestFrame()
+            return true
+        }
+
+        fun resolveGesture(accepted: Boolean) {
+            if (resolved != null) return
+            resolved = accepted
+            if (accepted) {
+                for (event in preservedEvents) super.dispatchTouchEvent(event)
+            }
+            disposeSequence()
+        }
+
+        fun disposeSequence() {
+            preservedEvents.forEach(MotionEvent::recycle)
+            preservedEvents.clear()
+        }
+    }
+
+    /** Generic texture compositor for package-registered Android views. */
     private class TextFieldHost(val nodeId: Int, val context: Context) : PlatformHost {
         var editText: EditText? = null
             private set
@@ -591,7 +1050,9 @@ object RayactPlatformViews {
             toolbar?.visibility = View.GONE
         }
 
-        override fun setProp(key: String, value: String) {
+        override fun setProperties(properties: Map<String, Any?>) {
+            for ((key, rawValue) in properties) {
+                val value = rawValue?.toString().orEmpty()
             val et = editText
             when (key) {
                 "value" -> if (et != null) applyValue(value) else pendingValue = value
@@ -602,6 +1063,7 @@ object RayactPlatformViews {
                     if (et != null) { if (sec) applyInputType("password") } else pendingSecure = sec
                 }
                 "focused" -> if (value == "1" || value == "true") ensureImeFocus()
+            }
             }
         }
 
@@ -643,18 +1105,42 @@ object RayactPlatformViews {
 
 // ─── JNI up-call entry points (static methods on RayactPlatformViewsKt) ──────
 
-fun platformViewRectFromHost(nodeId: Int, kind: String, x: Float, y: Float, w: Float, h: Float) {
-    RayactPlatformViews.onRect(nodeId, kind, x, y, w, h)
+fun platformViewCreateFromHost(surfaceId: Int, nodeId: Int, kind: String, propsJson: String) {
+    RayactPlatformViews.onCreate(surfaceId, nodeId, kind, propsJson)
+}
+
+fun platformViewRectFromHost(surfaceId: Int, nodeId: Int, kind: String, x: Float, y: Float, w: Float, h: Float) {
+    RayactPlatformViews.onRect(surfaceId, nodeId, kind, x, y, w, h)
 }
 
 fun platformViewInputFromHost(nodeId: Int, action: Int, lx: Float, ly: Float) {
     RayactPlatformViews.onInput(nodeId, action, lx, ly)
 }
 
-fun platformViewPropFromHost(nodeId: Int, key: String, value: String) {
-    RayactPlatformViews.onProp(nodeId, key, value)
+fun platformViewPropsFromHost(nodeId: Int, propsJson: String) {
+    RayactPlatformViews.onProps(nodeId, propsJson)
 }
 
 fun platformViewDisposeFromHost(nodeId: Int) {
     RayactPlatformViews.onDispose(nodeId)
+}
+
+fun platformViewsBeginFrameFromHost(
+    surfaceId: Int, width: Float, height: Float, density: Float,
+) {
+    RayactPlatformViews.beginFrame(surfaceId, width, height, density)
+}
+
+fun platformViewCompositeFromHost(
+    surfaceId: Int, nodeId: Int, compositionJson: String,
+): Long = RayactPlatformViews.composite(surfaceId, nodeId, compositionJson)
+
+fun platformViewsEndFrameFromHost(surfaceId: Int) {
+    RayactPlatformViews.endFrame(surfaceId)
+}
+
+fun platformViewGestureDecisionFromHost(
+    surfaceId: Int, nodeId: Int, accepted: Boolean,
+) {
+    RayactPlatformViews.resolveGesture(surfaceId, nodeId, accepted)
 }

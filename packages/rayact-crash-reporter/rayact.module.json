@@ -16,7 +16,7 @@
     "x86_64",
     "wasm32"
   ],
-  "abiRange": ">=1 <3",
+  "abiRange": ">=1 <4",
   "engineRange": ">=0.0.3 <0.1.0",
   "linkage": "dynamic",
   "permissions": [
@@ -53,7 +53,7 @@
       "platform": "android",
       "architecture": "arm64",
       "path": "android/arm64-v8a/librayact_crash_reporter.so",
-      "sha256": "d891fe8bafe0e3218d99b88c0c3be288278bf9a96bf6e09f4889aa08631ed630"
+      "sha256": "d958d67e1826da964e99acc5df99edeeb3fe106579f84b655b7918f5985ee505"
     },
     {
       "platform": "android",
@@ -64,14 +64,14 @@
     {
       "platform": "darwin",
       "architecture": "arm64",
-      "path": "darwin-arm64/librayact_crash_reporter.dylib",
-      "sha256": "64736c2a06f998fb8319bd69f9bef7e8b2136f3e762860a059c0e17fef712869"
+      "path": "desktop/darwin-arm64/librayact_crash_reporter.dylib",
+      "sha256": "0d1cc90caec28959cc0b1a3915e999e977a11d28e02ef11ba712a44fb6561fb0"
     },
     {
       "platform": "darwin",
       "architecture": "x86_64",
-      "path": "darwin-x64/librayact_crash_reporter.dylib",
-      "sha256": "623fc3c2bce004fedc27585e5396fca7cdb1774613d82bdf10ae215839d624b0"
+      "path": "desktop/darwin-x64/librayact_crash_reporter.dylib",
+      "sha256": "0faac63efb407220d1e4649f087aa372c76b1f995da24bac62a719e365613b6b"
     },
     {
       "platform": "ios",

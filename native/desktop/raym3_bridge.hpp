@@ -13,6 +13,8 @@ extern "C" {
 }
 
 #include <raym3/v2/View.h>
+#include <raym3/v2/RenderContext.h>
+#include <raym3/v2/Gradient.h>
 
 extern std::map<int, raym3::v2::NodePtr> g_nodes;
 extern raym3::v2::NodePtr g_root;
@@ -115,11 +117,16 @@ JSValue JS_setTextInputProps(JSContext*, JSValue, int, JSValueConst*);
 // External (platform) views: host callbacks for layout-rect pushes and input
 // forwarding, plus texture replacement (e.g. backend AHardwareBuffer imports).
 void rayactSetExternalViewHostCallbacks(
-    void (*rectCb)(int nodeId, const char* kind, float x, float y, float w, float h),
-    void (*inputCb)(int nodeId, int action, float localX, float localY),
-    void (*propCb)(int nodeId, const char* key, const char* value),
-    void (*disposeCb)(int nodeId));
+    void (*createCb)(int surfaceId, int nodeId, const char* kind, const char* propsJson),
+    void (*rectCb)(int surfaceId, int nodeId, const char* kind, float x, float y, float w, float h),
+    void (*inputCb)(int surfaceId, int nodeId, int action, float localX, float localY),
+    void (*propsCb)(int surfaceId, int nodeId, const char* propsJson),
+    void (*disposeCb)(int surfaceId, int nodeId));
 void rayactSetExternalViewTexture(int nodeId, Texture2D texture);
+// Re-fire `create` for external views that already exist. Call after installing
+// host callbacks late (desktop installs them once the window — and therefore
+// the native view hierarchy — exists, which is after the app's first commit).
+void rayactReplayExternalViewCreates();
 // Producer-surface content insets in px (oversized surface for overflow
 // chrome); the node's draw rect expands by these.
 void rayactSetExternalViewTextureInsets(int nodeId, float l, float t, float r, float b);
@@ -185,6 +192,15 @@ int engineGetCurrentScreenId();
 void engineDestroyScreen(int id);
 void engineBindScreenRoot(int id);
 const raym3::v2::NodePtr& engineGetScreenRoot(int id);
+raym3::v2::RenderContext& engineGetScreenRenderContext(int id);
+
+namespace rayact {
+// Install the host's native-view compositor for every screen this process
+// renders (web / macOS desktop). Null disables hybrid composition, which is the
+// state on hosts that have no platform-view implementation. Defined in
+// engine_render.cpp, which owns the per-screen RenderContext setup.
+void engineSetExternalViewEmbedder(raym3::v2::ExternalViewEmbedder* embedder);
+}
 void engineForEachScreen(const std::function<void(int, const raym3::v2::NodePtr&)>& fn);
 int engineGetNextScreenId();
 

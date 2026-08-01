@@ -1,6 +1,6 @@
 {
   "engineVersion": "0.0.4",
-  "moduleAbiVersion": 2,
+  "moduleAbiVersion": 3,
   "platform": "darwin",
   "arch": "arm64",
   "builtAt": "2026-07-27T00:26:10Z"

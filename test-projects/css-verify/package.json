@@ -1,0 +1,14 @@
+{
+  "name": "css-verify",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Acceptance app for CSS minification: every construct the engine's parser supports, rendered so a parse regression is visible.",
+  "scripts": {
+    "dev": "rayact dev"
+  },
+  "dependencies": {
+    "rayact": "*",
+    "react": "^19.0.0"
+  }
+}

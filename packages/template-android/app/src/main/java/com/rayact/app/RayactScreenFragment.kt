@@ -39,7 +39,7 @@ class RayactScreenFragment(
             }
         }
         surfaceView = view
-        return view
+        return RayactPlatformViewContainer(requireContext(), view)
     }
 
     override fun onDestroyView() {

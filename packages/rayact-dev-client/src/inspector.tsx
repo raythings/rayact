@@ -20,6 +20,19 @@ export function clearInspectorHighlight(): void {
   if (typeof setInspectorHighlight === 'function') setInspectorHighlight(-1);
 }
 
+/**
+ * Whether tap-to-inspect can work on this host. It depends on a per-frame
+ * native hit-test + overlay draw loop that exists only in native/desktop
+ * (raym3_bridge.cpp / dev_client_bridge.cpp) — android, ios, and web have none
+ * of getNodeTree/setInspectorHighlight/getInspectorPickedNode, so the toggle
+ * used to sit there doing nothing when tapped.
+ */
+export function inspectorAvailable(): boolean {
+  return typeof getNodeTree === 'function' &&
+    typeof setInspectorHighlight === 'function' &&
+    typeof getInspectorPickedNode === 'function';
+}
+
 function parseTree(raw: string): InspectorTreeNode[] {
   try {
     return JSON.parse(raw) as InspectorTreeNode[];

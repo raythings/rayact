@@ -102,7 +102,7 @@ const fiberByHostInstance = new WeakMap<object, unknown>();
 // doesn't try to apply it as a style/attribute.
 const eventProps = [
   'onPress', 'onPressIn', 'onPressOut', 'onLongPress',
-  'onClick', 'onChangeText', 'onValueChange', 'onScroll', 'onRequestClose',
+  'onClick', 'onChangeText', 'onNativeEvent', 'onValueChange', 'onScroll', 'onRequestClose',
   'onFocus', 'onBlur', 'onLayout', 'onDragStart', 'onDragMove', 'onDragEnd',
   // TextInput (react-native parity). keyPress/contentSizeChange are accepted and
   // stripped from the payload but not yet fired by the host.
@@ -383,7 +383,7 @@ function eventNameForProp(prop: typeof eventProps[number]): HostEventName {
   if (prop === 'onPressIn') return 'pressIn';
   if (prop === 'onPressOut') return 'pressOut';
   if (prop === 'onLongPress') return 'longPress';
-  if (prop === 'onChangeText') return 'changeText';
+  if (prop === 'onChangeText' || prop === 'onNativeEvent') return 'changeText';
   if (prop === 'onValueChange') return 'changeValue';
   if (prop === 'onScroll') return 'scroll';
   if (prop === 'onRequestClose') return 'requestClose';

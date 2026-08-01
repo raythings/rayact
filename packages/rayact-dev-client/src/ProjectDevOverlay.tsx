@@ -38,7 +38,7 @@ function ProjectDevToolsSurface() {
 }
 
 g.__rayactDecorateRoot = (projectNode: React.ReactNode) => (
-  <DevLauncherProvider>
+  <DevLauncherProvider projectDevTools>
     <View id="__rayact_project_wrapper" style={{ flexGrow: 1, position: 'relative' }}>
       {projectNode}
       <ProjectDevToolsSurface />

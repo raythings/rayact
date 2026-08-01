@@ -1,0 +1,59 @@
+{
+  "name": "@rayact/router",
+  "version": "0.0.4",
+  "description": "File-based routing for Rayact applications",
+  "type": "module",
+  "sideEffects": [
+    "./dist/entry.js"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./entry": {
+      "types": "./dist/entry.d.ts",
+      "default": "./dist/entry.js"
+    },
+    "./vite": {
+      "types": "./dist/vite/plugin.d.ts",
+      "default": "./dist/vite/plugin.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@react-navigation/core": "^7.0.0",
+    "@react-navigation/routers": "^7.0.0"
+  },
+  "peerDependencies": {
+    "@rayact/linking": "0.0.4",
+    "@rayact/navigation": "0.0.4",
+    "@rayact/react": "0.0.4",
+    "@rayact/shared": "0.0.4",
+    "react": "^19.0.0"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "license": "MIT",
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/rayact-router"
+  }
+}

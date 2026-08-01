@@ -5,6 +5,7 @@ final class RayactEngineSession {
     static let TOUCH_DOWN = 0
     static let TOUCH_UP = 1
     static let TOUCH_MOVE = 2
+    static let TOUCH_CANCEL = 3
 
     let nativeHandle: RayactIOSHandle
     private(set) lazy var host: RayactHost = RayactHost(
@@ -218,6 +219,12 @@ final class RayactEngineSession {
 
     func nativeImeHiddenBySystem() {
         RayactNativeBridge.sessionImeHiddenBySystem(nativeHandle)
+    }
+
+    func nativeExternalViewEvent(nodeId: Int, payload: String) {
+        payload.withCString {
+            RayactNativeBridge.sessionExternalViewEvent(nativeHandle, Int32(nodeId), $0)
+        }
     }
 
 #if !RAYACT_RELEASE

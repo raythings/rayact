@@ -14,7 +14,7 @@
     "arm64",
     "x86_64"
   ],
-  "abiRange": ">=1 <3",
+  "abiRange": ">=1 <4",
   "engineRange": ">=0.0.3 <0.1.0",
   "linkage": "dynamic",
   "permissions": [
@@ -34,7 +34,7 @@
       "platform": "android",
       "architecture": "arm64",
       "path": "android/arm64-v8a/librayact_secure_store.so",
-      "sha256": "aa8e65b3b9829c44e182e48eb36168c0f50ec8eac89771c278b17fd71087618c"
+      "sha256": "0f5d161cc3f1b918855103dc7c712473baf5f0a72f8cf7d879959141f2fe6de8"
     },
     {
       "platform": "android",
@@ -45,14 +45,14 @@
     {
       "platform": "darwin",
       "architecture": "arm64",
-      "path": "darwin-arm64/librayact_secure_store.dylib",
-      "sha256": "d38ac7774316d4c5634001d03cbcf2e4d63f805c6e28a03345287be4fab0b019"
+      "path": "desktop/darwin-arm64/librayact_secure_store.dylib",
+      "sha256": "f7f2b17639294b36ef92413d8c2183892744e18694e501295078ea419494330e"
     },
     {
       "platform": "darwin",
       "architecture": "x86_64",
-      "path": "darwin-x64/librayact_secure_store.dylib",
-      "sha256": "1e4982834e7417a96329fbf271c06539dcb7a1fa8594c1188fa2e69e6f4961df"
+      "path": "desktop/darwin-x64/librayact_secure_store.dylib",
+      "sha256": "6cad0a4eca178f93dffff7f186557ec4815f6c9314f2886b08579434a892208f"
     },
     {
       "platform": "ios",

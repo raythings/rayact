@@ -27,11 +27,13 @@
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 #include <android/log.h>
+#include <algorithm>
 #include <atomic>
 #include <map>
 #include <mutex>
 #include <set>
 #include <functional>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <unistd.h>   // chdir
@@ -54,6 +56,7 @@
 #include "../desktop/accessibility_bridge.hpp"
 #include "engine_runtime.hpp"
 #include <raym3/fonts/FontManager.h>
+#include <raym3/raym3.h>
 #include <raym3/styles/Stylesheet.h>
 #include <raym3/v2/Density.h>
 #include <raym3/v2/IconRenderer.h>
@@ -62,6 +65,10 @@
 
 extern "C" {
 #include "rcore_android_surface.h"   // RcoreAndroidSurface_* host hooks (from raylib-backends)
+bool rlvkRegisterSurface(uint64_t surfaceId, void* nativeWindow, int width, int height);
+void rlvkResizeRegisteredSurface(uint64_t surfaceId, int width, int height);
+bool rlvkSelectSurface(uint64_t surfaceId);
+void rlvkUnregisterSurface(uint64_t surfaceId);
 }
 
 // raylib functions we call directly to bring up / drive a surface.
@@ -74,6 +81,8 @@ bool  IsWindowReady(void);
 void  SetTargetFPS(int fps);
 void  SetConfigFlags(unsigned int flags);
 }
+
+void rayactAndroidSetSystemDarkMode(bool isDark);
 
 // Matches raylib.h ConfigFlags — this TU doesn't include raylib.h.
 #ifndef FLAG_MSAA_4X_HINT
@@ -1048,15 +1057,27 @@ unsigned char *AndroidRasterizeEmoji(const char *utf8, int px, int *outW, int *o
 
     unsigned char *result = nullptr;
 
-    // android.graphics.Bitmap
-    jclass bitmapClass   = env->FindClass("android/graphics/Bitmap");
-    jclass configClass   = env->FindClass("android/graphics/Bitmap$Config");
-    jclass paintClass    = env->FindClass("android/graphics/Paint");
-    jclass canvasClass   = env->FindClass("android/graphics/Canvas");
-
-    if (!bitmapClass || !configClass || !paintClass || !canvasClass) goto done;
+    // Every jobject below is a LOCAL ref. This is called from the render
+    // thread's native loop, not from a Java frame, so local refs are never
+    // reclaimed on return and would accumulate until the 512-entry table
+    // overflows (~85 unique emoji). A local frame bounds them per call.
+    if (env->PushLocalFrame(32) != JNI_OK) {
+        if (needDetach) g_jvm->DetachCurrentThread();
+        return nullptr;
+    }
 
     {
+        // Only boot-classloader classes are used, so FindClass works from any
+        // attached thread without needing the app's classloader.
+        jclass bitmapClass = env->FindClass("android/graphics/Bitmap");
+        jclass configClass = env->FindClass("android/graphics/Bitmap$Config");
+        jclass paintClass  = env->FindClass("android/graphics/Paint");
+        jclass canvasClass = env->FindClass("android/graphics/Canvas");
+        jclass rectClass   = env->FindClass("android/graphics/Rect");
+        if (!bitmapClass || !configClass || !paintClass || !canvasClass || !rectClass)
+            goto done;
+
+        {
         // Bitmap.Config.ARGB_8888
         jfieldID argb8888Field = env->GetStaticFieldID(configClass, "ARGB_8888",
                                                         "Landroid/graphics/Bitmap$Config;");
@@ -1083,24 +1104,38 @@ unsigned char *AndroidRasterizeEmoji(const char *utf8, int px, int *outW, int *o
         jobject canvas = env->NewObject(canvasClass, canvasInit, bitmap);
         if (!canvas) goto done;
 
-        // canvas.drawText(utf8, px/2 - measured/2, baseline, paint)
         jstring jtext = env->NewStringUTF(utf8);
         if (!jtext) goto done;
+        const jint jtextLen = env->GetStringLength(jtext);
 
-        jmethodID measureText = env->GetMethodID(paintClass, "measureText",
-                                                  "(Ljava/lang/String;)F");
-        jfloat textW = env->CallFloatMethod(paint, measureText, jtext);
+        // Center on the glyph's tight bounds, the same way the CoreText path
+        // does. The previous fixed `baseline = px * 0.82` cut off clusters whose
+        // ink sits outside that guess (flags, keycaps) and left others off-centre.
+        jobject rect = env->NewObject(rectClass, env->GetMethodID(rectClass, "<init>", "()V"));
+        if (!rect) goto done;
+        env->CallVoidMethod(paint,
+            env->GetMethodID(paintClass, "getTextBounds", "(Ljava/lang/String;IILandroid/graphics/Rect;)V"),
+            jtext, (jint)0, jtextLen, rect);
+        const jint bl = env->GetIntField(rect, env->GetFieldID(rectClass, "left", "I"));
+        const jint bt = env->GetIntField(rect, env->GetFieldID(rectClass, "top", "I"));
+        const jint br = env->GetIntField(rect, env->GetFieldID(rectClass, "right", "I"));
+        const jint bb = env->GetIntField(rect, env->GetFieldID(rectClass, "bottom", "I"));
+        const jint inkW = br - bl;
+        const jint inkH = bb - bt;
+        if (inkW <= 0 || inkH <= 0) goto done; // nothing to draw
 
-        // Estimate baseline from ascent: roughly 80% of px from top.
-        jfloat x = ((jfloat)px - textW) * 0.5f;
-        jfloat y = (jfloat)px * 0.82f;
+        // Rect is relative to the drawing origin (baseline-left), with `top`
+        // negative above the baseline, so these offsets place the ink box in the
+        // middle of the square.
+        const jfloat x = ((jfloat)px - (jfloat)inkW) * 0.5f - (jfloat)bl;
+        const jfloat y = ((jfloat)px - (jfloat)inkH) * 0.5f - (jfloat)bt;
 
         jmethodID drawText = env->GetMethodID(canvasClass, "drawText",
             "(Ljava/lang/String;FFLandroid/graphics/Paint;)V");
         env->CallVoidMethod(canvas, drawText, jtext, x, y, paint);
-        env->DeleteLocalRef(jtext);
 
-        // bitmap.copyPixelsToBuffer — use int[] getPixels for simplicity
+        // Bitmap rows are top-origin and upright, matching the CBDT/PNG path
+        // that GetCluster feeds to LoadTextureFromImage — no vertical flip.
         jintArray pixels = env->NewIntArray(px * px);
         if (!pixels) goto done;
         jmethodID getPixels = env->GetMethodID(bitmapClass, "getPixels",
@@ -1136,10 +1171,18 @@ unsigned char *AndroidRasterizeEmoji(const char *utf8, int px, int *outW, int *o
             *outH = px;
         }
         env->ReleaseIntArrayElements(pixels, data, JNI_ABORT);
-        env->DeleteLocalRef(pixels);
+        }
     }
 
 done:
+    // A pending Java exception makes the next JNI call from this thread abort
+    // the process, so clear it here rather than letting it escape into the
+    // render loop.
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        if (result) { std::free(result); result = nullptr; }
+    }
+    env->PopLocalFrame(nullptr);
     if (needDetach) g_jvm->DetachCurrentThread();
     return result;
 }
@@ -1149,9 +1192,13 @@ extern "C" {
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     g_jvm = vm;
-    // Prefer the bundled CBDT emoji font on Android. Some devices' Paint-based
-    // fallback path rasterizes missing-glyph boxes for otherwise standard emoji,
-    // while the bundled font is already shipped with the runtime assets.
+    // Rasterize emoji with the device's own emoji font (Paint/Canvas) instead of
+    // bundling a 10.6 MB CBDT NotoColorEmoji — the same trade the CoreText path
+    // makes on Apple, and it picks up whatever the OS ships (COLRv1 on 13+).
+    // EmojiFont probes this backend before committing to it and falls back to a
+    // bundled font when the probe fails, which is what the earlier "some devices
+    // draw missing-glyph boxes" concern needed.
+    raym3::v2::EmojiFont::Instance().SetRasterizer(AndroidRasterizeEmoji);
     installAndroidTextInputHostHooksOnce();
     // Let native subsystems (CDP inbound, later net) wake an idle render loop
     // from any thread. androidRequestRenderFrame targets the graphics-lease
@@ -1206,7 +1253,152 @@ static void callPlatformViewsKt(const char* method, const char* sig,
     if (needDetach) g_jvm->DetachCurrentThread();
 }
 
-static void externalViewRectChanged(int nodeId, const char* kind,
+class AndroidExternalViewEmbedder final
+    : public raym3::v2::ExternalViewEmbedder {
+public:
+    void BeginFrame(uint64_t surfaceId, Rectangle bounds,
+                    float density) override {
+        selectedOverlayId_ = 0;
+        targetChanged_ = false;
+        callPlatformViewsKt("platformViewsBeginFrameFromHost", "(IFFF)V",
+            [&](JNIEnv* env, jclass cls, jmethodID method) {
+                env->CallStaticVoidMethod(
+                    cls, method, (jint)surfaceId,
+                    bounds.width, bounds.height, density);
+            });
+    }
+
+    bool CompositeExternalView(
+        const raym3::v2::ExternalViewComposition& composition) override {
+        std::ostringstream json;
+        json << "{\"bounds\":{\"x\":"
+             << raym3::v2::Density::RasterPixels(composition.bounds.x)
+             << ",\"y\":"
+             << raym3::v2::Density::RasterPixels(composition.bounds.y)
+             << ",\"width\":"
+             << raym3::v2::Density::RasterPixels(composition.bounds.width)
+             << ",\"height\":"
+             << raym3::v2::Density::RasterPixels(composition.bounds.height)
+             << "},\"preservesFrameworkUnderlay\":"
+             << (composition.preservesFrameworkUnderlay ? "true" : "false")
+             << ",\"hitTestBehavior\":\"";
+        switch (composition.hitTestBehavior) {
+        case raym3::v2::ExternalViewHitTestBehavior::Transparent:
+            json << "transparent"; break;
+        case raym3::v2::ExternalViewHitTestBehavior::Translucent:
+            json << "translucent"; break;
+        default:
+            json << "opaque"; break;
+        }
+        json << "\",\"mutators\":[";
+        for (size_t index = 0; index < composition.mutators.size(); ++index) {
+            if (index) json << ',';
+            const auto& mutator = composition.mutators[index];
+            json << '{';
+            switch (mutator.kind) {
+            case raym3::v2::ExternalViewMutatorKind::Transform:
+                json << "\"kind\":\"transform\",\"matrix\":[";
+                for (size_t m = 0; m < mutator.transform.size(); ++m) {
+                    if (m) json << ',';
+                    json << mutator.transform[m];
+                }
+                json << ']';
+                break;
+            case raym3::v2::ExternalViewMutatorKind::ClipRect:
+            case raym3::v2::ExternalViewMutatorKind::ClipRoundedRect:
+                json << "\"kind\":\""
+                     << (mutator.kind ==
+                                 raym3::v2::ExternalViewMutatorKind::ClipRect
+                             ? "clipRect" : "clipRoundedRect")
+                     << "\",\"rect\":{\"x\":"
+                     << raym3::v2::Density::RasterPixels(mutator.rect.x)
+                     << ",\"y\":"
+                     << raym3::v2::Density::RasterPixels(mutator.rect.y)
+                     << ",\"width\":"
+                     << raym3::v2::Density::RasterPixels(mutator.rect.width)
+                     << ",\"height\":"
+                     << raym3::v2::Density::RasterPixels(mutator.rect.height)
+                     << "},\"radius\":"
+                     << raym3::v2::Density::RasterPixels(mutator.radius);
+                break;
+            case raym3::v2::ExternalViewMutatorKind::Opacity:
+                json << "\"kind\":\"opacity\",\"opacity\":"
+                     << mutator.opacity;
+                break;
+            }
+            json << '}';
+        }
+        json << "],\"requiresOverlay\":"
+             << (composition.requiresOverlay ? "true" : "false")
+             << ",\"occludingRegions\":[";
+        for (size_t i = 0; i < composition.occludingRegions.size(); ++i) {
+            if (i) json << ',';
+            const auto& r = composition.occludingRegions[i];
+            json << "{\"x\":" << raym3::v2::Density::RasterPixels(r.x)
+                 << ",\"y\":" << raym3::v2::Density::RasterPixels(r.y)
+                 << ",\"width\":" << raym3::v2::Density::RasterPixels(r.width)
+                 << ",\"height\":" << raym3::v2::Density::RasterPixels(r.height) << '}';
+        }
+        json << "]}";
+        const std::string payload = json.str();
+        jlong overlaySurfaceId = 0;
+        callPlatformViewsKt(
+            "platformViewCompositeFromHost",
+            "(IILjava/lang/String;)J",
+            [&](JNIEnv* env, jclass cls, jmethodID method) {
+                jstring value = env->NewStringUTF(payload.c_str());
+                overlaySurfaceId = env->CallStaticLongMethod(
+                    cls, method, (jint)raym3::v2::Ctx().surfaceId,
+                    (jint)composition.externalViewId, value);
+                env->DeleteLocalRef(value);
+            });
+        if (overlaySurfaceId <= 0) return false;
+        const uint64_t overlayId = static_cast<uint64_t>(overlaySurfaceId);
+        targetChanged_ = selectedOverlayId_ != overlayId;
+        if (!rlvkSelectSurface(overlayId)) return false;
+        selectedOverlayId_ = overlayId;
+
+        // One physical HCPP overlay represents all logical slices. At each
+        // later native-view boundary, erase previously painted framework
+        // content inside that view's final rectangle; subsequent framework
+        // content then paints above it. This is the incremental equivalent of
+        // Flutter's difference stencil for final platform-view bounds.
+        if (!composition.preservesFrameworkUnderlay) {
+            Rectangle clearBounds = {
+                composition.bounds.x, composition.bounds.y,
+                composition.bounds.width, composition.bounds.height
+            };
+            raym3::PushScissor(clearBounds);
+            ClearBackground(BLANK);
+            raym3::PopScissor();
+        }
+        return true;
+    }
+
+    bool RequiresClipReplay() const override { return targetChanged_; }
+
+    void EndFrame(uint64_t surfaceId) override {
+        callPlatformViewsKt("platformViewsEndFrameFromHost", "(I)V",
+            [&](JNIEnv* env, jclass cls, jmethodID method) {
+                env->CallStaticVoidMethod(cls, method, (jint)surfaceId);
+            });
+    }
+
+    void OnGestureDecision(int externalViewId, bool accepted) override {
+        callPlatformViewsKt("platformViewGestureDecisionFromHost", "(IIZ)V",
+            [&](JNIEnv* env, jclass cls, jmethodID method) {
+                env->CallStaticVoidMethod(
+                    cls, method, (jint)raym3::v2::Ctx().surfaceId,
+                    (jint)externalViewId, (jboolean)accepted);
+            });
+    }
+
+private:
+    uint64_t selectedOverlayId_ = 0;
+    bool targetChanged_ = false;
+};
+
+static void externalViewRectChanged(int surfaceId, int nodeId, const char* kind,
                                     float x, float y, float w, float h) {
     // Convert layout-dp → raster px here, where the engine's density policy
     // lives; the Kotlin host then works in surface px (touch coords match).
@@ -1214,49 +1406,67 @@ static void externalViewRectChanged(int nodeId, const char* kind,
     const float py = (float)raym3::v2::Density::RasterPixels(y);
     const float pw = (float)raym3::v2::Density::RasterPixels(w);
     const float ph = (float)raym3::v2::Density::RasterPixels(h);
-    callPlatformViewsKt("platformViewRectFromHost", "(ILjava/lang/String;FFFF)V",
+    callPlatformViewsKt("platformViewRectFromHost", "(IILjava/lang/String;FFFF)V",
         [&](JNIEnv* env, jclass cls, jmethodID m) {
             jstring jk = env->NewStringUTF(kind ? kind : "");
-            env->CallStaticVoidMethod(cls, m, (jint)nodeId, jk, px, py, pw, ph);
+            env->CallStaticVoidMethod(cls, m, (jint)surfaceId, (jint)nodeId,
+                                      jk, px, py, pw, ph);
             env->DeleteLocalRef(jk);
         });
 }
 
-static void externalViewInput(int nodeId, int action, float lx, float ly) {
+static void externalViewCreate(int surfaceId, int nodeId, const char* kind, const char* propsJson) {
+    callPlatformViewsKt("platformViewCreateFromHost",
+                        "(IILjava/lang/String;Ljava/lang/String;)V",
+        [&](JNIEnv* env, jclass cls, jmethodID m) {
+            jstring jk = env->NewStringUTF(kind ? kind : "");
+            jstring jp = env->NewStringUTF(propsJson ? propsJson : "{}");
+            env->CallStaticVoidMethod(cls, m, (jint)surfaceId,
+                                      (jint)nodeId, jk, jp);
+            env->DeleteLocalRef(jk);
+            env->DeleteLocalRef(jp);
+        });
+}
+
+static void externalViewInput(int surfaceId, int nodeId, int action, float lx, float ly) {
+    (void)surfaceId;
     callPlatformViewsKt("platformViewInputFromHost", "(IIFF)V",
         [&](JNIEnv* env, jclass cls, jmethodID m) {
             env->CallStaticVoidMethod(cls, m, (jint)nodeId, (jint)action, lx, ly);
         });
 }
 
-static void externalViewProp(int nodeId, const char* key, const char* value) {
-    callPlatformViewsKt("platformViewPropFromHost",
-                        "(ILjava/lang/String;Ljava/lang/String;)V",
+static void externalViewProps(int surfaceId, int nodeId, const char* propsJson) {
+    (void)surfaceId;
+    callPlatformViewsKt("platformViewPropsFromHost",
+                        "(ILjava/lang/String;)V",
         [&](JNIEnv* env, jclass cls, jmethodID m) {
-            jstring jkey = env->NewStringUTF(key ? key : "");
-            jstring jval = env->NewStringUTF(value ? value : "");
-            env->CallStaticVoidMethod(cls, m, (jint)nodeId, jkey, jval);
-            env->DeleteLocalRef(jkey);
-            env->DeleteLocalRef(jval);
+            jstring jp = env->NewStringUTF(propsJson ? propsJson : "{}");
+            env->CallStaticVoidMethod(cls, m, (jint)nodeId, jp);
+            env->DeleteLocalRef(jp);
         });
 }
 
-static void externalViewDispose(int nodeId);
+static void externalViewDispose(int surfaceId, int nodeId);
 
 // Pending producer frames (main thread → JS-pump drain). One slot per node:
 // a newer frame replaces an undrained older one.
 static std::mutex g_pvFrameMutex;
 static std::map<int, AHardwareBuffer*> g_pvPendingFrames;
-// Pending text-change events from EditText TextWatchers.
+// Pending editor event envelopes from EditText listeners. An ordered QUEUE,
+// not a latest-wins slot: one TextWatcher pass emits change + selection +
+// contentSize back-to-back, and a slot would clobber the change envelope
+// before the pump drains ("typed but the label never floated").
 static std::mutex g_pvTextMutex;
-static std::map<int, std::string> g_pvPendingText;
+static std::vector<std::pair<int, std::string>> g_pvPendingText;
 
 // Per-node import cache: ImageReader recycles a small buffer pool, so each
 // AHardwareBuffer imports once and frames just swap which texture is bound.
 struct PvTexEntry { unsigned int texId; int width; int height; };
 static std::map<int, std::map<AHardwareBuffer*, PvTexEntry>> g_pvTexCache;
 
-static void externalViewDispose(int nodeId) {
+static void externalViewDispose(int surfaceId, int nodeId) {
+    (void)surfaceId;
     {
         std::lock_guard<std::mutex> lk(g_pvFrameMutex);
         auto it = g_pvPendingFrames.find(nodeId);
@@ -1267,7 +1477,10 @@ static void externalViewDispose(int nodeId) {
     }
     {
         std::lock_guard<std::mutex> lk(g_pvTextMutex);
-        g_pvPendingText.erase(nodeId);
+        g_pvPendingText.erase(
+            std::remove_if(g_pvPendingText.begin(), g_pvPendingText.end(),
+                           [&](const auto& e) { return e.first == nodeId; }),
+            g_pvPendingText.end());
     }
     auto cit = g_pvTexCache.find(nodeId);
     if (cit != g_pvTexCache.end()) {
@@ -1320,7 +1533,7 @@ static void drainExternalViewEvents() {
         AHardwareBuffer_release(ahb); // pending-slot ref; cache import holds its own
     }
 
-    std::map<int, std::string> texts;
+    std::vector<std::pair<int, std::string>> texts;
     {
         std::lock_guard<std::mutex> lk(g_pvTextMutex);
         texts.swap(g_pvPendingText);
@@ -1337,10 +1550,14 @@ Java_com_rayact_engine_RayactEngineSession_nativeCreate(JNIEnv* env, jclass, jst
     if (handle == 0) return 0;
     AndroidEngineInstance* inst = androidEngineInstanceFromHandle(handle);
     if (!inst) return 0;
+    if (!inst->externalViewEmbedder)
+        inst->externalViewEmbedder =
+            std::make_unique<AndroidExternalViewEmbedder>();
     {
         if (!g_processBooted) {
-            rayactSetExternalViewHostCallbacks(externalViewRectChanged, externalViewInput,
-                                               externalViewProp, externalViewDispose);
+            rayactSetExternalViewHostCallbacks(
+                externalViewCreate, externalViewRectChanged, externalViewInput,
+                externalViewProps, externalViewDispose);
             if (!dp.empty()) {
                 RcoreAndroidSurface_SetDataPath(strdup(dp.c_str()));
                 chdir(dp.c_str());
@@ -1371,6 +1588,13 @@ Java_com_rayact_engine_RayactEngineSession_nativeRegisterHost(
     JNIEnv* env, jclass, jlong handle, jobject callbacks) {
     AndroidEngineInstance* inst = androidEngineInstanceFromHandle(handle);
     if (inst) inst->registerHost(env, callbacks);
+}
+
+JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngineSession_nativeSetSystemAppearance(
+    JNIEnv*, jclass, jlong handle, jboolean isDark) {
+    if (!androidEngineInstanceFromHandle(handle)) return;
+    rayactAndroidSetSystemDarkMode(isDark == JNI_TRUE);
 }
 
 JNIEXPORT jboolean JNICALL
@@ -2115,6 +2339,20 @@ Java_com_rayact_engine_RayactEngineSession_nativeRenderFrame(JNIEnv*, jclass, jl
         if (g_surfaces.count(id)) ordered.push_back(id);
     });
     if (ordered.empty()) return JNI_FALSE;
+    for (const auto& [surfaceId, surface] : g_surfaces) {
+        auto& context = engineGetScreenRenderContext(surfaceId);
+        context.surfaceId = static_cast<uint64_t>(surfaceId);
+        context.platformDensity = std::max(0.1f, surface.density);
+        const int surfaceWidth =
+            surface.pendingWidth > 0
+                ? surface.pendingWidth
+                : (surface.window
+                       ? ANativeWindow_getWidth(surface.window)
+                       : 0);
+        context.layoutDensity =
+            androidLayoutDensityForWidth(surfaceWidth, surface.density);
+        context.externalViewEmbedder = inst->externalViewEmbedder.get();
+    }
 
     // Per-surface bind → render pass → swap. Each SurfaceView owns one Android
     // native window and one engine screen; Android composites the windows in
@@ -2202,7 +2440,7 @@ Java_com_rayact_engine_RayactEngineSession_nativeExternalViewTextChanged(
     JNIEnv* env, jclass, jlong handle, jint nodeId, jstring text) {
     InstanceScope scope(handle);
     std::lock_guard<std::mutex> lk(g_pvTextMutex);
-    g_pvPendingText[nodeId] = jstr(env, text);
+    g_pvPendingText.emplace_back(nodeId, jstr(env, text));
 }
 
 // Touch event from the UI thread. action: 0=down 1=up 2=move (RCORE_AS_TOUCH_*).
@@ -2313,6 +2551,42 @@ Java_com_rayact_engine_RayactEngineSession_nativeSurfaceDestroyed(JNIEnv*, jclas
     // nativeDestroySurface. This entry point is kept for legacy callers
     // (the single-surface view) that don't use the multi-surface API.
     LOGI("nativeSurfaceDestroyed: no-op (surfaces are managed by create/destroy)");
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_rayact_engine_RayactEngineSession_nativeRegisterOverlaySurface(
+    JNIEnv* env, jclass, jlong handle, jlong surfaceId, jobject surface,
+    jint width, jint height) {
+    if (!surface || surfaceId <= 0) return JNI_FALSE;
+    std::lock_guard<std::mutex> lock(g_engineMutex);
+    AndroidEngineInstance* inst = androidEngineInstanceFromHandle(handle);
+    if (!inst || !androidEngineGraphicsValid()) return JNI_FALSE;
+    if (androidEngineCurrent() != inst) inst->setCurrent();
+    ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
+    if (!window) return JNI_FALSE;
+    const bool result = rlvkRegisterSurface(
+        static_cast<uint64_t>(surfaceId), window, width, height);
+    ANativeWindow_release(window);
+    return result ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngineSession_nativeResizeOverlaySurface(
+    JNIEnv*, jclass, jlong handle, jlong surfaceId, jint width, jint height) {
+    std::lock_guard<std::mutex> lock(g_engineMutex);
+    AndroidEngineInstance* inst = androidEngineInstanceFromHandle(handle);
+    if (!inst || androidEngineCurrent() != inst) return;
+    rlvkResizeRegisteredSurface(
+        static_cast<uint64_t>(surfaceId), width, height);
+}
+
+JNIEXPORT void JNICALL
+Java_com_rayact_engine_RayactEngineSession_nativeUnregisterOverlaySurface(
+    JNIEnv*, jclass, jlong handle, jlong surfaceId) {
+    std::lock_guard<std::mutex> lock(g_engineMutex);
+    AndroidEngineInstance* inst = androidEngineInstanceFromHandle(handle);
+    if (!inst || androidEngineCurrent() != inst) return;
+    rlvkUnregisterSurface(static_cast<uint64_t>(surfaceId));
 }
 
 JNIEXPORT void JNICALL

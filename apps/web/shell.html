@@ -1,4 +1,16 @@
 <!DOCTYPE html>
+<!--
+  Emscripten --shell-file TEMPLATE for the Rayact web host. NOT a runnable page.
+
+  Opening this file directly in a browser launches nothing: there is no engine,
+  no app bundle and no project here, so you get an empty canvas behind the
+  loading overlay. That is expected, not a failure.
+
+  emcc substitutes the {{{ SCRIPT }}} placeholder at the end of <body> with the
+  generated <script src="rayact.js"> and emits rayact.html next to the wasm; that
+  output is the page to open. See apps/web/CMakeLists.txt (LINK_FLAGS
+  --shell-file) and CLAUDE.md for how to build and serve a project.
+-->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -9,11 +21,44 @@
     body { overflow: hidden; }
     #wrap { position: fixed; inset: 0; display: grid; place-items: center; }
     canvas {
-      background: #000;
+      /* Matches the page background: any beat where the compositor shows the
+         canvas before a frame lands (e.g. mid-drag resize) blends instead of
+         flashing black. */
+      background: #12121a;
       display: block;
       width: 100vw;
       height: 100vh;
       box-sizing: border-box;
+    }
+    /* The canvas is focusable (tabindex="0") only so it can capture keyboard
+       input, and the pointer handlers focus it programmatically on every press —
+       which Chrome treats as :focus-visible, drawing a focus ring around the
+       entire viewport on any click. That ring marks the whole app, so it says
+       nothing about what is actually focused; rayact paints its own focus
+       affordances inside the scene (M3 field outlines, state layers), which is
+       the indicator a user should see. Both selectors: :focus-visible carries
+       its own UA outline and does not inherit the :focus reset. */
+    #canvas:focus,
+    #canvas:focus-visible { outline: none; }
+    /* Hybrid composition: platform elements and overlay canvases are stacked
+       above the base canvas in composite order, so framework content painted
+       after a platform view genuinely covers it. The layer itself never takes
+       pointer events; individual platform elements opt in. */
+    #rayact-pv-layer { position: absolute; inset: 0; pointer-events: none; }
+    #rayact-pv-layer > * { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+    #rayact-pv-layer canvas { width: 100%; height: 100%; background: transparent; }
+    #rayact-pv-layer input, #rayact-pv-layer textarea {
+      border: 0; margin: 0; padding: 0; background: transparent; box-sizing: border-box;
+      outline: none; color: inherit; font: inherit; resize: none;
+    }
+    #rayact-pv-layer input::placeholder,
+    #rayact-pv-layer textarea::placeholder {
+      color: var(--rayact-placeholder-color, currentColor);
+      opacity: 1; /* Firefox dims placeholders by default */
+    }
+    #rayact-pv-layer input::selection,
+    #rayact-pv-layer textarea::selection {
+      background: var(--rayact-selection-color, Highlight);
     }
     #unsupported {
       display: none;
@@ -72,6 +117,7 @@
 <body>
   <div id="wrap">
     <canvas id="canvas" width="960" height="540" oncontextmenu="event.preventDefault()" tabindex="0"></canvas>
+    <div id="rayact-pv-layer"></div>
     <input id="rayact-ime-input" class="rayact-ime" autocomplete="off" autocapitalize="none" spellcheck="false">
     <textarea id="rayact-ime-textarea" class="rayact-ime" autocomplete="off" autocapitalize="none" spellcheck="false"></textarea>
     <section id="rayact-loading" role="status" aria-live="polite">
@@ -165,6 +211,30 @@
           }
         });
 
+        // Native web modules (side-module wasm). Release injects the list as a
+        // global at stage time; dev takes it from the manifest. preRun waits on
+        // this same promise before loading them, so setting it here is in time.
+        window.__rayactWebModules = (Array.isArray(manifest.webModuleWasm) ? manifest.webModuleWasm : [])
+          .map(function(module) { return module && module.url; })
+          .filter(Boolean);
+
+        // Browser-side module scripts (@rayact/webview and friends). A release
+        // build gets <script> tags injected at stage time; this page is served
+        // byte-for-byte in dev, so the tags are added here from the manifest.
+        // Not awaited: the platform-view registry parks creates for kinds whose
+        // factory has not registered yet and replays them when it does.
+        (Array.isArray(manifest.webModuleScripts) ? manifest.webModuleScripts : [])
+          .forEach(function(module) {
+            if (!module || !module.url) return;
+            var script = document.createElement('script');
+            script.src = rayactAbsoluteUrl(module.url);
+            script.async = false;   // preserve declaration order between modules
+            script.onerror = function() {
+              console.error('[rayact-web] failed to load module script: ' + module.name);
+            };
+            document.head.appendChild(script);
+          });
+
         async function warmResource(resource) {
           if (resource.size && rayactPrefetchBytes + resource.size > rayactPrefetchLimit) return;
           try {
@@ -195,6 +265,44 @@
       // the bundle being embedded at link time. Missing files are fine (the
       // host falls through to ?dev= or the demo).
       preRun: [function() {
+        // Native web modules (@rayact/svg and friends) are Emscripten SIDE_MODULEs the
+        // host dlopens, the peer of desktop's .dylib. This only stages the bytes into
+        // MEMFS; the host loads them from /rayact-modules during boot.
+        //
+        // The split matters. dlopen'ing here would be too early: Emscripten places a
+        // side module's data segment with getMemory(), which bump-allocates from the
+        // heap base until runtimeInitialized is set, and the allocator then hands the
+        // same region out again — the engine dies with "memory access out of bounds"
+        // during engineCreate, nowhere near the cause. Fetching is safe though, and
+        // doing it here keeps the network wait off the boot path.
+        //
+        // In dev the list arrives with the manifest, so wait for that fetch first.
+        addRunDependency('rayact-modules');
+        Promise.resolve(rayactDevBase ? window.__rayactDevPrefetchReady : null)
+          .catch(function() {})
+          .then(function() {
+            var modules = window.__rayactWebModules;
+            if (!Array.isArray(modules) || !modules.length) return;
+            try { FS.mkdirTree('/rayact-modules'); } catch (e) { /* already exists */ }
+            return Promise.all(modules.map(function(module) {
+              var url = typeof module === 'string' ? module : (module && module.url);
+              if (!url) return null;
+              var name = url.split('/').pop().split('?')[0];
+              var target = '/rayact-modules/' + name;
+              return fetch(rayactAbsoluteUrl(url)).then(function(res) {
+                if (!res.ok) throw new Error(url + ': ' + res.status);
+                return res.arrayBuffer();
+              }).then(function(buf) {
+                FS.writeFile(target, new Uint8Array(buf));
+              }).catch(function(error) {
+                // Never fatal: the app boots without that module's node kinds.
+                console.error('[rayact-web] module fetch failed: ' + error.message);
+              });
+            }));
+          })
+          .catch(function() {})
+          .then(function() { removeRunDependency('rayact-modules'); });
+
         if (rayactDevBase) {
           addRunDependency('rayact-dev-prefetch');
           Promise.resolve(window.__rayactDevPrefetchReady).finally(function() {
@@ -289,13 +397,38 @@
       // pixels. The engine only READS this (it never resizes the canvas). Native's
       // resize notification (rayactWebNotifyResize) calls this before re-reading,
       // and we size once here so the very first InitPlatform reads a real backing.
-      function resizeCanvasBacking() {
-        if (!canvas) return false;
+      // Rayact policy (mirrors the desktop host's rlmtSetMinRenderScale(2)):
+      // rasterize at no less than 2x, even on 1x displays. Text and icons baked
+      // at density 1 read as blurry on low-DPI monitors; rendering 2x and
+      // letting the browser downsample gives them the raster density mobile
+      // gets natively. Returns the multiplier to apply ON TOP of the exact
+      // device-pixel size (1 on 2x+ displays — the exact path stays untouched).
+      function rayactExtraRenderScale() {
         var dpr = window.devicePixelRatio || 1;
-        var cssW = Math.max(1, Math.round(canvas.clientWidth || window.innerWidth || 1));
-        var cssH = Math.max(1, Math.round(canvas.clientHeight || window.innerHeight || 1));
-        var bw = Math.max(1, Math.round(cssW * dpr));
-        var bh = Math.max(1, Math.round(cssH * dpr));
+        return Math.max(1, 2 / dpr);
+      }
+
+      // Prefer the exact device-pixel size from ResizeObserver's
+      // devicePixelContentBoxSize (passed through by the runtime): computing
+      // round(clientWidth) x dpr can disagree with the element's true device
+      // pixel width by one pixel on fractional CSS sizes (100vw is rarely
+      // integral), and a canvas whose backing store is scaled by even 1px
+      // renders every glyph blurry.
+      function resizeCanvasBacking(exactW, exactH) {
+        if (!canvas) return false;
+        var extra = rayactExtraRenderScale();
+        var bw, bh;
+        if (typeof exactW === 'number' && exactW > 0 &&
+            typeof exactH === 'number' && exactH > 0) {
+          bw = Math.max(1, Math.round(exactW * extra));
+          bh = Math.max(1, Math.round(exactH * extra));
+        } else {
+          var dpr = window.devicePixelRatio || 1;
+          var cssW = Math.max(1, canvas.clientWidth || window.innerWidth || 1);
+          var cssH = Math.max(1, canvas.clientHeight || window.innerHeight || 1);
+          bw = Math.max(1, Math.round(cssW * dpr * extra));
+          bh = Math.max(1, Math.round(cssH * dpr * extra));
+        }
         if (canvas.width === bw && canvas.height === bh) return false;
         canvas.width = bw;
         canvas.height = bh;
@@ -303,6 +436,611 @@
       }
       Module.__rayactResizeCanvas = resizeCanvasBacking;
       resizeCanvasBacking();
+
+      // ---------------------------------------------------------------------
+      // Platform views (hybrid composition)
+      //
+      // native/web/web_platform_views.cpp drives this from raym3's render walk.
+      // Per frame: beginFrame, then one composite() per platform view in paint
+      // order, then endFrame. composite() positions the real DOM element from
+      // the mutator stack and returns the rlwg surface id of an overlay canvas;
+      // everything raym3 paints after that goes into the overlay, which sits
+      // above the element. That ordering is the whole point — an element merely
+      // layered on top could never be occluded by framework content.
+      //
+      // Geometry arrives in dp, which on web is CSS px.
+      // ---------------------------------------------------------------------
+      (function installPlatformViews() {
+        var layer = document.getElementById('rayact-pv-layer');
+        if (!layer) return;
+
+        var views = {};            // nodeId -> { el, kind, surfaceId }
+        var overlays = [];         // pooled { canvas, surfaceId, registered }
+        var overlayCursor = 0;
+        var activeThisFrame = {};
+        var OVERLAY_SURFACE_BASE = 1000;
+
+        // ── platform view registry ────────────────────────────────────────────
+        //
+        // Modules (e.g. @rayact/webview) own platform views of a given kind, the
+        // browser peer of Android's RayactPlatformRegistry.registerViewFactory and
+        // the desktop ABI's register_view_factory. A factory receives
+        // { nodeId, props, emit } and returns a controller { el, applyProps?,
+        // dispose? }.
+        //
+        // Module scripts are plain <script> tags whose load order relative to the
+        // wasm host is not guaranteed, so they never touch Module: they push a
+        // callback onto window.__rayactModuleRegistrations, drained here. Creates
+        // for a kind nobody has claimed yet are PARKED and replayed when its
+        // factory arrives — the same idea as the desktop host's
+        // rayactReplayExternalViewCreates. That makes load order irrelevant in
+        // both the release and dev flows.
+        var viewFactories = {};
+
+        // Browser implementations of platform modules (sensors, haptics, ...),
+        // reached from JS through platformCall() and native/web/
+        // web_platform_modules.cpp. A handler is (method, payload) -> value; it
+        // may also return an explicit { ok:false, error } to signal failure.
+        var platformModules = {};
+
+        var registry = {
+          registerViewFactory: function(kind, factory) {
+            if (!kind || typeof factory !== 'function') return;
+            if (viewFactories[kind]) return;   // first registration wins
+            viewFactories[kind] = factory;
+            replayParkedCreates(kind);
+          },
+          registerModule: function(name, handler) {
+            if (!name || typeof handler !== 'function') return;
+            if (platformModules[name]) return;  // first registration wins
+            platformModules[name] = handler;
+          }
+        };
+        Module.__rayactPlatformViewRegistry = registry;
+
+        // Called synchronously from wasm. Must always return a JSON string, or
+        // null when no module owns the name so the caller can report the same
+        // "unavailable" error every other host uses.
+        Module.__rayactPlatformModules = {
+          call: function(name, method, payloadJson) {
+            var handler = platformModules[name];
+            if (!handler) return null;
+            var payload = null;
+            try { payload = JSON.parse(payloadJson); } catch (e) {}
+            try {
+              var value = handler(method, payload);
+              // A handler may answer with the full envelope itself.
+              if (value && typeof value === 'object' && typeof value.ok === 'boolean') {
+                return JSON.stringify(value);
+              }
+              return JSON.stringify({ ok: true, value: value === undefined ? null : value });
+            } catch (error) {
+              return JSON.stringify({
+                ok: false,
+                error: (error && error.message) ? error.message : String(error)
+              });
+            }
+          }
+        };
+
+        // A module script can arrive after its views were created — the engine
+        // commits the tree as soon as the app mounts. Parked views hold their
+        // accumulated props until the factory shows up, then instantiate as if
+        // they had been there all along.
+        function replayParkedCreates(kind) {
+          for (var nodeId in views) {
+            var view = views[nodeId];
+            if (view.parked && view.kind === kind) instantiateView(view);
+          }
+        }
+
+        function drainRegistrations() {
+          var queue = window.__rayactModuleRegistrations;
+          if (queue && queue.length) {
+            for (var i = 0; i < queue.length; i++) {
+              try { queue[i](registry); }
+              catch (e) { console.error('[rayact-web] module registration failed:', e); }
+            }
+            queue.length = 0;
+          }
+          // Anything pushed from here on registers immediately.
+          window.__rayactModuleRegistrations = {
+            push: function(callback) {
+              try { callback(registry); }
+              catch (e) { console.error('[rayact-web] module registration failed:', e); }
+              return 0;
+            },
+            length: 0
+          };
+        }
+
+        function elementForKind(kind, props) {
+          if (kind === 'rayact.internal.text-input') {
+            var multiline = !!(props && props.multiline);
+            var input = document.createElement(multiline ? 'textarea' : 'input');
+            if (!multiline) input.type = 'text';
+            return input;
+          }
+          return document.createElement('div');
+        }
+
+        function emit(nodeId, envelope) {
+          if (typeof Module._rayactWebExternalViewEvent !== 'function') return;
+          var ptr = stringToNewUTF8(JSON.stringify(envelope));
+          try { Module._rayactWebExternalViewEvent(nodeId, ptr); }
+          finally { _free(ptr); }
+        }
+
+        function wireTextInput(el, nodeId) {
+          el.addEventListener('input', function() {
+            emit(nodeId, { type: 'change', text: el.value });
+          });
+          el.addEventListener('focus', function() { emit(nodeId, { type: 'focus' }); });
+          el.addEventListener('blur', function() { emit(nodeId, { type: 'blur' }); });
+          el.addEventListener('select', function() {
+            emit(nodeId, {
+              type: 'selection', text: el.value,
+              selectionStart: el.selectionStart || 0,
+              selectionEnd: el.selectionEnd || 0
+            });
+          });
+          el.addEventListener('keydown', function(event) {
+            emit(nodeId, { type: 'key', key: event.key });
+            if (event.key === 'Enter' && el.tagName !== 'TEXTAREA') {
+              emit(nodeId, { type: 'submit', text: el.value });
+            }
+          });
+        }
+
+        function cssColor(value) {
+          if (typeof value === 'number') {
+            var r = (value >>> 24) & 0xff;
+            var g = (value >>> 16) & 0xff;
+            var b = (value >>> 8) & 0xff;
+            var a = (value & 0xff) / 255;
+            return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+          }
+          return typeof value === 'string' ? value : '';
+        }
+
+        function applyProps(view, props) {
+          var el = view.el;
+          if (!props) return;
+          if (view.kind === 'rayact.internal.text-input') {
+            if (props.value != null && el.value !== props.value) el.value = props.value;
+            // Geometry + text appearance mirror the iOS/Android editors
+            // (RayactNativeTextInput.swift / .kt): the editor fills the whole
+            // field node and insets itself to raym3's text region, so the
+            // caller's text lines up with the chrome the renderer paints.
+            if (props.contentHorizontal != null) {
+              el.style.paddingLeft = props.contentHorizontal + 'px';
+              el.style.paddingRight = props.contentHorizontal + 'px';
+            }
+            if (props.contentTop != null) el.style.paddingTop = props.contentTop + 'px';
+            if (props.contentBottom != null) {
+              el.style.paddingBottom = props.contentBottom + 'px';
+            }
+            if (props.fontSize != null) el.style.fontSize = props.fontSize + 'px';
+            if (props.textAlign != null) {
+              el.style.textAlign = props.textAlign === 'auto' ? '' : props.textAlign;
+            }
+            if (props.textColor != null) el.style.color = cssColor(props.textColor);
+            if (props.cursorColor != null) {
+              el.style.caretColor = cssColor(props.cursorColor);
+            }
+            if (props.placeholderColor != null) {
+              el.style.setProperty(
+                '--rayact-placeholder-color', cssColor(props.placeholderColor));
+            }
+            if (props.selectionColor != null) {
+              el.style.setProperty(
+                '--rayact-selection-color', cssColor(props.selectionColor));
+            }
+            if (props.hasLabel != null) view.hasLabel = !!props.hasLabel;
+            if (props.placeholder != null) view.placeholder = props.placeholder;
+            if (props.hasLabel != null || props.placeholder != null) {
+              // A Material field shows raym3's resting label instead; a second
+              // hint painted by the editor would sit on top of it.
+              el.placeholder = view.hasLabel ? '' : (view.placeholder || '');
+            }
+            if (props.secure != null || props.inputType != null) {
+              if (el.tagName !== 'TEXTAREA') {
+                el.type = props.secure ? 'password'
+                  : (props.inputType === 'email' ? 'email'
+                    : props.inputType === 'number' ? 'number'
+                    : props.inputType === 'tel' ? 'tel' : 'text');
+              }
+            }
+            if (props.editable === false) el.setAttribute('readonly', '');
+            else el.removeAttribute('readonly');
+            if (props.maxLength != null) el.maxLength = props.maxLength;
+            if (props.focused === true && document.activeElement !== el) el.focus();
+            if (props.focused === false && document.activeElement === el) el.blur();
+          }
+        }
+
+        // Compose the mutator stack into CSS, mirroring iOS's applyMutators
+        // (apps/ios/RayactPlatformViewHost.swift). `bounds` is the absolute
+        // frame in dp and does the positioning on its own; mutators contribute
+        // only opacity, clipping and *authored* transforms. Clip rects arrive in
+        // global dp, so they are made local to the view before becoming a
+        // clip-path inset.
+        function styleFromMutators(mutators, bounds, density) {
+          var m = null;                 // authored affine, CSS order a,b,c,d,e,f
+          var opacity = 1;
+          var clip = null, clipRadius = 0;
+          var d = density || 1;
+          for (var i = 0; i < mutators.length; i++) {
+            var mut = mutators[i];
+            if (mut.kind === 'transform' && mut.matrix && mut.matrix.length === 9) {
+              var t = mut.matrix;   // row-major [a c e / b d f / 0 0 1]
+              var a = t[0], b = t[3], c = t[1], dd = t[4], tx = t[2], ty = t[5];
+              // Skip the ambient dp->device-pixel scale raym3 pushes at the
+              // root: CSS pixels are already dp here, exactly as UIKit points
+              // are on iOS. Only genuinely authored transforms survive.
+              var isDensityScale =
+                Math.abs(a - d) < 0.001 && Math.abs(dd - d) < 0.001 &&
+                Math.abs(b) < 0.001 && Math.abs(c) < 0.001 &&
+                Math.abs(tx) < 0.001 && Math.abs(ty) < 0.001;
+              if (isDensityScale) continue;
+              var n = [a, b, c, dd, tx, ty];
+              if (!m) m = n;
+              else m = [
+                m[0] * n[0] + m[2] * n[1],
+                m[1] * n[0] + m[3] * n[1],
+                m[0] * n[2] + m[2] * n[3],
+                m[1] * n[2] + m[3] * n[3],
+                m[0] * n[4] + m[2] * n[5] + m[4],
+                m[1] * n[4] + m[3] * n[5] + m[5]
+              ];
+            } else if (mut.kind === 'opacity') {
+              opacity *= mut.opacity;
+            } else if (mut.kind === 'clipRect' || mut.kind === 'clipRoundedRect') {
+              var r = mut.rect;
+              var local = {
+                x: r.x - bounds.x, y: r.y - bounds.y,
+                width: r.width, height: r.height
+              };
+              clip = clip ? intersectRects(clip, local) : local;
+              clipRadius = Math.max(clipRadius, mut.radius || 0);
+            }
+          }
+          var style = {
+            transform: m ? 'matrix(' + m.join(',') + ')' : 'none',
+            opacity: opacity,
+            clip: null,
+            clipRect: clip,        // element-local; for composing with hit holes
+            clipRadius: clipRadius
+          };
+          if (clip) {
+            var top = clip.y, left = clip.x;
+            style.clip = 'inset(' + top + 'px ' +
+              (bounds.width - (left + clip.width)) + 'px ' +
+              (bounds.height - (top + clip.height)) + 'px ' + left + 'px' +
+              (clipRadius ? ' round ' + clipRadius + 'px' : '') + ')';
+          }
+          return style;
+        }
+
+        // Rounded-rect subpath for clip-path: path(). Radius clamped to fit.
+        function roundedRectPath(x, y, w, h, r) {
+          r = Math.max(0, Math.min(r || 0, Math.min(w, h) / 2));
+          if (!r) return 'M' + x + ' ' + y + 'H' + (x + w) + 'V' + (y + h) + 'H' + x + 'Z';
+          var xr = x + r, xw = x + w, yr = y + r, yh = y + h;
+          var arc = 'A' + r + ' ' + r + ' 0 0 1 ';
+          return 'M' + xr + ' ' + y +
+                 'H' + (xw - r) + arc + xw + ' ' + yr +
+                 'V' + (yh - r) + arc + (xw - r) + ' ' + yh +
+                 'H' + xr + arc + x + ' ' + (yh - r) +
+                 'V' + yr + arc + xr + ' ' + y + 'Z';
+        }
+
+        // Pointer parity with the compositor: where the framework painted over
+        // the platform view, the pointer must reach the framework, not the
+        // element. DOM hit-testing routes events to the topmost element, so a
+        // framework button drawn over a platform view is unreachable unless those
+        // regions are actually punched out of the element's hit area. An
+        // evenodd clip-path does that — and it is visually lossless, because
+        // the overlay canvas paints framework content over exactly those
+        // pixels (that is what made them occluding regions).
+        // Single writer for the element's clip-path: composes the mutator clip
+        // (style.clipRect/clipRadius from styleFromMutators — do NOT also write
+        // style.clip elsewhere, two writers clobber) with the hit-test holes.
+        function applyHitTestRegions(el, comp, bounds, style) {
+          var mutatorClip = (style && style.clip) || 'none';
+          if (comp.hitTestBehavior === 'transparent') {
+            el.style.pointerEvents = 'none';
+            el.style.clipPath = mutatorClip;
+            return;
+          }
+          var regions = comp.occludingRegions || [];
+          if (!regions.length) {
+            el.style.pointerEvents = 'auto';
+            el.style.clipPath = mutatorClip;
+            return;
+          }
+          var covered = regions.some(function(r) {
+            return r.x <= bounds.x + 0.5 && r.y <= bounds.y + 0.5 &&
+                   r.x + r.width >= bounds.x + bounds.width - 0.5 &&
+                   r.y + r.height >= bounds.y + bounds.height - 0.5;
+          });
+          if (covered) {
+            el.style.pointerEvents = 'none';
+            el.style.clipPath = mutatorClip;
+            return;
+          }
+          el.style.pointerEvents = 'auto';
+          // path() with evenodd supports holes via subpaths (polygon() does
+          // not). Coordinates are element-local CSS px; dp == CSS px on web.
+          // The outer subpath is the mutator clip (rounded rect) when one is
+          // active, so clipping and hit holes compose instead of clobbering.
+          var w = Math.max(0, bounds.width), h = Math.max(0, bounds.height);
+          var outer = (style && style.clipRect)
+            ? roundedRectPath(style.clipRect.x, style.clipRect.y,
+                              Math.max(0, style.clipRect.width),
+                              Math.max(0, style.clipRect.height),
+                              style.clipRadius)
+            : roundedRectPath(0, 0, w, h, 0);
+          var d = outer;
+          for (var i = 0; i < regions.length; i++) {
+            var r = regions[i];
+            var x0 = Math.max(0, r.x - bounds.x);
+            var y0 = Math.max(0, r.y - bounds.y);
+            var x1 = Math.min(w, r.x - bounds.x + r.width);
+            var y1 = Math.min(h, r.y - bounds.y + r.height);
+            if (x1 <= x0 || y1 <= y0) continue;
+            d += 'M' + x0 + ' ' + y0 + 'H' + x1 + 'V' + y1 + 'H' + x0 + 'Z';
+          }
+          el.style.clipPath = "path(evenodd, '" + d + "')";
+        }
+
+        function intersectRects(a, b) {
+          var x = Math.max(a.x, b.x), y = Math.max(a.y, b.y);
+          return {
+            x: x, y: y,
+            width: Math.max(0, Math.min(a.x + a.width, b.x + b.width) - x),
+            height: Math.max(0, Math.min(a.y + a.height, b.y + b.height) - y)
+          };
+        }
+
+        function acquireOverlay(index) {
+          while (overlays.length <= index) {
+            var canvasEl = document.createElement('canvas');
+            canvasEl.setAttribute('aria-hidden', 'true');
+            // Excluded from __rayactResizeCanvas on purpose: overlay backing
+            // stores are sized here, from the composition bounds.
+            canvasEl.dataset.rayactOverlay = '1';
+            layer.appendChild(canvasEl);
+            overlays.push({
+              canvas: canvasEl,
+              surfaceId: OVERLAY_SURFACE_BASE + overlays.length,
+              registered: false,
+              id: 'rayact-pv-overlay-' + overlays.length
+            });
+            canvasEl.id = overlays[overlays.length - 1].id;
+          }
+          return overlays[index];
+        }
+
+        function sizeOverlay(overlay, cssW, cssH) {
+          // Same supersampling floor as the base canvas — framework content
+          // painted above a platform view lands in these overlays, so a 1x
+          // overlay would blur exactly the text the user is looking at.
+          var dpr = (window.devicePixelRatio || 1) * rayactExtraRenderScale();
+          var bw = Math.max(1, Math.round(cssW * dpr));
+          var bh = Math.max(1, Math.round(cssH * dpr));
+          overlay.canvas.style.width = cssW + 'px';
+          overlay.canvas.style.height = cssH + 'px';
+          if (overlay.canvas.width !== bw || overlay.canvas.height !== bh) {
+            overlay.canvas.width = bw;
+            overlay.canvas.height = bh;
+            if (overlay.registered && typeof Module._rayactWebResizeOverlaySurface === 'function') {
+              Module._rayactWebResizeOverlaySurface(overlay.surfaceId, bw, bh);
+            }
+          }
+          if (!overlay.registered) {
+            if (typeof Module._rayactWebRegisterOverlaySurface !== 'function') return false;
+            var sel = stringToNewUTF8('#' + overlay.id);
+            try {
+              overlay.registered = !!Module._rayactWebRegisterOverlaySurface(
+                overlay.surfaceId, sel, bw, bh);
+            } finally { _free(sel); }
+          }
+          return overlay.registered;
+        }
+
+        // Every method here runs inside an EM_ASM call on the render thread, so
+        // an escaping exception unwinds through the wasm frame and stops the
+        // rAF loop for good — a blank, frozen app. Contain failures to "this
+        // platform view did not composite" instead.
+        function guarded(table) {
+          var wrapped = {};
+          Object.keys(table).forEach(function(name) {
+            wrapped[name] = function() {
+              try {
+                return table[name].apply(wrapped, arguments);
+              } catch (e) {
+                console.error('[rayact-web] platform view ' + name + ' failed:', e);
+                return 0;
+              }
+            };
+          });
+          return wrapped;
+        }
+
+        // Give a parked view its module-owned element, replacing the placeholder.
+        function instantiateView(view) {
+          var factory = viewFactories[view.kind];
+          if (!factory) return false;
+          var controller;
+          try {
+            controller = factory({
+              nodeId: view.nodeId,
+              props: view.props || {},
+              emit: function(envelope) { emit(view.nodeId, envelope); }
+            });
+          } catch (e) {
+            console.error('[rayact-web] view factory for ' + view.kind + ' failed:', e);
+            return false;
+          }
+          if (!controller || !controller.el) return false;
+
+          var placeholder = view.el;
+          var el = controller.el;
+          el.style.position = 'absolute';
+          el.style.top = '0';
+          el.style.left = '0';
+          el.style.transformOrigin = '0 0';
+          el.style.pointerEvents = 'auto';
+          // Inherit whatever geometry composite() already applied, so a replay
+          // mid-frame does not flash at the wrong place.
+          el.style.display = placeholder.style.display;
+          el.style.width = placeholder.style.width;
+          el.style.height = placeholder.style.height;
+          el.style.transform = placeholder.style.transform;
+          el.style.opacity = placeholder.style.opacity;
+          el.style.clipPath = placeholder.style.clipPath;
+          el.style.zIndex = placeholder.style.zIndex;
+          if (placeholder.parentNode) placeholder.parentNode.replaceChild(el, placeholder);
+          else layer.appendChild(el);
+
+          view.el = el;
+          view.controller = controller;
+          view.parked = false;
+          if (controller.applyProps && view.props) controller.applyProps(view.props);
+          return true;
+        }
+
+        Module.__rayactPlatformViews = guarded({
+          create: function(surfaceId, nodeId, kind, propsJson) {
+            var props = {};
+            try { props = JSON.parse(propsJson) || {}; } catch (e) {}
+            if (views[nodeId]) this.dispose(surfaceId, nodeId);
+            var view = {
+              el: null, kind: kind, surfaceId: surfaceId, nodeId: nodeId,
+              props: props, parked: false, controller: null
+            };
+            views[nodeId] = view;
+
+            if (viewFactories[kind]) {
+              // Placeholder so instantiateView has something to replace.
+              view.el = document.createElement('div');
+              layer.appendChild(view.el);
+              if (instantiateView(view)) return;
+              // Factory refused: fall through to the built-in handling.
+            }
+
+            var el = elementForKind(kind, props);
+            el.style.pointerEvents = 'auto';
+            el.style.display = 'none';   // shown by the first composite()
+            layer.appendChild(el);
+            view.el = el;
+            // No factory (yet) and no built-in kind: park it, so a module script
+            // that loads later still gets its view.
+            view.parked = !viewFactories[kind] && kind !== 'rayact.internal.text-input';
+            if (kind === 'rayact.internal.text-input') wireTextInput(el, nodeId);
+            applyProps(view, props);
+          },
+
+          setProperties: function(surfaceId, nodeId, propsJson) {
+            var view = views[nodeId];
+            if (!view) return;
+            var props = {};
+            try { props = JSON.parse(propsJson) || {}; } catch (e) {}
+            // Keep the merged view of props: a parked view replays them when its
+            // factory arrives, and a module controller may want the full set.
+            for (var key in props) view.props[key] = props[key];
+            if (view.controller) {
+              if (view.controller.applyProps) view.controller.applyProps(props);
+              return;
+            }
+            applyProps(view, props);
+          },
+
+          dispose: function(surfaceId, nodeId) {
+            var view = views[nodeId];
+            if (!view) return;
+            if (view.controller && view.controller.dispose) {
+              try { view.controller.dispose(); }
+              catch (e) { console.error('[rayact-web] view dispose failed:', e); }
+            }
+            if (view.el && view.el.parentNode) view.el.parentNode.removeChild(view.el);
+            delete views[nodeId];
+          },
+
+          beginFrame: function(surfaceId, width, height, density) {
+            overlayCursor = 0;
+            activeThisFrame = {};
+            this._density = density || 1;
+          },
+
+          composite: function(surfaceId, nodeId, json) {
+            var view = views[nodeId];
+            if (!view) return 0;
+            var comp;
+            try { comp = JSON.parse(json); } catch (e) { return 0; }
+
+            var b = comp.bounds;
+            var style = styleFromMutators(comp.mutators || [], b, this._density);
+            var el = view.el;
+            el.style.display = '';
+            // bounds is the absolute dp frame and does the positioning; the
+            // transform below is only what the app authored on top of it.
+            el.style.left = b.x + 'px';
+            el.style.top = b.y + 'px';
+            el.style.width = Math.max(0, b.width) + 'px';
+            el.style.height = Math.max(0, b.height) + 'px';
+            el.style.transform = style.transform;
+            el.style.opacity = style.opacity;
+            el.style.zIndex = String(2 + overlayCursor * 2);
+            activeThisFrame[nodeId] = true;
+
+            // Framework content painted above this view must stay clickable, so
+            // punch those regions out of the element's pointer area. Without
+            // this, anything drawn over a platform view is dead to the pointer.
+            // This is also the single writer of el.style.clipPath — it composes
+            // the mutator clip with the hit-test holes.
+            applyHitTestRegions(el, comp, b, style);
+
+            // Nothing paints over this view this frame, so it needs no overlay
+            // surface at all — the engine keeps drawing into the current
+            // target. -1 tells the embedder that is deliberate, not a failure.
+            if (comp.requiresOverlay === false) return -1;
+
+            // The overlay covers the whole viewport: content painted after this
+            // view can be anywhere, not just over the view's own bounds.
+            var overlay = acquireOverlay(overlayCursor);
+            var cssW = Math.max(1, Math.round(canvas.clientWidth || window.innerWidth || 1));
+            var cssH = Math.max(1, Math.round(canvas.clientHeight || window.innerHeight || 1));
+            if (!sizeOverlay(overlay, cssW, cssH)) return 0;
+            overlay.canvas.style.display = '';
+            overlay.canvas.style.zIndex = String(3 + overlayCursor * 2);
+            overlayCursor++;
+            return overlay.surfaceId;
+          },
+
+          endFrame: function(surfaceId) {
+            for (var i = overlayCursor; i < overlays.length; i++) {
+              overlays[i].canvas.style.display = 'none';
+            }
+            for (var nodeId in views) {
+              if (!activeThisFrame[nodeId]) views[nodeId].el.style.display = 'none';
+            }
+          },
+
+          gestureDecision: function(surfaceId, nodeId, accepted) {
+            var view = views[nodeId];
+            if (!view) return;
+            // An accepted gesture belongs to the platform view; a rejected one
+            // was claimed by the framework, so stop the element from acting on it.
+            view.el.style.pointerEvents = accepted ? 'auto' : 'none';
+          }
+        });
+
+        // Pick up module scripts that already loaded, and register any that load
+        // after this point immediately.
+        drainRegistrations();
+      })();
 
       function sendPointer(action, eventLike) {
         if (!runtimeReady || typeof Module._rayactWebPointer !== 'function') return;
@@ -352,7 +1090,11 @@
         });
         canvas.addEventListener('pointercancel', function(event) {
           lastPointerEventTime = Date.now();
-          sendPointer(1, event);
+          // Action 3 is cancel, not up: the engine drops the in-flight gesture
+          // instead of firing the press handler under the finger (a browser
+          // cancels a pointer when it steals the gesture for a scroll or the
+          // element loses capture, which is never a tap).
+          sendPointer(3, event);
           event.preventDefault();
         });
         canvas.addEventListener('wheel', function(event) {
@@ -416,7 +1158,7 @@
         }, { passive: false });
         canvas.addEventListener('touchcancel', function(event) {
           if (Date.now() - lastPointerEventTime < 500 || !event.changedTouches.length) return;
-          sendPointer(1, event.changedTouches[0]);
+          sendPointer(3, event.changedTouches[0]);   // cancel, not up — see pointercancel
           event.preventDefault();
         }, { passive: false });
       }

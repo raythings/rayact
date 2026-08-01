@@ -33,10 +33,19 @@ private final class RayactSensorsModule {
         switch method {
         case "isAvailable":
             let type = value["type"] as? String ?? ""
-            return try encode(type == "gyroscope" ? motion.isGyroAvailable : motion.isAccelerometerAvailable)
+            let available: Bool
+            switch type {
+            case "gyroscope":
+                available = motion.isGyroAvailable
+            case "rotation":
+                available = motion.isDeviceMotionAvailable
+            default:
+                available = motion.isAccelerometerAvailable
+            }
+            return try encode(available)
         case "startObserving":
             let type = value["type"] as? String ?? ""
-            guard type == "accelerometer" || type == "gyroscope" || type == "shake" else {
+            guard type == "accelerometer" || type == "gyroscope" || type == "rotation" || type == "shake" else {
                 throw sensorError("Unsupported sensor type '\(type)'")
             }
             lock.lock()
@@ -96,6 +105,26 @@ private final class RayactSensorsModule {
             }
         } else {
             motion.stopGyroUpdates()
+        }
+        if snapshot.contains("rotation") {
+            motion.deviceMotionUpdateInterval = interval
+            if !motion.isDeviceMotionActive {
+                motion.startDeviceMotionUpdates(
+                    using: .xArbitraryZVertical,
+                    to: queue
+                ) { [weak self] data, _ in
+                    guard let self, let attitude = data?.attitude else { return }
+                    self.enqueue([
+                        "type": "rotation",
+                        "roll": attitude.roll,
+                        "pitch": attitude.pitch,
+                        "yaw": attitude.yaw,
+                        "timestamp": Date().timeIntervalSince1970 * 1000,
+                    ])
+                }
+            }
+        } else {
+            motion.stopDeviceMotionUpdates()
         }
     }
 

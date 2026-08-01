@@ -1,0 +1,7 @@
+{
+  "name": "textinput-smoke",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": { "rayact": "*", "react": "^19.0.0" }
+}

@@ -18,12 +18,13 @@ fun interface RayactPlatformModule {
 class RayactPlatformViewContext(
     val context: Context,
     val nodeId: Int,
+    val initialProperties: Map<String, Any?>,
     val emit: (String) -> Unit,
 )
 
 interface RayactPlatformViewController {
     val view: View
-    fun setProperty(key: String, value: String) {}
+    fun setProperties(properties: Map<String, Any?>) {}
     fun dispose() {}
 }
 
@@ -94,6 +95,7 @@ class RayactPlatformRegistry {
         fun initialize(context: Context) {
             if (context is Activity) attachActivity(context)
             if (!initialized.compareAndSet(false, true)) return
+            registerRayactNativeTextInput(shared)
             runCatching {
                 val generated = Class.forName("com.rayact.generated.RayactGeneratedModules")
                 generated.getMethod(

@@ -1,4 +1,5 @@
 import type { HostBridge, RayactGlobal, WebSocketLike } from './types.js';
+import { devInfo } from './devLog.js';
 
 export interface ModuleHmrOptions {
   serverUrl: string;
@@ -14,6 +15,8 @@ export interface DevManifestModule {
   entryModuleUrl?: string;
   hmrUrl?: string;
   bundleUrl?: string;
+  /** Dev bundle: every module the entry can reach, as deferred definitions. */
+  moduleBundleUrl?: string;
   revision?: number;
 }
 
@@ -125,6 +128,9 @@ type GlobalHmr = RayactGlobal & {
   __rayactRequire?: (specifier: string, fromUrl?: string) => unknown;
   __rayactRequireAsync?: (specifier: string, fromUrl?: string) => Promise<unknown>;
   __rayactRegisterModule?: (url: string, factory: ModuleFactory) => void;
+  /** Dev-bundle definitions: run on first require, then self-register. */
+  __rayactModuleDefinitions?: Map<string, () => void>;
+  __rayactDefineModule?: (url: string, define: () => void) => void;
   /** Development-only bridge: retains the exact module source evaluated by QuickJS. */
   __rayactRegisterDebugScript?: (url: string, source: string) => void;
   __rayactApplyModuleUpdate?: (path: string, source: string) => void;
@@ -198,6 +204,25 @@ export class ModuleHmrRuntime {
     if (!this.globalObject.__rayactModuleLoading) {
       this.globalObject.__rayactModuleLoading = new Map();
     }
+    if (!this.globalObject.__rayactModuleDefinitions) {
+      this.globalObject.__rayactModuleDefinitions = new Map();
+    }
+
+    // The dev bundle ships every module as a deferred definition rather than a
+    // registration, so module bodies still run lazily in dependency order the
+    // first time something requires them — exactly as they do when fetched one
+    // at a time. Running `define()` executes the wrapped module, which registers
+    // itself through __rayactRegisterModule below.
+    this.globalObject.__rayactDefineModule = (url, define) => {
+      const definitions = this.globalObject.__rayactModuleDefinitions!;
+      const normalized = normalizeModuleUrl(url);
+      const stripped = withoutPlatformParam(normalized);
+      const aliases = new Set([normalized, stripped]);
+      if (stripped.startsWith('/rayact/m/')) {
+        aliases.add(stripped.slice('/rayact/m'.length));
+      }
+      for (const alias of aliases) definitions.set(alias, define);
+    };
 
     this.globalObject.__rayactRegisterModule = (url, factory) => {
       const normalized = normalizeModuleUrl(url);
@@ -236,6 +261,42 @@ export class ModuleHmrRuntime {
     };
   }
 
+  /**
+   * Load the whole module graph in one request.
+   *
+   * Without this the device walks the graph module by module, and each edge is a
+   * blocking fetch — hundreds of round trips before the first frame. The bundle
+   * only *defines* modules, so execution order is unchanged; it just removes the
+   * network from the middle of it.
+   *
+   * Best-effort by design: any failure leaves the registry empty and the normal
+   * per-module path takes over, so a bundling problem slows the boot instead of
+   * breaking it.
+   */
+  private async preloadModuleBundle(bundleUrl?: string): Promise<void> {
+    if (!bundleUrl) return;
+    try {
+      const source = await this.devFetchText(
+        withPlatformParam(bundleUrl, currentPlatform(this.globalObject))
+      );
+      if (!source || !source.trim()) return;
+      if (/^\s*(Error|SyntaxError|TypeError|ReferenceError):/.test(source.slice(0, 200))) {
+        devInfo(this.globalObject, '[rayact:hmr] dev bundle unavailable, loading modules individually');
+        return;
+      }
+      // eslint-disable-next-line no-eval
+      (0, eval)(source);
+      const count = this.globalObject.__rayactModuleDefinitions?.size ?? 0;
+      devInfo(this.globalObject, `[rayact:hmr] dev bundle loaded (${count} modules)`);
+    } catch (error) {
+      devInfo(
+        this.globalObject,
+        '[rayact:hmr] dev bundle failed, loading modules individually:',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
   markBootstrap(url: string): void {
     this.bootstrapUrls.add(normalizeModuleUrl(url));
   }
@@ -255,6 +316,7 @@ export class ModuleHmrRuntime {
       throw new Error('Dev manifest missing entryModuleUrl');
     }
 
+    await this.preloadModuleBundle(manifest.moduleBundleUrl);
     await this.loadModule(entryUrl);
 
     if (!this.globalObject.__RAYACT_HMR_ACTIVE__) {
@@ -283,6 +345,17 @@ export class ModuleHmrRuntime {
 
     if (registry.has(key)) {
       return registry.get(key)!();
+    }
+
+    // Present in the dev bundle but not yet executed: run it now (which
+    // registers it) instead of going back to the network.
+    const definitions = this.globalObject.__rayactModuleDefinitions;
+    const define = definitions?.get(key);
+    if (define) {
+      definitions!.delete(key);
+      define();
+      const built = registry.get(key);
+      if (built) return built();
     }
 
     const pending = loading.get(key);
@@ -324,6 +397,17 @@ export class ModuleHmrRuntime {
       return Promise.resolve(registry.get(key)!());
     }
 
+    // Present in the dev bundle but not yet executed: run it now (which
+    // registers it) instead of going back to the network.
+    const definitions = this.globalObject.__rayactModuleDefinitions;
+    const define = definitions?.get(key);
+    if (define) {
+      definitions!.delete(key);
+      define();
+      const built = registry.get(key);
+      if (built) return Promise.resolve(built());
+    }
+
     const pending = loading.get(key);
     if (pending) return Promise.resolve(pending);
 
@@ -349,6 +433,17 @@ export class ModuleHmrRuntime {
 
     if (registry.has(key)) {
       return registry.get(key)!();
+    }
+
+    // Present in the dev bundle but not yet executed: run it now (which
+    // registers it) instead of going back to the network.
+    const definitions = this.globalObject.__rayactModuleDefinitions;
+    const define = definitions?.get(key);
+    if (define) {
+      definitions!.delete(key);
+      define();
+      const built = registry.get(key);
+      if (built) return built();
     }
 
     const pending = loading.get(key);
@@ -389,6 +484,9 @@ export class ModuleHmrRuntime {
     }
     this.globalObject.__rayactModuleRegistry?.delete(key);
     this.globalObject.__rayactModuleLoading?.delete(key);
+    // Drop any unexecuted dev-bundle copy of this module, or a later require
+    // would resurrect the source this update replaces.
+    this.globalObject.__rayactModuleDefinitions?.delete(key);
     this.evalModule(key, source);
     this.performRefresh();
   }
@@ -435,23 +533,23 @@ export class ModuleHmrRuntime {
     // every js-update twice — an entry-module edit then ran the entry's
     // side effects twice concurrently, which could wedge the app.
     if (this.globalObject.__RAYACT_NATIVE_HMR__) {
-      this.globalObject.console?.info?.('[rayact:hmr] native transport owns the socket — JS client idle');
+      devInfo(this.globalObject, '[rayact:hmr] native transport owns the socket — JS client idle');
       return;
     }
     const WebSocketCtor = this.globalObject.WebSocket;
     if (typeof WebSocketCtor !== 'function') {
-      this.globalObject.console?.info?.('[rayact:hmr] WebSocket unavailable — native transport expected');
+      devInfo(this.globalObject, '[rayact:hmr] WebSocket unavailable — native transport expected');
       return;
     }
 
     const url = hmrUrl ?? this.serverUrl.replace(/^http/, 'ws') + '/rayact/hmr';
     if (this.hmrSocket) return;
 
-    this.globalObject.console?.info?.(`[rayact:hmr] connecting ${url}`);
+    devInfo(this.globalObject, `[rayact:hmr] connecting ${url}`);
     this.hmrSocket = new WebSocketCtor(url);
 
     this.hmrSocket.onopen = () => {
-      this.globalObject.console?.info?.('[rayact:hmr] connected');
+      devInfo(this.globalObject, '[rayact:hmr] connected');
     };
 
     this.hmrSocket.onclose = () => {
@@ -529,7 +627,7 @@ export class ModuleHmrRuntime {
 
     if (type === 'hmr-update') {
       // Legacy revision broadcast — module mode ignores full bundle reloads.
-      this.globalObject.console?.info?.('[rayact:hmr] ignoring legacy hmr-update (module mode)');
+      devInfo(this.globalObject, '[rayact:hmr] ignoring legacy hmr-update (module mode)');
     }
   }
 

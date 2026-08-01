@@ -3,6 +3,9 @@
 #include "data_dir.hpp"
 #include "gpu_api.hpp"
 #include "module_nodes.hpp"
+#include "module_views.hpp"
+// rayactExternalViewEmitText — the JS event channel ABI-3 view factories emit on.
+#include "raym3_bridge.hpp"
 #include "../core/engine.hpp"
 
 #include <cstring>
@@ -203,6 +206,27 @@ int hostRegisterWasmImports(const char* ns, const RayactWasmImport* imports,
   return 0;
 }
 
+// ─── ABI 3: platform view factories ────────────────────────────────────────────
+
+int hostRegisterViewFactory(const char* kind, const RayactViewFactory* factory) {
+  if (!kind || !*kind || !factory || !factory->create) return -1;
+  // struct_size lets a module built against a later header register safely: we only
+  // read the prefix both sides agree on. Zero means the caller never initialized
+  // the struct.
+  if (factory->struct_size == 0) return -1;
+  return moduleViewsRegisterFactory(kind, factory) ? 0 : -1;
+}
+
+void hostEmitViewEvent(int32_t node_id, const char* json_utf8, size_t len) {
+  if (!json_utf8) return;
+  // The module may hand us a length-delimited slice of a larger buffer, so copy
+  // rather than probe for a terminator: rayactExternalViewEmitText needs a
+  // NUL-terminated string, and reading json_utf8[len] to check would itself run
+  // off the end of an exactly-sized allocation.
+  const std::string owned(json_utf8, len);
+  rayactExternalViewEmitText(node_id, owned.c_str());
+}
+
 RayactHost g_host = {
     RAYACT_MODULE_ABI_VERSION, hostDataDir, hostRegister, hostInvoke,
     hostRandom, hostLog, hostJavaVM,
@@ -210,6 +234,8 @@ RayactHost g_host = {
     hostRegisterNodeKind, hostGpu,
     hostSharedBufferCreate, hostSharedBufferPtr, hostSharedBufferDrop,
     hostRequestFrame, hostRegisterWasmImports,
+    // ABI 3
+    hostRegisterViewFactory, hostEmitViewEvent,
 };
 } // namespace
 

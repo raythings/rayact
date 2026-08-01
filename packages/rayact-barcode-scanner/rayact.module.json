@@ -6,24 +6,42 @@
   "jsEntry": ".",
   "library": "rayact_barcode_scanner",
   "nativeBus": false,
-  "platforms": ["android", "ios", "web"],
-  "architectures": ["arm64", "x86_64", "wasm32"],
-  "abiRange": ">=2 <3",
+  "platforms": [
+    "android",
+    "ios"
+  ],
+  "architectures": [
+    "arm64",
+    "x86_64"
+  ],
+  "abiRange": ">=2 <4",
   "engineRange": ">=0.0.4 <0.1.0",
   "artifacts": [],
   "linkage": "static",
   "permissions": [],
-  "configurationSchema": { "type": "object", "additionalProperties": false },
+  "configurationSchema": {
+    "type": "object",
+    "additionalProperties": false
+  },
   "officialDevApp": true,
   "android": {
-    "dependencies": ["com.google.android.gms:play-services-code-scanner:16.1.0"],
+    "dependencies": [
+      "com.google.android.gms:play-services-code-scanner:16.1.0"
+    ],
     "manifest": "android/AndroidManifest.xml",
-    "sourceDirs": ["android/src/main/java"],
+    "sourceDirs": [
+      "android/src/main/java"
+    ],
     "registrationClass": "dev.rayact.barcodescanner.RayactBarcodeScannerRegistration"
   },
   "ios": {
-    "frameworks": ["AVFoundation", "Vision"],
-    "sources": ["ios/RayactBarcodeScannerRegistration.swift"],
+    "frameworks": [
+      "AVFoundation",
+      "Vision"
+    ],
+    "sources": [
+      "ios/RayactBarcodeScannerRegistration.swift"
+    ],
     "registrationType": "RayactBarcodeScannerRegistration",
     "infoPlist": {
       "NSCameraUsageDescription": "Scan a QR code to connect to a development server."

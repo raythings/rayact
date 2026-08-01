@@ -29,6 +29,16 @@ export function runDesktopHost(options: {
   const args: string[] = [];
   const env = { ...process.env, ...options.env };
 
+  // Point the host at the project's native modules. Without this, dev runs see
+  // only the prebuilt host's own (non-existent) bin/modules directory, so a
+  // project's plugins — including the platform views they register, like
+  // @rayact/webview — are silently absent in `rayact dev` while working fine in
+  // a packaged build. `rayact prebuild` populates this directory.
+  if (!env.RAYACT_MODULE_PATH) {
+    const projectModules = path.resolve(options.cwd, 'rayact-assets/modules');
+    if (fs.existsSync(projectModules)) env.RAYACT_MODULE_PATH = projectModules;
+  }
+
   if (options.devServer) {
     env.RAYACT_DEV_SERVER = options.devServer;
   } else if (options.bundle) {

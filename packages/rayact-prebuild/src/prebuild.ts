@@ -346,10 +346,20 @@ export function copyIosPluginArtifacts(
       dependencies.push(`      - framework: Frameworks/Modules/${entryName}\n        embed: false`);
     }
   }
-  if (!dependencies.length) return;
   const projectFile = path.join(iosDir, 'project.yml');
   const marker = '    # RAYACT_AUTOLINKED_MODULES';
-  replaceInFile(projectFile, { [marker]: `${dependencies.join('\n')}\n${marker}` });
+  let project = fs.readFileSync(projectFile, 'utf8');
+  // The CLI may autolink again during `rayact build` after `prebuild`.
+  // Remove the previous generated module block before inserting the current
+  // one so repeated runs do not duplicate Xcode dependencies.
+  const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  project = project.replace(
+    new RegExp(
+      `(?:      - framework: Frameworks/Modules/[^\\n]+\\n        embed: false\\n)*${escapedMarker}`,
+    ),
+    `${dependencies.length ? `${dependencies.join('\n')}\n` : ''}${marker}`,
+  );
+  fs.writeFileSync(projectFile, project);
 }
 
 /**
@@ -577,6 +587,18 @@ function plistXmlValue(value: string | number | boolean | string[]): string {
 function applyInfoPlistValues(file: string, values: Record<string, string | number | boolean | string[]>): void {
   if (!fs.existsSync(file) || Object.keys(values).length === 0) return;
   let xml = fs.readFileSync(file, 'utf8');
+  for (const key of Object.keys(values)) {
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    xml = xml.replace(
+      new RegExp(
+        `\\s*<key>${escaped}</key>\\s*` +
+        `(?:<string>[\\s\\S]*?</string>|<real>[\\s\\S]*?</real>|` +
+        `<(?:true|false)/>|<array>[\\s\\S]*?</array>)`,
+        'g',
+      ),
+      '',
+    );
+  }
   const entries = Object.entries(values)
     .map(([key, value]) => `\t<key>${key}</key>\n\t${plistXmlValue(value)}`)
     .join('\n');
@@ -645,19 +667,38 @@ export function writeIosPlatformAutolinking(
   fs.writeFileSync(path.join(autolinkDir, 'RayactGeneratedModules.swift'), generated);
 
   const projectFile = path.join(iosDir, 'project.yml');
-  if (frameworks.size || resourcePaths.length) {
-    const lines = [
-      ...[...frameworks].sort().flatMap(framework => [
-        '      - sdk: ' + yamlScalar(`${framework}.framework`),
-      ]),
-      ...resourcePaths.sort().flatMap(resource => [
-        '      - bundle: ' + yamlScalar(resource),
-      ]),
-    ];
-    replaceInFile(projectFile, {
-      '    # RAYACT_AUTOLINKED_PLATFORM_DEPENDENCIES':
-        `${lines.join('\n')}${lines.length ? '\n' : ''}    # RAYACT_AUTOLINKED_PLATFORM_DEPENDENCIES`,
-    });
+  const lines = [
+    ...[...frameworks].sort().flatMap(framework => [
+      '      - sdk: ' + yamlScalar(`${framework}.framework`),
+    ]),
+    ...resourcePaths.sort().flatMap(resource => [
+      '      - bundle: ' + yamlScalar(resource),
+    ]),
+  ];
+  let project = fs.readFileSync(projectFile, 'utf8');
+  const moduleMarker = '    # RAYACT_AUTOLINKED_MODULES';
+  const platformMarker = '    # RAYACT_AUTOLINKED_PLATFORM_DEPENDENCIES';
+  const start = project.indexOf(moduleMarker);
+  const end = project.indexOf(
+    platformMarker,
+    start >= 0 ? start + moduleMarker.length : 0,
+  );
+  if (start >= 0 && end >= 0) {
+    const before = project.slice(0, start + moduleMarker.length);
+    const after = project.slice(end + platformMarker.length);
+    project =
+      `${before}\n${lines.length ? `${lines.join('\n')}\n` : ''}` +
+      `${platformMarker}${after}`;
+    fs.writeFileSync(projectFile, project);
+  } else if (end >= 0) {
+    // Older/custom templates may expose only the platform marker.
+    const escapedMarker =
+      platformMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    project = project.replace(
+      new RegExp(`(?:      - (?:sdk|bundle): [^\\n]+\\n)*${escapedMarker}`),
+      `${lines.length ? `${lines.join('\n')}\n` : ''}${platformMarker}`,
+    );
+    fs.writeFileSync(projectFile, project);
   }
   applyInfoPlistValues(path.join(iosDir, 'Info.plist'), plistValues);
   applyInfoPlistValues(path.join(iosDir, 'Info-Release.plist'), plistValues);

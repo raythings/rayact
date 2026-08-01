@@ -6,6 +6,7 @@ import {
   adbInstall,
   adbLaunch,
   loadRayactConfig,
+  minifyCssText,
   resolveAppName,
   resolveAndroidActivityName,
   resolveAndroidPackageName,
@@ -29,6 +30,7 @@ import {
 } from '@rayact/prebuild';
 import type { CliFlags } from '../parse.js';
 import { resolveDesktopBin } from '../desktop.js';
+import { isSlimmableFont, slimFont } from '../fonts/slimFont.js';
 
 function assertModuleSupport(config: RayactConfig, platform: string): void {
   const modules = mergeNativeModules(config.nativeModules, resolveRayactPlugins(process.cwd()));
@@ -139,6 +141,85 @@ async function copyInto(src: string, dest: string): Promise<void> {
     return;
   }
   await fs.copyFile(src, dest);
+}
+
+/**
+ * Stage a stylesheet, minifying it on the way through.
+ *
+ * The engine parses CSS into a rule table and no native target has a CSS
+ * inspector, so there is nothing to lose by shipping it compact. Anything
+ * esbuild declines to minify is copied through byte-for-byte.
+ */
+async function copyCssInto(src: string, dest: string): Promise<void> {
+  const original = await fs.readFile(src, 'utf8');
+  const { css, originalBytes, minifiedBytes, skipped } = await minifyCssText(original, src);
+  await fs.mkdir(path.dirname(dest), { recursive: true });
+  await fs.writeFile(dest, css, 'utf8');
+  if (!skipped && minifiedBytes < originalBytes) {
+    const pct = (100 * (1 - minifiedBytes / originalBytes)).toFixed(0);
+    console.log(`  minified ${path.basename(src)} ${originalBytes} -> ${minifiedBytes} bytes (-${pct}%)`);
+  } else if (skipped && skipped !== 'empty' && skipped !== 'no size win') {
+    console.warn(`  warning: ${path.basename(src)} left unminified — ${skipped}`);
+  }
+}
+
+/**
+ * The bundled CBDT emoji font is only worth shipping where the platform has no
+ * emoji rasterizer of its own. Android draws emoji through Paint/Canvas and
+ * Apple through CoreText (see EmojiFont::EnsureBackend), so on those targets
+ * this file is ~10.7 MB of dead weight. Linux desktop still needs it as a
+ * fallback when the system has no Noto emoji font, and the web build embeds it
+ * because wasm has no OS rasterizer at all.
+ *
+ * An app that wants a specific emoji set on any platform can still ship one and
+ * register it with `loadEmoji()`, which overrides the OS rasterizer.
+ */
+const BUNDLED_EMOJI_FONT = 'NotoColorEmoji.ttf';
+
+function skipBundledEmojiFont(name: string, target: 'android' | 'ios' | 'desktop'): boolean {
+  if (path.basename(name) !== BUNDLED_EMOJI_FONT) return false;
+  return target !== 'desktop' || process.platform !== 'linux';
+}
+
+/**
+ * Staging only ever copies *into* the destination, so a file we have stopped
+ * shipping would otherwise sit there forever — a project that built with an
+ * older rayact keeps a stale 10.7 MB emoji font in its app bundle and never
+ * sees the size win. Prune it explicitly whenever we are skipping it.
+ */
+async function pruneUnusedEmojiFont(destFontsDir: string, target: 'android' | 'ios' | 'desktop'): Promise<void> {
+  if (!skipBundledEmojiFont(BUNDLED_EMOJI_FONT, target)) return;
+  const stale = path.join(destFontsDir, BUNDLED_EMOJI_FONT);
+  if (!existsSync(stale)) return;
+  await fs.rm(stale, { force: true });
+  console.log(`  removed stale ${BUNDLED_EMOJI_FONT} (this platform rasterizes emoji via the OS)`);
+}
+
+/**
+ * Stage a font, dropping tables the engine cannot read on the way through.
+ *
+ * The rasterizer is stb_truetype (via raylib LoadFontEx), which ignores
+ * variable-font data entirely — in Material Symbols that unread `gvar` is ~88%
+ * of the file. Slimming here rather than at the source keeps the win for
+ * app-supplied fonts too. Anything that is not a recognized TTF/OTF, or that
+ * slimFont declines to touch, is copied byte-for-byte.
+ */
+async function copyFontInto(src: string, dest: string): Promise<void> {
+  if (!isSlimmableFont(src) || !(await fs.stat(src)).isFile()) {
+    await copyInto(src, dest);
+    return;
+  }
+  const original = await fs.readFile(src);
+  const { out, dropped } = slimFont(original);
+  await fs.mkdir(path.dirname(dest), { recursive: true });
+  await fs.writeFile(dest, out);
+  if (dropped.length) {
+    const mb = (bytes: number): string => `${(bytes / 1e6).toFixed(2)} MB`;
+    console.log(
+      `  slimmed ${path.basename(src)} ${mb(original.length)} -> ${mb(out.length)} ` +
+        `(dropped ${dropped.join(', ')})`
+    );
+  }
 }
 
 export async function runBuild(flags: CliFlags): Promise<void> {
@@ -311,7 +392,7 @@ async function buildAndroidApk(
       console.warn(`warning: bundle references missing CSS file: ${ref.src}`);
       continue;
     }
-    await copyInto(ref.src, path.join(apkAssets, 'runtime', ref.rel));
+    await copyCssInto(ref.src, path.join(apkAssets, 'runtime', ref.rel));
   }
 
   // Native plugin manifest the dev client reads (extracted from runtime/ like CSS).
@@ -354,8 +435,10 @@ async function buildAndroidApk(
     const fontsDir = path.join(androidPrebuiltDir, 'resources/fonts');
     if (existsSync(fontsDir)) {
       for (const name of await fs.readdir(fontsDir)) {
-        await copyInto(path.join(fontsDir, name), path.join(apkAssets, 'runtime/resources/fonts', name));
+        if (skipBundledEmojiFont(name, 'android')) continue;
+        await copyFontInto(path.join(fontsDir, name), path.join(apkAssets, 'runtime/resources/fonts', name));
       }
+      await pruneUnusedEmojiFont(path.join(apkAssets, 'runtime/resources/fonts'), 'android');
     } else {
       console.warn('warning: no resources/fonts found in @rayact/prebuilt-android-arm64 — icons will render as tofu');
     }
@@ -425,6 +508,16 @@ async function assembleWebApp(
   for (const ext of ['html', 'js', 'wasm']) {
     await fs.copyFile(path.join(hostDir, `${hostBase}.${ext}`), path.join(webDir, `rayact.${ext}`));
   }
+  // The trio is always staged as rayact.{html,js,wasm}, but the shell and the
+  // emscripten glue refer to each other by their *upstream* names. Left alone,
+  // the glue fetches `<hostBase>.wasm`, gets a 404 and aborts with "both async
+  // and sync fetching of the wasm failed", so the page never leaves the loading
+  // overlay. These are plain filename constants, so a literal swap is safe.
+  if (hostBase !== 'rayact') {
+    const glue = path.join(webDir, 'rayact.js');
+    const js = await fs.readFile(glue, 'utf8');
+    await fs.writeFile(glue, js.split(`${hostBase}.wasm`).join('rayact.wasm'));
+  }
   // index.html so `serve dist/web` just works.
   await fs.copyFile(path.join(hostDir, `${hostBase}.html`), path.join(webDir, 'index.html'));
   // Static releases have no discovery/HMR/bootstrap-prefetch path. Remove the
@@ -435,8 +528,99 @@ async function assembleWebApp(
     }
     for (const name of ['rayact.html', 'index.html']) {
       const file = path.join(webDir, name);
-      const html = sanitizeReleaseWebHtml(await fs.readFile(file, 'utf8'));
+      let html = sanitizeReleaseWebHtml(await fs.readFile(file, 'utf8'));
+      // The host trio is staged as rayact.{html,js,wasm} whatever it was called
+      // upstream, so the shell's own <script src="rayact_release.js"> would 404
+      // and the module would never boot — the page just sits on the loading
+      // overlay. Point it at the staged name.
+      if (hostBase !== 'rayact') {
+        html = html.split(`${hostBase}.js`).join('rayact.js');
+      }
       await fs.writeFile(file, html);
+    }
+  }
+  // Browser-side module code (manifest `web.script`), the web peer of the
+  // Android/iOS registration classes and the desktop dylibs. Copied next to the
+  // app and loaded with a <script> tag — app-assets.json cannot serve these
+  // because it targets MEMFS, and a <script> needs a real HTTP path.
+  const webPlugins = resolveRayactPlugins(process.cwd());
+  const webModules = webPlugins.filter(plugin => plugin.manifest.web?.script);
+  // Native web modules: Emscripten side modules the host dlopens at boot, the peer
+  // of the desktop dylibs staged into <outDir>/modules.
+  const webWasmModules = webPlugins.flatMap(plugin => {
+    const artifact = plugin.manifest.artifacts?.find(candidate => candidate.platform === 'web');
+    return artifact ? [{ plugin, artifact }] : [];
+  });
+  if (webModules.length || webWasmModules.length) {
+    const modulesDir = path.join(webDir, 'modules');
+    await fs.mkdir(modulesDir, { recursive: true });
+    const tags: string[] = [];
+    const wasmUrls: string[] = [];
+    for (const { plugin, artifact } of webWasmModules) {
+      const source = path.join(plugin.packageDir, artifact.path);
+      if (!existsSync(source)) {
+        console.warn(`warning: ${plugin.jsPackage} declares a web artifact but ${source} is missing`);
+        continue;
+      }
+      // Copy the artifact alone rather than its directory: unlike a browser script,
+      // a side module fetches no siblings — everything it does not define itself it
+      // imports from the host — and the directory also holds its C++ sources.
+      const destination = path.join(modulesDir, plugin.name, path.basename(artifact.path));
+      await fs.mkdir(path.dirname(destination), { recursive: true });
+      await fs.copyFile(source, destination);
+      wasmUrls.push(`modules/${plugin.name}/${path.basename(artifact.path)}`);
+    }
+    if (wasmUrls.length) {
+      // Consumed by the shell's preRun, which fetches each module and holds main()
+      // back until it has registered. Dev gets the same list from the manifest.
+      tags.push(
+        `<script>window.__rayactWebModules=${JSON.stringify(wasmUrls)}</script>`
+      );
+    }
+    for (const plugin of webModules) {
+      const script = plugin.manifest.web?.script;
+      if (!script) continue;
+      const source = path.join(plugin.packageDir, script);
+      if (!existsSync(source)) {
+        console.warn(`warning: ${plugin.jsPackage} declares web.script but ${source} is missing`);
+        continue;
+      }
+      // Stage the script's whole directory, not just the file. A browser module
+      // is often more than one file — a .wasm it instantiates, a worker script,
+      // a glue file — and those are fetched at runtime by URL, so they need real
+      // paths next to the script rather than a place in app-assets.json (which
+      // targets MEMFS and cannot serve a fetch()). Copying the directory keeps
+      // every sibling reachable at the same relative path it has in the package,
+      // so a module's own `./thing.wasm` just works.
+      await fs.cp(path.dirname(source), path.join(modulesDir, plugin.name), {
+        recursive: true
+      });
+      tags.push(`<script src="modules/${plugin.name}/${path.basename(script)}"></script>`);
+    }
+    if (tags.length) {
+      // Injected before the emscripten-emitted <script src="rayact.js">, which
+      // the shell template puts last in the body. Ordering is a nicety, not a
+      // requirement: the registry parks creates for kinds whose factory has not
+      // registered yet and replays them when it does.
+      for (const name of ['rayact.html', 'index.html']) {
+        const file = path.join(webDir, name);
+        const html = await fs.readFile(file, 'utf8');
+        // emcc minifies the shell, so the engine tag is `<script async
+        // src=rayact.js>` — unquoted. Match either form rather than a literal,
+        // or the tags land after the engine via the fallback below.
+        const engineTag = /<script[^>]*\ssrc=["']?rayact\.js["']?[^>]*>/.exec(html);
+        await fs.writeFile(
+          file,
+          engineTag
+            ? `${html.slice(0, engineTag.index)}${tags.join('')}${html.slice(engineTag.index)}`
+            : html.replace('</body>', `${tags.join('')}</body>`)
+        );
+      }
+      const staged = [
+        ...webModules.map(plugin => plugin.name),
+        ...webWasmModules.map(entry => `${entry.plugin.name} (wasm)`)
+      ];
+      console.log(`Web modules: ${staged.join(', ')}`);
     }
   }
   if (bundleFormat === 'qjsbc' && bytecode) {
@@ -453,7 +637,7 @@ async function assembleWebApp(
       console.warn(`warning: bundle references missing CSS file: ${ref.src}`);
       continue;
     }
-    await copyInto(ref.src, path.join(webDir, ref.rel));
+    await copyCssInto(ref.src, path.join(webDir, ref.rel));
     assetList.push(ref.rel);
   }
   // Bundled assets (worker .wasm, images, …) were written to <outDir>/assets
@@ -539,7 +723,7 @@ async function buildIosApp(
       console.warn(`warning: bundle references missing CSS file: ${ref.src}`);
       continue;
     }
-    await copyInto(ref.src, path.join(iosAssets, 'runtime', ref.rel));
+    await copyCssInto(ref.src, path.join(iosAssets, 'runtime', ref.rel));
   }
   await writeNativeModules(config, path.join(iosAssets, 'runtime', 'native-modules.json'));
 
@@ -568,8 +752,10 @@ async function buildIosApp(
     const fontsDir = path.join(iosPrebuiltDir, 'resources/fonts');
     if (existsSync(fontsDir)) {
       for (const name of await fs.readdir(fontsDir)) {
-        await copyInto(path.join(fontsDir, name), path.join(iosAssets, 'runtime/resources/fonts', name));
+        if (skipBundledEmojiFont(name, 'ios')) continue;
+        await copyFontInto(path.join(fontsDir, name), path.join(iosAssets, 'runtime/resources/fonts', name));
       }
+      await pruneUnusedEmojiFont(path.join(iosAssets, 'runtime/resources/fonts'), 'ios');
     } else {
       console.warn('warning: no resources/fonts found in @rayact/prebuilt-ios-arm64 — icons will render as tofu');
     }
@@ -643,8 +829,13 @@ async function buildIosApp(
   }
 
   if (existsSync(appPath)) {
-    await copyInto(appPath, path.join(outDir, `${scheme}.app`));
-    console.log(`iOS app: ${path.join(outDir, `${scheme}.app`)}`);
+    const stagedApp = path.join(outDir, `${scheme}.app`);
+    // Mirror rather than merge: fs.cp overwrites but never deletes, so anything
+    // the build has stopped producing (e.g. a resource dropped from the bundle)
+    // would linger in the copy forever and misreport the app's real size.
+    await fs.rm(stagedApp, { recursive: true, force: true });
+    await copyInto(appPath, stagedApp);
+    console.log(`iOS app: ${stagedApp}`);
   }
 
   if (flags.install) {
@@ -748,7 +939,7 @@ async function packageDesktopApp(
       console.warn(`warning: bundle references missing CSS file: ${ref.src}`);
       continue;
     }
-    await copyInto(ref.src, path.join(outDir, ref.rel));
+    await copyCssInto(ref.src, path.join(outDir, ref.rel));
   }
 
   // Icon/emoji fonts: the host loads resources/fonts/* relative to CWD.
@@ -761,8 +952,10 @@ async function packageDesktopApp(
   ]) {
     if (!existsSync(fontsDir)) continue;
     for (const name of await fs.readdir(fontsDir)) {
-      await copyInto(path.join(fontsDir, name), path.join(outDir, 'resources/fonts', name));
+      if (skipBundledEmojiFont(name, 'desktop')) continue;
+      await copyFontInto(path.join(fontsDir, name), path.join(outDir, 'resources/fonts', name));
     }
+    await pruneUnusedEmojiFont(path.join(outDir, 'resources/fonts'), 'desktop');
     break;
   }
 

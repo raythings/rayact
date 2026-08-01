@@ -30,8 +30,22 @@ for (const module of catalog.modules.filter(module => module.officialDevApp)) {
         if (!fs.existsSync(path.join(packageDir, artifact.path))) failures.push(`${module.name}: missing ${artifact.path}`);
         if (!/^[a-f0-9]{64}$/.test(artifact.sha256)) failures.push(`${module.name}: invalid SHA-256 for ${artifact.path}`);
       }
-      for (const platform of module.platforms.filter(platform => platform !== 'web')) {
-        if (!(manifest.artifacts ?? []).some(artifact => artifact.platform === platform)) failures.push(`${module.name}: ${platform} artifact missing`);
+      const nativeArtifacts = manifest.artifacts ?? [];
+      if (manifest.linkage === 'static' && nativeArtifacts.length === 0) {
+        const androidSources = manifest.android?.sourceDirs ?? [];
+        const iosSources = manifest.ios?.sources ?? [];
+        if (module.platforms.includes('android') &&
+            !androidSources.some(source => fs.existsSync(path.join(packageDir, source)))) {
+          failures.push(`${module.name}: Android native source missing`);
+        }
+        if (module.platforms.includes('ios') &&
+            !iosSources.some(source => fs.existsSync(path.join(packageDir, source)))) {
+          failures.push(`${module.name}: iOS native source missing`);
+        }
+      } else {
+        for (const platform of module.platforms.filter(platform => platform !== 'web')) {
+          if (!nativeArtifacts.some(artifact => artifact.platform === platform)) failures.push(`${module.name}: ${platform} artifact missing`);
+        }
       }
     }
   }

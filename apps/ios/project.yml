@@ -56,6 +56,7 @@ targets:
           - platform.cpp
           - mac_text_input.mm
           - mac_text_input.hpp
+          - mac_platform_views.mm
           - platform_mac.mm
           - platform_mac.hpp
           - platform_windows.cpp
@@ -211,7 +212,7 @@ targets:
         INFOPLIST_FILE: Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: com.rayact.app
         PRODUCT_NAME: Rayact
-        OTHER_LDFLAGS: "$(inherited) -framework Metal -framework QuartzCore -framework UIKit -framework CoreFoundation -framework Security"
+        OTHER_LDFLAGS: "$(inherited) -framework Metal -framework QuartzCore -framework UIKit -framework CoreFoundation -framework Security -framework WebKit"
       configs:
         Debug:
           OTHER_CFLAGS: "$(inherited) -DRAYACT_ENABLE_DEVTOOLS=1"
@@ -267,6 +268,7 @@ targets:
           - platform.cpp
           - mac_text_input.mm
           - mac_text_input.hpp
+          - mac_platform_views.mm
           - platform_mac.mm
           - platform_mac.hpp
           - platform_windows.cpp

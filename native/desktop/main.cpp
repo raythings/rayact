@@ -6,6 +6,7 @@
 #include "engine_internal.hpp"
 #include "engine_thread.hpp"
 #include "raym3_bridge.hpp"
+#include "accessibility_bridge.hpp"
 #include "../core/engine.hpp"
 #include "../core/config_loader.hpp"
 #include "../shared/rayactpack.h"
@@ -27,6 +28,10 @@
 #ifndef _WIN32
 #include <climits>
 #include <cstdlib>
+
+#if defined(__APPLE__) && defined(RAYACT_DESKTOP_METAL)
+extern "C" void rlmtCaptureFrame(const char *ppmPath);
+#endif
 #endif
 
 static std::string getArgValue(int argc, char** argv, const std::string& name) {
@@ -216,6 +221,26 @@ void mainLoop(JSContext* ctx) {
                 }
             } else if (strcmp(op, "shot") == 0) {
                 TakeScreenshot(arg);
+#if defined(__APPLE__) && defined(RAYACT_DESKTOP_METAL)
+                // TakeScreenshot reads back through rlgl, which Metal does not
+                // implement; capture the real drawable alongside it.
+                std::string ppm(arg);
+                const size_t dot = ppm.rfind('.');
+                if (dot != std::string::npos) ppm.resize(dot);
+                rlmtCaptureFrame((ppm + ".ppm").c_str());
+#endif
+            } else if (strcmp(op, "dump") == 0) {
+                // Accessibility snapshot: role/label/bounds for every node.
+                // The only headless way to inspect content that hybrid
+                // composition painted into a platform-view overlay — those
+                // surfaces are separate CAMetalLayers the window server
+                // composites, so no single capture contains them.
+                if (FILE* out = fopen(arg, "wb")) {
+                    const std::string json = rayact::accessibilityBridge().snapshotJson();
+                    fwrite(json.data(), 1, json.size(), out);
+                    fclose(out);
+                    printf("RAYACT_A11Y_DUMP wrote %s (%zu bytes)\n", arg, json.size());
+                }
             } else if (strcmp(op, "quit") == 0) {
                 quit = true;
             }
@@ -242,7 +267,10 @@ void mainLoop(JSContext* ctx) {
         // Desktop-only scripted screenshot harness (RAYACT_SHOT).
         if (std::getenv("RAYACT_SHOT")) {
             static int sf = 0; ++sf;
-            if (sf == 5) SetWindowSize(1120, 900);
+            // Resizing mid-capture leaves the drawable and the layout viewport
+            // disagreeing, which makes the screenshot a distorted, unusable
+            // measurement. Opt in only when the resize itself is under test.
+            if (sf == 5 && std::getenv("RAYACT_SHOT_RESIZE")) SetWindowSize(1120, 900);
             if (sf >= 60 && g_root) {
                 std::function<void(const raym3::v2::NodePtr&)> sc = [&](const raym3::v2::NodePtr& n){
                     if (!n) return;
@@ -251,7 +279,16 @@ void mainLoop(JSContext* ctx) {
                 };
                 sc(g_root);
             }
-            if (sf == 120) TakeScreenshot("shot.png");
+            if (sf == 120) {
+                TakeScreenshot("shot.png");
+#if defined(__APPLE__) && defined(RAYACT_DESKTOP_METAL)
+                // raylib's TakeScreenshot reads back through rlgl, which the
+                // Metal backend does not implement — it writes a blank image.
+                // rlmtCaptureFrame grabs the real presented drawable, so this
+                // is the only honest capture on macOS.
+                rlmtCaptureFrame("shot.ppm");
+#endif
+            }
             if (sf == 122) break;
         }
 
@@ -447,9 +484,37 @@ if (!success && !devMode) {
         return 1;
     }
 
-    // Window is now ready (JS called initRaylib): rasterize icon atlas, GC,
-    // and bring up raym3 + system appearance.
+    // Give the app a chance to call initRaylib() itself before the host opens a
+    // window. A dev-server / module-HMR bootstrap imports the project entry
+    // asynchronously, so its call lands only after the job queue is pumped; the
+    // app's own size should win rather than flashing a host-sized window that
+    // immediately resizes. Dev loads fetch over HTTP, so they get a much longer
+    // budget than a release bundle (whose JS has already run synchronously by
+    // this point).
+    const int windowGraceMs = devMode ? 5000 : 250;
+    if (!IsWindowReady()) {
+        for (int i = 0; i < windowGraceMs && !IsWindowReady(); ++i) {
+            if (!rayact::engineThreadedModeEnabled())
+                rayact::enginePumpJS();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        if (!rayact::engineEnsureHostWindow()) {
+            std::cerr << "Failed to open a window" << std::endl;
+            rayact::engineDestroy();
+            return 1;
+        }
+    }
+
+    // Window is now ready (the app called initRaylib, or the host opened one):
+    // rasterize icon atlas, GC, and bring up raym3 + system appearance.
     rayact::engineFinishLoad();
+
+#if defined(__APPLE__) && defined(RAYACT_DESKTOP_METAL)
+    // Platform views need the window's CAMetalLayer, so install after the
+    // window exists. Registration before the app's first commit is not required
+    // here: unlike the mobile hosts, desktop finishes loading before any frame.
+    rayact::macInstallPlatformViews();
+#endif
 
     // Start main loop
     std::cout << "\nStarting main render loop..." << std::endl;

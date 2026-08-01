@@ -12,6 +12,7 @@ import { REACT_DEVTOOLS_BACKEND_SETUP_ID, reactDevtoolsBackendSource } from '@ra
 import { mergeNativeModules, resolveRayactPlugins, type RayactNativeModuleEntry } from '@rayact/prebuild';
 import { loadRayactConfig, resolveAppName } from './config.js';
 import { rayactCssInlineModule } from './rayactHostModule.js';
+import { findAppDir, rayactRouterPlugin } from '@rayact/router/vite';
 
 const require = createRequire(import.meta.url);
 
@@ -438,6 +439,28 @@ export function resolveRayactSubsystem(root: string, sub: string, srcFile: strin
   throw new Error(`Cannot resolve rayact/${sub} — tried:\n  ${attempted.join('\n  ')}`);
 }
 
+/**
+ * The developer-tools overlay is part of the tooling, not of the application:
+ * a project must not be required to declare @rayact/dev-client just so the
+ * dev host can mount its inspector. When the project's own resolution fails,
+ * fall back to the copy installed alongside this dev-server (its versions are
+ * pinned with the rest of the toolchain), so the overlay JS ships with the
+ * dev app regardless of the project's dependencies.
+ */
+export function resolveBundledDevClient(srcFile: string, distFile: string): string | null {
+  try {
+    const req = createRequire(import.meta.url);
+    const packageRoot = path.dirname(req.resolve('@rayact/dev-client/package.json'));
+    const src = path.join(packageRoot, 'src', srcFile);
+    if (fs.existsSync(src)) return normalizePath(src);
+    const dist = path.join(packageRoot, 'dist', distFile);
+    if (fs.existsSync(dist)) return normalizePath(dist);
+  } catch {
+    // Not installed next to the dev-server either — caller reports the error.
+  }
+  return null;
+}
+
 function rayactResolveAliases(root: string): { find: RegExp; replacement: string }[] {
   return [
     ...reactResolveAliases(root),
@@ -449,6 +472,10 @@ function rayactResolveAliases(root: string): { find: RegExp; replacement: string
       try {
         return [{ find, replacement: resolveRayactSubsystem(root, sub, srcFile, distFile) }];
       } catch {
+        if (sub === 'dev-client') {
+          const bundled = resolveBundledDevClient(srcFile, distFile.replace(/^dev-client\//, ''));
+          if (bundled) return [{ find, replacement: bundled }];
+        }
         return [];
       }
     })
@@ -546,9 +573,21 @@ function reactNativeShimPlugin(): Plugin {
   };
 }
 
+/**
+ * True when the configured entry is a module specifier ('@rayact/router/entry')
+ * rather than a project file. A path that exists on disk always wins, so an
+ * app with a literal 'src/App.tsx' is never misclassified.
+ */
+export function isBareEntrySpecifier(root: string, entry: string): boolean {
+  if (entry.startsWith('.') || path.isAbsolute(entry)) return false;
+  return !fs.existsSync(path.resolve(root, entry));
+}
+
 export function rayactVitePlugin(options: BundleOptions, registry = new AssetRegistry(path.resolve(options.root))): Plugin {
   const root = path.resolve(options.root);
-  const resolvedEntry = normalizePath(path.resolve(root, options.entry));
+  const resolvedEntry = isBareEntrySpecifier(root, options.entry)
+    ? options.entry
+    : normalizePath(path.resolve(root, options.entry));
   const mode = options.mode ?? 'development';
 
   return {
@@ -573,6 +612,8 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
         try {
           return resolveRayactSubsystem(root, 'dev-client', 'ProjectDevOverlay.tsx', 'dev-client/ProjectDevOverlay.js');
         } catch (err) {
+          const bundled = resolveBundledDevClient('ProjectDevOverlay.tsx', 'ProjectDevOverlay.js');
+          if (bundled) return bundled;
           throw new Error(
             `The Android/iOS dev-client overlay needs @rayact/dev-client, which is not installed. ` +
               `Add it to your project's package.json dependencies (matching your other @rayact/* packages) and reinstall. ` +
@@ -789,6 +830,8 @@ export function createRayactViteConfig(
     ? resolveProjectNativeModules(root)
     : [];
   const devClientAppMetadata = resolveDevClientAppMetadata(root);
+  const routerAppDirName = loadRayactConfig(root).router?.appDir;
+  const routerAppDir = findAppDir(root, routerAppDirName);
   const devBanner = isDev
     ? [
         `globalThis.__rayactPlatform = { os: ${JSON.stringify(options.platform)}, target: ${JSON.stringify(options.platform)}, ...(globalThis.__rayactPlatform || {}) };`,
@@ -805,6 +848,10 @@ export function createRayactViteConfig(
     },
     plugins: [
       ...(mode === 'release' ? [] : [vendorSharePlugin()]),
+      // File-based routing: back virtual:rayact-routes whenever the project
+      // has an app/ directory, regardless of whether the entry is the router
+      // (an explicit entry can still import the manifest).
+      ...(routerAppDir ? [rayactRouterPlugin({ root, appDir: routerAppDirName }) as Plugin] : []),
       rayactVitePlugin({ ...options, root, mode }, registry),
       nodeCryptoShimPlugin(),
       reactNativeShimPlugin(),
@@ -879,6 +926,7 @@ export function createRayactDevServerConfig(
   assetRegistry?: AssetRegistry
 ): UserConfig {
   const config = createRayactViteConfig({ ...options, mode: 'development' }, ENTRY_ID, assetRegistry);
+  const appRoot = normalizePath(path.resolve(options.root));
   return {
     ...config,
     appType: 'custom',
@@ -898,7 +946,16 @@ export function createRayactDevServerConfig(
       hmr: false,
       ws: false,
       watch: {
-        ignored: ['**/node_modules/**', '**/dist/**', '**/build/**']
+        // Linked Rayact packages are consumed from their `dist` directories.
+        // Ignoring every dist/build directory leaves Vite's transform cache
+        // stale after rebuilding one of those packages (the file on disk and
+        // its source map update, but the code served to the device does not).
+        // Only suppress generated output owned by the app itself.
+        ignored: [
+          '**/node_modules/**',
+          `${appRoot}/dist/**`,
+          `${appRoot}/build/**`
+        ]
       }
     },
     legacy: {
@@ -961,7 +1018,9 @@ export async function buildRayactBundle(options: BundleOptions): Promise<RayactB
     bytecode,
     bundleFormat,
     assets: registry.all(),
-    entry: normalizePath(path.relative(root, path.resolve(root, options.entry))),
+    entry: isBareEntrySpecifier(root, options.entry)
+      ? options.entry
+      : normalizePath(path.relative(root, path.resolve(root, options.entry))),
     platform: options.platform ?? 'desktop',
     mode,
     compiler,

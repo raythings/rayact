@@ -104,6 +104,15 @@ for abi in "${ABIS[@]}"; do
   mkdir -p "$RAYACT_ROOT/packages/prebuilt-android-${package_arch}/resources/fonts"
   if [[ -d "$RAYACT_ROOT/resources/fonts" ]]; then
     cp "$RAYACT_ROOT/resources/fonts/"* "$RAYACT_ROOT/packages/prebuilt-android-${package_arch}/resources/fonts/"
+    # Android rasterizes emoji with Paint/Canvas via JNI (AndroidRasterizeEmoji),
+    # so the bundled ~10.7 MB CBDT font is never read on this platform.
+    rm -f "$RAYACT_ROOT/packages/prebuilt-android-${package_arch}/resources/fonts/NotoColorEmoji.ttf"
+    # Drop the variable-font tables stb_truetype cannot read (~88% of the
+    # Material Symbols files). `rayact build` slims again at staging time; doing
+    # it here keeps the published npm package small too.
+    node "$RAYACT_ROOT/tools/fonts/slim-fonts.mjs" \
+      "$RAYACT_ROOT/packages/prebuilt-android-${package_arch}/resources/fonts" \
+      || echo "  WARNING: font slimming skipped — prebuilt ships full-size fonts" >&2
   else
     echo "  WARNING: $RAYACT_ROOT/resources/fonts not found — prebuilt will ship without fonts" >&2
   fi

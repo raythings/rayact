@@ -114,7 +114,7 @@ export const WebView = React.forwardRef<WebViewHandle, WebViewProps>(function We
     originWhitelist: originWhitelist.join(','),
     scrollEnabled,
     command,
-    onChangeText: onNativeEvent,
+    onNativeEvent,
   };
   return React.createElement(ExternalView, nativeProps as ExternalViewProps);
 });

@@ -37,6 +37,34 @@ export interface RayactIosModule {
 }
 
 /** Canonical package-owned native metadata (`rayact.module.json`, schema v1). */
+/**
+ * Web integration a module contributes — one or both of:
+ *
+ * `script`: browser JavaScript, staged next to the app and loaded with a <script>
+ * tag; registers platform view factories through window.__rayactModuleRegistrations
+ * (never touching Module, so its load order relative to the wasm host is free).
+ *
+ * `sources`: native C/C++ built into an Emscripten SIDE_MODULE
+ * (web/wasm32/rayact_<name>.wasm, by scripts/build-web-module-artifacts.sh) that the host
+ * dlopens at boot, exactly as desktop dlopens the .dylib. The artifact appears in
+ * `artifacts` with platform "web" / architecture "wasm32", which is what staging
+ * and the dev server key on.
+ */
+export interface RayactWebModule {
+  /** Package-relative path, e.g. "web/register.js". */
+  script?: string;
+  /** Repo-relative side-module sources, e.g. "packages/rayact-svg/native/web_register.cpp". */
+  sources?: string[];
+  /**
+   * Defines for the side-module build only. nativeDefines configures the desktop
+   * dylib and is deliberately not inherited (RAYACT_SVG_USE_GPU_SHIM is right for
+   * every dynamically loaded artifact, wrong for the statically linked iOS build).
+   */
+  defines?: string[];
+  /** @deprecated The side module exports rayact_module_register instead. Ignored. */
+  register?: string;
+}
+
 export interface RayactModuleManifest {
   $schema?: string;
   schemaVersion: 1;
@@ -67,8 +95,10 @@ export interface RayactModuleManifest {
   nativeIncludeDirs?: string[];
   /** Compile definitions for nativeSources, e.g. "RAYACT_SVG_USE_GPU_SHIM=1". */
   nativeDefines?: string[];
-  /** Sources compiled into the Emscripten host; web has no dynamic loading. */
+  /** @deprecated No consumer reads this. Use `web.script` for browser code. */
   webSources?: string[];
+  /** Optional browser integration owned by this package. */
+  web?: RayactWebModule;
   /** Optional Android UI/platform integration owned by this package. */
   android?: RayactAndroidModule;
   /** Optional iOS UI/platform integration owned by this package. */

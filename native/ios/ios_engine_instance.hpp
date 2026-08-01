@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "ios_host_callbacks.hpp"
+#include <raym3/v2/ExternalView.h>
 
 struct IOSEngineInstance;
 
@@ -75,6 +76,7 @@ struct IOSEngineInstance {
 
     RayactIOSHostCallbacks hostCallbacks{};
     bool hasHostCallbacks = false;
+    std::unique_ptr<raym3::v2::ExternalViewEmbedder> externalViewEmbedder;
 
     void setCurrent();
     void registerHost(const RayactIOSHostCallbacks* callbacks);

@@ -26,8 +26,6 @@
     <array>
         <string>_rayact._tcp</string>
     </array>
-    <key>NSCameraUsageDescription</key>
-    <string>Scan QR codes to connect to a Rayact dev server.</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Discover and connect to Rayact dev servers on your local network.</string>
     <key>NSAppTransportSecurity</key>
@@ -65,16 +63,6 @@
     </dict>
     <key>UILaunchScreen</key>
     <dict/>
-	<key>NSCameraUsageDescription</key>
-	<string>Scan a QR code to connect to a development server.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Scan a QR code to connect to a development server.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Scan a QR code to connect to a development server.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Scan a QR code to connect to a development server.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Scan a QR code to connect to a development server.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Scan a QR code to connect to a development server.</string>
 </dict>

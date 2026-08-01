@@ -13,7 +13,7 @@ const RAYACT_VERSION = '0.0.4';
 export interface CreateOptions {
   projectName: string;
   targetDir: string;
-  template: 'default' | 'blank';
+  template: 'default' | 'default-router' | 'blank';
   monorepo: boolean;
   monorepoRoot?: string;
   /**
@@ -65,6 +65,9 @@ const DIRECT_DEPS = [
   '@rayact/template-ios',
   '@rayact/dev-client'
 ];
+
+/** Extra direct dependencies of the file-based-routing template. */
+const ROUTER_TEMPLATE_DEPS = ['@rayact/router', '@rayact/navigation', '@rayact/linking'];
 
 interface ReleaseSetEntry {
   name: string;
@@ -159,10 +162,14 @@ function depBlock(options: CreateOptions): {
     vite: '^7.3.6'
   };
 
+  const directDeps = options.template === 'default-router'
+    ? [...DIRECT_DEPS, ...ROUTER_TEMPLATE_DEPS]
+    : DIRECT_DEPS;
+
   if (options.releaseDir) {
     const specs = vendorReleaseTarballs(options);
     const dependencies: Record<string, string> = { react: '^19.0.0' };
-    for (const name of DIRECT_DEPS) {
+    for (const name of directDeps) {
       if (!specs[name]) {
         throw new Error(`Release set is missing the ${name} tarball — cannot scaffold from it.`);
       }
@@ -187,6 +194,11 @@ function depBlock(options: CreateOptions): {
       '@rayact/dev-client': `file:${rel}/packages/rayact-dev-client`,
       react: '^19.0.0'
     };
+    if (options.template === 'default-router') {
+      dependencies['@rayact/router'] = `file:${rel}/packages/rayact-router`;
+      dependencies['@rayact/navigation'] = `file:${rel}/packages/rayact-navigation`;
+      dependencies['@rayact/linking'] = `file:${rel}/packages/rayact-linking`;
+    }
     const prebuilt = hostPrebuiltFolder();
     if (prebuilt && fs.existsSync(path.join(abs, 'packages', prebuilt))) {
       dependencies[`@rayact/${prebuilt}`] = `file:${rel}/packages/${prebuilt}`;
@@ -205,11 +217,7 @@ function depBlock(options: CreateOptions): {
   );
   return {
     dependencies: {
-      rayact: RAYACT_VERSION,
-      '@rayact/dev-server': RAYACT_VERSION,
-      '@rayact/template-android': RAYACT_VERSION,
-      '@rayact/template-ios': RAYACT_VERSION,
-      '@rayact/dev-client': RAYACT_VERSION,
+      ...Object.fromEntries(directDeps.map(name => [name, RAYACT_VERSION])),
       react: '^19.0.0'
     },
     devDependencies

@@ -24,6 +24,7 @@
 
 #include <raym3/raym3.h>
 #include <raym3/v2/Renderer.h>
+#include <raym3/v2/RenderContext.h>
 #include <raym3/v2/Animations.h>
 #include <raym3/v2/Ripple.h>
 #include <raym3/v2/Input.h>
@@ -484,7 +485,32 @@ void inputDebugTakeScreenshots() {
     }
 }
 
+// Host-supplied native-view compositor (web: stacked canvases + DOM elements;
+// macOS: CAMetalLayer overlays + NSViews). Null on hosts without one, which is
+// how Linux/Windows degrade to the bridge's own stub texture — Renderer.cpp
+// nulls the embedder for the frame when no external view is present anyway.
+// Unlike Android/iOS this is one embedder for every screen: desktop and web
+// render their screens sequentially into a single window, so there is no
+// concurrent-root hazard. The per-screen surfaceId still identifies the target.
+static raym3::v2::ExternalViewEmbedder* g_hostExternalViewEmbedder = nullptr;
+
+void engineSetExternalViewEmbedder(raym3::v2::ExternalViewEmbedder* embedder) {
+    g_hostExternalViewEmbedder = embedder;
+}
+
 static void engineRenderScreenInSurface(int screenId, int width, int height, bool dispatchInput) {
+    raym3::v2::RenderContext& screenContext =
+        engineGetScreenRenderContext(screenId);
+    // Web/macOS install their embedder process-wide via
+    // engineSetExternalViewEmbedder; Android/iOS assign it per-instance onto
+    // the screen context before this call. Only override when the host global
+    // is set, or the mobile embedder is wiped every frame — external views
+    // stop compositing (invisible editors) and gesture arbitration never
+    // answers (untappable text inputs).
+    if (g_hostExternalViewEmbedder)
+        screenContext.externalViewEmbedder = g_hostExternalViewEmbedder;
+    screenContext.surfaceId = static_cast<uint64_t>(screenId);
+    raym3::v2::SetCurrentRenderContext(&screenContext);
     {
         const AppConfig& cfg = engineAppConfig();
         Color bg = { cfg.backgroundColor[0], cfg.backgroundColor[1],
@@ -495,7 +521,10 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
         // Fallback: immediate-mode shapes (backward compat). Only the focused
         // screen draws shapes — backgrounds behind the focused screen would
         // cover input regions otherwise.
-        if (!dispatchInput) return;
+        if (!dispatchInput) {
+            raym3::v2::SetCurrentRenderContext(nullptr);
+            return;
+        }
         for (const Shape& shape : g_shapes) {
             Color c = {
                 (unsigned char)((shape.color >> 24) & 0xFF),
@@ -509,6 +538,7 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
                 case 2: DrawLine(shape.x1, shape.y1, shape.x2, shape.y2, c); break;
             }
         }
+        raym3::v2::SetCurrentRenderContext(nullptr);
         return;
     }
     // raym3 v2 retained-mode path — render the current surface's tree.
@@ -522,6 +552,16 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     const bool forceLayout =
         engineConsumeSurfaceRelayout(screenId) ||
         engineSurfaceBoundsChanged(screenId, width, height);
+#if defined(RAYACT_ANDROID)
+    if (forceLayout) {
+        TraceLog(LOG_INFO,
+                 "RAYACT_DENSITY screen=%d surface=%dx%d platform=%.3f "
+                 "layout=%.3f draw=%.3f",
+                 screenId, width, height,
+                 raym3::v2::Density::GetPlatformDensity(),
+                 raym3::v2::Density::GetLayoutDensity(), dp);
+    }
+#endif
     applyAnimatedStylesToNodes();
     raym3::v2::TickScrollMomentum(g_root);
     raym3::v2::TickTransitions(g_root);
@@ -565,6 +605,7 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     bool pressed  = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
     bool released = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
     bool down     = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+    bool cancelled = false;
 #if defined(RAYACT_ANDROID) || defined(RAYACT_IOS) || defined(RAYACT_WEB)
     // Mobile + web drive input through engineQueueTouch (the canvas pointer
     // handlers in shell.html on web); it's the authoritative source there, not
@@ -588,6 +629,7 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
 #endif
         pressed = g_queuedTouch.pressed;
         released = g_queuedTouch.released;
+        cancelled = g_queuedTouch.cancelled;
         down = g_queuedTouch.down;
         // Deliver the press at the point the finger actually went down. When a
         // whole gesture batches into one frame, `position` has already been
@@ -624,6 +666,7 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
             g_queuedTouch.hasPendingMove = false;
             g_queuedTouch.pressed = false;
             g_queuedTouch.released = false;
+            g_queuedTouch.cancelled = false;
         }
     }
 #ifndef RAYACT_NO_WORKERS
@@ -634,7 +677,8 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     // Unified per-frame input: controls/buttons first, then scroll (touch-slop +
     // directional claim). Scroll never preempts ResolveInput.
     if (dispatchInput) {
-        raym3::v2::BeginInputFrame(mouseDp, down, pressed, released, wheelY);
+        raym3::v2::BeginInputFrame(
+            mouseDp, down, pressed, released, wheelY, cancelled);
         const bool inspectorConsumed =
             handleInspectorPickInput(mouseDp, pressed, released);
         raym3::v2::NodeId preActive = raym3::v2::GetActiveId();
@@ -715,6 +759,7 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     drawInspectorHighlight();
     SetMouseScale(1.0f, 1.0f);
     rlPopMatrix();
+    raym3::v2::SetCurrentRenderContext(nullptr);
 }
 
 // Desktop legacy single-surface render frame.
@@ -828,7 +873,8 @@ bool engineNeedsAnotherFrame() {
         // A queued touch event (e.g. the deferred UP of a one-pump tap) must
         // get a frame to dispatch in.
         std::lock_guard<std::mutex> lock(g_touchMutex);
-        if (g_queuedTouch.pressed || g_queuedTouch.released)
+        if (g_queuedTouch.pressed || g_queuedTouch.released ||
+            g_queuedTouch.cancelled)
             return true;
     }
     if (raym3::v2::HasActiveRipples())

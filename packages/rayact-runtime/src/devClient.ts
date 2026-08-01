@@ -1,5 +1,6 @@
 import type { HostBridge, RayactDevClient, RayactGlobal, WebSocketLike } from './types.js';
 import { setReloadState } from './reloadState.js';
+import { devInfo } from './devLog.js';
 
 interface DevClientOptions {
   serverUrl: string;
@@ -141,7 +142,7 @@ export function createDevClient(options: DevClientOptions): RayactDevClient {
       }
 
       if (status.revision !== lastRevision) {
-        globalObject.console?.info?.(`[rayact] revision ${status.revision} detected (poll fallback)`);
+        devInfo(globalObject, `[rayact] revision ${status.revision} detected (poll fallback)`);
         if (await loadBundle()) lastRevision = status.revision;
       }
     } catch (error) {
@@ -151,7 +152,7 @@ export function createDevClient(options: DevClientOptions): RayactDevClient {
 
   const handleHmrMessage = (message: DevMessage) => {
     if (message.type === 'reload' || message.type === 'hmr-update') {
-      globalObject.console?.info?.(`[rayact] ${message.type} received`);
+      devInfo(globalObject, `[rayact] ${message.type} received`);
       const revision = typeof (message.payload as { revision?: unknown } | undefined)?.revision === 'number'
         ? (message.payload as { revision: number }).revision
         : null;
@@ -170,10 +171,10 @@ export function createDevClient(options: DevClientOptions): RayactDevClient {
     if (hmrSocket) return;
 
     const hmrUrl = manifest.hmrUrl ?? toWsUrl(options.serverUrl, '/rayact/hmr');
-    globalObject.console?.info?.(`[rayact] connecting hmr: ${hmrUrl}`);
+    devInfo(globalObject, `[rayact] connecting hmr: ${hmrUrl}`);
     hmrSocket = new WebSocketCtor(hmrUrl);
     hmrSocket.onopen = () => {
-      globalObject.console?.info?.('[rayact] hmr connected');
+      devInfo(globalObject, '[rayact] hmr connected');
     };
     hmrSocket.onclose = () => {
       globalObject.console?.warn?.('[rayact] hmr disconnected');
@@ -198,10 +199,10 @@ export function createDevClient(options: DevClientOptions): RayactDevClient {
     if (debuggerSocket) return;
 
     const debuggerUrl = toWsUrl(options.serverUrl, '/rayact/debugger');
-    globalObject.console?.info?.(`[rayact] connecting debugger: ${debuggerUrl}`);
+    devInfo(globalObject, `[rayact] connecting debugger: ${debuggerUrl}`);
     debuggerSocket = new WebSocketCtor(debuggerUrl);
     debuggerSocket.onopen = () => {
-      globalObject.console?.info?.('[rayact] debugger connected');
+      devInfo(globalObject, '[rayact] debugger connected');
       send('client:ready', { serverUrl: options.serverUrl });
     };
     debuggerSocket.onclose = () => {

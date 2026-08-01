@@ -119,6 +119,7 @@ struct ScreenState {
 };
 
 static std::map<int, ScreenState> g_screens;
+static std::map<int, raym3::v2::RenderContext> g_screenRenderContexts;
 static int g_currentScreenId = 0;     // 0 = legacy single-screen (always present)
 static int g_nextScreenId = 1;        // ids 1+ are navigation screens
 // Z-order stack: index 0 = bottom (root screen 0), back = topmost (focused).
@@ -884,6 +885,7 @@ static raym3::v2::Style preserveLayoutStyle(const raym3::v2::Style& visualStyle,
     // bar"). A real colour change always carries `style`, taking the other branch.
     result.backgroundColor = previousStyle.backgroundColor;
     result.backgroundGradient = previousStyle.backgroundGradient;
+    result.backgroundLayers = previousStyle.backgroundLayers;
     result.display = previousStyle.display;
     result.flexDirection = previousStyle.flexDirection;
     result.flexWrap = previousStyle.flexWrap;
@@ -1386,19 +1388,109 @@ static Color parseCssColorString(const std::string& raw) {
     return ParseCssColorToRaylib(value);
 }
 
-static std::optional<raym3::v2::LinearGradient> parseLinearGradientCss(const std::string& css) {
-    auto start = css.find("linear-gradient(");
-    if (start == std::string::npos) return std::nullopt;
-    start += strlen("linear-gradient(");
+static std::string cssLower(std::string s) {
+    for (auto& ch : s) ch = (char)std::tolower((unsigned char)ch);
+    return s;
+}
+
+// Whitespace-separated tokens, ignoring anything inside parentheses so functional
+// colours (`oklch(0.6 0.2 25)`) survive as one token.
+static std::vector<std::string> cssWords(const std::string& input) {
+    std::vector<std::string> out;
+    int depth = 0;
+    std::string current;
+    for (char ch : input) {
+        if (ch == '(') depth++;
+        if (ch == ')' && depth > 0) depth--;
+        if (depth == 0 && (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r')) {
+            if (!current.empty()) { out.push_back(current); current.clear(); }
+        } else {
+            current += ch;
+        }
+    }
+    if (!current.empty()) out.push_back(current);
+    return out;
+}
+
+// `<angle>` in any CSS unit, as a number of degrees.
+static float parseCssAngleDegrees(const std::string& raw, float fallback) {
+    const std::string value = trimCss(raw);
+    if (value.empty()) return fallback;
+    const float n = std::strtof(value.c_str(), nullptr);
+    if (value.find("turn") != std::string::npos) return n * 360.0f;
+    if (value.find("rad") != std::string::npos) return n * 180.0f / 3.14159265358979f;
+    if (value.find("grad") != std::string::npos) return n * 0.9f;
+    return n; // deg, or a bare number
+}
+
+// Trailing position on a colour-stop (`red 40%`, `red 12px`). Lengths are
+// resolved against `extentPx` because a stop list is normalized to 0..1.
+static std::optional<float> parseStopPosition(const std::string& token, float extentPx) {
+    const std::string value = trimCss(token);
+    if (value.empty()) return std::nullopt;
+    const float n = std::strtof(value.c_str(), nullptr);
+    if (value.find('%') != std::string::npos) return n / 100.0f;
+    // A conic-gradient's stops are angles (`red 90deg`); one full turn = 1.0.
+    if (value.find("deg") != std::string::npos) return n / 360.0f;
+    if (value.find("turn") != std::string::npos) return n;
+    if (value.find("rad") != std::string::npos) return n / (2.0f * 3.14159265358979f);
+    if (extentPx > 0.0f) return n / extentPx;
+    return std::nullopt;
+}
+
+// linear-gradient() / conic-gradient(). Stop positions are honoured (they used to
+// be discarded and the stops spaced evenly), and the resulting list is normalized
+// per css-images-3 so the renderer can sample it directly.
+static std::optional<raym3::v2::LinearGradient> parseGradientCss(const std::string& css,
+                                                                float extentPx = 0.0f) {
+    const std::string lower = cssLower(css);
+    raym3::v2::LinearGradient gradient;
+    size_t start = std::string::npos;
+    if ((start = lower.find("conic-gradient(")) != std::string::npos) {
+        gradient.kind = raym3::v2::GradientKind::Conic;
+        gradient.angleDegrees = 0.0f; // conic defaults to `from 0deg`
+        start += strlen("conic-gradient(");
+    } else if ((start = lower.find("linear-gradient(")) != std::string::npos) {
+        start += strlen("linear-gradient(");
+    } else {
+        return std::nullopt;
+    }
     auto end = css.rfind(')');
     if (end == std::string::npos || end <= start) return std::nullopt;
     auto args = splitCssTopLevel(css.substr(start, end - start), ',');
-    if (args.size() < 2) return std::nullopt;
-    raym3::v2::LinearGradient gradient;
+    if (args.empty()) return std::nullopt;
+
     size_t colorStart = 0;
-    std::string first = trimCss(args[0]);
-    if (first.find("deg") != std::string::npos) {
-        gradient.angleDegrees = std::strtof(first.c_str(), nullptr);
+    const std::string first = cssLower(trimCss(args[0]));
+    if (gradient.kind == raym3::v2::GradientKind::Conic) {
+        // `from <angle>` and/or `at <position>` share the first argument.
+        if (first.rfind("from", 0) == 0 || first.rfind("at", 0) == 0) {
+            auto fromPos = first.find("from");
+            auto atPos = first.find(" at ");
+            if (fromPos != std::string::npos) {
+                const size_t stop = atPos == std::string::npos ? first.size() : atPos;
+                gradient.angleDegrees = parseCssAngleDegrees(
+                    first.substr(fromPos + 4, stop - (fromPos + 4)), 0.0f);
+            }
+            if (atPos != std::string::npos) {
+                auto coords = cssWords(first.substr(atPos + 4));
+                auto axis = [](const std::string& token, float fallback) {
+                    if (token == "left" || token == "top") return 0.0f;
+                    if (token == "right" || token == "bottom") return 1.0f;
+                    if (token == "center") return 0.5f;
+                    if (token.find('%') != std::string::npos)
+                        return std::strtof(token.c_str(), nullptr) / 100.0f;
+                    return fallback;
+                };
+                if (coords.size() >= 1) gradient.centerX = axis(coords[0], 0.5f);
+                if (coords.size() >= 2) gradient.centerY = axis(coords[1], 0.5f);
+            }
+            colorStart = 1;
+        }
+    } else if (first.find("deg") != std::string::npos ||
+               first.find("turn") != std::string::npos ||
+               first.find("rad") != std::string::npos) {
+        gradient.angleDegrees = parseCssAngleDegrees(first, 180.0f);
         colorStart = 1;
     } else if (first.rfind("to ", 0) == 0) {
         if (first.find("right") != std::string::npos) gradient.angleDegrees = 90.0f;
@@ -1407,17 +1499,86 @@ static std::optional<raym3::v2::LinearGradient> parseLinearGradientCss(const std
         else gradient.angleDegrees = 180.0f;
         colorStart = 1;
     }
-    size_t colorCount = args.size() - colorStart;
+
+    static const std::regex colorRe(CssColorTokenPattern(), std::regex::icase);
     for (size_t i = colorStart; i < args.size(); i++) {
-        std::string stop = trimCss(args[i]);
+        const std::string entry = trimCss(args[i]);
         std::smatch match;
-        static const std::regex colorRe(CssColorTokenPattern(), std::regex::icase);
-        if (std::regex_search(stop, match, colorRe)) {
-            float pos = colorCount <= 1 ? 0.0f : (float)(i - colorStart) / (float)(colorCount - 1);
-            gradient.stops.push_back({parseCssColorString(match.str()), pos});
+        if (!std::regex_search(entry, match, colorRe)) continue;
+        raym3::v2::LinearGradientStop stop;
+        stop.color = parseCssColorString(match.str());
+        // Whatever follows the colour token is the position. `red 30% 60%` (a
+        // css-images-4 double position) becomes two stops of the same colour.
+        const std::string rest = trimCss(entry.substr(match.position(0) + match.length(0)));
+        if (!rest.empty()) {
+            auto tokens = cssWords(rest);
+            bool emitted = false;
+            for (const auto& token : tokens) {
+                if (auto pos = parseStopPosition(token, extentPx)) {
+                    raym3::v2::LinearGradientStop copy = stop;
+                    copy.position = *pos;
+                    copy.hasPosition = true;
+                    gradient.stops.push_back(copy);
+                    emitted = true;
+                }
+            }
+            if (emitted) continue;
         }
+        gradient.stops.push_back(stop);
     }
-    return gradient.stops.size() >= 2 ? std::optional<raym3::v2::LinearGradient>(gradient) : std::nullopt;
+    if (gradient.stops.size() < 2) return std::nullopt;
+    raym3::v2::NormalizeGradientStops(gradient);
+    return gradient;
+}
+
+static raym3::v2::BoxArea parseBoxArea(const std::string& token,
+                                       raym3::v2::BoxArea fallback) {
+    if (token == "border-box") return raym3::v2::BoxArea::BorderBox;
+    if (token == "padding-box") return raym3::v2::BoxArea::PaddingBox;
+    if (token == "content-box") return raym3::v2::BoxArea::ContentBox;
+    // css-backgrounds-4: paint the layer in the border ring only.
+    if (token == "border-area") return raym3::v2::BoxArea::BorderArea;
+    return fallback;
+}
+
+// A multi-layer `background` shorthand. Each comma-separated layer is a colour or
+// a gradient plus optional box keywords: one box value sets origin AND clip, two
+// set origin then clip (CSS Backgrounds 3 §2.11).
+static std::vector<raym3::v2::BackgroundLayer> parseBackgroundLayersCss(const std::string& css) {
+    std::vector<raym3::v2::BackgroundLayer> layers;
+    for (const auto& raw : splitCssTopLevel(css, ',')) {
+        const std::string entry = trimCss(raw);
+        if (entry.empty()) continue;
+        raym3::v2::BackgroundLayer layer;
+        std::vector<std::string> boxes;
+        for (const auto& token : cssWords(cssLower(entry))) {
+            if (token == "border-box" || token == "padding-box" ||
+                token == "content-box" || token == "border-area")
+                boxes.push_back(token);
+        }
+        if (boxes.size() == 1) {
+            layer.origin = parseBoxArea(boxes[0], layer.origin);
+            layer.clip = parseBoxArea(boxes[0], layer.clip);
+        } else if (boxes.size() >= 2) {
+            layer.origin = parseBoxArea(boxes[0], layer.origin);
+            layer.clip = parseBoxArea(boxes[1], layer.clip);
+        }
+        if (auto gradient = parseGradientCss(entry)) {
+            layer.gradient = *gradient;
+        } else {
+            // Strip the box keywords so only the colour token is left.
+            std::string colorPart = entry;
+            for (const auto& box : boxes) {
+                auto at = cssLower(colorPart).find(box);
+                if (at != std::string::npos) colorPart.erase(at, box.size());
+            }
+            colorPart = trimCss(colorPart);
+            if (colorPart.empty() || cssLower(colorPart) == "none") continue;
+            layer.color = parseCssColorString(colorPart);
+        }
+        layers.push_back(layer);
+    }
+    return layers;
 }
 
 static std::vector<raym3::v2::BoxShadow> parseBoxShadowCss(const std::string& css) {
@@ -1599,11 +1760,56 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
     {
         std::string gradientCss = jsGetString(ctx, obj, "backgroundGradientCss");
         if (!gradientCss.empty()) {
-            if (auto gradient = parseLinearGradientCss(gradientCss)) s.backgroundGradient = *gradient;
+            if (auto gradient = parseGradientCss(gradientCss)) s.backgroundGradient = *gradient;
+        }
+        // Multi-layer `background`. Kept separate from the single-gradient field so
+        // a one-layer declaration still takes the cheap flat/one-gradient path.
+        std::string layersCss = jsGetString(ctx, obj, "backgroundLayersCss");
+        if (!layersCss.empty()) {
+            auto layers = parseBackgroundLayersCss(layersCss);
+            // `background-clip` may override the shorthand's clip per layer.
+            std::string clipCss = jsGetString(ctx, obj, "backgroundClip");
+            if (!clipCss.empty() && !layers.empty()) {
+                auto clips = splitCssTopLevel(clipCss, ',');
+                for (size_t i = 0; i < layers.size(); i++) {
+                    if (clips.empty()) break;
+                    const std::string token = cssLower(trimCss(clips[std::min(i, clips.size() - 1)]));
+                    layers[i].clip = parseBoxArea(token, layers[i].clip);
+                }
+            }
+            std::string originCss = jsGetString(ctx, obj, "backgroundOrigin");
+            if (!originCss.empty() && !layers.empty()) {
+                auto origins = splitCssTopLevel(originCss, ',');
+                for (size_t i = 0; i < layers.size(); i++) {
+                    if (origins.empty()) break;
+                    const std::string token = cssLower(trimCss(origins[std::min(i, origins.size() - 1)]));
+                    layers[i].origin = parseBoxArea(token, layers[i].origin);
+                }
+            }
+            if (!layers.empty()) s.backgroundLayers = layers;
         }
     }
     if (auto v = jsGetColor(ctx, obj, "stateLayerColor")) s.stateLayerColor = v;
     if (auto v = jsGetColor(ctx, obj, "rippleColor"))     s.rippleColor     = v;
+    // Text-field editing colors. Accepted flat (`placeholderColor`) and nested
+    // under the sub-object the value belongs to (`placeholder: { color }`),
+    // mirroring how `text: { color }` already works.
+    if (auto v = jsGetColor(ctx, obj, "placeholderColor")) s.placeholderColor = v;
+    if (auto v = jsGetColor(ctx, obj, "caretColor"))       s.caretColor       = v;
+    if (auto v = jsGetColor(ctx, obj, "cursorColor"))      s.caretColor       = v;
+    if (auto v = jsGetColor(ctx, obj, "selectionColor"))   s.selectionColor   = v;
+    for (const auto& [key, target] : {
+             std::pair<const char*, std::optional<Color>*>{"placeholder", &s.placeholderColor},
+             std::pair<const char*, std::optional<Color>*>{"caret", &s.caretColor},
+             std::pair<const char*, std::optional<Color>*>{"cursor", &s.caretColor},
+             std::pair<const char*, std::optional<Color>*>{"selection", &s.selectionColor}}) {
+        JSValue nested = JS_GetPropertyStr(ctx, obj, key);
+        if (JS_IsObject(nested)) {
+            if (auto v = jsGetColor(ctx, nested, "color")) *target = v;
+            if (auto v = jsGetColor(ctx, nested, "backgroundColor")) *target = v;
+        }
+        JS_FreeValue(ctx, nested);
+    }
     if (auto v = jsGetColor(ctx, obj, "borderColor"))     s.borderColor     = v;
     if (auto v = jsGetFloat(ctx, obj, "borderWidth"))     s.borderWidth     = v;
     // Per-edge borders (CSS `border-bottom`, RN `borderTopColor`, …). Unset
@@ -2117,6 +2323,9 @@ void refreshStylesForColorScheme(JSContext* ctx) {
     refreshClassNameStyles(ctx);
 }
 
+// Defined below, next to the external-view props channel.
+void syncNativeEditorAppearance(int nodeId);
+
 void refreshClassNameStyles(JSContext* ctx) {
     if (!ctx) return;
     // The stylesheet / variables / theme / media context changed — every cached
@@ -2135,6 +2344,11 @@ void refreshClassNameStyles(JSContext* ctx) {
         // Same contract as applyCapturedStateStyles: leave existing stateStyles
         // untouched when the classes declare none.
         if (e.hasStates) node->stateStyles = e.states;
+    }
+    // The cascade moved under every field; re-push editor appearance.
+    for (auto& [id, node] : g_nodes) {
+        if (node && node->kind == raym3::v2::NodeKind::TextInput)
+            syncNativeEditorAppearance(id);
     }
 }
 
@@ -2503,10 +2717,12 @@ JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSVal
             if (variant == "filled") props.variant = raym3::TextFieldVariant::Filled;
             else if (variant == "outlined") props.variant = raym3::TextFieldVariant::Outlined;
             else if (variant == "underline") props.variant = raym3::TextFieldVariant::Underline;
+            else if (variant == "plain") props.variant = raym3::TextFieldVariant::Plain;
         }
         props.drawBackground = jsGetBool(ctx, argv[1], "drawBackground", true);
         props.drawOutline = jsGetBool(ctx, argv[1], "drawOutline", true);
         props.drawStateLayer = jsGetBool(ctx, argv[1], "drawStateLayer", true);
+        props.nativeEditor = jsGetBool(ctx, argv[1], "nativeEditor", false);
         // react-native parity props.
         if (auto m = jsGetFloat(ctx, argv[1], "maxLength")) props.maxLength = (int)*m;
         props.multiline = jsGetBool(ctx, argv[1], "multiline", false);
@@ -2555,7 +2771,8 @@ JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSVal
     node->textInput.onFocus = [id = g_nextNodeId]() {
 #if defined(__ANDROID__) || defined(RAYACT_IOS)
         auto itNode = g_nodes.find(id);
-        if (itNode != g_nodes.end() && itNode->second) {
+        if (itNode != g_nodes.end() && itNode->second &&
+            !itNode->second->textInput.nativeEditor) {
             const auto& ti = itNode->second->textInput;
             AndroidKeyboard_ShowForNode(id, ti.inputType, ti.autocorrect,
                                         ti.secure || ti.passwordMode, ti.imeAction,
@@ -2570,14 +2787,18 @@ JSValue JS_createTextInput(JSContext* ctx, JSValue /*this_val*/, int argc, JSVal
     };
     node->textInput.onBlur = [id = g_nextNodeId]() {
 #if defined(__ANDROID__) || defined(RAYACT_IOS)
+        auto itNode = g_nodes.find(id);
+        const bool ownsNativeEditor =
+            itNode != g_nodes.end() && itNode->second &&
+            itNode->second->textInput.nativeEditor;
         // Focus already moved when switching fields — keep keyboard open.
         raym3::v2::NodeId focused = raym3::v2::GetFocusedId();
-        if (focused != 0) {
+        if (!ownsNativeEditor && focused != 0) {
             auto *n = reinterpret_cast<raym3::v2::Node *>(focused);
             if (n && n->kind == raym3::v2::NodeKind::TextInput)
                 return;
         }
-        AndroidKeyboard_Hide();
+        if (!ownsNativeEditor) AndroidKeyboard_Hide();
 #endif
         // react-native onEndEditing: fires with the final text when editing ends.
         fireTextInputTextEvent(g_endEditingCallbacks, id);
@@ -2664,10 +2885,19 @@ JSValue JS_createModal(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
 struct ExternalViewEntry {
     std::string kind;                       // "stub" | "textfield" | ...
     int nodeId = 0;
+    int surfaceId = 0;
     Texture2D texture = {0};                // lazy — JS may run before InitWindow
     std::shared_ptr<Rectangle> layoutRect;  // dp; written by the render lambda
     Rectangle lastPushedRect = {0, 0, -1, -1};
     bool focused = false;
+    // Last appearance patch pushed by syncNativeEditorAppearance, so a
+    // per-commit sync only crosses the host boundary when something changed.
+    std::string lastAppearanceJson;
+    // Props this node was created with, kept so a host that installs its
+    // callbacks after the app's first commit can be replayed into. Desktop
+    // needs that: its window (and therefore its view hierarchy) only exists
+    // after the JS has already built the tree.
+    std::string createPropsJson;
     // Texture supplied by the platform host (AHB import etc.) — producers own
     // its contents; the bridge must not UpdateTexture into it.
     bool externalTexture = false;
@@ -2681,29 +2911,105 @@ struct ExternalViewEntry {
 };
 static std::map<int, ExternalViewEntry> g_externalViews; // nodeId → entry
 
-// Platform host callbacks. Rect: dp-space layout (drives VirtualDisplay /
-// ImageReader / NSView sizing). Input: action 0=down 1=up 2=move, view-local dp.
-static void (*g_externalViewRectCb)(int nodeId, const char* kind, float x, float y, float w, float h) = nullptr;
-static void (*g_externalViewInputCb)(int nodeId, int action, float localX, float localY) = nullptr;
-static void (*g_externalViewPropCb)(int nodeId, const char* key, const char* value) = nullptr;
-static void (*g_externalViewDisposeCb)(int nodeId) = nullptr;
+// Platform host callbacks. Creation and updates carry JSON-safe property
+// batches so hosts can stage configuration before loading content and retain
+// updates that race asynchronous native-view construction. Rect is dp-space
+// layout. Input: action 0=down 1=up 2=move, view-local dp.
+static void (*g_externalViewCreateCb)(int, int, const char*, const char*) = nullptr;
+static void (*g_externalViewRectCb)(int, int, const char*, float, float, float, float) = nullptr;
+static void (*g_externalViewInputCb)(int, int, int, float, float) = nullptr;
+static void (*g_externalViewPropsCb)(int, int, const char*) = nullptr;
+static void (*g_externalViewDisposeCb)(int, int) = nullptr;
 
 void rayactSetExternalViewHostCallbacks(
-    void (*rectCb)(int, const char*, float, float, float, float),
-    void (*inputCb)(int, int, float, float),
-    void (*propCb)(int, const char*, const char*),
-    void (*disposeCb)(int)) {
+    void (*createCb)(int, int, const char*, const char*),
+    void (*rectCb)(int, int, const char*, float, float, float, float),
+    void (*inputCb)(int, int, int, float, float),
+    void (*propsCb)(int, int, const char*),
+    void (*disposeCb)(int, int)) {
+    g_externalViewCreateCb = createCb;
     g_externalViewRectCb = rectCb;
     g_externalViewInputCb = inputCb;
-    g_externalViewPropCb = propCb;
+    g_externalViewPropsCb = propsCb;
     g_externalViewDisposeCb = disposeCb;
+}
+
+static bool isExternalViewEngineProp(const char* key) {
+    static const char* kEngineProps[] = {
+        "style", "zIndex", "className", "kind", "hitTestBehavior", "children",
+        "capturesInput", "pointerEvents", "accessible", "accessibilityRole",
+        "accessibilityLabel", "accessibilityHint", "accessibilityState",
+        "accessibilityValue", "accessibilityActions", "focusable", "tabIndex",
+        "onAccessibilityAction", "onPress", "onPressIn", "onPressOut",
+        "onLongPress", "onClick", "onLayout", "onNativeEvent", "onChangeText"
+    };
+    for (const char* engineKey : kEngineProps)
+        if (std::strcmp(key, engineKey) == 0) return true;
+    return false;
+}
+
+// Copy JSON-safe public properties into a plain object. JSON.stringify handles
+// nested arrays/objects; top-level functions and engine-owned props are
+// excluded. Undefined update values become null tombstones so native
+// controllers can clear stale state (notably sourceHtml/sourceUri).
+static std::string serializeExternalViewProps(JSContext* ctx,
+                                              JSValueConst props,
+                                              bool patch) {
+    if (!JS_IsObject(props)) return "{}";
+    JSValue filtered = JS_NewObject(ctx);
+    JSPropertyEnum* names = nullptr;
+    uint32_t count = 0;
+    if (JS_GetOwnPropertyNames(ctx, &names, &count, props, JS_GPN_STRING_MASK) != 0) {
+        JS_FreeValue(ctx, filtered);
+        return "{}";
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+        const char* key = JS_AtomToCString(ctx, names[i].atom);
+        if (!key) continue;
+        JSValue value = JS_GetProperty(ctx, props, names[i].atom);
+        const bool skip = isExternalViewEngineProp(key) || JS_IsFunction(ctx, value);
+        if (!skip) {
+            if (JS_IsUndefined(value)) {
+                if (patch) JS_SetPropertyStr(ctx, filtered, key, JS_NULL);
+                JS_FreeValue(ctx, value);
+            } else {
+                JS_SetPropertyStr(ctx, filtered, key, value); // consumes value
+            }
+        } else {
+            JS_FreeValue(ctx, value);
+        }
+        JS_FreeCString(ctx, key);
+    }
+    js_free(ctx, names);
+
+    JSValue json = JS_JSONStringify(ctx, filtered, JS_UNDEFINED, JS_UNDEFINED);
+    JS_FreeValue(ctx, filtered);
+    if (JS_IsException(json) || JS_IsUndefined(json)) {
+        if (!JS_IsUndefined(json)) JS_FreeValue(ctx, json);
+        return "{}";
+    }
+    const char* raw = JS_ToCString(ctx, json);
+    std::string result = raw ? raw : "{}";
+    if (raw) JS_FreeCString(ctx, raw);
+    JS_FreeValue(ctx, json);
+    return result;
 }
 
 // Producer-driven text change (e.g. EditText TextWatcher): invoke the node's
 // JS onChangeText callback. Runs on the JS thread (pump drain).
 void rayactExternalViewEmitText(int nodeId, const char* text) {
     auto cbIt = g_changeTextCallbacks.find(nodeId);
-    if (cbIt == g_changeTextCallbacks.end() || !g_bridge_ctx) return;
+    if (cbIt == g_changeTextCallbacks.end() || !g_bridge_ctx) {
+        // Silently dropping producer events is a nasty thing to debug: the
+        // native view works, JS just never hears from it.
+        static const bool trace = std::getenv("RAYACT_PLATFORM_VIEW_TRACE") != nullptr;
+        if (trace) {
+            TraceLog(LOG_WARNING,
+                     "RAYACT_PLATFORM_VIEW node=%d has no JS handler; dropped %s",
+                     nodeId, text ? text : "");
+        }
+        return;
+    }
     JSValue arg = JS_NewString(g_bridge_ctx, text ? text : "");
     JSValue result = JS_Call(g_bridge_ctx, cbIt->second, JS_UNDEFINED, 1, &arg);
     if (JS_IsException(result)) JS_FreeValue(g_bridge_ctx, JS_GetException(g_bridge_ctx));
@@ -2785,7 +3091,8 @@ JSValue JS_createExternalView(JSContext* ctx, JSValue, int argc, JSValueConst* a
              fabsf(layout.width - ev.lastPushedRect.width) > 0.5f ||
              fabsf(layout.height - ev.lastPushedRect.height) > 0.5f)) {
             ev.lastPushedRect = layout;
-            g_externalViewRectCb(id, ev.kind.c_str(), layout.x, layout.y, layout.width, layout.height);
+            g_externalViewRectCb(ev.surfaceId, id, ev.kind.c_str(),
+                                 layout.x, layout.y, layout.width, layout.height);
         }
 
         // Lazy texture creation: JS executes before InitWindow on Android.
@@ -2814,8 +3121,27 @@ JSValue JS_createExternalView(JSContext* ctx, JSValue, int argc, JSValueConst* a
             dst.height += t + raym3::v2::Density::PxToDp(ev.insetB);
         }
         Rectangle src{0, 0, (float)ev.texture.width, (float)ev.texture.height};
-        DrawTexturePro(ev.texture, src, dst, {0, 0}, 0.0f, WHITE);
+        DrawTexturePro(
+            ev.texture, src, dst, {0, 0}, 0.0f,
+            ColorAlpha(WHITE, raym3::v2::CurrentRenderOpacity()));
     });
+    node->externalViewId = id;
+    if (argc >= 2 && JS_IsObject(argv[1])) {
+        node->externalViewPreservesFrameworkUnderlay =
+            jsGetBool(ctx, argv[1], "preserveFrameworkUnderlay", false);
+        JSValue behaviorValue = JS_GetPropertyStr(ctx, argv[1], "hitTestBehavior");
+        const char* behavior = JS_IsString(behaviorValue)
+            ? JS_ToCString(ctx, behaviorValue) : nullptr;
+        if (behavior && std::strcmp(behavior, "transparent") == 0) {
+            node->externalViewHitTestBehavior =
+                raym3::v2::ExternalViewHitTestBehavior::Transparent;
+        } else if (behavior && std::strcmp(behavior, "translucent") == 0) {
+            node->externalViewHitTestBehavior =
+                raym3::v2::ExternalViewHitTestBehavior::Translucent;
+        }
+        if (behavior) JS_FreeCString(ctx, behavior);
+        JS_FreeValue(ctx, behaviorValue);
+    }
 
     // Stub animates continuously; real producers wake frames via requestFrame.
     if (isStub) node->alwaysAnimates = true;
@@ -2828,22 +3154,120 @@ JSValue JS_createExternalView(JSContext* ctx, JSValue, int argc, JSValueConst* a
 #if defined(RAYACT_ANDROID) || defined(__ANDROID__)
         m = raym3::v2::Density::PxToDp(m);
 #endif
-        g_externalViewInputCb(id, 1 /*up=tap*/, m.x - layoutRect->x, m.y - layoutRect->y);
+        auto it = g_externalViews.find(id);
+        if (it == g_externalViews.end()) return;
+        g_externalViewInputCb(it->second.surfaceId, id, 1 /*up=tap*/,
+                              m.x - layoutRect->x, m.y - layoutRect->y);
     };
 
     g_nodes[id] = node;
     ExternalViewEntry ev;
     ev.kind = kind;
     ev.nodeId = id;
+    ev.surfaceId = g_currentScreenId;
     ev.layoutRect = layoutRect;
+    const std::string propsJson =
+        argc >= 2 ? serializeExternalViewProps(ctx, argv[1], false) : "{}";
+    ev.createPropsJson = propsJson;
     g_externalViews[id] = std::move(ev);
     if (argc >= 2 && JS_IsObject(argv[1])) captureNodeClassName(ctx, id, argv[1]);
+    if (g_externalViewCreateCb)
+        g_externalViewCreateCb(g_currentScreenId, id, kind.c_str(), propsJson.c_str());
     return JS_NewInt32(ctx, id);
 }
 
-// setExternalViewProps(nodeId, propsObj) — forwards producer-relevant props
-// (value, placeholder, inputType, secure, focused) to the platform host as
-// key/value strings.
+// Re-fire `create` for every external view that already exists. A host whose
+// view hierarchy only comes up after the app's first commit (desktop: the
+// window is opened after the JS has built its tree) would otherwise never hear
+// about those nodes, and their platform views would never appear.
+void rayactReplayExternalViewCreates() {
+    if (!g_externalViewCreateCb) return;
+    for (const auto& [nodeId, entry] : g_externalViews) {
+        g_externalViewCreateCb(entry.surfaceId, nodeId, entry.kind.c_str(),
+                               entry.createPropsJson.c_str());
+    }
+}
+
+// Push the engine-resolved text appearance of a mobile text field down to its
+// native editor child.
+//
+// JS can only see inline styles, so a field styled through CSS (`className`)
+// would hand the editor a fallback color — Codesitter's `.field { color:#fff }`
+// rendered as near-invisible text on iOS, where the fallback theme resolves
+// dark. The engine is the only side that knows the resolved cascade, so it
+// owns this sync.
+void syncNativeEditorAppearance(int nodeId) {
+    if (!g_externalViewPropsCb || !IsWindowReady()) return;
+    auto nodeIt = g_nodes.find(nodeId);
+    if (nodeIt == g_nodes.end() || !nodeIt->second) return;
+    const raym3::v2::NodePtr& node = nodeIt->second;
+    if (node->kind != raym3::v2::NodeKind::TextInput ||
+        !node->textInput.nativeEditor)
+        return;
+    const raym3::v2::Style& style = node->style;
+    const raym3::v2::TextInputProps& ti = node->textInput;
+
+    for (const raym3::v2::NodePtr& child : node->children) {
+        if (!child || child->externalViewId == 0) continue;
+        auto evIt = g_externalViews.find(child->externalViewId);
+        if (evIt == g_externalViews.end()) continue;
+        if (evIt->second.kind != "rayact.internal.text-input") continue;
+
+        std::ostringstream json;
+        json << '{';
+        bool first = true;
+        auto putColor = [&](const char* key, const std::optional<Color>& value) {
+            if (!value) return;
+            const Color c = *value;
+            const unsigned int rgba = ((unsigned int)c.r << 24) |
+                                      ((unsigned int)c.g << 16) |
+                                      ((unsigned int)c.b << 8) |
+                                      (unsigned int)c.a;
+            if (!first) json << ',';
+            json << '"' << key << "\":" << rgba;
+            first = false;
+        };
+        // Resolution order, highest first: the react-native prop the caller
+        // passed explicitly, then the resolved CSS/style cascade, then the
+        // theme. The engine is the only side that can see all three, so it
+        // owns the value the editor gets — JS no longer sends theme guesses
+        // that would race the cascade.
+        const raym3::ColorScheme& scheme = raym3::Theme::GetColorScheme();
+        auto pick = [](bool hasProp, Color prop,
+                       const std::optional<Color>& styleValue,
+                       Color fallback) -> std::optional<Color> {
+            if (hasProp) return prop;
+            if (styleValue) return *styleValue;
+            return fallback;
+        };
+        putColor("textColor",
+                 style.text.color ? style.text.color
+                                  : std::optional<Color>(scheme.onSurface));
+        putColor("placeholderColor",
+                 pick(ti.hasPlaceholderColor, ti.placeholderColor,
+                      style.placeholderColor, scheme.onSurfaceVariant));
+        putColor("cursorColor",
+                 pick(ti.hasCursorColor, ti.cursorColor, style.caretColor,
+                      scheme.primary));
+        putColor("selectionColor",
+                 pick(ti.hasSelectionColor, ti.selectionColor,
+                      style.selectionColor,
+                      ColorAlpha(scheme.primary, 0.3f)));
+        if (style.text.fontSize) {
+            if (!first) json << ',';
+            json << "\"fontSize\":" << *style.text.fontSize;
+        }
+        json << '}';
+        const std::string payload = json.str();
+        if (payload == evIt->second.lastAppearanceJson) return;
+        evIt->second.lastAppearanceJson = payload;
+        g_externalViewPropsCb(evIt->second.surfaceId, child->externalViewId,
+                              payload.c_str());
+        return;
+    }
+}
+
+// setExternalViewProps(nodeId, propsObj) — forwards one JSON-safe patch.
 JSValue JS_setExternalViewProps(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
     if (argc < 2) return JS_ThrowTypeError(ctx, "setExternalViewProps: expected (nodeId, props)");
     int id;
@@ -2851,26 +3275,9 @@ JSValue JS_setExternalViewProps(JSContext* ctx, JSValue, int argc, JSValueConst*
     auto it = g_externalViews.find(id);
     if (it == g_externalViews.end()) return JS_UNDEFINED;
 
-    JSValue fv = JS_GetPropertyStr(ctx, argv[1], "focused");
-    if (!JS_IsUndefined(fv)) {
-        bool want = JS_ToBool(ctx, fv) != 0;
-        if (want != it->second.focused) {
-            it->second.focused = want;
-            if (g_externalViewPropCb)
-                g_externalViewPropCb(id, "focused", want ? "1" : "0");
-        }
-    }
-    JS_FreeValue(ctx, fv);
-
-    static const char* kForwarded[] = {"value", "placeholder", "inputType", "secure"};
-    for (const char* key : kForwarded) {
-        JSValue v = JS_GetPropertyStr(ctx, argv[1], key);
-        if (!JS_IsUndefined(v) && !JS_IsNull(v)) {
-            const char* str = JS_ToCString(ctx, v);
-            if (str && g_externalViewPropCb) g_externalViewPropCb(id, key, str);
-            if (str) JS_FreeCString(ctx, str);
-        }
-        JS_FreeValue(ctx, v);
+    if (g_externalViewPropsCb && JS_IsObject(argv[1])) {
+        const std::string propsJson = serializeExternalViewProps(ctx, argv[1], true);
+        g_externalViewPropsCb(it->second.surfaceId, id, propsJson.c_str());
     }
     return JS_UNDEFINED;
 }
@@ -2887,6 +3294,15 @@ JSValue JS_focusTextInput(JSContext* ctx, JSValue, int argc, JSValueConst* argv)
     auto it = g_nodes.find(id);
     if (it == g_nodes.end() || !it->second) return JS_UNDEFINED;
     raym3::v2::NodeId nid = raym3::v2::IdOf(it->second);
+    // Focus lives on the screen's RenderContext, but this JS entry point runs
+    // between frames on the thread-default context (the render loop binds the
+    // screen context only for the duration of a frame). Bind the focused
+    // screen's context so the write lands where ResolveTextInput and
+    // PaintTextInput will read it.
+    raym3::v2::RenderContext* prevContext =
+        raym3::v2::GetCurrentRenderContext();
+    raym3::v2::SetCurrentRenderContext(
+        &engineGetScreenRenderContext(engineGetFocusedScreenId()));
     if (focus) {
         if (raym3::v2::GetFocusedId() == nid) {
             // Already focused: no focus transition, so the per-frame watcher
@@ -2900,6 +3316,7 @@ JSValue JS_focusTextInput(JSContext* ctx, JSValue, int argc, JSValueConst* argv)
     } else if (raym3::v2::GetFocusedId() == nid) {
         raym3::v2::SetFocusedId(0);
     }
+    raym3::v2::SetCurrentRenderContext(prevContext);
     workerRequestRenderFrame();
     return JS_UNDEFINED;
 }
@@ -3655,6 +4072,7 @@ JSValue JS_appendChild(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
     detachFromCurrentParent(childId, cit->second);
     appendChildPreservingNavLabel(pit->second, cit->second);
     g_nodeParents[childId] = parentId;
+    syncNativeEditorAppearance(parentId);
     {
         raym3::Mutation m;
         m.op = raym3::MutationOp::AppendChild;
@@ -4117,6 +4535,7 @@ JSValue JS_setStyle(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueConst
     if (jsHasProperty(ctx, argv[1], "capturesInput"))
         it->second->capturesInput = jsGetBool(ctx, argv[1], "capturesInput", false);
     captureNodeClassName(ctx, id, argv[1]);
+    syncNativeEditorAppearance(id);
     return JS_UNDEFINED;
 }
 
@@ -4173,6 +4592,34 @@ JSValue JS_setTextInputProps(JSContext* ctx, JSValue, int argc, JSValueConst* ar
         return JS_UNDEFINED;
     if (!JS_IsObject(argv[1])) return JS_UNDEFINED;
 
+    if (jsHasProperty(ctx, argv[1], "nativeEditor"))
+        it->second->textInput.nativeEditor =
+            jsGetBool(ctx, argv[1], "nativeEditor", false);
+    if (jsHasProperty(ctx, argv[1], "placeholder"))
+        it->second->textInput.placeholder =
+            jsGetString(ctx, argv[1], "placeholder");
+    if (jsHasProperty(ctx, argv[1], "label"))
+        it->second->textInput.label = jsGetString(ctx, argv[1], "label");
+    if (jsHasProperty(ctx, argv[1], "variant")) {
+        const std::string variant = jsGetString(ctx, argv[1], "variant");
+        if (variant == "filled")
+            it->second->textInput.variant = raym3::TextFieldVariant::Filled;
+        else if (variant == "outlined")
+            it->second->textInput.variant = raym3::TextFieldVariant::Outlined;
+        else if (variant == "underline")
+            it->second->textInput.variant = raym3::TextFieldVariant::Underline;
+        else if (variant == "plain")
+            it->second->textInput.variant = raym3::TextFieldVariant::Plain;
+    }
+    if (jsHasProperty(ctx, argv[1], "drawBackground"))
+        it->second->textInput.drawBackground =
+            jsGetBool(ctx, argv[1], "drawBackground", true);
+    if (jsHasProperty(ctx, argv[1], "drawOutline"))
+        it->second->textInput.drawOutline =
+            jsGetBool(ctx, argv[1], "drawOutline", true);
+    if (jsHasProperty(ctx, argv[1], "drawStateLayer"))
+        it->second->textInput.drawStateLayer =
+            jsGetBool(ctx, argv[1], "drawStateLayer", true);
     if (jsHasProperty(ctx, argv[1], "multiline"))
         it->second->textInput.multiline = jsGetBool(ctx, argv[1], "multiline", false);
     if (jsHasProperty(ctx, argv[1], "blurOnSubmit"))
@@ -4201,6 +4648,39 @@ JSValue JS_setTextInputProps(JSContext* ctx, JSValue, int argc, JSValueConst* ar
     if (jsHasProperty(ctx, argv[1], "contextMenuHidden"))
         it->second->textInput.contextMenuHidden =
             jsGetBool(ctx, argv[1], "contextMenuHidden", false);
+    if (jsHasProperty(ctx, argv[1], "caretHidden"))
+        it->second->textInput.caretHidden =
+            jsGetBool(ctx, argv[1], "caretHidden", false);
+    if (jsHasProperty(ctx, argv[1], "selectTextOnFocus"))
+        it->second->textInput.selectTextOnFocus =
+            jsGetBool(ctx, argv[1], "selectTextOnFocus", false);
+    if (jsHasProperty(ctx, argv[1], "maxLength")) {
+        auto maxLength = jsGetFloat(ctx, argv[1], "maxLength");
+        it->second->textInput.maxLength = maxLength ? (int)*maxLength : 0;
+    }
+    if (jsHasProperty(ctx, argv[1], "textAlign")) {
+        const std::string alignment = jsGetString(ctx, argv[1], "textAlign");
+        it->second->textInput.textAlign =
+            alignment.empty() ? "auto" : alignment;
+    }
+    if (jsHasProperty(ctx, argv[1], "selectionColor")) {
+        auto color = jsGetColor(ctx, argv[1], "selectionColor");
+        it->second->textInput.hasSelectionColor = color.has_value();
+        if (color) it->second->textInput.selectionColor = *color;
+    }
+    if (jsHasProperty(ctx, argv[1], "cursorColor")) {
+        auto color = jsGetColor(ctx, argv[1], "cursorColor");
+        it->second->textInput.hasCursorColor = color.has_value();
+        if (color) it->second->textInput.cursorColor = *color;
+    }
+    if (jsHasProperty(ctx, argv[1], "placeholderTextColor")) {
+        auto color = jsGetColor(ctx, argv[1], "placeholderTextColor");
+        it->second->textInput.hasPlaceholderColor = color.has_value();
+        if (color) it->second->textInput.placeholderColor = *color;
+    }
+    // Prop-level color overrides changed the resolution — re-push to the
+    // platform editor.
+    syncNativeEditorAppearance(id);
     return JS_UNDEFINED;
 }
 
@@ -4280,7 +4760,8 @@ JSValue JS_disposeNode(JSContext* ctx, JSValue /*this_val*/, int argc, JSValueCo
 
     auto evIt = g_externalViews.find(id);
     if (evIt != g_externalViews.end()) {
-        if (g_externalViewDisposeCb) g_externalViewDisposeCb(id);
+        if (g_externalViewDisposeCb)
+            g_externalViewDisposeCb(evIt->second.surfaceId, id);
         if (!evIt->second.externalTexture &&
             evIt->second.texture.id != 0 && IsWindowReady())
             UnloadTexture(evIt->second.texture);
@@ -5129,6 +5610,7 @@ void engineDestroyScreen(int id) {
         for (auto& [k, v] : it->second.scrollCallbacks) JS_FreeValue(g_bridge_ctx, v);
         for (auto& [k, v] : it->second.requestCloseCallbacks) JS_FreeValue(g_bridge_ctx, v);
     }
+    g_screenRenderContexts.erase(id);
     g_screens.erase(it);
 }
 
@@ -5147,6 +5629,12 @@ const raym3::v2::NodePtr& engineGetScreenRoot(int id) {
     auto it = g_screens.find(id);
     if (it == g_screens.end()) return nullPtr;
     return it->second.root;
+}
+
+raym3::v2::RenderContext& engineGetScreenRenderContext(int id) {
+    auto& context = g_screenRenderContexts[id];
+    context.surfaceId = static_cast<uint64_t>(id);
+    return context;
 }
 
 void engineForEachScreen(const std::function<void(int, const raym3::v2::NodePtr&)>& fn) {
@@ -5289,6 +5777,12 @@ static raym3::v2::Node* focusedRaym3TextInputForIme() {
     if (!id) return nullptr;
     auto* node = reinterpret_cast<raym3::v2::Node*>(id);
     if (!node || node->kind != raym3::v2::NodeKind::TextInput) return nullptr;
+    // A native editor (NSTextField / platform view) owns editing for this
+    // node; raym3 holds focus only for the Material chrome. Routing keys into
+    // the raym3 IME here would fight the editor's own NSTextInputContext —
+    // the activation flip-flop blurred the field after every keystroke, and
+    // the shortcut table ate backspace/arrows/cmd-A outright.
+    if (node->textInput.nativeEditor) return nullptr;
     return node;
 }
 
@@ -5522,6 +6016,7 @@ extern "C" void rayactMacImeCaretRect(float* x, float* y, float* w, float* h) {
 #if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
 struct Raym3RuntimeStorage {
     std::map<int, ScreenState> screens;
+    std::map<int, raym3::v2::RenderContext> screenRenderContexts;
     int currentScreenId = 0;
     int nextScreenId = 1;
     int nextNodeId = 1;
@@ -5580,6 +6075,7 @@ void raym3BridgeDeleteRuntimeStorage(Raym3RuntimeStorage* storage) {
 void raym3BridgeExportRuntimeStorage(Raym3RuntimeStorage& out) {
     raym3UnloadGpuCaches();
     out.screens = std::move(g_screens);
+    out.screenRenderContexts = std::move(g_screenRenderContexts);
     out.currentScreenId = g_currentScreenId;
     out.nextScreenId = g_nextScreenId;
     out.nextNodeId = g_nextNodeId;
@@ -5622,6 +6118,7 @@ void raym3BridgeExportRuntimeStorage(Raym3RuntimeStorage& out) {
 void raym3BridgeImportRuntimeStorage(const Raym3RuntimeStorage& in) {
     raym3BridgeClearRuntimeGlobals();
     g_screens = in.screens;
+    g_screenRenderContexts = in.screenRenderContexts;
     g_currentScreenId = in.currentScreenId;
     g_nextScreenId = in.nextScreenId;
     g_nextNodeId = in.nextNodeId;
@@ -5668,6 +6165,7 @@ void raym3BridgeImportRuntimeStorage(const Raym3RuntimeStorage& in) {
 
 void raym3BridgeClearRuntimeGlobals() {
     g_screens.clear();
+    g_screenRenderContexts.clear();
     g_currentScreenId = 0;
     g_nextScreenId = 1;
     g_nextNodeId = 1;
@@ -5786,6 +6284,7 @@ void cleanupRaym3Bridge(JSContext* ctx, bool unloadGpuCaches) {
     g_scrollCallbacks.clear();
     g_requestCloseCallbacks.clear();
     g_screens.clear();
+    g_screenRenderContexts.clear();
     g_screenStack.clear();
     g_root = nullptr;
     g_bridge_ctx = nullptr;
@@ -6621,6 +7120,7 @@ static void batchAppendChildTolerant(int parentId, int childId) {
     detachFromCurrentParent(childId, cit->second);
     appendChildPreservingNavLabel(pit->second, cit->second);
     g_nodeParents[childId] = parentId;
+    syncNativeEditorAppearance(parentId);
     rayact::shadowTree().appendChild((uint32_t)parentId, (uint32_t)childId);
 }
 
@@ -7174,6 +7674,9 @@ size_t applyStyleEntryBinary(int32_t keyId, const uint8_t* val, raym3::v2::Style
         case 54: s.borderRightColor  = colorFromUint(cmdReadU32(val)); return 4;
         case 55: s.borderBottomColor = colorFromUint(cmdReadU32(val)); return 4;
         case 56: s.borderLeftColor   = colorFromUint(cmdReadU32(val)); return 4;
+        case 57: s.placeholderColor  = colorFromUint(cmdReadU32(val)); return 4;
+        case 58: s.caretColor        = colorFromUint(cmdReadU32(val)); return 4;
+        case 59: s.selectionColor    = colorFromUint(cmdReadU32(val)); return 4;
         case 60: switch (cmdReadI32(val)) {
             case 0: s.flexDirection = raym3::v2::FlexDirection::Row; break;
             case 1: s.flexDirection = raym3::v2::FlexDirection::Column; break;
@@ -7602,6 +8105,7 @@ static void applyCommandBufferCtx(const uint8_t* base, size_t len, RcmdWorkerCtx
                     // optional Style struct per update.
                     off = readStyleRun(base, off, len, it->second->style);
                     rayact::shadowTree().setStyle((uint32_t)it->first, it->second->style);
+                    syncNativeEditorAppearance(it->first);
                 } else {
                     // Unknown node: still consume the run to keep the stream
                     // in sync.
@@ -7656,6 +8160,10 @@ static void applyCommandBufferCtx(const uint8_t* base, size_t len, RcmdWorkerCtx
                     if (it->second->style.animations)
                         raym3::v2::ApplyStyleWithAnimations(it->second, it->second->style,
                                                             it->second->style);
+                    // Class-derived editing colors have to reach the platform
+                    // editor too — this is the path every className node takes
+                    // under the binary command buffer.
+                    syncNativeEditorAppearance(it->first);
                 }
                 break;
             }
@@ -7676,6 +8184,7 @@ static void applyCommandBufferCtx(const uint8_t* base, size_t len, RcmdWorkerCtx
                 if (it != g_nodes.end() && it->second) {
                     applySlabEntryToStyle(entry, it->second->style);
                     rayact::shadowTree().setStyle((uint32_t)it->first, it->second->style);
+                    syncNativeEditorAppearance(it->first);
                 }
                 g_styleSlab[(size_t)slot * rayact::kStyleSlabWords + rayact::kSlabDirty] = 0;
                 break;

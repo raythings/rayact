@@ -62,6 +62,7 @@ export function MaterialGallery() {
   const [chipSelected, setChipSelected] = useState(true);
   const [message, setMessage] = useState('Tap any component');
   const [textValue, setTextValue] = useState('');
+  const [notchValue, setNotchValue] = useState('');
   const [searchValue, setSearchValue] = useState('');
   const [showDialog, setShowDialog] = useState(false);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
@@ -120,7 +121,8 @@ export function MaterialGallery() {
         <ExtendedFab label={enabled ? 'Compose' : 'Composed'} onPress={() => { setEnabled(!enabled); setMessage('Extended FAB pressed'); }}>
           <Icon name="edit" size={24} />
         </ExtendedFab>
-        <TextInput value={textValue} placeholder="Text field" onChangeText={(value) => { setTextValue(value); setMessage('TextInput changed'); }} />
+        {/* Bare TextInput is the RN-parity plain input: no M3 chrome. */}
+        <TextInput value={textValue} placeholder="Plain text input" onChangeText={(value) => { setTextValue(value); setMessage('TextInput changed'); }} />
         <TextField
           value={textValue}
           variant="filled"
@@ -134,6 +136,14 @@ export function MaterialGallery() {
           label="Outlined text field"
           onChangeText={(value) => { setTextValue(value); setMessage('Outlined changed'); }}
           onFocus={() => setMessage('Outlined focused')}
+        />
+        {/* Starts empty: focus it to watch the label float into the notch. */}
+        <TextField
+          value={notchValue}
+          variant="outlined"
+          label="Outlined notch demo"
+          onChangeText={(value) => { setNotchValue(value); setMessage('Notch demo changed'); }}
+          onFocus={() => setMessage('Notch demo focused')}
         />
         <TextField
           value={textValue}

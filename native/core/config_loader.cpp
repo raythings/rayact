@@ -40,6 +40,8 @@ bool exists(const char* path)
     return true;
 }
 
+void applyWindowConfig(JSContext* ctx, JSValue cfg, AppConfig& out);
+
 // Apply the `rayact` key of `cfg` to `out`. Walks known fields and leaves
 // everything else at the default.
 void applyConfig(JSContext* ctx, JSValue cfg, AppConfig& out)
@@ -57,6 +59,44 @@ void applyConfig(JSContext* ctx, JSValue cfg, AppConfig& out)
             memcpy(out.backgroundColor, rgba, 4);
     }
     JS_FreeValue(ctx, bg);
+
+    applyWindowConfig(ctx, cfg, out);
+}
+
+// Window title/size, shared by the `rayact` key and rayact.config.json's
+// top level. Only writes fields the file actually specifies, so a later
+// (higher-priority) file can fill in what an earlier one left alone.
+void applyWindowConfig(JSContext* ctx, JSValue cfg, AppConfig& out)
+{
+    if (!JS_IsObject(cfg)) return;
+
+    // `title` wins over `name`: rayact.config.json's `name` is the package
+    // identifier, which is a reasonable fallback but a poor window title.
+    for (const char* key : { "name", "title" }) {
+        JSValue v = JS_GetPropertyStr(ctx, cfg, key);
+        if (JS_IsString(v)) {
+            const char* s = JS_ToCString(ctx, v);
+            if (s) {
+                if (*s) out.title = s;
+                JS_FreeCString(ctx, s);
+            }
+        }
+        JS_FreeValue(ctx, v);
+    }
+
+    JSValue window = JS_GetPropertyStr(ctx, cfg, "window");
+    if (JS_IsObject(window)) {
+        JSValue w = JS_GetPropertyStr(ctx, window, "width");
+        JSValue h = JS_GetPropertyStr(ctx, window, "height");
+        int32_t value = 0;
+        if (JS_IsNumber(w) && JS_ToInt32(ctx, &value, w) == 0 && value > 0)
+            out.windowWidth = value;
+        if (JS_IsNumber(h) && JS_ToInt32(ctx, &value, h) == 0 && value > 0)
+            out.windowHeight = value;
+        JS_FreeValue(ctx, w);
+        JS_FreeValue(ctx, h);
+    }
+    JS_FreeValue(ctx, window);
 }
 
 bool tryJson(const char* path, AppConfig& out)
@@ -79,6 +119,30 @@ bool tryJson(const char* path, AppConfig& out)
     }
     JS_FreeValue(tmp, parsed);
     JS_FreeContext(tmp);
+    return ok;
+}
+
+// rayact.config.json is the CLI/dev-server project file. It has no `rayact`
+// wrapper — `name`, `title` and `window` sit at the top level. Only the window
+// fields are read here; backgroundColor stays an app.json concern.
+bool tryRayactConfigJson(const char* path, AppConfig& out)
+{
+    std::string text = readFileText(path);
+    if (text.empty()) return false;
+
+    JSRuntime* rt = JS_NewRuntime();
+    if (!rt) return false;
+    JSContext* tmp = JS_NewContext(rt);
+    if (!tmp) { JS_FreeRuntime(rt); return false; }
+    JSValue parsed = JS_ParseJSON(tmp, text.c_str(), text.size(), path);
+    bool ok = false;
+    if (!JS_IsException(parsed) && JS_IsObject(parsed)) {
+        applyWindowConfig(tmp, parsed, out);
+        ok = true;
+    }
+    JS_FreeValue(tmp, parsed);
+    JS_FreeContext(tmp);
+    JS_FreeRuntime(rt);
     return ok;
 }
 
@@ -208,13 +272,24 @@ bool parseColorValue(JSContext* ctx, JSValue v, uint8_t out[4])
 
 AppConfig loadAppConfig(JSContext* ctx, const char* assetsPath)
 {
-    AppConfig cfg;  // start from defaults
+    // Layer onto whatever is already loaded rather than resetting to defaults:
+    // hosts search more than one directory (desktop looks in the CWD and then
+    // next to the bundle), and a directory with no config must not wipe what an
+    // earlier one found. Each call still overrides the fields it does specify.
+    AppConfig cfg = g_config;
     g_assetsPath = (assetsPath && *assetsPath) ? assetsPath : "";
     if (!assetsPath || !*assetsPath) return cfg;
 
     // Try each file in priority order. The first one that parses AND has a
     // `rayact` key wins. Subsequent files are skipped.
     char path[1024];
+
+    // Window/title first and unconditionally: rayact.config.json is the file
+    // projects actually have, and the `rayact`-key chain below overrides
+    // whatever it set. It never short-circuits that chain.
+    snprintf(path, sizeof(path), "%s/rayact.config.json", assetsPath);
+    if (tryRayactConfigJson(path, cfg))
+        TraceLog(LOG_INFO, "RAYACT: loaded window config from %s", path);
 
     snprintf(path, sizeof(path), "%s/app.json", assetsPath);
     if (tryJson(path, cfg)) {

@@ -32,6 +32,7 @@ export default defineConfig({
           { text: 'Tailwind CSS', link: '/guide/tailwind' },
           { text: 'Animation', link: '/guide/animation' },
           { text: 'Navigation', link: '/guide/navigation' },
+          { text: 'File-based routing', link: '/guide/router' },
           { text: 'Fonts & icons', link: '/guide/fonts-and-icons' },
           { text: 'Workers & WASM', link: '/guide/workers' },
           { text: 'Native modules', link: '/native-modules' },

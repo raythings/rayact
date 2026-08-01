@@ -7,6 +7,7 @@ const buildOrder = [
   '@rayact/renderer',
   '@rayact/react',
   '@rayact/navigation',
+  '@rayact/router',
   '@rayact/worklets',
   '@rayact/prebuild',
   '@rayact/dev-server',

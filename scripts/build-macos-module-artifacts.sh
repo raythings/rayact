@@ -2,14 +2,16 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-for package_name in rayact-mmkv rayact-secure-store rayact-crash-reporter rayact-svg; do
+for package_name in rayact-mmkv rayact-secure-store rayact-crash-reporter rayact-svg rayact-webview; do
   library_name="${package_name#rayact-}"
   library_name="rayact_${library_name//-/_}"
   for arch in arm64 x86_64; do
     package_arch="$arch"
     [[ "$arch" == "x86_64" ]] && package_arch="x64"
     build_dir="$ROOT/build/modules-$package_arch/$package_name"
-    output_dir="$ROOT/packages/$package_name/darwin-$package_arch"
+    # Desktop artifacts are grouped under desktop/<platform>-<arch>/ so a package
+    # gains linux-x64 / windows-x64 siblings without cluttering its root.
+    output_dir="$ROOT/packages/$package_name/desktop/darwin-$package_arch"
     cmake -S "$ROOT/packages/$package_name/native" -B "$build_dir" \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_OSX_ARCHITECTURES="$arch" \

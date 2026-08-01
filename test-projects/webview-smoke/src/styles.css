@@ -1,0 +1,8 @@
+/* Text-field editing colors resolved from the cascade and forwarded to the
+   platform editor on every target (desktop, web, iOS, Android, macOS). */
+.tinted-field {
+  color: #ffd166;
+  placeholder-color: #ef476f;
+  caret-color: #06d6a0;
+  selection-color: #118ab2;
+}

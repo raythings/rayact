@@ -1,0 +1,10 @@
+{
+  "name": "emoji-verify",
+  "rayactAppKey": "emoji-verify",
+  "devServer": {
+    "host": "0.0.0.0",
+    "port": 8083,
+    "cdpPort": 9231
+  },
+  "entry": "src/App.tsx"
+}

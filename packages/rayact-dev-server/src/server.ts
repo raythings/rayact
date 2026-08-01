@@ -10,12 +10,14 @@ import {
   reactDevtoolsFrontendUrl,
   stockDevtoolsFrontendUrl
 } from '@rayact/devtools/server';
+import { resolveRayactPlugins } from '@rayact/prebuild';
 import type { ViteDevServer } from 'vite';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
   buildRayactBootstrap,
   buildRayactBundle,
   createRayactViteDevServer,
+  isBareEntrySpecifier,
   AssetRegistry,
   RAYACT_ENTRY_ID,
   RAYACT_BINARY_COMMANDS,
@@ -23,13 +25,27 @@ import {
   resolveProjectNativeModules,
   type RayactBuildOutput
 } from './bundler.js';
-import { loadRayactConfig } from './config.js';
+import { RESOLVED_RAYACT_ROUTES_ID } from '@rayact/router/vite';
+import { loadRayactConfig, resolveProjectEntry } from './config.js';
 import { listenWithFallback } from './listen.js';
 import { advertiseRayactServer } from './mdns.js';
 import { buildQrPayload } from './qr.js';
-import { createRayactModuleMiddleware, warmRayactModuleGraph, wrapRayactModule } from './rayactHostModule.js';
+import {
+  buildRayactDevBundle,
+  createRayactModuleMiddleware,
+  warmRayactModuleGraph,
+  wrapRayactModule
+} from './rayactHostModule.js';
 import { cleanupLegacyAdbCdpForwards } from './adb.js';
 import type { DebugMessage, RayactDevServer, RayactDevServerOptions } from './types.js';
+import {
+  discoverProjectCssFiles,
+  forgetMinifiedCssFile,
+  getMinifiedCssFile,
+  isCssFile,
+  primeCssCache,
+  refreshMinifiedCssFile
+} from './cssMinify.js';
 
 const DEVTOOLS_MAX_PAYLOAD = 16 * 1024 * 1024;
 const DEVTOOLS_MAX_BUFFERED = 16 * 1024 * 1024;
@@ -105,6 +121,9 @@ interface PlatformContext {
   assetRegistry: AssetRegistry;
   vite: ViteDevServer | null;
   middleware: ReturnType<typeof createRayactModuleMiddleware> | null;
+  /** Cached dev bundle; invalidated by the watcher, never rebuilt per request. */
+  moduleBundle: string | null;
+  moduleBundleInFlight: Promise<string> | null;
 }
 
 export function canonicalHmrPath(url: string | undefined, fallback: string): string {
@@ -377,14 +396,17 @@ function platformQuery(platform: DevPlatform): string {
 }
 
 function normalizeOptions(options: RayactDevServerOptions): Required<RayactDevServerOptions> {
-  const config = loadRayactConfig(options.root ?? process.cwd());
+  const root = path.resolve(options.root ?? process.cwd());
+  const config = loadRayactConfig(root);
   return {
-    root: path.resolve(options.root ?? process.cwd()),
+    root,
     name: options.name ?? config.name ?? config.android?.appName ?? 'Rayact',
     host: options.host ?? config.devServer?.host ?? '0.0.0.0',
     port: options.port ?? config.devServer?.port ?? 8081,
     strictPort: options.strictPort ?? config.devServer?.strictPort ?? false,
-    entry: options.entry ?? config.entry ?? 'test-projects/release-consumer-smoke/src/App.tsx',
+    entry:
+      options.entry ??
+      resolveProjectEntry(root, config.entry ?? 'test-projects/release-consumer-smoke/src/App.tsx'),
     platform: normalizePlatform(options.platform ?? config.platform, 'desktop'),
     rayactAppKey: options.rayactAppKey ?? config.rayactAppKey ?? 'rayact-app',
     cdpPort: options.cdpPort ?? config.devServer?.cdpPort ?? 9229,
@@ -407,6 +429,43 @@ function createWsBroadcast(wss: WebSocketServer) {
 export async function startRayactDevServer(rawOptions: RayactDevServerOptions): Promise<RayactDevServer> {
   const options = normalizeOptions(rawOptions);
   const nativeModules = resolveProjectNativeModules(options.root);
+  // Browser-side module scripts (manifest `web.script`). The release build
+  // injects <script> tags at stage time, but the dev flow serves the prebuilt
+  // rayact.html byte for byte, so the shell learns about them from the manifest
+  // and appends the tags itself. Load order does not matter: the platform-view
+  // registry parks creates for unclaimed kinds and replays them on registration.
+  // Mirror the release layout exactly (modules/<name>/<file>): a module fetches
+  // its own siblings — a .wasm, a worker — by relative URL, so dev and release
+  // must resolve those to the same shape or the module only works in one of them.
+  const webModuleScripts = resolveRayactPlugins(options.root)
+    .flatMap(plugin => {
+      const script = plugin.manifest.web?.script;
+      if (!script) return [];
+      return [{
+        name: plugin.name,
+        dir: path.dirname(path.join(plugin.packageDir, script)),
+        entry: path.basename(script),
+      }];
+    })
+    .filter(script => fs.existsSync(path.join(script.dir, script.entry)));
+
+  // Native web modules: the Emscripten side modules the host dlopens at boot, the
+  // peer of the .dylib desktop loads. Unlike the scripts above these are NOT
+  // fire-and-forget — the shell fetches them during preRun and holds main() back
+  // until each has registered, so a module missing here means the app boots without
+  // that node kind rather than late-registering it.
+  const webModuleWasm = resolveRayactPlugins(options.root)
+    .map(plugin => {
+      const artifact = plugin.manifest.artifacts?.find(candidate => candidate.platform === 'web');
+      if (!artifact) return null;
+      return {
+        name: plugin.name,
+        dir: path.join(plugin.packageDir, path.dirname(artifact.path)),
+        entry: path.basename(artifact.path),
+      };
+    })
+    .filter((module): module is { name: string; dir: string; entry: string } => module !== null)
+    .filter(module => fs.existsSync(path.join(module.dir, module.entry)));
   const devtoolsRoot = reactDevtoolsFrontendRoot();
 
   const server = http.createServer();
@@ -499,6 +558,58 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
   const contexts = new Map<DevPlatform, PlatformContext>();
   const hmrBroadcastClaims = new Map<string, number>();
 
+  /** `RAYACT_NO_DEV_BUNDLE=1` falls back to fetching modules one at a time. */
+  function devBundleDisabled(): boolean {
+    const flag = process.env.RAYACT_NO_DEV_BUNDLE;
+    return !!flag && flag !== '0' && flag.toLowerCase() !== 'false';
+  }
+
+  /**
+   * Build (or reuse) the single-request module bundle for a platform.
+   *
+   * Cached until something changes on disk — the watcher clears it — so repeat
+   * connects and reloads never pay for it twice. Concurrent callers share one
+   * in-flight build rather than each starting their own.
+   */
+  async function getModuleBundle(context: PlatformContext): Promise<string> {
+    if (context.moduleBundle) return context.moduleBundle;
+    if (context.moduleBundleInFlight) return context.moduleBundleInFlight;
+    const vite = context.vite;
+    if (!vite) return '';
+
+    const query = `?platform=${encodeURIComponent(context.platform)}`;
+    // Walk from the project's real entry file, not the virtual
+    // ENTRY_MODULE_PATH — the traversal locates the graph root by matching
+    // `node.file`, and `/rayact/entry.js` has no file on disk.
+    const bundleEntryPath = `/${options.entry}`;
+    const build = (async () => {
+      const started = Date.now();
+      console.log(`[rayact] bundling ${context.platform}…`);
+      const { code, moduleCount, skipped } = await buildRayactDevBundle(
+        vite,
+        bundleEntryPath,
+        query
+      );
+      const ms = Date.now() - started;
+      const kb = (Buffer.byteLength(code, 'utf8') / 1024).toFixed(0);
+      console.log(
+        `[rayact] bundled ${moduleCount} modules for ${context.platform} in ${ms}ms (${kb} KB)` +
+          (skipped ? ` — ${skipped} skipped, will load individually` : '')
+      );
+      context.moduleBundle = code;
+      return code;
+    })().finally(() => {
+      context.moduleBundleInFlight = null;
+    });
+
+    context.moduleBundleInFlight = build;
+    return build;
+  }
+
+  function invalidateModuleBundle(context: PlatformContext): void {
+    context.moduleBundle = null;
+  }
+
   function createPlatformContext(platform: DevPlatform): PlatformContext {
     const context: PlatformContext = {
       platform,
@@ -520,7 +631,9 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
       assets: [],
       assetRegistry: new AssetRegistry(options.root),
       vite: null,
-      middleware: null
+      middleware: null,
+      moduleBundle: null,
+      moduleBundleInFlight: null
     };
     contexts.set(platform, context);
     return context;
@@ -579,6 +692,21 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     const normalized = file.split(path.sep).join('/');
     const rel = path.relative(root, file).split(path.sep).join('/');
     if (rel.startsWith('..')) return;
+
+    // Adding or removing a file under the routes directory changes the
+    // generated virtual:rayact-routes manifest; its module-graph entry must be
+    // invalidated by hand (virtual modules have no backing file for the
+    // watcher to invalidate) before the full reload re-requests it.
+    const appDirPrefix = `${loadRayactConfig(root).router?.appDir ?? 'app'}/`;
+    if ((event === 'add' || event === 'unlink') && rel.startsWith(appDirPrefix)) {
+      const routesModule = context.vite.moduleGraph.getModuleById(RESOLVED_RAYACT_ROUTES_ID);
+      if (routesModule) context.vite.moduleGraph.invalidateModule(routesModule);
+      const timestamp = Date.now();
+      if (claimHmrBroadcast(hmrBroadcastClaims, `reload:routes:${event}:${rel}`, timestamp)) {
+        broadcastModuleHmr({ type: 'full-reload' });
+      }
+      return;
+    }
 
     if (event === 'unlink' || normalized.endsWith('rayact.config.json') || normalized.includes('/native/')) {
       const timestamp = Date.now();
@@ -648,9 +776,23 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
     if (!context.vite) {
       context.vite = await createRayactViteDevServer(context.bundleOptions, server, context.assetRegistry);
       context.middleware = createRayactModuleMiddleware(() => context.vite);
-      context.vite.watcher.on('change', file => broadcastModuleUpdates(context, file, 'change'));
-      context.vite.watcher.on('add', file => broadcastModuleUpdates(context, file, 'add'));
-      context.vite.watcher.on('unlink', file => broadcastModuleUpdates(context, file, 'unlink'));
+      // Re-minify a stylesheet the moment it changes, not when the next client
+      // asks for it, so an edit is already compact by the time HMR delivers it.
+      context.vite.watcher.on('change', file => {
+        if (isCssFile(file)) refreshMinifiedCssFile(file);
+        invalidateModuleBundle(context);
+        broadcastModuleUpdates(context, file, 'change');
+      });
+      context.vite.watcher.on('add', file => {
+        if (isCssFile(file)) refreshMinifiedCssFile(file);
+        invalidateModuleBundle(context);
+        broadcastModuleUpdates(context, file, 'add');
+      });
+      context.vite.watcher.on('unlink', file => {
+        if (isCssFile(file)) forgetMinifiedCssFile(file);
+        invalidateModuleBundle(context);
+        broadcastModuleUpdates(context, file, 'unlink');
+      });
     }
     if (!context.bootstrapCode && !context.bootstrapError) {
       await rebuildBootstrap(context);
@@ -660,15 +802,32 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
 
   await getContext(options.platform as DevPlatform);
 
+  // Minify the project's stylesheets up front rather than on the first request.
+  // The watcher above keeps them fresh afterwards, so a connecting dev client
+  // never waits on esbuild. Bounded walk; a stylesheet it misses just falls back
+  // to being minified lazily on first use.
+  {
+    const cssFiles = discoverProjectCssFiles(options.root);
+    const { primed, originalBytes, minifiedBytes } = primeCssCache(cssFiles);
+    if (primed > 0 && minifiedBytes < originalBytes) {
+      const pct = (100 * (1 - minifiedBytes / originalBytes)).toFixed(0);
+      console.log(`[rayact] minified ${primed} stylesheet${primed === 1 ? '' : 's'} ` +
+        `(${originalBytes} -> ${minifiedBytes} bytes, -${pct}%)`);
+    }
+  }
+
   // Warm each mobile platform's bootstrap AND its full module graph in the
   // background so the first dev-app connect doesn't pay cold vite/babel builds.
   // Two symptoms this kills: (1) the ~2MB bootstrap cold-building on tap (black
   // "frozen" pane), and (2) hundreds of modules cold-transformed one-by-one as
   // the device walks the graph synchronously ("several minutes to open" /
   // "dev server timeout"). Time-budgeted + concurrency-limited; never blocks.
+  // Bare module-specifier entries (@rayact/router/entry) have no project-file
+  // path to warm from; the graph warms on the first /rayact/entry.js request.
+  const entryIsBare = isBareEntrySpecifier(options.root, options.entry);
   const warmEntryPath = `/${options.entry}`;
   const warmPlatforms = new Set<DevPlatform>(['android', 'ios', options.platform as DevPlatform]);
-  for (const warmPlatform of options.bytecode ? [] : warmPlatforms) {
+  for (const warmPlatform of options.bytecode || entryIsBare ? [] : warmPlatforms) {
     void (async () => {
       const warmContext = await getContext(warmPlatform);
       if (warmContext.vite) {
@@ -800,6 +959,27 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
       return;
     }
 
+    if (requestUrl.pathname === '/rayact/dev-bundle.js') {
+      if (options.bytecode || devBundleDisabled()) {
+        sendBuffer(response, 200, Buffer.from('', 'utf8'), 'application/javascript; charset=utf-8');
+        return;
+      }
+      try {
+        const code = await getModuleBundle(context);
+        sendBuffer(response, 200, Buffer.from(code, 'utf8'), 'application/javascript; charset=utf-8');
+      } catch (error) {
+        // The device treats an `Error:` body as "no bundle" and falls back to
+        // per-module loading, so a bundling failure only costs startup time.
+        sendBuffer(
+          response,
+          200,
+          Buffer.from(`Error: [rayact:bundle] ${error instanceof Error ? error.message : String(error)}`, 'utf8'),
+          'text/plain; charset=utf-8'
+        );
+      }
+      return;
+    }
+
     if (requestUrl.pathname === '/rayact/manifest.json') {
       const entryModuleUrl = `${baseUrl}${ENTRY_MODULE_PATH}?${platformSuffix}`;
       const bootstrapUrl = `${baseUrl}/rayact/bootstrap.js?${platformSuffix}`;
@@ -820,6 +1000,10 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
         binaryCommands: RAYACT_BINARY_COMMANDS,
         bootstrapUrl: options.bytecode ? undefined : bootstrapUrl,
         entryModuleUrl: options.bytecode ? undefined : entryModuleUrl,
+        moduleBundleUrl:
+          options.bytecode || devBundleDisabled()
+            ? undefined
+            : `${baseUrl}/rayact/dev-bundle.js?${platformSuffix}`,
         bundleUrl,
         hmrUrl: options.bytecode ? undefined : `${wsBase}/rayact/hmr`,
         debuggerUrl: options.bytecode ? undefined : `${wsBase}/rayact/debugger`,
@@ -842,10 +1026,55 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
           url: `${baseUrl}/rayact/assets/${encodeURIComponent(asset.id)}/${encodeURIComponent(asset.name)}?${platformSuffix}`
         })),
         nativeModules,
+        webModuleScripts: webModuleScripts.map(script => ({
+          name: script.name,
+          url: `${baseUrl}/rayact/modules/${encodeURIComponent(script.name)}/${script.entry}`
+        })),
+        webModuleWasm: webModuleWasm.map(module => ({
+          name: module.name,
+          url: `${baseUrl}/rayact/modules/${encodeURIComponent(module.name)}/${module.entry}`
+        })),
         capabilities: options.bytecode
           ? ['bytecode']
           : ['hmr', 'cdp', ...DEVTOOLS_CAPABILITIES, 'inspector', 'module-hmr']
       });
+      return;
+    }
+
+    // Browser-side module files, served straight from the resolved package —
+    // the entry script and anything beside it (.wasm, workers) it fetches.
+    const moduleFileMatch = requestUrl.pathname.match(/^\/rayact\/modules\/([^/]+)\/(.+)$/);
+    if (moduleFileMatch) {
+      const name = decodeURIComponent(moduleFileMatch[1]);
+      // A package can appear in both lists (a browser script plus a side module);
+      // both resolve under the same package web/ directory, so either entry serves.
+      const script = webModuleScripts.find(candidate => candidate.name === name)
+        ?? webModuleWasm.find(candidate => candidate.name === name);
+      if (!script) {
+        sendText(response, 404, `unknown web module: ${name}`);
+        return;
+      }
+      // Resolve inside the module's directory and verify containment: the path
+      // comes from a URL, so `..` must not escape into the rest of the package.
+      const target = path.resolve(script.dir, decodeURIComponent(moduleFileMatch[2]));
+      const root = path.resolve(script.dir);
+      if (target !== root && !target.startsWith(root + path.sep)) {
+        sendText(response, 403, 'forbidden');
+        return;
+      }
+      if (!fs.existsSync(target) || !fs.statSync(target).isFile()) {
+        sendText(response, 404, `not found: ${moduleFileMatch[2]}`);
+        return;
+      }
+      const types: Record<string, string> = {
+        '.js': 'application/javascript; charset=utf-8',
+        '.mjs': 'application/javascript; charset=utf-8',
+        '.wasm': 'application/wasm',
+        '.json': 'application/json; charset=utf-8'
+      };
+      // sendBuffer already sets no-store, which is what dev wants.
+      sendBuffer(response, 200, fs.readFileSync(target),
+                 types[path.extname(target)] ?? 'application/octet-stream');
       return;
     }
 
@@ -878,6 +1107,17 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
         return;
       }
       try {
+        // Stylesheets fetched through this route (apps that call importCSSText
+        // themselves rather than `import`ing the file) get the same minified,
+        // pre-warmed text the module pipeline serves — otherwise a project that
+        // loads its CSS this way pays full size on every launch.
+        if (isCssFile(filePath)) {
+          const minified = getMinifiedCssFile(filePath);
+          if (minified) {
+            sendBuffer(response, 200, Buffer.from(minified.css, 'utf8'), mimeFor(filePath));
+            return;
+          }
+        }
         const data = await fs.promises.readFile(filePath);
         sendBuffer(response, 200, data, mimeFor(filePath));
       } catch (error) {
@@ -1267,7 +1507,9 @@ export async function startRayactDevServer(rawOptions: RayactDevServerOptions): 
 
   const url = `http://${publicHost(options.host)}:${options.port}`;
   const localUrl = `http://127.0.0.1:${options.port}`;
-  const entry = path.relative(options.root, path.resolve(options.root, options.entry));
+  const entry = isBareEntrySpecifier(options.root, options.entry)
+    ? options.entry
+    : path.relative(options.root, path.resolve(options.root, options.entry));
   const qrPayload = JSON.stringify(buildQrPayload({
     url,
     port: options.port

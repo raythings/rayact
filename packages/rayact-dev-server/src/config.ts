@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RayactNativeModuleSelection } from '@rayact/prebuild';
+import { findAppDir } from '@rayact/router/vite';
 
 export interface RayactTransformConfig {
   minify?: { dev?: boolean; debug?: boolean; release?: boolean };
@@ -66,6 +67,11 @@ export interface RayactConfig {
     /** Custom URL schemes generated into Android intent filters and iOS URL types. */
     schemes?: string[];
   };
+  /** File-based routing (@rayact/router) options. */
+  router?: {
+    /** Routes directory relative to the project root. Default "app". */
+    appDir?: string;
+  };
   /** Native plugin modules the host bundles / the project requires. */
   nativeModules?: RayactNativeModuleSelection[];
   transform?: RayactTransformConfig;
@@ -126,6 +132,32 @@ export function loadRayactConfig(root = process.cwd()): RayactConfig {
     console.warn(`rayact.config.json: failed to parse (${(err as Error).message}); using defaults`);
     return { ...DEFAULT_CONFIG };
   }
+}
+
+/**
+ * Project entry resolution with zero-wiring file-based routing:
+ *   1. an entry declared in rayact.config.json always wins;
+ *   2. else, a project with an app/ routes directory gets '@rayact/router/entry';
+ *   3. else, the caller-provided fallback (usually the merged config default).
+ * loadRayactConfig cannot express step 1 vs 3 itself — its DEFAULT_CONFIG merge
+ * makes config.entry always non-null — so the raw file is consulted here.
+ */
+export function resolveProjectEntry(root = process.cwd(), fallback = 'src/App.tsx'): string {
+  const configPath = path.join(root, 'rayact.config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) as { entry?: unknown };
+      if (typeof raw.entry === 'string' && raw.entry.trim()) return raw.entry;
+    } catch {
+      // Malformed config is reported by loadRayactConfig; fall through.
+    }
+  }
+  const config = loadRayactConfig(root);
+  if (findAppDir(root, config.router?.appDir)) {
+    console.log(`[rayact] Using file-based routing from ${config.router?.appDir ?? 'app'}/ (@rayact/router/entry)`);
+    return '@rayact/router/entry';
+  }
+  return fallback;
 }
 
 export function resolveAndroidPackageName(config: RayactConfig): string {

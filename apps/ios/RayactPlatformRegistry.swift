@@ -3,7 +3,31 @@ import Darwin
 
 typealias RayactPlatformCompletion = (Result<Data, Error>) -> Void
 typealias RayactPlatformModule = (_ method: String, _ payload: Data, _ completion: @escaping RayactPlatformCompletion) -> Void
-typealias RayactPlatformViewFactory = (_ nodeId: Int, _ properties: [String: Any]) -> UIView
+
+final class RayactPlatformViewContext {
+    let nodeId: Int
+    let initialProperties: [String: Any]
+    let emit: (String) -> Void
+
+    init(nodeId: Int, initialProperties: [String: Any], emit: @escaping (String) -> Void) {
+        self.nodeId = nodeId
+        self.initialProperties = initialProperties
+        self.emit = emit
+    }
+}
+
+protocol RayactPlatformViewController: AnyObject {
+    var view: UIView { get }
+    func setProperties(_ properties: [String: Any?])
+    func dispose()
+}
+
+extension RayactPlatformViewController {
+    func setProperties(_ properties: [String: Any?]) {}
+    func dispose() {}
+}
+
+typealias RayactPlatformViewFactory = (_ context: RayactPlatformViewContext) -> RayactPlatformViewController
 
 protocol RayactPlatformModuleRegistration {
     func register(with registry: RayactPlatformRegistry)
@@ -51,11 +75,20 @@ final class RayactPlatformRegistry {
         module(method, payload, completion)
     }
 
-    func makeView(_ kind: String, nodeId: Int, properties: [String: Any]) -> UIView? {
+    func makeViewController(
+        _ kind: String,
+        nodeId: Int,
+        properties: [String: Any],
+        emit: @escaping (String) -> Void
+    ) -> RayactPlatformViewController? {
         lock.lock()
         let factory = viewFactories[kind]
         lock.unlock()
-        return factory?(nodeId, properties)
+        return factory?(RayactPlatformViewContext(
+            nodeId: nodeId,
+            initialProperties: properties,
+            emit: emit
+        ))
     }
 
     func hasModule(_ name: String) -> Bool {
@@ -104,6 +137,7 @@ final class RayactPlatformRegistry {
         defer { initializationLock.unlock() }
         guard !initialized else { return }
         initialized = true
+        registerRayactNativeTextInput(with: shared)
         guard let symbol = dlsym(
             UnsafeMutableRawPointer(bitPattern: -2),
             "RayactRegisterGeneratedModules"

@@ -49,7 +49,10 @@ class NavigationHost @JvmOverloads constructor(
     fun installRoot(root: RayactSurfaceView, onReady: ((Int) -> Unit)? = null) {
         if (indexOfChild(root) >= 0) return
         rootSurfaceView = root
-        addView(root, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        addView(
+            RayactPlatformViewContainer(context, root),
+            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT),
+        )
         root.surfaceReadyListener = { sid ->
             rootSurfaceId = sid
             root.pushToFront()

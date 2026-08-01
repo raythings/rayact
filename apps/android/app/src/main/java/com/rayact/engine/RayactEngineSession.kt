@@ -20,6 +20,9 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
     }
     fun destroy() {
         if (com.rayact.app.BuildConfig.RAYACT_DEV_CLIENT) disableDevtools()
+        // JS never unmounts this session's nodes; native platform views must
+        // be detached explicitly or they outlive the session on screen.
+        RayactPlatformViews.releaseSession(this)
         RayactMobileNetwork.closeAll(nativeHandle)
         destroyed = true
         nativeDestroy(nativeHandle)
@@ -89,6 +92,9 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
     fun setKeyboardInsets(heightDp: Float, visible: Boolean, durationMs: Float) =
         nativeSetKeyboardInsets(nativeHandle, heightDp, visible, durationMs)
 
+    fun setSystemAppearance(isDark: Boolean) =
+        nativeSetSystemAppearance(nativeHandle, isDark)
+
     fun deliverURL(url: String?) {
         if (url.isNullOrBlank()) return
         try {
@@ -147,6 +153,17 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
     fun nativeSetExternalViewInsets(nodeId: Int, l: Float, t: Float, r: Float, b: Float) =
         nativeSetExternalViewInsets(nativeHandle, nodeId, l, t, r, b)
 
+    fun registerOverlaySurface(
+        surfaceId: Long, surface: Surface, width: Int, height: Int,
+    ): Boolean = nativeRegisterOverlaySurface(
+        nativeHandle, surfaceId, surface, width, height)
+
+    fun resizeOverlaySurface(surfaceId: Long, width: Int, height: Int) =
+        nativeResizeOverlaySurface(nativeHandle, surfaceId, width, height)
+
+    fun unregisterOverlaySurface(surfaceId: Long) =
+        nativeUnregisterOverlaySurface(nativeHandle, surfaceId)
+
     companion object {
         private val pendingURLs = ArrayDeque<String>()
 
@@ -169,6 +186,7 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
         const val TOUCH_DOWN = 0
         const val TOUCH_UP = 1
         const val TOUCH_MOVE = 2
+        const val TOUCH_CANCEL = 3
 
         @JvmStatic external fun nativeCreate(dataPath: String): Long
         @JvmStatic external fun nativeRegisterHost(handle: Long, callbacks: RayactEngineHostCallbacks)
@@ -188,6 +206,7 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
         @JvmStatic external fun nativeDevtoolsMessage(handle: Long, message: String)
         @JvmStatic external fun nativeSetSafeAreaInsets(handle: Long, top: Float, right: Float, bottom: Float, left: Float)
         @JvmStatic external fun nativeSetKeyboardInsets(handle: Long, heightDp: Float, visible: Boolean, durationMs: Float)
+        @JvmStatic external fun nativeSetSystemAppearance(handle: Long, isDark: Boolean)
         @JvmStatic external fun nativePushURL(url: String)
         @JvmStatic external fun nativeDestroySurface(handle: Long, surfaceId: Int)
         @JvmStatic external fun nativePushSurface(handle: Long, surfaceId: Int)
@@ -215,5 +234,15 @@ class RayactEngineSession private constructor(val nativeHandle: Long) {
         @JvmStatic external fun nativePushExternalViewFrame(handle: Long, nodeId: Int, buffer: android.hardware.HardwareBuffer)
         @JvmStatic external fun nativeExternalViewTextChanged(handle: Long, nodeId: Int, text: String)
         @JvmStatic external fun nativeSetExternalViewInsets(handle: Long, nodeId: Int, l: Float, t: Float, r: Float, b: Float)
+        @JvmStatic external fun nativeRegisterOverlaySurface(
+            handle: Long, surfaceId: Long, surface: Surface,
+            width: Int, height: Int,
+        ): Boolean
+        @JvmStatic external fun nativeResizeOverlaySurface(
+            handle: Long, surfaceId: Long, width: Int, height: Int,
+        )
+        @JvmStatic external fun nativeUnregisterOverlaySurface(
+            handle: Long, surfaceId: Long,
+        )
     }
 }

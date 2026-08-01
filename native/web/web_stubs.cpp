@@ -113,10 +113,9 @@ std::vector<uint8_t> webFetchBytes(const std::string& url) {
     return out;
 }
 
-void loadPlugins(const std::string& /*extraDir*/) {
-    // The generic Web host contains only built-in engine modules. Optional
-    // modules must supply a WASM artifact and be selected by a custom client.
-}
+// loadPlugins lives in web_plugin_loader.cpp: web modules are dlopen'd side
+// modules, so it is a real loader rather than a stub. Modules that ship browser
+// JavaScript (`web.script`) register themselves from the page and never reach it.
 void installDevClientBridge(JSContext* /*ctx*/, JSValue /*global*/) {}
 void devtoolsInit(JSContext* /*ctx*/) {}
 void devtoolsPump(JSContext* /*ctx*/) {}

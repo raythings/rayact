@@ -11,18 +11,40 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist", "README.md", "rayact.module.json"],
-  "rayact": { "manifest": "rayact.module.json" },
+  "files": [
+    "dist",
+    "android",
+    "ios",
+    "native",
+    "web",
+    "desktop",
+    "README.md",
+    "rayact.module.json"
+  ],
+  "rayact": {
+    "manifest": "rayact.module.json"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist"
   },
-  "dependencies": { "@rayact/react": "0.0.4" },
-  "peerDependencies": { "react": "^19.0.0" },
-  "engines": { "node": ">=22" },
-  "publishConfig": { "access": "public", "provenance": true },
+  "dependencies": {
+    "@rayact/react": "0.0.4"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "license": "MIT",
-  "maintainers": ["Rayact Maintainers"],
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/raythings/rayact.git",

@@ -22,6 +22,22 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(STATUS "rayact-web: defaulting CMAKE_BUILD_TYPE=Release (-O0 overflows V8's wasm call stack on deep React mount)")
 endif()
 
+# -O2, not CMake's default -O3 for Release. This is a hard requirement of dynamic
+# module loading, not a preference: at -O3 emscripten's wasm-opt drops the
+# __stack_pointer global export from a MAIN_MODULE, and every side module then fails
+# to instantiate with
+#   LinkError: Import "env" "__stack_pointer": imported mutable global must be a
+#   WebAssembly.Global object
+# No linker flag recovers it — neither -Wl,--export=__stack_pointer nor --export-all
+# survives the wasm-opt pass. -O2 keeps it. Verified by bisecting a minimal
+# -sMAIN_MODULE=2 build against this build's flags one at a time; -O3 was the only
+# one that mattered.
+foreach(_cfg RELEASE RELWITHDEBINFO MINSIZEREL)
+    string(REPLACE "-O3" "-O2" CMAKE_C_FLAGS_${_cfg} "${CMAKE_C_FLAGS_${_cfg}}")
+    string(REPLACE "-O3" "-O2" CMAKE_CXX_FLAGS_${_cfg} "${CMAKE_CXX_FLAGS_${_cfg}}")
+endforeach()
+add_link_options(-O2)
+
 # Pthreads (Phase 3: universal workers). -pthread switches WASM linear memory to a
 # SharedArrayBuffer and must be applied to EVERY translation unit (qjs/raylib/raym3/
 # yoga + the exe), or emscripten errors on a shared/non-shared memory mismatch. Set
@@ -48,6 +64,23 @@ endif()
 # Directory-wide so all C++ TUs share the same EH ABI.
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fwasm-exceptions>)
 add_link_options(-fwasm-exceptions)
+
+# Position-independent code, directory-wide, for the same reason it is directory-wide
+# above: every TU in the host has to agree.
+#
+# This is what makes the host a real MAIN_MODULE. Passing -sMAIN_MODULE=2 at link time
+# alone produces a binary that links, loads, and looks correct — but wasm-ld only emits
+# the dynamic-linking machinery when the objects are PIC, so the host never exports
+# __stack_pointer, and every side module dies at instantiate with
+#   LinkError: Import "env" "__stack_pointer": imported mutable global must be a
+#   WebAssembly.Global object
+# The failure surfaces only in a browser, at dlopen, long after a clean build.
+#
+# -sMAIN_MODULE=2 rather than plain -fPIC: emscripten treats this as a whole-build mode
+# (it sets RELOCATABLE, which is what actually emits the dylink section and the shared
+# __stack_pointer). -fPIC on its own changes codegen without setting it, and the host
+# then still fails to satisfy a side module.
+add_compile_options(-sMAIN_MODULE=2)
 
 # Repo layout: this file lives in <repo>/apps/web.
 get_filename_component(RAYACT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
@@ -153,26 +186,19 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# raysvg vector renderer (third_party submodule) — compiled against this
-# build's raylib headers so its rl* calls bind to the web backend in use
-# (rlwg WebGPU by default, GLES3 with RAYACT_WEB_WEBGL).
+# raysvg is deliberately NOT built here.
+#
+# Nothing in native/ or raym3/ calls rsvg* — it exists only to back @rayact/svg,
+# which on web is a dlopen'd side module that statically links its own copy
+# (packages/rayact-svg/rayact.module.json `web.sources`). Linking it into the host
+# too would put a second copy in every app, including apps that never render an
+# <Svg>, which is precisely what desktop avoids by shipping librayact_svg.dylib.
+#
+# Confirmed by the side module's import table: of its 133 imports, every rsvg::
+# and mapbox::earcut symbol is self-satisfied and none is requested from the host
+# (tools/web/module-imports.mjs).
 # ---------------------------------------------------------------------------
 set(RAYSVG_DIR "${THIRD_PARTY}/raysvg")
-add_library(raysvg STATIC
-    ${RAYSVG_DIR}/src/raysvg.cpp
-    ${RAYSVG_DIR}/src/rsvg_xml.cpp
-    ${RAYSVG_DIR}/src/rsvg_parse.cpp
-    ${RAYSVG_DIR}/src/rsvg_path.cpp
-    ${RAYSVG_DIR}/src/rsvg_paint.cpp
-    ${RAYSVG_DIR}/src/rsvg_transform.cpp
-    ${RAYSVG_DIR}/src/rsvg_flatten.cpp
-    ${RAYSVG_DIR}/src/rsvg_tess_fill.cpp
-    ${RAYSVG_DIR}/src/rsvg_stroke.cpp
-    ${RAYSVG_DIR}/src/rsvg_clip.cpp
-    ${RAYSVG_DIR}/src/rsvg_render.cpp
-)
-target_include_directories(raysvg PUBLIC ${RAYSVG_DIR}/include ${RAYLIB_DIR}/src)
-target_include_directories(raysvg PRIVATE ${RAYSVG_DIR}/src ${RAYSVG_DIR}/third_party/earcut)
 
 # ---------------------------------------------------------------------------
 # raym3 (+ Yoga from source) — built for the WebGPU backend (skip the ES3 default).
@@ -222,6 +248,7 @@ set(ENGINE_SOURCES
     ${DESKTOP_DIR}/kv_store.cpp
     ${DESKTOP_DIR}/data_dir.cpp
     ${DESKTOP_DIR}/module_bus.cpp
+    ${DESKTOP_DIR}/module_views.cpp
     ${DESKTOP_DIR}/gpu_api.cpp
     ${DESKTOP_DIR}/accessibility_bridge.cpp
     ${DESKTOP_DIR}/quickjs_bridge.cpp
@@ -239,9 +266,14 @@ set(ENGINE_SOURCES
     ${DESKTOP_DIR}/workers.cpp
     ${CSSPARSER_SOURCES}
     ${WEB_NATIVE_DIR}/main_web.cpp
+    ${WEB_NATIVE_DIR}/web_platform_views.cpp
+    ${WEB_NATIVE_DIR}/web_platform_modules.cpp
     ${WEB_NATIVE_DIR}/web_text_input.cpp
     ${WEB_NATIVE_DIR}/web_stubs.cpp
+    ${WEB_NATIVE_DIR}/web_plugin_loader.cpp
+    ${WEB_NATIVE_DIR}/web_local_storage.cpp
     ${WEB_NATIVE_DIR}/web_websocket.cpp
+    ${WEB_NATIVE_DIR}/web_fetch.cpp
     ${WEB_NATIVE_DIR}/web_js_worker.cpp
 )
 
@@ -255,6 +287,12 @@ if(RAYACT_APP_NATIVE_WORKERS)
     list(APPEND ENGINE_SOURCES ${RAYACT_APP_NATIVE_WORKERS})
     message(STATUS "Rayact web native workers: ${RAYACT_APP_NATIVE_WORKERS}")
 endif()
+
+# Nothing to collect here any more: native web modules are no longer compiled into
+# the host. They are Emscripten SIDE_MODULEs built by scripts/build-web-module-artifacts.sh
+# and dlopen'd at boot (native/web/web_stubs.cpp), exactly as desktop dlopens .dylib
+# and Android dlopens .so. The host's side of that contract is MAIN_MODULE=2 plus the
+# export surface in native/web/module_sdk_exports.txt, applied at the link step below.
 
 add_executable(rayact ${ENGINE_SOURCES})
 set(RAYACT_WEB_QJS_STACK_SIZE_BYTES "234881024" CACHE STRING "QuickJS stack guard for the Rayact web host, in bytes")
@@ -270,14 +308,12 @@ target_include_directories(rayact PRIVATE
     ${CORE_DIR}
     ${QUICKJS_DIR}
     ${RAYM3_DIR}/include
-    ${RAYSVG_DIR}/include
     ${YOGA_DIR}
     ${THIRD_PARTY}/cssparser
     ${WASM3_DIR}/source
 )
 target_link_libraries(rayact PRIVATE
     qjs_web
-    raysvg
     raylib
     raym3
     m3
@@ -311,6 +347,37 @@ endif()
 set(_rayact_iconfont "${RAYACT_ROOT}/resources/fonts/MaterialSymbolsRounded.ttf")
 set(_rayact_iconfont_filled "${RAYACT_ROOT}/resources/fonts/MaterialSymbolsRounded-Filled.ttf")
 set(_rayact_emoji_font "${RAYACT_ROOT}/resources/fonts/NotoColorEmoji.ttf")
+
+# The icon fonts are variable fonts, and ~88% of each file is `gvar` deltas that
+# stb_truetype (what raylib rasterizes with) cannot read. --embed-file bakes the
+# bytes straight into the wasm, so slimming first takes ~25 MB off the web
+# bundle. Runs at configure time because the embed list is a link flag. Falls
+# back to the originals when node is unavailable, so the build never breaks.
+find_program(RAYACT_NODE_EXECUTABLE NAMES node nodejs)
+if(RAYACT_NODE_EXECUTABLE AND EXISTS "${RAYACT_ROOT}/tools/fonts/slim-fonts.mjs")
+    set(_rayact_slim_fonts_dir "${CMAKE_CURRENT_BINARY_DIR}/slim-fonts")
+    file(MAKE_DIRECTORY "${_rayact_slim_fonts_dir}")
+    execute_process(
+        COMMAND "${RAYACT_NODE_EXECUTABLE}" "${RAYACT_ROOT}/tools/fonts/slim-fonts.mjs"
+                "${RAYACT_ROOT}/resources/fonts" "${_rayact_slim_fonts_dir}"
+        RESULT_VARIABLE _rayact_slim_result
+        OUTPUT_VARIABLE _rayact_slim_output
+        ERROR_VARIABLE _rayact_slim_output)
+    if(_rayact_slim_result EQUAL 0)
+        message(STATUS "Slimmed embedded fonts:\n${_rayact_slim_output}")
+        if(EXISTS "${_rayact_slim_fonts_dir}/MaterialSymbolsRounded.ttf")
+            set(_rayact_iconfont "${_rayact_slim_fonts_dir}/MaterialSymbolsRounded.ttf")
+        endif()
+        if(EXISTS "${_rayact_slim_fonts_dir}/MaterialSymbolsRounded-Filled.ttf")
+            set(_rayact_iconfont_filled "${_rayact_slim_fonts_dir}/MaterialSymbolsRounded-Filled.ttf")
+        endif()
+        if(EXISTS "${_rayact_slim_fonts_dir}/NotoColorEmoji.ttf")
+            set(_rayact_emoji_font "${_rayact_slim_fonts_dir}/NotoColorEmoji.ttf")
+        endif()
+    else()
+        message(WARNING "Font slimming failed; embedding full-size fonts.\n${_rayact_slim_output}")
+    endif()
+endif()
 if(RAYACT_WEB_EMBED_ICONS AND EXISTS "${_rayact_icons}")
     # name->codepoint map (injectMaterialIcons sets globalThis.Icons from this)...
     set(_rayact_embed "${_rayact_embed} --embed-file ${_rayact_icons}@/resources/fonts/material_icons.js")
@@ -332,7 +399,38 @@ set(_rayact_dbg "")
 if(RAYACT_WEB_DEBUG)
     set(_rayact_dbg " --profiling-funcs -sASSERTIONS=2 -sSTACK_OVERFLOW_CHECK=2")
 endif()
-set(_rayact_exports " -sEXPORTED_FUNCTIONS=['_main','_rayactWebStart','_rayactWebFinishBoot','_rayactWebPointer','_rayactWebWheel','_rayactWebKey','_rayactWebImeUpdate','_rayactWebImeSubmit','_rayactWebJsWorkerMessage','_rayactWebJsWorkerClosed','_malloc','_free']")
+# _rlwg*Surface and _rayactWebExternalViewEvent are the platform-view (hybrid
+# composition) channel: the shell's manager registers/resizes overlay canvases
+# and pushes producer events (an <input>'s text, a webview message) back into JS.
+set(_rayact_engine_exports "'_main','_rayactWebStart','_rayactWebFinishBoot','_rayactWebPointer','_rayactWebWheel','_rayactWebKey','_rayactWebImeUpdate','_rayactWebImeSubmit','_rayactWebJsWorkerMessage','_rayactWebJsWorkerClosed','_rayactWebExternalViewEvent','_rayactWebRegisterOverlaySurface','_rayactWebResizeOverlaySurface','_rayactWebSetColorSchemeDirty','_rayactWebLocalStorageGet','_rayactWebLocalStorageSet','_rayactWebLocalStorageRemove','_rayactWebLocalStorageKeysWithPrefix','_rayactWebLocalStorageRandomBytes','_malloc','_free'")
+
+# Dynamic modules. Web modules are Emscripten SIDE_MODULEs dlopen'd at boot, the
+# peer of desktop's .dylib and Android's .so — see native/web/web_stubs.cpp.
+#
+# MAIN_MODULE=2, not 1: =1 force-links every archive member (no lazy archive pull,
+# no dead-code elimination) and does not even link here — raylib's rcore_overlay.c
+# then yields "duplicate symbol: rlLoadShaderProgram". =2 keeps DCE and exports only
+# what is named below, which measured at +10 KB of wasm and +21 KB of JS glue.
+#
+# Side modules import the C++ runtime from the host rather than carrying their own,
+# so that runtime must be explicitly exported or DCE drops it. The list is an ABI
+# contract; see native/web/module_sdk_exports.txt for what may change and why.
+file(STRINGS "${RAYACT_ROOT}/native/web/module_sdk_exports.txt" _rayact_sdk_lines)
+set(_rayact_sdk_exports "")
+foreach(_line IN LISTS _rayact_sdk_lines)
+    string(STRIP "${_line}" _line)
+    # Match symbols rather than skipping comments: file(STRINGS) extracts printable
+    # ASCII runs the way strings(1) does, so a non-ASCII character mid-comment (an
+    # em dash, say) ends one "line" and starts another that no longer begins with #.
+    # Whitelisting the identifier shape is immune to that.
+    if(NOT _line MATCHES "^[A-Za-z_][A-Za-z0-9_]*$")
+        continue()
+    endif()
+    # Emscripten names a wasm symbol with a leading underscore, so the mangled C++
+    # symbol _ZdlPv is requested as __ZdlPv.
+    string(APPEND _rayact_sdk_exports ",'_${_line}'")
+endforeach()
+set(_rayact_exports " -sMAIN_MODULE=2 -sEXPORTED_FUNCTIONS=[${_rayact_engine_exports}${_rayact_sdk_exports}]")
 # The rlwg backend propagates a 16 MB stack, which is enough for simple demos but
 # the full smoke app (React navigation + large Material tree) can exhaust it while
 # QuickJS evaluates and mounts the bundle. Keep this above the web QuickJS guard in

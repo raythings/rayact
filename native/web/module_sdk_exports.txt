@@ -1,0 +1,123 @@
+# Web module SDK surface — symbols the host exports to dynamically loaded modules.
+#
+# A web module is an Emscripten SIDE_MODULE (packages/<pkg>/web/*.wasm). Emscripten
+# externalises the C++ runtime: a side module does not carry its own libc++/libc and
+# imports it from the host instead. Anything listed here the host is guaranteed to
+# provide; anything a module imports that is NOT listed fails at dlopen with an
+# unresolved-import error naming the mangled symbol.
+#
+# This is therefore an ABI contract, not an implementation detail — removing a line
+# can break an already-shipped third-party module. Treat it like a .def file:
+# additive changes are safe, removals are breaking.
+#
+# NOT listed (deliberately): raysvg, raylib, raym3 and every other engine symbol.
+# Modules reach the engine only through the RayactHost function-pointer table in
+# native/core/rayact_module_abi.h — that indirection is what keeps this surface
+# small and stable. @rayact/svg proves it works: it statically links its own copy
+# of raysvg into its side module and imports nothing engine-specific.
+#
+# Verified by test/prebuild/web-module-abi.test.mjs, which builds every first-party
+# web module and asserts its host-required imports are a subset of this list.
+#
+# Regenerate the raw candidate list for a module with:
+#   node tools/web/module-imports.mjs <module.wasm>
+
+# operator new / delete
+_ZdlPv
+_ZdlPvm
+_Znwm
+_ZnwmRKSt9nothrow_t
+
+# C++ exceptions and termination
+_ZNSt11logic_errorC2EPKc
+_ZNSt20bad_array_new_lengthC1Ev
+_ZSt9terminatev
+__assert_fail
+__cxa_allocate_exception
+__cxa_atexit
+__cxa_free_exception
+__cxa_thread_atexit
+__cxa_throw
+
+# std::string
+_ZNKSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE4findEcm
+_ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_externalEPKc
+_ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_externalEPKcm
+_ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_no_aliasILb0EEERS5_PKcm
+_ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE17__assign_no_aliasILb1EEERS5_PKcm
+_ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE25__init_copy_ctor_externalEPKcm
+_ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6appendEPKc
+_ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6appendEPKcm
+_ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6insertEmPKc
+_ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6resizeEmc
+_ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7reserveEm
+_ZNSt3__212basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE9push_backEc
+
+# iostreams and locale
+_ZNKSt3__215basic_stringbufIcNS_11char_traitsIcEENS_9allocatorIcEEE3strEv
+_ZNSt3__213basic_filebufIcNS_11char_traitsIcEEE4openEPKcj
+_ZNSt3__213basic_filebufIcNS_11char_traitsIcEEEC1Ev
+_ZNSt3__213basic_filebufIcNS_11char_traitsIcEEED1Ev
+_ZNSt3__213basic_istreamIcNS_11char_traitsIcEEED2Ev
+_ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEED2Ev
+_ZNSt3__213basic_ostreamIcNS_11char_traitsIcEEElsEPNS_15basic_streambufIcS2_EE
+_ZNSt3__26localeC1Ev
+_ZNSt3__26localeD1Ev
+_ZNSt3__28ios_base4initEPv
+_ZNSt3__28ios_base5clearEj
+_ZNSt3__29basic_iosIcNS_11char_traitsIcEEED2Ev
+
+# std::mutex
+_ZNSt3__25mutex4lockEv
+_ZNSt3__25mutex6unlockEv
+_ZNSt3__25mutexD1Ev
+
+# misc libc++
+_ZNSt3__212__next_primeEm
+_ZNSt3__29to_stringEi
+_ZNSt3__29to_stringEm
+_ZNSt3__2plIcNS_11char_traitsIcEENS_9allocatorIcEEEENS_12basic_stringIT_T0_T1_EEPKS6_RKS9_
+
+# libc string and formatting
+memchr
+memcmp
+snprintf
+strcmp
+strlen
+strncmp
+strstr
+strtod
+strtof
+vsnprintf
+
+# libm (float variants)
+acosf
+atan2f
+cosf
+fmaxf
+fminf
+fmodf
+sinf
+tanf
+
+# C++ ABI data (GOT.mem / GOT.func imports): vtables, typeinfo, exception-type
+# destructors, and std::nothrow. A module needs the HOST's copy of these addresses
+# for RTTI and exception matching to work across the boundary — its own copy would
+# make every catch(std::length_error&) miss. A missing one does not LinkError; it
+# fails at dlopen with "TypeError: Cannot read properties of undefined (reading
+# 'value')", which names nothing (see tools/web/module-imports.mjs).
+_ZNSt12length_errorD1Ev
+_ZNSt12out_of_rangeD1Ev
+_ZNSt20bad_array_new_lengthD1Ev
+_ZSt7nothrow
+_ZTISt12length_error
+_ZTISt12out_of_range
+_ZTISt20bad_array_new_length
+_ZTTNSt3__214basic_ifstreamIcNS_11char_traitsIcEEEE
+_ZTTNSt3__219basic_ostringstreamIcNS_11char_traitsIcEENS_9allocatorIcEEEE
+_ZTVNSt3__214basic_ifstreamIcNS_11char_traitsIcEEEE
+_ZTVNSt3__215basic_streambufIcNS_11char_traitsIcEEEE
+_ZTVNSt3__215basic_stringbufIcNS_11char_traitsIcEENS_9allocatorIcEEEE
+_ZTVNSt3__219basic_ostringstreamIcNS_11char_traitsIcEENS_9allocatorIcEEEE
+_ZTVSt12length_error
+_ZTVSt12out_of_range

@@ -151,6 +151,12 @@ set(RAYLIB_SRC
     ${RAYLIB_DIR}/src/raudio.c
 )
 add_library(raylib STATIC ${RAYLIB_SRC})
+# The plain-GL rcore (everything except the macOS Metal overlay above) compiles
+# vanilla rlgl, which lacks the extended stencil API raym3's rounded clips use;
+# supply the GL passthrough implementations. See rlgl_stencil_gl.c.
+if(NOT (PLATFORM_MACOS AND RAYACT_DESKTOP_USE_METAL))
+    target_sources(raylib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/rlgl_stencil_gl.c)
+endif()
 target_include_directories(raylib PUBLIC ${RAYLIB_DIR}/src ${RAYLIB_DIR}/src/platforms)
 target_compile_options(raylib PRIVATE -Wno-unknown-pragmas)
 if(PLATFORM_LINUX OR PLATFORM_MACOS)
@@ -279,6 +285,7 @@ set(SOURCES
     kv_store.cpp
     data_dir.cpp
     module_bus.cpp
+    module_views.cpp
     gpu_api.cpp
     plugin_loader.cpp
     accessibility_bridge.cpp
@@ -321,6 +328,12 @@ endif()
 
 if(PLATFORM_MACOS)
     list(APPEND SOURCES mac_text_input.mm)
+    # Platform views (hybrid composition) need the Metal multi-surface path, so
+    # they only build with the Metal backend; the GL fallback has no equivalent.
+    if(RAYACT_DESKTOP_USE_METAL)
+        list(APPEND SOURCES mac_platform_views.mm)
+        add_compile_definitions(RAYACT_DESKTOP_METAL=1)
+    endif()
 endif()
 
 file(GLOB_RECURSE RAYACT_APP_NATIVE_WORKERS
@@ -363,13 +376,19 @@ target_link_directories(rayact_desktop PRIVATE
 )
 
 # Link dependencies
+# Order matters on GNU ld (single left-to-right pass, unlike Apple's ld64):
+# every archive must precede the archives it pulls symbols from, so raym3 goes
+# BEFORE raylib. raym3's stencil-clip path references the backend-provided
+# rlStencil* family, which live in raylib's rcore TU via the rlgl backend shim —
+# with the old order the Linux link dropped them and failed with
+# "undefined reference to rlStencilFunc" while macOS built fine.
 target_link_libraries(rayact_desktop
     Threads::Threads
     ${QUICKJS_LIBC_LIBRARY}
     ${QUICKJS_LIBRARY}
+    raym3
     raylib
     ${RAYLIB_GLFW_LIBRARY}
-    raym3
     treesitter
     m3
     ${CURL_LIBRARIES}
@@ -407,6 +426,8 @@ if(PLATFORM_MACOS)
     )
     # The raylib-backends Metal attachment needs these; harmless for OpenGL.
     if(RAYACT_DESKTOP_USE_METAL)
+        # No WebKit here: the `webview` kind is owned by @rayact/webview, which
+        # links WebKit in its own dylib (packages/rayact-webview/native).
         target_link_libraries(rayact_desktop
             "-framework Metal" "-framework QuartzCore" "-framework CoreVideo")
         # librlmt.a (built with transpile) references glslang + SPIRV-Cross.

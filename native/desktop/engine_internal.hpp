@@ -46,6 +46,7 @@ struct Shape {
 struct QueuedTouch {
     bool pressed = false;
     bool released = false;
+    bool cancelled = false;
     bool down = false;
     Vector2 position = {0.0f, 0.0f};
     // Position at the moment of the press. `position` is a single slot that

@@ -164,7 +164,23 @@ export interface ViewStyle {
   pointerEvents?: 'none' | 'auto';
   opacity?: number;
   backgroundColor?: ColorValue;
+  /** A single `linear-gradient()` or `conic-gradient()`, as CSS text. */
   backgroundGradientCss?: string;
+  /**
+   * A full multi-layer `background` shorthand, as CSS text. Layers paint
+   * front-to-back like CSS, and each may name its own box area, which is what
+   * makes the standard gradient-border idiom work:
+   *
+   *   borderWidth: 1, borderColor: 'transparent',
+   *   backgroundLayersCss: 'conic-gradient(from 0deg, #fff2, #fffc, #fff2) border-box, #ffffff14 padding-box'
+   *
+   * (`border-image` with a gradient cannot do this — per spec it ignores
+   * `border-radius`.)
+   */
+  backgroundLayersCss?: string;
+  /** `border-box` | `padding-box` | `content-box`, optionally one per layer. */
+  backgroundClip?: string;
+  backgroundOrigin?: string;
   borderColor?: ColorValue;
   borderTopColor?: ColorValue;
   borderRightColor?: ColorValue;
@@ -193,6 +209,22 @@ export interface ViewStyle {
   transitionDurationMs?: number;
   zIndex?: number;
   text?: TextStyle;
+
+  // ── Text-field editing colors ──────────────────────────────────────────
+  // Also settable from CSS as `placeholder-color`, `caret-color` and
+  // `selection-color`. The engine resolves prop → style/CSS → theme and
+  // forwards the winner to the platform editor, so these work identically on
+  // desktop, web, iOS, Android and macOS.
+  placeholderColor?: ColorValue;
+  /** Alias: `cursorColor`. */
+  caretColor?: ColorValue;
+  cursorColor?: ColorValue;
+  selectionColor?: ColorValue;
+  /** Nested form, mirroring `text: { color }`. */
+  placeholder?: { color?: ColorValue };
+  caret?: { color?: ColorValue };
+  cursor?: { color?: ColorValue };
+  selection?: { color?: ColorValue; backgroundColor?: ColorValue };
 }
 
 export type Style = ViewStyle & TextStyle;
@@ -394,10 +426,9 @@ export interface TextInputContentSizeChangeEvent {
 
 /**
  * Props mirror react-native's TextInput (https://reactnative.dev/docs/textinput).
- * The field is rendered + edited entirely by the raym3 engine (Flutter model:
- * caret/selection/composing/handles/clipboard live in native; the OS only
- * proxies the IME), so behaviour is 1:1 with Flutter's EditableText while the
- * surface matches RN.
+ * Mobile uses a real UITextField/UITextView/EditText for editing, selection,
+ * composition, handles, clipboard, accessibility, and autofill. Raym3 retains
+ * the public M3 appearance contract; desktop retains the engine editor.
  */
 export interface TextInputProps extends BaseProps {
   // ── Value ────────────────────────────────────────────────────────────────
@@ -445,7 +476,12 @@ export interface TextInputProps extends BaseProps {
   onBlur?: (e?: TextInputFocusEvent) => void;
 
   // ── raym3/M3 rendering controls (not in RN; advanced) ──────────────────────
-  variant?: 'filled' | 'outlined' | 'underline';
+  /**
+   * M3 chrome variant. Bare `TextInput` defaults to `'plain'` — a
+   * React-Native-style input with no fill, outline, or label float (the
+   * `style` prop still applies). `TextField` defaults to `'filled'`.
+   */
+  variant?: 'filled' | 'outlined' | 'underline' | 'plain';
   drawOutline?: boolean;
   drawBackground?: boolean;
   /** When false, the field paints no own hover/focus highlight (parent owns it). */

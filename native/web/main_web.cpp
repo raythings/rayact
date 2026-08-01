@@ -39,7 +39,7 @@ void rlwgAcquireDeviceAsync(const char *canvasSelector, void (*cb)(void *user), 
 // rcore_web.c — refresh CORE (screen=CSS logical, render=backing device px),
 // reconfigure the WebGPU surface + viewport from the browser-owned canvas size.
 // The engine reads the canvas; it never resizes it.
-void rayactWebSyncCanvas(void);
+void rlwgWebSyncCanvas(void);
 }
 
 // Browser-WebSocket bridge for the WASM runtime (native/web/web_websocket.cpp) —
@@ -47,6 +47,15 @@ void rayactWebSyncCanvas(void);
 namespace rayact {
 void registerWebSocketBridge(JSContext *ctx);
 void pumpWebSocketBridge(JSContext *ctx);
+// Browser fetch bridged into QuickJS (web_fetch.cpp); web had no `fetch` global
+// at all, unlike every other platform.
+void registerFetchBridge(JSContext *ctx);
+void pumpFetchBridge(JSContext *ctx);
+// Platform views: installs the DOM/overlay-canvas compositor (web_platform_views.cpp).
+void webInstallPlatformViews(void);
+// Native modules: dlopens the side modules staged by the page (web_plugin_loader.cpp)
+// and calls back once every load has settled, so boot can continue.
+void webLoadModules(void (*done)(void*), void* user);
 }
 
 static const char *kCanvasSelector = "#canvas";
@@ -192,7 +201,7 @@ static bool syncCanvasSizeAndPublish(void) {
     // The browser owns the canvas resolution. Refresh CORE from it (screen=CSS
     // logical, render=backing device px) and reconfigure the surface/viewport —
     // we never resize the canvas ourselves.
-    rayactWebSyncCanvas();
+    rlwgWebSyncCanvas();
 
     // Density = render/screen = devicePixelRatio. Set it now so the dimensions
     // published below (and the very next rendered frame, which recomputes the
@@ -219,10 +228,31 @@ extern "C" EMSCRIPTEN_KEEPALIVE void rayactWebNotifyResize(void) {
     // The page owns the canvas resolution: let it resize the backing store to
     // clientCSS x devicePixelRatio BEFORE the engine reads it. Never resize the
     // canvas from native.
-    EM_ASM({ if (Module.__rayactResizeCanvas) Module.__rayactResizeCanvas(); });
+    EM_ASM({
+        if (Module.__rayactResizeCanvas) {
+            var px = Module.__rayactDevicePx;
+            Module.__rayactResizeCanvas(px && px[0], px && px[1]);
+        }
+    });
     g_resizePending = true;
-    if (g_engineReady && IsWindowReady())
+    if (g_engineReady && IsWindowReady()) {
         syncCanvasSizeAndPublish();
+        // Writing canvas.width/height above just CLEARED the backing store,
+        // and the next scheduled paint is a whole rAF away — during an
+        // interactive resize the compositor shows that cleared canvas every
+        // step, which is the classic resize flicker. Render synchronously in
+        // this same task (relayout was requested by the sync and is consumed
+        // here), so the browser never paints an empty canvas.
+        if (g_finished) {
+            const double t0 = emscripten_get_now();
+            rayact::engineRenderFrame(GetRenderWidth(), GetRenderHeight());
+            const double t1 = emscripten_get_now();
+            EM_ASM({
+                var s = Module.__rayactResizeStats;
+                if (s) { s.renders++; s.renderOnlyMs = $0; }
+            }, t1 - t0);
+        }
+    }
 }
 
 static EM_BOOL onBrowserResize(int, const EmscriptenUiEvent *, void *) {
@@ -231,13 +261,31 @@ static EM_BOOL onBrowserResize(int, const EmscriptenUiEvent *, void *) {
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE void rayactWebFinishBoot(void) {
-    if (!g_engineReady || g_finished || !IsWindowReady()) return;
+    if (!g_engineReady || g_finished) return;
     rayact::enginePrepareJSThread();
+    if (!IsWindowReady()) {
+        // The app may still call initRaylib() from a pending job, so give the
+        // retry loop a few passes (tick() keeps pumping JS between them) before
+        // taking over. Once that budget is spent, open the window ourselves at
+        // the browser-owned canvas size — no scaffolded app calls initRaylib,
+        // and mobile hosts never required it. The canvas stays authoritative:
+        // never resize it from here.
+        static int graceAttempts = 0;
+        if (++graceAttempts < 8) return;
+        int cssW = 0, cssH = 0;
+        readCanvasCssSize(cssW, cssH);
+        if (!rayact::engineEnsureHostWindow(cssW, cssH)) return;
+    }
     rayact::engineFinishLoad();
     g_finished = true;
     // Ensure the backing store matches the current viewport (page-owned) before
     // the first published dimensions + render.
-    EM_ASM({ if (Module.__rayactResizeCanvas) Module.__rayactResizeCanvas(); });
+    EM_ASM({
+        if (Module.__rayactResizeCanvas) {
+            var px = Module.__rayactDevicePx;
+            Module.__rayactResizeCanvas(px && px[0], px && px[1]);
+        }
+    });
     g_resizePending = true;
     syncCanvasSizeAndPublish();
     rayact::engineRenderFrame(GetRenderWidth(), GetRenderHeight());
@@ -268,6 +316,7 @@ static void tick(void) {
     rayact::enginePumpJS();
     // Dispatch any browser WebSocket events (HMR socket) into JS handlers.
     rayact::pumpWebSocketBridge(rayact::engineContext());
+    rayact::pumpFetchBridge(rayact::engineContext());
 
     // The app's initRaylib() opens the window during the first pumps; wait for it.
     if (!IsWindowReady()) return;
@@ -335,6 +384,10 @@ static void onDeviceReady(void * /*user*/) {
     // Install `globalThis.WebSocket` before the dev bundle loads so the module-HMR
     // runtime can open /rayact/hmr (no native libwebsockets in the web build).
     rayact::registerWebSocketBridge(rayact::engineContext());
+    rayact::registerFetchBridge(rayact::engineContext());
+    // Platform views must be registered before the app's first commit: the
+    // bridge only forwards a create for nodes made after the callbacks exist.
+    rayact::webInstallPlatformViews();
 
     bool ok = false;
 #if !RAYACT_RELEASE_HOST
@@ -403,9 +456,17 @@ static void onDeviceReady(void * /*user*/) {
 // Called from the IDBFS syncfs(true) callback once persisted storage has loaded.
 // Exported (KEEPALIVE) so the JS callback can invoke it as Module._rayactWebStart.
 extern "C" EMSCRIPTEN_KEEPALIVE void rayactWebStart(void) {
-    printf("[rayact-web] storage ready; requesting WebGPU device for canvas %s\n", kCanvasSelector);
-    // Async device acquisition; the engine boots from onDeviceReady (tick no-ops until).
-    rlwgAcquireDeviceAsync(kCanvasSelector, onDeviceReady, nullptr);
+    printf("[rayact-web] storage ready; loading native modules\n");
+    // Native modules first, and only then the device: engineCreate (from onDeviceReady)
+    // registers them, so they have to be in memory by that point. Loading cannot happen
+    // any earlier than this — see the getMemory note in web_plugin_loader.cpp — and it
+    // is async, hence the chain rather than a straight-line call.
+    rayact::webLoadModules([](void*) {
+        printf("[rayact-web] modules ready; requesting WebGPU device for canvas %s\n",
+               kCanvasSelector);
+        // Async device acquisition; the engine boots from onDeviceReady (tick no-ops until).
+        rlwgAcquireDeviceAsync(kCanvasSelector, onDeviceReady, nullptr);
+    }, nullptr);
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE void rayactWebPointer(int action, int id, float x, float y) {
@@ -434,9 +495,14 @@ int main(void) {
     setvbuf(stdout, nullptr, _IOLBF, 0);
     emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, EM_TRUE, onBrowserResize);
 
-    // Mount IDBFS for persistent storage (kv / mmkv / secure-store under /rayact_idbfs,
-    // see rayactDataDir) and load any existing data, THEN start the engine. All
-    // callback-driven — no ASYNCIFY. tick() periodically flushes back to IndexedDB.
+    // Mount IDBFS at /rayact_idbfs for anything that persists through the C
+    // filesystem, and load it, THEN start the engine. All callback-driven — no
+    // ASYNCIFY. tick() periodically flushes back to IndexedDB.
+    //
+    // Note this is NOT where key/value storage lands: KV and @rayact/mmkv write
+    // to localStorage instead (native/web/web_local_storage.cpp), because
+    // rayactDataDir() resolves outside this mount on web, so a file written
+    // there would never be synced and would vanish with the tab.
     EM_ASM({
         try {
             FS.mkdir('/rayact_idbfs');
@@ -453,10 +519,32 @@ int main(void) {
                 return;
             }
             if (!Module.__rayactCanvasResizeObserver && typeof ResizeObserver !== 'undefined') {
-                Module.__rayactCanvasResizeObserver = new ResizeObserver(function() {
+                Module.__rayactResizeStats = { fires: 0, renders: 0, maxMs: 0, lastMs: 0 };
+                Module.__rayactCanvasResizeObserver = new ResizeObserver(function(entries) {
+                    var stats = Module.__rayactResizeStats;
+                    stats.fires++;
+                    // Exact device-pixel size of the canvas box, when the
+                    // browser provides it. __rayactResizeCanvas uses this as
+                    // the backing size verbatim; deriving it from clientWidth
+                    // x dpr is off by one on fractional CSS sizes, and a
+                    // 1px-scaled canvas blurs every glyph.
+                    var entry = entries && entries[entries.length - 1];
+                    var box = entry && entry.devicePixelContentBoxSize &&
+                              entry.devicePixelContentBoxSize[0];
+                    Module.__rayactDevicePx = box ? [box.inlineSize, box.blockSize] : null;
+                    var t0 = performance.now();
                     if (Module._rayactWebNotifyResize) Module._rayactWebNotifyResize();
+                    stats.lastMs = performance.now() - t0;
+                    if (stats.lastMs > stats.maxMs) stats.maxMs = stats.lastMs;
                 });
-                Module.__rayactCanvasResizeObserver.observe(canvas);
+                // device-pixel-content-box: fire on real device-pixel changes,
+                // not just CSS-px changes — fractional-DPR drags otherwise leave
+                // the backing store one pixel off and shimmer at the edge.
+                try {
+                    Module.__rayactCanvasResizeObserver.observe(canvas, { box: 'device-pixel-content-box' });
+                } catch (e) {
+                    Module.__rayactCanvasResizeObserver.observe(canvas);
+                }
             }
             if (!Module.__rayactWindowResizeInstalled) {
                 Module.__rayactWindowResizeInstalled = true;

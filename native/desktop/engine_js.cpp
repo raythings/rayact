@@ -118,7 +118,21 @@ static JSValue JS_resolveAssetUrl(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_resolveAssetPath(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_readAssetBytes(JSContext*, JSValue, int, JSValueConst*);
 static JSValue JS_keyboardCapture(JSContext*, JSValue, int, JSValueConst*);
+
+#if defined(__APPLE__) && defined(RAYACT_DESKTOP_METAL)
+// rlmt supersampling floor (see engineCreate). Declared here rather than via
+// rlmt.h to keep the engine's include surface unchanged.
+extern "C" void rlmtSetMinRenderScale(float minScale);
+#endif
 static JSValue JS_keyboardDismiss(JSContext*, JSValue, int, JSValueConst*);
+#if defined(RAYACT_WEB)
+namespace rayact {
+// Routes platformCall into the browser-side module registry (native/web/
+// web_platform_modules.cpp); modules register from their `web.script`.
+std::string webPlatformCall(const char* module, const char* method, const char* payloadJson);
+}
+#endif
+
 static JSValue JS_platformCall(JSContext*, JSValue, int, JSValueConst*);
 
 // Global variables
@@ -132,8 +146,26 @@ static bool g_running = false;
 static std::filesystem::path g_releaseAssetBaseDir;
 namespace rayact { std::string rayactAssetBaseDir(); } // defined below; used by injectMaterialIcons above its definition point
 
-// Default: MSAA 4x + HighDPI. User can override before initRaylib() via setConfigFlags().
-static unsigned int g_configFlags = FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI;
+// On web, requestAnimationFrame paces the frame loop; raylib's CPU frame
+// limiter would just busy-wait out the rest of each 60Hz slot inside
+// EndDrawing. That wait made every extra render (e.g. the synchronous one in
+// the resize handler) cost a full frame and miss the paint deadline — the
+// drag-resize flicker. Everywhere else the limiter works as normal.
+static void applyTargetFPS(int fps) {
+#if defined(RAYACT_WEB)
+    (void)fps;
+    SetTargetFPS(0);
+#else
+    SetTargetFPS(fps);
+#endif
+}
+
+// Default: MSAA 4x + HighDPI + resizable. User can override before initRaylib()
+// via setConfigFlags(). Resizable is the desktop norm (mobile surfaces resize
+// via the OS anyway); the engine relayouts from engineSurfaceBoundsChanged and
+// publishes new dimensions to JS, so a fixed-size default only frustrated.
+static unsigned int g_configFlags =
+    FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI | FLAG_WINDOW_RESIZABLE;
 static int g_targetFPS = 60;
 static double g_diagnosticFrameMs = 0.0;
 static double g_diagnosticRollingMs = 0.0;
@@ -392,7 +424,7 @@ static void registerNativeFunctions(JSContext* ctx) {
                 int32_t fps;
                 JS_ToInt32(ctx, &fps, argv[0]);
                 g_targetFPS = fps;
-                if (IsWindowReady()) SetTargetFPS(fps);
+                if (IsWindowReady()) applyTargetFPS(fps);
             }
             return JS_UNDEFINED;
         }, "setTargetFPS", 1));
@@ -829,6 +861,8 @@ static JSValue JS_platformCall(JSContext* ctx, JSValue, int argc, JSValueConst* 
     resultJson = rayact::androidPlatformCall(module, method, payloadJson.c_str());
 #elif defined(RAYACT_IOS)
     resultJson = rayact::iosPlatformCall(module, method, payloadJson.c_str());
+#elif defined(RAYACT_WEB)
+    resultJson = rayact::webPlatformCall(module, method, payloadJson.c_str());
 #else
     resultJson = "{\"ok\":false,\"error\":\"Platform modules are unavailable on this host\"}";
 #endif
@@ -943,7 +977,7 @@ static JSValue JS_initRaylib(JSContext* ctx, JSValue this_val,
             (GetScreenWidth() != width || GetScreenHeight() != height)) {
             SetWindowSize(width, height);
         }
-        SetTargetFPS(g_targetFPS);
+        applyTargetFPS(g_targetFPS);
         raym3::Theme::Initialize();
         printf("Reused raylib window: %dx%d \"%s\"\n", width, height, title);
         JS_FreeCString(ctx, title);
@@ -952,7 +986,7 @@ static JSValue JS_initRaylib(JSContext* ctx, JSValue this_val,
 
     SetConfigFlags(g_configFlags);
     InitWindow(width, height, title);
-    SetTargetFPS(g_targetFPS);
+    applyTargetFPS(g_targetFPS);
 
     raym3::Theme::Initialize();
 
@@ -962,6 +996,66 @@ static JSValue JS_initRaylib(JSContext* ctx, JSValue this_val,
     return JS_UNDEFINED;
 #endif
 }
+
+#if !defined(RAYACT_ANDROID) && !defined(RAYACT_IOS)
+// Host-owned window creation. Android and iOS create the surface themselves
+// (see the mobile branch of JS_initRaylib above), so an app never has to call
+// initRaylib there — and no scaffolded app does. Desktop and web used to wait
+// for the app to call it and simply never rendered when it didn't. This gives
+// them the same contract: the host opens a window from the app config, and an
+// app that *does* call initRaylib still wins via the reuse branch above.
+namespace rayact {
+bool engineEnsureHostWindow(int fallbackWidth, int fallbackHeight) {
+    if (IsWindowReady()) return true;
+
+    // Pick up window/title from the app config. In dev the project root is the
+    // CWD; in a release build the config ships next to the bundle, so that one
+    // is loaded last and wins. loadAppConfig layers, so a directory without a
+    // config leaves the other's values alone, and a project with neither still
+    // boots on the fallbacks below.
+    engineLoadConfig(".");
+    const std::string assetBase = rayactAssetBaseDir();
+    if (!assetBase.empty() && assetBase != ".")
+        engineLoadConfig(assetBase.c_str());
+
+    const AppConfig& cfg = engineAppConfig();
+    const bool sized = cfg.windowWidth > 0 && cfg.windowHeight > 0;
+    int width = cfg.windowWidth > 0 ? cfg.windowWidth : fallbackWidth;
+    int height = cfg.windowHeight > 0 ? cfg.windowHeight : fallbackHeight;
+    if (width <= 0) width = 1280;
+    if (height <= 0) height = 800;
+    const std::string title = cfg.title.empty() ? std::string("Rayact") : cfg.title;
+
+    SetConfigFlags(g_configFlags);
+    InitWindow(width, height, title.c_str());
+    if (!IsWindowReady()) {
+        TraceLog(LOG_ERROR, "RAYACT: host InitWindow(%dx%d) failed", width, height);
+        return false;
+    }
+
+    // Deliberately NOT resized to fit the display afterwards: SetWindowSize()
+    // does not propagate to the framebuffer on the macOS Metal backend, so the
+    // layout viewport and the drawable disagree and every element draws
+    // oversized and stretched. The size has to be final at InitWindow time.
+    (void)sized;
+#if !defined(RAYACT_WEB)
+    // Desktop only: on web the browser owns placement, the "monitor" is the page,
+    // and moving the window is meaningless — the canvas is authoritative and must
+    // never be repositioned or resized from here.
+    if (const int monitor = GetCurrentMonitor(); GetMonitorWidth(monitor) > 0) {
+        SetWindowPosition((GetMonitorWidth(monitor) - width) / 2,
+                          (GetMonitorHeight(monitor) - height) / 2);
+    }
+#endif
+
+    applyTargetFPS(g_targetFPS);
+    raym3::Theme::Initialize();
+    printf("Initialized raylib window (host-owned): %dx%d \"%s\"\n",
+           width, height, title.c_str());
+    return true;
+}
+} // namespace rayact
+#endif
 
 // JavaScript function: renderRect(x, y, width, height, color)
 static JSValue JS_renderRect(JSContext* ctx, JSValue this_val,
@@ -1768,7 +1862,7 @@ static void ensureDevWindow() {
     if (IsWindowReady()) return;
     SetConfigFlags(g_configFlags);
     InitWindow(1000, 700, "Rayact Dev Client");
-    SetTargetFPS(g_targetFPS);
+    applyTargetFPS(g_targetFPS);
     printf("Initialized default dev window: 1000x700 \"Rayact Dev Client\"\n");
 }
 
@@ -1776,7 +1870,7 @@ static void showDevErrorOverlay(JSContext* ctx, const std::string& message) {
     if (!IsWindowReady()) {
         SetConfigFlags(g_configFlags);
         InitWindow(980, 560, "Rayact Dev Error");
-        SetTargetFPS(g_targetFPS);
+        applyTargetFPS(g_targetFPS);
     }
 
     std::string script =
@@ -2092,6 +2186,14 @@ namespace rayact {
 
 bool engineCreate() {
     if (g_rt && g_ctx) return true;   // already created (process-singleton)
+#if defined(__APPLE__) && defined(RAYACT_DESKTOP_METAL)
+    // Rayact policy, not backend policy: supersample the Metal drawable to at
+    // least 2x so text/icons keep mobile-like raster density on external 1x
+    // displays. The backend default is native scale; end users can override
+    // with RLMT_RENDER_SCALE. Set before InitWindow so the first drawable
+    // already has it.
+    rlmtSetMinRenderScale(2.0f);
+#endif
     g_rt = initRuntime();
     if (!g_rt) return false;
     g_ctx = initContext(g_rt);
@@ -2119,10 +2221,15 @@ void engineQueueTouch(int action, int id, float x, float y) {
         g_queuedTouch.pressPosition = {x, y};
         g_queuedTouch.hasPendingMove = false;
         g_touchPressFired = false; // new gesture — allow next onPress
+        g_queuedTouch.cancelled = false;
     } else if (action == 1) {
         if (!g_touchPressFired) {
             g_queuedTouch.released = true;
         }
+        g_queuedTouch.down = false;
+    } else if (action == 3) {
+        g_queuedTouch.cancelled = true;
+        g_queuedTouch.released = false;
         g_queuedTouch.down = false;
     }
     // action == 2 is a move: the position write above is the whole effect.

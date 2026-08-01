@@ -6,22 +6,43 @@
   "jsEntry": ".",
   "library": "rayact_linking",
   "nativeBus": false,
-  "platforms": ["android", "ios", "darwin", "linux", "windows", "web"],
-  "architectures": ["arm64", "x86_64", "wasm32"],
-  "abiRange": ">=2 <3",
+  "platforms": [
+    "android",
+    "ios",
+    "darwin",
+    "linux",
+    "windows",
+    "web"
+  ],
+  "architectures": [
+    "arm64",
+    "x86_64",
+    "wasm32"
+  ],
+  "abiRange": ">=2 <4",
   "engineRange": ">=0.0.4 <0.1.0",
   "artifacts": [],
   "linkage": "static",
   "permissions": [],
-  "configurationSchema": { "type": "object", "additionalProperties": false },
+  "configurationSchema": {
+    "type": "object",
+    "additionalProperties": false
+  },
   "officialDevApp": true,
   "android": {
-    "sourceDirs": ["android/src/main/java"],
+    "sourceDirs": [
+      "android/src/main/java"
+    ],
     "manifest": "android/AndroidManifest.xml",
     "registrationClass": "dev.rayact.linking.RayactLinkingRegistration"
   },
   "ios": {
-    "sources": ["ios/RayactLinkingRegistration.swift"],
+    "sources": [
+      "ios/RayactLinkingRegistration.swift"
+    ],
     "registrationType": "RayactLinkingRegistration"
+  },
+  "web": {
+    "script": "web/register.js"
   }
 }

@@ -137,6 +137,65 @@ private func updateImeStateCb(
     )
 }
 
+private func platformViewCreateCb(
+    _ ctx: UnsafeMutableRawPointer?, _ surfaceId: Int32, _ nodeId: Int32,
+    _ kind: UnsafePointer<CChar>?, _ properties: UnsafePointer<CChar>?
+) {
+    hostBridge(from: ctx).host.platformViewCreate(
+        surfaceId: Int(surfaceId), nodeId: Int(nodeId),
+        kind: kind.map(String.init(cString:)) ?? "",
+        propertiesJson: properties.map(String.init(cString:)) ?? "{}"
+    )
+}
+
+private func platformViewSetPropertiesCb(
+    _ ctx: UnsafeMutableRawPointer?, _ surfaceId: Int32, _ nodeId: Int32,
+    _ properties: UnsafePointer<CChar>?
+) {
+    hostBridge(from: ctx).host.platformViewSetProperties(
+        surfaceId: Int(surfaceId), nodeId: Int(nodeId),
+        propertiesJson: properties.map(String.init(cString:)) ?? "{}"
+    )
+}
+
+private func platformViewDisposeCb(
+    _ ctx: UnsafeMutableRawPointer?, _ surfaceId: Int32, _ nodeId: Int32
+) {
+    hostBridge(from: ctx).host.platformViewDispose(
+        surfaceId: Int(surfaceId), nodeId: Int(nodeId))
+}
+
+private func platformViewsBeginFrameCb(
+    _ ctx: UnsafeMutableRawPointer?, _ surfaceId: Int32,
+    _ width: Float, _ height: Float, _ density: Float
+) {
+    hostBridge(from: ctx).host.platformViewsBeginFrame(
+        surfaceId: Int(surfaceId), width: width, height: height, density: density)
+}
+
+private func platformViewCompositeCb(
+    _ ctx: UnsafeMutableRawPointer?, _ surfaceId: Int32, _ nodeId: Int32,
+    _ composition: UnsafePointer<CChar>?
+) -> Bool {
+    hostBridge(from: ctx).host.platformViewComposite(
+        surfaceId: Int(surfaceId), nodeId: Int(nodeId),
+        compositionJson: composition.map(String.init(cString:)) ?? "{}")
+}
+
+private func platformViewsEndFrameCb(
+    _ ctx: UnsafeMutableRawPointer?, _ surfaceId: Int32
+) {
+    hostBridge(from: ctx).host.platformViewsEndFrame(surfaceId: Int(surfaceId))
+}
+
+private func platformViewGestureDecisionCb(
+    _ ctx: UnsafeMutableRawPointer?, _ surfaceId: Int32,
+    _ nodeId: Int32, _ accepted: Bool
+) {
+    hostBridge(from: ctx).host.platformViewGestureDecision(
+        surfaceId: Int(surfaceId), nodeId: Int(nodeId), accepted: accepted)
+}
+
 final class RayactHostCallbacksBridge {
     let host: RayactHost
     private let callbacksPtr: UnsafeMutablePointer<RayactIOSHostCallbacks>
@@ -145,6 +204,8 @@ final class RayactHostCallbacksBridge {
         self.host = host
         callbacksPtr = UnsafeMutablePointer<RayactIOSHostCallbacks>.allocate(capacity: 1)
         callbacksPtr.initialize(to: RayactIOSHostCallbacks(
+            abiVersion: 2,
+            structSize: UInt32(MemoryLayout<RayactIOSHostCallbacks>.size),
             context: Unmanaged.passUnretained(self).toOpaque(),
             requestNewSurface: requestNewSurfaceCb,
             rootSurfaceId: rootSurfaceIdCb,
@@ -163,7 +224,14 @@ final class RayactHostCallbacksBridge {
             switchIme: switchImeCb,
             copyToClipboard: copyToClipboardCb,
             readClipboard: readClipboardCb,
-            updateImeState: updateImeStateCb
+            updateImeState: updateImeStateCb,
+            platformViewCreate: platformViewCreateCb,
+            platformViewSetProperties: platformViewSetPropertiesCb,
+            platformViewDispose: platformViewDisposeCb,
+            platformViewsBeginFrame: platformViewsBeginFrameCb,
+            platformViewComposite: platformViewCompositeCb,
+            platformViewsEndFrame: platformViewsEndFrameCb,
+            platformViewGestureDecision: platformViewGestureDecisionCb
         ))
     }
 

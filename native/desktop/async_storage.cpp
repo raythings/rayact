@@ -180,8 +180,17 @@ static int kvInvoke(void *, const char *method, RayactBytes args, RayactBytes *o
   std::string m = method ? method : "";
   auto &kv = defaultKvStore();
   if (m == "get") {
+    // A miss returns an empty payload, not a non-zero rc. The bus turns any
+    // non-zero rc into a thrown JS error, so returning -1 here made the
+    // documented `KV.get(key): string | undefined` throw on every absent key,
+    // on every platform. The JS side already reads an empty result as undefined
+    // (packages/rayact/src/kv), so this is the shape it always expected.
+    // @rayact/mmkv's plugin encodes absence in the payload for the same reason.
     std::string key((const char *)args.ptr, args.len), v;
-    if (!kv.getString(key, v)) return -1;
+    if (!kv.getString(key, v)) {
+      *out = dup(std::string());
+      return 0;
+    }
     *out = dup(v);
     return 0;
   }

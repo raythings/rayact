@@ -7,3 +7,6 @@
 # nativeRenderFrame, which also kills touch dispatch in release builds).
 -keep class com.rayact.engine.** { *; }
 -keep class com.rayact.devclient.** { *; }
+# Autolinking is intentionally discovered by class name so the base host has
+# no compile-time dependency on optional packages.
+-keep class com.rayact.generated.** { *; }

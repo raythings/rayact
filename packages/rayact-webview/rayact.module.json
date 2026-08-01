@@ -6,18 +6,60 @@
   "jsEntry": ".",
   "library": "rayact_webview",
   "nativeBus": false,
-  "platforms": ["android", "ios", "web"],
-  "architectures": ["arm64", "x86_64", "wasm32"],
-  "abiRange": ">=2 <3",
+  "platforms": [
+    "android",
+    "ios",
+    "web",
+    "darwin"
+  ],
+  "architectures": [
+    "arm64",
+    "x86_64",
+    "wasm32"
+  ],
+  "abiRange": ">=3 <4",
   "engineRange": ">=0.0.4 <0.1.0",
-  "artifacts": [],
+  "artifacts": [
+    {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "path": "desktop/darwin-arm64/librayact_webview.dylib",
+      "sha256": "0c5d31a768f8b3b1a2902eef80a3cb0b0bcabf6973762b30727eb31745143e6d"
+    },
+    {
+      "platform": "darwin",
+      "architecture": "x86_64",
+      "path": "desktop/darwin-x64/librayact_webview.dylib",
+      "sha256": "37306cd1918976249663f6572d446df8bbc78d80138bbd7e088bca8997700c7d"
+    }
+  ],
   "linkage": "static",
   "permissions": [],
-  "configurationSchema": { "type": "object", "additionalProperties": false },
+  "configurationSchema": {
+    "type": "object",
+    "additionalProperties": false
+  },
   "officialDevApp": true,
   "android": {
-    "sourceDirs": ["android/src/main/java"],
+    "sourceDirs": [
+      "android/src/main/java"
+    ],
+    "dependencies": [
+      "androidx.webkit:webkit:1.9.0"
+    ],
+    "manifest": "android/src/main/AndroidManifest.xml",
     "registrationClass": "dev.rayact.webview.RayactWebViewRegistration"
   },
-  "ios": { "frameworks": ["WebKit"] }
+  "ios": {
+    "sources": [
+      "ios/RayactWebViewRegistration.swift"
+    ],
+    "registrationType": "RayactWebViewRegistration",
+    "frameworks": [
+      "WebKit"
+    ]
+  },
+  "web": {
+    "script": "web/register.js"
+  }
 }

@@ -105,7 +105,15 @@ export async function checkDiscoveredServerCompatibility(
   }));
 }
 
-export function DevLauncherProvider({ children }: { children: React.ReactNode }) {
+export function DevLauncherProvider({ children, projectDevTools = false }: {
+  children: React.ReactNode;
+  /**
+   * True only when the provider wraps a running project (ProjectDevOverlay).
+   * The launcher screen must never expose the developer tools, so shake and
+   * the native dev-menu toggle are ignored unless this is set.
+   */
+  projectDevTools?: boolean;
+}) {
   const [url, setUrlState] = useState('');
   const [theme] = useState<DevLauncherTheme | null>(FALLBACK_THEME);
   const [recentEntries, setRecentEntries] = useState<RecentEntry[]>([]);
@@ -160,14 +168,19 @@ export function DevLauncherProvider({ children }: { children: React.ReactNode })
   // shake/key gesture is delivered, which previously selected that fallback
   // and hid Inspector and Diagnostics on iOS and Android.
   const g = globalThis as { __rayactToggleDevMenu?: () => void };
-  g.__rayactToggleDevMenu = () => setDevMenuOpen(open => !open);
+  // On the launcher screen the developer tools must stay unreachable, but the
+  // handler is still registered as a no-op: an unregistered handler makes the
+  // native host fall back to its emergency menu, which would re-expose dev
+  // tools from the launcher through the back door.
+  g.__rayactToggleDevMenu = projectDevTools ? () => setDevMenuOpen(open => !open) : () => {};
 
   useEffect(() => {
+    if (!projectDevTools) return;
     const subscription = addShakeListener(() => {
       setDevMenuOpen(open => !open);
     });
     return () => subscription.remove();
-  }, []);
+  }, [projectDevTools]);
 
   const setUrl = useCallback((u: string) => {
     setUrlState(u);

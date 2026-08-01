@@ -7,6 +7,7 @@ import { MMKV } from '@rayact/mmkv';
 import { KV } from 'rayact/kv';
 import { getItemAsync, setItemAsync } from '@rayact/secure-store';
 import { configureCrashReporter, listCrashReports, recordCrash } from '@rayact/crash-reporter';
+import { isAvailableAsync } from '@rayact/sensors';
 import { Svg } from '@rayact/svg';
 
 function App() {
@@ -17,12 +18,14 @@ function App() {
     'mmkv-roundtrip',
     'secure-store-roundtrip',
     'crash-reporter-local',
+    'sensors-availability',
     'svg-node-roundtrip'
   ];
   const [kvLine, setKvLine] = useState('kv: …');
   const [mmkvLine, setMmkvLine] = useState('mmkv: …');
   const [secureLine, setSecureLine] = useState('secure-store: …');
   const [crashLine, setCrashLine] = useState('crash-reporter: …');
+  const [sensorsLine, setSensorsLine] = useState('sensors: …');
   const [svgLine, setSvgLine] = useState('svg: …');
 
   useEffect(() => {
@@ -76,6 +79,16 @@ function App() {
         setCrashLine('crash-reporter ERROR: ' + String(e));
       }
     })();
+    (async () => {
+      try {
+        const available = await isAvailableAsync('rotation');
+        console.log('MODTEST sensors-availability PASS', available);
+        setSensorsLine(`sensors: rotation ${available ? 'available' : 'unavailable'}`);
+      } catch (e) {
+        console.log('MODTEST sensors-availability FAIL', String(e));
+        setSensorsLine('sensors ERROR: ' + String(e));
+      }
+    })();
     try {
       const invoke = (globalThis as {
         __rayact_invoke?: (name: string, method: string) => ArrayBuffer;
@@ -103,6 +116,7 @@ function App() {
       <Text style={{ text: { color: 0xff8fd6ff, fontSize: 16 } }}>{mmkvLine}</Text>
       <Text style={{ text: { color: 0xffa5f3a5, fontSize: 16 } }}>{secureLine}</Text>
       <Text style={{ text: { color: 0xffffc37a, fontSize: 16 } }}>{crashLine}</Text>
+      <Text style={{ text: { color: 0xffc4b5fd, fontSize: 16 } }}>{sensorsLine}</Text>
       <Text style={{ text: { color: 0xff8fd6ff, fontSize: 16 } }}>{svgLine}</Text>
       {/* Renders through the module's node kind — proves the component path, not just the bus. */}
       <Svg source={probeSvg} style={{ width: 64, height: 64 }} vars={{ '--probe': '#a5f3a5' }} />

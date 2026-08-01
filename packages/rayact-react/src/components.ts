@@ -34,6 +34,7 @@ import type {
 import { useTheme } from './theme/theming.js';
 import { useKeyboard } from './hooks/useKeyboard.js';
 import { useSafeAreaInsets } from './hooks/useSafeAreaInsets.js';
+import { Platform } from '@rayact/shared';
 
 const searchIconSlotStyle = { width: 24, height: 24 };
 
@@ -43,6 +44,37 @@ function asStyleObject(style: StyleProp | undefined): Style {
     return style.reduce<Style>((acc, item) => ({ ...acc, ...asStyleObject(item) }), {});
   }
   return { ...style };
+}
+
+/**
+ * Collapse the nested editing-color forms onto their flat keys:
+ * `placeholder: { color }` → `placeholderColor`, `caret`/`cursor` →
+ * `caretColor`, `selection: { color | backgroundColor }` → `selectionColor`.
+ *
+ * The flat keys are what the binary style codec and the CSS cascade speak, so
+ * normalizing here keeps the nested form working on every path (binary create,
+ * binary update, sync fallback) instead of only where the payload happens to
+ * fall back to JSON.
+ */
+function normalizeEditingColors(style: Style): Style {
+  const nested: Array<[keyof Style, keyof Style]> = [
+    ['placeholder', 'placeholderColor'],
+    ['caret', 'caretColor'],
+    ['cursor', 'caretColor'],
+    ['selection', 'selectionColor'],
+  ];
+  let out = style;
+  for (const [from, to] of nested) {
+    const value = out[from] as { color?: unknown; backgroundColor?: unknown } | undefined;
+    if (!value || typeof value !== 'object') continue;
+    const color = value.color ?? value.backgroundColor;
+    if (out === style) out = { ...style };
+    delete (out as Record<string, unknown>)[from as string];
+    if (color != null && out[to] == null) {
+      (out as Record<string, unknown>)[to as string] = color;
+    }
+  }
+  return out;
 }
 
 function edgePadding(explicit: unknown, inset: number): number {
@@ -164,6 +196,9 @@ export interface TextInputHandle {
 declare const focusTextInput:
   | ((nodeId: number, focused?: boolean) => void)
   | undefined;
+declare const setExternalViewProps:
+  | ((nodeId: number, props: Record<string, unknown>) => void)
+  | undefined;
 
 function assignRef(ref: React.Ref<unknown>, value: unknown): void {
   if (typeof ref === 'function') ref(value);
@@ -176,6 +211,7 @@ function assignRef(ref: React.Ref<unknown>, value: unknown): void {
  * TextInputHandle with imperative focus()/blur().
  */
 export function TextInput(props: TextInputProps): React.ReactElement {
+  const theme = useTheme();
   const {
     ref,
     // RN names mapped onto wire props:
@@ -190,9 +226,42 @@ export function TextInput(props: TextInputProps): React.ReactElement {
     selection,
     ...rest
   } = props as TextInputProps & { ref?: React.Ref<TextInputHandle> };
+  // Platforms whose host supplies a real transparent editor through the
+  // platform-view bridge (EditText / UITextField / DOM input / NSTextField).
+  // raym3 keeps painting the Material chrome either way; the native editor only
+  // owns glyphs, caret, selection and composition — which is what buys real IME,
+  // autofill and spellcheck. Everywhere else falls back to raym3's own editor.
+  const nativeEditorPlatform =
+    Platform.OS === Platform.ANDROID ||
+    Platform.OS === Platform.IOS ||
+    Platform.OS === Platform.WEB ||
+    Platform.OS === Platform.MACOS;
+  // Material fields hide the placeholder behind their resting label and reveal
+  // it once the label floats (M3 spec). Tracking focus here is what lets the
+  // editor's hint follow that.
+  const [editorFocused, setEditorFocused] = React.useState(false);
+  const [uncontrolledValue, setUncontrolledValue] = React.useState(
+    props.defaultValue ?? '',
+  );
+  const value = props.value ?? uncontrolledValue;
+  const nativeNodeId = React.useRef(0);
+  const raym3NodeId = React.useRef(0);
 
+  // Bare TextInput is a React-Native-style plain input: no M3 fill, outline,
+  // or label float. TextField (and any caller passing `variant`) opts into the
+  // Material chrome. The `style` prop applies to plain fields as usual.
+  const resolvedVariant = props.variant ?? 'plain';
+  // Plain fields have no label chrome; the native hint stays visible and the
+  // editor gets the full node bounds. (Declared here because the focus
+  // handlers below need it, not only the geometry block.)
+  const hasLabel = !!props.label && resolvedVariant !== 'plain';
   const wire: Record<string, unknown> = {
     ...rest,
+    // Nested `placeholder`/`caret`/`cursor`/`selection` objects collapse onto
+    // the flat color keys the codec and CSS cascade share.
+    style: normalizeEditingColors(asStyleObject(props.style)),
+    variant: resolvedVariant,
+    value,
     inputType: inputTypeFromKeyboardType(keyboardType, multiline, secureTextEntry),
     imeAction: returnKeyType && returnKeyType !== 'default' ? returnKeyType : 'done',
     autoCapitalize: autoCapitalize ?? 'sentences',
@@ -203,29 +272,235 @@ export function TextInput(props: TextInputProps): React.ReactElement {
     multiline: !!multiline,
     // blurOnSubmit defaults to single-line behaviour (RN parity).
     blurOnSubmit: props.blurOnSubmit ?? !multiline,
+    // The renderer retains the complete Material field chrome. On mobile the
+    // transparent child editor owns only glyphs/caret/selection/composition.
+    nativeEditor: nativeEditorPlatform,
+    // The real mobile editor supplies the accessibility element. Keeping the
+    // raym3 chrome semantic as well would announce every field twice.
+    accessible: nativeEditorPlatform ? false : props.accessible,
   };
   // Controlled selection → flat wire keys the bridge reads.
   if (selection) {
     wire.selectionStart = selection.start;
     wire.selectionEnd = selection.end ?? selection.start;
   }
-  // Wrap the host-instance ref in an imperative TextInputHandle.
-  if (ref) {
-    wire.ref = (inst: { node?: { id: number } } | null) => {
-      if (!inst || inst.node == null) {
-        assignRef(ref, null);
-        return;
+  if (nativeEditorPlatform) {
+    // The raym3 chrome owns focus policy (tap-outside dismissal, imperative
+    // focusTextInput, focus stealing by another field). Mirror its focus
+    // transitions onto the native editor, or a chrome blur leaves the
+    // EditText/UITextField focused with the keyboard up. The reverse
+    // direction (editor → chrome) already flows through handleNativeEvent's
+    // focus/blur envelopes; both sides are idempotent, so no loop.
+    wire.onFocus = () => {
+      setEditorFocused(true);
+      if (typeof setExternalViewProps === 'function' && nativeNodeId.current) {
+        setExternalViewProps(nativeNodeId.current, { focused: true });
       }
-      const id = inst.node.id;
-      assignRef(ref, {
-        node: inst.node,
-        focus: () => { if (typeof focusTextInput === 'function') focusTextInput(id, true); },
-        blur: () => { if (typeof focusTextInput === 'function') focusTextInput(id, false); },
-      } satisfies TextInputHandle);
+      props.onFocus?.();
+    };
+    wire.onBlur = () => {
+      setEditorFocused(false);
+      if (typeof setExternalViewProps === 'function' && nativeNodeId.current) {
+        setExternalViewProps(nativeNodeId.current, { focused: false });
+      }
+      props.onBlur?.();
     };
   }
+  // Always retain the raym3 id: native focus transitions must update the M3
+  // focused chrome even when the caller did not request a public ref.
+  wire.ref = (inst: { node?: { id: number } } | null) => {
+    if (!inst || inst.node == null) {
+      raym3NodeId.current = 0;
+      if (ref) {
+        assignRef(ref, null);
+      }
+      return;
+    }
+    const id = inst.node.id;
+    raym3NodeId.current = id;
+    if (ref) {
+      assignRef(ref, {
+        node: inst.node,
+        focus: () => {
+          if (typeof focusTextInput === 'function') focusTextInput(id, true);
+          if (typeof setExternalViewProps === 'function' && nativeNodeId.current) {
+            setExternalViewProps(nativeNodeId.current, { focused: true });
+          }
+        },
+        blur: () => {
+          if (typeof focusTextInput === 'function') focusTextInput(id, false);
+          if (typeof setExternalViewProps === 'function' && nativeNodeId.current) {
+            setExternalViewProps(nativeNodeId.current, { focused: false });
+          }
+        },
+      } satisfies TextInputHandle);
+    }
+  };
 
-  return React.createElement('rayact-text-input', wire);
+  if (!nativeEditorPlatform) {
+    return React.createElement('rayact-text-input', wire);
+  }
+
+  const flattenedStyle = asStyleObject(props.style);
+  const textStyle = flattenedStyle.text ?? {};
+  // Match the renderer's geometry exactly (kFilledInputTop/kFilledInputBottom/
+  // kOutlinedTopStrip in third_party/raym3/src/v2/TextInput.cpp). The native
+  // editor fills only raym3's editable region; raym3 owns the M3 chrome.
+  //  - filled/underline + label: label row reserved at the container top.
+  //  - outlined + label: 8dp top strip; text centers in the border box.
+  //  - no label / plain: full node bounds.
+  const contentHorizontal = 16;
+  let contentTop = 0;
+  let contentBottom = 0;
+  if (hasLabel) {
+    if (resolvedVariant === 'outlined') {
+      contentTop = 8;
+    } else {
+      contentTop = 24;
+      contentBottom = 8;
+    }
+  }
+  const handleNativeEvent = (payload: string) => {
+    let event: {
+      type?: string;
+      text?: string;
+      selectionStart?: number;
+      selectionEnd?: number;
+      width?: number;
+      height?: number;
+      key?: string;
+    };
+    try {
+      event = JSON.parse(payload) as typeof event;
+    } catch {
+      return;
+    }
+    const text = event.text ?? value;
+    switch (event.type) {
+      case 'change':
+        if (props.value == null) setUncontrolledValue(text);
+        props.onChangeText?.(text);
+        props.onChange?.({ nativeEvent: { text } });
+        break;
+      case 'focus':
+        if (raym3NodeId.current && typeof focusTextInput === 'function') {
+          focusTextInput(raym3NodeId.current, true);
+        }
+        break;
+      case 'blur':
+        if (raym3NodeId.current && typeof focusTextInput === 'function') {
+          focusTextInput(raym3NodeId.current, false);
+        }
+        break;
+      case 'submit':
+        props.onSubmitEditing?.({ nativeEvent: { text } });
+        break;
+      case 'selection':
+        // Selection envelopes carry the full editor text. Sync uncontrolled
+        // state from them as well so the raym3 chrome (label float depends on
+        // "has content") can never desync from the native editor even if a
+        // change envelope is lost in transit.
+        if (
+          props.value == null &&
+          typeof event.text === 'string' &&
+          event.text !== value
+        ) {
+          setUncontrolledValue(event.text);
+        }
+        props.onSelectionChange?.({
+          nativeEvent: {
+            selection: {
+              start: event.selectionStart ?? 0,
+              end: event.selectionEnd ?? event.selectionStart ?? 0,
+            },
+          },
+        });
+        break;
+      case 'key':
+        props.onKeyPress?.({ nativeEvent: { key: event.key ?? '' } });
+        break;
+      case 'contentSize':
+        props.onContentSizeChange?.({
+          nativeEvent: {
+            contentSize: {
+              width: event.width ?? 0,
+              height: event.height ?? 0,
+            },
+          },
+        });
+        break;
+    }
+  };
+
+  const nativeEditor = React.createElement('rayact-external-view', {
+    ref: (inst: { node?: { id: number } } | null) => {
+      nativeNodeId.current = inst?.node?.id ?? 0;
+    },
+    kind: 'rayact.internal.text-input',
+    // This native view is only a transparent editor. Preserve raym3 pixels
+    // beneath it instead of treating its bounds as an opaque platform view.
+    preserveFrameworkUnderlay: true,
+    hitTestBehavior: editable === false ? 'transparent' : 'opaque',
+    style: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+    },
+    value,
+    // The native editor shows a placeholder only for `plain` fields — every
+    // Material variant owns that spot with its chrome (resting label float,
+    // etc.), so the native hint stays off there on every platform.
+    //
+    // A plain field has nowhere to render `label`, but the label is still the
+    // field's name: fall back to it so switching variants doesn't silently
+    // change the text the user reads (Material variants rest their label in
+    // exactly this spot).
+    placeholder: hasLabel
+      ? // M3: the label owns this spot at rest and floats out of the way on
+        // focus, at which point the placeholder is what the user should read.
+        editorFocused
+        ? props.placeholder ?? ''
+        : ''
+      : props.label ?? props.placeholder ?? '',
+    inputType: inputTypeFromKeyboardType(keyboardType, multiline, secureTextEntry),
+    imeAction: returnKeyType && returnKeyType !== 'default' ? returnKeyType : 'done',
+    autoCapitalize: autoCapitalize ?? 'sentences',
+    autocorrect: autoCorrect !== false,
+    autoComplete: props.autoComplete ?? null,
+    secure: !!secureTextEntry,
+    editable: editable !== false,
+    multiline: !!multiline,
+    maxLength: props.maxLength ?? null,
+    selectTextOnFocus: !!props.selectTextOnFocus,
+    caretHidden: !!props.caretHidden,
+    contextMenuHidden: !!props.contextMenuHidden,
+    blurOnSubmit: props.blurOnSubmit ?? !multiline,
+    selectionStart: selection?.start ?? null,
+    selectionEnd: selection?.end ?? selection?.start ?? null,
+    // textColor / placeholderColor / cursorColor / selectionColor are NOT sent
+    // from here. Only the engine sees all three sources — the react-native
+    // prop, the resolved CSS/style cascade (`placeholder-color`, `caret-color`,
+    // `selection-color`, or nested `style={{ placeholder: { color } }}`), and
+    // the theme — so it resolves them and pushes the winner to the editor
+    // (syncNativeEditorAppearance). A theme guess sent from JS would race that
+    // and clobber a class-derived color.
+    fontSize: textStyle.fontSize ?? 16,
+    textAlign: props.textAlign ?? 'auto',
+    contentHorizontal,
+    contentTop,
+    contentBottom,
+    hasLabel,
+    focused: !!props.autoFocus,
+    nativeAccessible: props.accessible !== false,
+    nativeAccessibilityLabel:
+      props.accessibilityLabel ?? props.label ?? props.placeholder ?? null,
+    nativeAccessibilityHint: props.accessibilityHint ?? null,
+    onNativeEvent: handleNativeEvent,
+  });
+
+  return React.createElement('rayact-text-input', wire, nativeEditor);
 }
 
 export const Input = TextInput;
@@ -401,15 +676,25 @@ export function ActivityIndicator(props: ActivityIndicatorProps): React.ReactEle
 export interface ExternalViewProps extends BaseProps {
   /** Producer kind: 'stub' (animated test pattern), 'textfield', ... */
   kind?: string;
+  /**
+   * Whether this native view participates in Rayact hit testing.
+   * Mirrors Flutter's PlatformViewHitTestBehavior.
+   */
+  hitTestBehavior?: 'opaque' | 'translucent' | 'transparent';
+  /** Raw event envelope emitted by the registered platform-view controller. */
+  onNativeEvent?: (payload: string) => void;
 }
 
 /**
- * A node whose content is produced by a platform-native view and composited
- * as a texture inside the scene (platform-view system). Producers: 'stub'
- * (animated test pattern), 'textfield' (native EditText / NSTextField).
+ * A node whose content is produced by a registered platform-native view.
+ * Hosts with native composition keep the view in the real platform hierarchy;
+ * unsupported hosts may use the legacy texture/stub fallback.
  */
 export function ExternalView(props: ExternalViewProps): React.ReactElement {
-  return React.createElement('rayact-external-view', props);
+  return React.createElement('rayact-external-view', {
+    hitTestBehavior: 'opaque',
+    ...props,
+  });
 }
 
 export interface NativeTextInputProps extends BaseProps {

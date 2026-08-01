@@ -32,6 +32,7 @@
  *   1  initial: named modules, byte-in/byte-out invoke
  *   2  node kinds (modules can own render nodes), GPU table, shared buffers,
  *      frame requests, WASM host-import registration
+ *   3  platform view factories (modules can own composited native views)
  */
 #ifndef RAYACT_MODULE_ABI_H
 #define RAYACT_MODULE_ABI_H
@@ -43,7 +44,7 @@
 extern "C" {
 #endif
 
-#define RAYACT_MODULE_ABI_VERSION 2u
+#define RAYACT_MODULE_ABI_VERSION 3u
 
 typedef struct {
   const uint8_t* ptr;
@@ -100,6 +101,42 @@ typedef struct RayactNodeVTable {
   void (*gpu_reset)(void* self);   /* graphics device lost; drop GPU objects. May be NULL. */
   int (*needs_frame)(void* self);  /* cheap poll; nonzero schedules a frame. May be NULL. */
 } RayactNodeVTable;
+
+/*
+ * A platform view factory lets a module own a real OS view composited inside the
+ * rayact scene — a WKWebView/NSView on macOS, and the same shape for future hosts
+ * (the handle is deliberately void*, so a Linux GTK/WPE widget fits unchanged).
+ *
+ * Division of labour: the engine owns the surrounding wrapper view, hit-testing,
+ * clipping, layout and occlusion; the module owns everything inside its view. This
+ * is the desktop counterpart of Android's RayactPlatformRegistry.registerViewFactory
+ * and iOS's registerViewFactory, and the naming is kept parallel on purpose.
+ *
+ * All calls run on the platform main/UI thread. `props_json` is UTF-8 JSON; in the
+ * patch passed to set_properties an explicit JSON null means "this prop was
+ * removed". As with node kinds, the vtable is copied at registration and kinds are
+ * never unregistered.
+ */
+typedef struct RayactViewFactory {
+  uint32_t struct_size;     /* sizeof(RayactViewFactory) — forward compatibility */
+  void* self;
+  /*
+   * Create an instance for one node. Returns an opaque instance handle (NULL on
+   * failure) and writes the platform view the host should embed into
+   * *out_native_view (an NSView* on macOS).
+   */
+  void* (*create)(void* self, int32_t node_id, const char* props_json,
+                  size_t props_len, void** out_native_view);
+  int (*set_properties)(void* instance, const char* props_patch_json, size_t len);
+  /*
+   * The host sized the view. The first call carries the first non-zero bounds,
+   * which is the hook a web view needs: WKWebView silently refuses to load while
+   * its frame is empty, and `create` necessarily runs before the first layout.
+   * May be NULL.
+   */
+  void (*notify_layout)(void* instance, float width, float height);
+  void (*dispose)(void* instance);
+} RayactViewFactory;
 
 /*
  * The drawing subset that behaves identically across every raylib backend rayact
@@ -195,6 +232,15 @@ typedef struct RayactHost {
   void (*request_frame)(void); /* wake an idle on-demand host */
   int (*register_wasm_imports)(const char* ns, const RayactWasmImport* imports,
                                size_t count);
+  /* --- ABI 3. --- */
+  int (*register_view_factory)(const char* kind, const RayactViewFactory* factory);
+  /*
+   * Deliver an event envelope from a module-owned view up to the node's JS
+   * handler (the same channel the engine's own platform views use). The payload
+   * is UTF-8 JSON, by convention {"type": "...", "data": "..."}. Main thread only;
+   * silently dropped when the node has no JS handler attached.
+   */
+  void (*emit_view_event)(int32_t node_id, const char* json_utf8, size_t len);
 } RayactHost;
 
 /* Plugin entry point. Implemented by every plugin. */

@@ -143,6 +143,7 @@ set(ENGINE_SRC
     ${RAYACT}/native/desktop/kv_store.cpp
     ${RAYACT}/native/desktop/data_dir.cpp
     ${RAYACT}/native/desktop/module_bus.cpp
+    ${RAYACT}/native/desktop/module_views.cpp
     ${RAYACT}/native/desktop/gpu_api.cpp
     ${RAYACT}/native/desktop/plugin_loader.cpp
     ${RAYACT}/native/desktop/accessibility_bridge.cpp

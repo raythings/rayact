@@ -27,7 +27,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         RayactNativeBridge.setNetworkFetchAbort(RayactMobileNetwork.fetchAbortCallback)
         connectionOptions.urlContexts.first?.url.absoluteString.withCString {
             if !RayactNativeBridge.pushURL($0) {
+#if !RAYACT_RELEASE
                 DevClientBridge.enqueueLinkingURL(String(cString: $0))
+#endif
             }
         }
 
@@ -60,7 +62,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         for context in URLContexts {
             context.url.absoluteString.withCString {
                 if !RayactNativeBridge.pushURL($0) {
+#if !RAYACT_RELEASE
                     DevClientBridge.enqueueLinkingURL(String(cString: $0))
+#endif
                 }
             }
         }

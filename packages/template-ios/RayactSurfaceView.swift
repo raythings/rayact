@@ -24,6 +24,8 @@ private final class RayactSemanticElement: UIAccessibilityElement {
 final class RayactSurfaceView: UIView, UITextFieldDelegate {
     private let session: RayactEngineSession
     private let hiddenTextField = RayactImeTextField()
+    private(set) lazy var platformViewHost =
+        RayactPlatformViewHost(owner: self, session: session)
 
     private(set) var surfaceId = 0
     var onSurfaceReady: ((Int) -> Void)?
@@ -152,6 +154,7 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
         } else if surfaceId > 0 {
             reportSurfaceResize()
         }
+        platformViewHost.resizeOverlays()
     }
 
     override func safeAreaInsetsDidChange() {
@@ -283,7 +286,7 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        forwardTouches(touches, action: RayactEngineSession.TOUCH_UP)
+        forwardTouches(touches, action: RayactEngineSession.TOUCH_CANCEL)
     }
 
     private func forwardTouches(_ touches: Set<UITouch>, action: Int) {
@@ -303,7 +306,10 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
     private func pointerId(for touch: UITouch, action: Int) -> Int {
         let key = ObjectIdentifier(touch)
         if let existing = touchPointerIds[key] {
-            if action == RayactEngineSession.TOUCH_UP { touchPointerIds[key] = nil }
+            if action == RayactEngineSession.TOUCH_UP ||
+                action == RayactEngineSession.TOUCH_CANCEL {
+                touchPointerIds[key] = nil
+            }
             return existing
         }
         // Assign the smallest unused index so the first finger down is always 0.
@@ -422,6 +428,7 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
         onSurfaceReady?(sid)
         onSurfaceReady = nil
         session.host.registerImeView(self)
+        session.host.registerSurfaceView(self, surfaceId: sid)
         session.host.renderScheduler.retainSurface()
         session.host.renderScheduler.requestFrame()
         observeKeyboard()
@@ -535,11 +542,17 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
 
     deinit {
         if surfaceId > 0 {
+            platformViewHost.disposeAll()
+            session.host.unregisterSurfaceView(self, surfaceId: surfaceId)
             session.host.unregisterImeView(self)
             session.destroySurface(surfaceId)
             session.host.renderScheduler.releaseSurface()
         }
         NotificationCenter.default.removeObserver(self)
+    }
+
+    func bringHiddenTextFieldToFront() {
+        bringSubviewToFront(hiddenTextField)
     }
 
     private func textRange(in field: UITextField, start: Int, end: Int) -> UITextRange? {

@@ -11,16 +11,32 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist", "android", "ios", "README.md", "rayact.module.json"],
-  "rayact": { "manifest": "rayact.module.json" },
+  "files": [
+    "dist",
+    "android",
+    "ios",
+    "README.md",
+    "rayact.module.json",
+    "web"
+  ],
+  "rayact": {
+    "manifest": "rayact.module.json"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist"
   },
-  "engines": { "node": ">=22" },
-  "publishConfig": { "access": "public", "provenance": true },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "license": "MIT",
-  "maintainers": ["Rayact Maintainers"],
+  "maintainers": [
+    "Rayact Maintainers"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/raythings/rayact.git",

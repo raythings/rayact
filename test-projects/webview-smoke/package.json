@@ -3,7 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Standalone smoke app for @rayact/webview on Android (adb) and iOS (simulator).",
+  "description": "Generic platform-view acceptance app using @rayact/webview on Android and iOS.",
+  "scripts": {
+    "dev": "rayact dev"
+  },
   "dependencies": {
     "@rayact/webview": "*",
     "rayact": "*",

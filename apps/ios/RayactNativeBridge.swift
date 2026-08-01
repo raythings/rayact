@@ -4,6 +4,8 @@ import Darwin
 typealias RayactIOSHandle = Int64
 
 struct RayactIOSHostCallbacks {
+    var abiVersion: UInt32
+    var structSize: UInt32
     var context: UnsafeMutableRawPointer?
     var requestNewSurface: (@convention(c) (UnsafeMutableRawPointer?) -> Int32)?
     var rootSurfaceId: (@convention(c) (UnsafeMutableRawPointer?) -> Int32)?
@@ -23,6 +25,13 @@ struct RayactIOSHostCallbacks {
     var copyToClipboard: (@convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?) -> Void)?
     var readClipboard: (@convention(c) (UnsafeMutableRawPointer?) -> UnsafePointer<CChar>?)?
     var updateImeState: (@convention(c) (UnsafeMutableRawPointer?, Int32, Int32, Int32, Int32, Int32, UnsafePointer<CChar>?) -> Void)?
+    var platformViewCreate: (@convention(c) (UnsafeMutableRawPointer?, Int32, Int32, UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> Void)?
+    var platformViewSetProperties: (@convention(c) (UnsafeMutableRawPointer?, Int32, Int32, UnsafePointer<CChar>?) -> Void)?
+    var platformViewDispose: (@convention(c) (UnsafeMutableRawPointer?, Int32, Int32) -> Void)?
+    var platformViewsBeginFrame: (@convention(c) (UnsafeMutableRawPointer?, Int32, Float, Float, Float) -> Void)?
+    var platformViewComposite: (@convention(c) (UnsafeMutableRawPointer?, Int32, Int32, UnsafePointer<CChar>?) -> Bool)?
+    var platformViewsEndFrame: (@convention(c) (UnsafeMutableRawPointer?, Int32) -> Void)?
+    var platformViewGestureDecision: (@convention(c) (UnsafeMutableRawPointer?, Int32, Int32, Bool) -> Void)?
 }
 
 enum RayactNativeBridge {
@@ -201,4 +210,8 @@ enum RayactNativeBridge {
 
     @_silgen_name("RayactIOSSessionImeHiddenBySystem")
     static func sessionImeHiddenBySystem(_ handle: RayactIOSHandle)
+
+    @_silgen_name("RayactIOSSessionExternalViewEvent")
+    static func sessionExternalViewEvent(
+        _ handle: RayactIOSHandle, _ nodeId: Int32, _ payload: UnsafePointer<CChar>?)
 }

@@ -1,0 +1,36 @@
+// Acceptance app for @rayact/svg loaded as a dynamic module.
+//
+// The point of this app is the load path, not the artwork: <Svg> is contributed by a
+// module the host dlopens at boot — librayact_svg.dylib on desktop, .so on Android,
+// and web/rayact_svg.wasm (an Emscripten side module) on web. If the module failed to
+// load or register, the circle simply does not paint, so a screenshot is a real check.
+//
+// The inline document exercises the parts that live in the module's own copy of
+// raysvg — path fill, stroke, and a var() colour — rather than anything the engine
+// could render on its own.
+
+import React from 'react';
+import { View, Text } from 'rayact/react';
+import { Svg } from '@rayact/svg';
+
+const DOCUMENT = `
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="50" cy="50" r="40" fill="var(--disc)" stroke="var(--ring)" stroke-width="6" />
+  <path d="M30 52 L45 67 L72 38" fill="none" stroke="#ffffff" stroke-width="8"
+        stroke-linecap="round" stroke-linejoin="round" />
+</svg>
+`;
+
+export default function App() {
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+      <Text style={{ fontSize: 18 }}>@rayact/svg dynamic module</Text>
+      <Svg
+        source={DOCUMENT}
+        vars={{ '--disc': '#d92b2b', '--ring': '#1f1f1f' }}
+        style={{ width: 180, height: 180 }}
+      />
+      <Text style={{ fontSize: 13 }}>A red disc with a white tick means the module registered.</Text>
+    </View>
+  );
+}

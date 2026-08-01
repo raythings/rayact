@@ -70,7 +70,14 @@ function validateManifest(manifest: RayactModuleManifest, pkgName: string, file:
     validatePackagePath(artifact.path, 'artifact');
     if (!/^[a-f0-9]{64}$/.test(artifact.sha256)) invalid(`invalid SHA-256 for ${artifact.path}`);
     if (!manifest.platforms.includes(artifact.platform)) invalid(`artifact platform is not declared: ${artifact.platform}`);
-    if (artifact.architecture !== 'universal' && !manifest.architectures.includes(artifact.architecture)) {
+    // `architectures` enumerates the CPU targets a module chose to build for, so a
+    // manifest must declare each one it ships. Two values are exempt because they
+    // are properties of the platform rather than a choice: iOS ships one `universal`
+    // xcframework, and web has exactly one target, `wasm32`. Requiring either to be
+    // listed would make every module repeat a constant.
+    const architectureIsIntrinsic =
+      artifact.architecture === 'universal' || artifact.architecture === 'wasm32';
+    if (!architectureIsIntrinsic && !manifest.architectures.includes(artifact.architecture)) {
       invalid(`artifact architecture is not declared: ${artifact.architecture}`);
     }
   }
@@ -152,6 +159,22 @@ function moduleFromPackageJson(pkgFile: string): ResolvedPlugin | null {
  * intentionally a dependency-graph walk: it never enumerates node_modules or
  * monorepo package directories.
  */
+// Build/dev tooling is a dependency boundary: the walk must not descend into
+// these packages' own dependencies. The dev launcher (@rayact/dev-client)
+// legitimately depends on native modules for its own UI (QR scanning, shake
+// detection), and it is reachable from every project via
+// rayact -> @rayact/cli -> @rayact/dev-server — so without the boundary every
+// consumer build adopted the launcher's native modules as its own, and a web
+// build failed the platform-support check on modules the app never imports.
+// A project that direct-depends on one of these (or on a module they use)
+// still resolves it: the boundary stops descent, not discovery.
+const TOOLING_DEPENDENCY_BOUNDARY = new Set([
+  '@rayact/cli',
+  '@rayact/dev-server',
+  '@rayact/dev-client',
+  'create-rayact-app',
+]);
+
 export function resolveRayactPlugins(projectRoot: string): ResolvedPlugin[] {
   const rootFile = path.join(projectRoot, 'package.json');
   const root = readJson<PackageJson>(rootFile);
@@ -177,8 +200,10 @@ export function resolveRayactPlugins(projectRoot: string): ResolvedPlugin[] {
       }
       byName.set(plugin.name, plugin);
     }
-    queue.push(...Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies })
-      .map(name => ({ name, ownerDir: path.dirname(packageFile) })));
+    if (!TOOLING_DEPENDENCY_BOUNDARY.has(pkg.name ?? '')) {
+      queue.push(...Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies })
+        .map(name => ({ name, ownerDir: path.dirname(packageFile) })));
+    }
   }
   return [...byName.values()].sort((a, b) => a.jsPackage.localeCompare(b.jsPackage));
 }

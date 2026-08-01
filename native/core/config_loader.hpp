@@ -10,11 +10,17 @@
 //
 //   {
 //     "rayact": {
-//       "backgroundColor": "#000000"   // pre-raym3 clear + first-frame clear
+//       "backgroundColor": "#000000",  // pre-raym3 clear + first-frame clear
+//       "title": "My App",             // desktop window title
+//       "window": { "width": 960, "height": 540 }
 //     }
 //   }
 //
 // JS/TS files use `module.exports = { rayact: { ... } }`.
+//
+// `rayact.config.json` (the CLI/dev-server's project file) is also consulted
+// for `name` / `title` / `window`, with its top-level keys read directly — no
+// `rayact` wrapper. Anything found in app.json/app.config.* wins over it.
 //
 // All fields are optional. Missing fields fall back to defaults (black).
 // If no config file is present, defaults are used and `loadAppConfig` is a
@@ -35,6 +41,13 @@ struct AppConfig
     // the app's content tree) AND used as the first-frame clear.
     // Single field — pre-raym3 and first-frame are the same color.
     uint8_t backgroundColor[4] = { 0, 0, 0, 255 };
+    // Desktop/web window the host opens when the app never calls initRaylib
+    // itself (mobile hosts always own window creation; desktop and web used to
+    // depend on the app doing it, which no scaffolded app does). 0 = unset,
+    // meaning the host picks its own default.
+    int windowWidth = 0;
+    int windowHeight = 0;
+    std::string title;
     // Reserved for future fields (e.g. defaultFontFamily, splashImage, ...).
 };
 

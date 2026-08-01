@@ -41,7 +41,7 @@ private class SensorsModule(context: Context) : SensorEventListener {
             "isAvailable" -> hasSensor(payload.optString("type")).toString()
             "startObserving" -> {
                 val type = payload.optString("type")
-                require(type == "accelerometer" || type == "gyroscope" || type == "shake") {
+                require(type == "accelerometer" || type == "gyroscope" || type == "rotation" || type == "shake") {
                     "Unsupported sensor type '$type'"
                 }
                 synchronized(active) { active += type }
@@ -61,6 +61,7 @@ private class SensorsModule(context: Context) : SensorEventListener {
     private fun hasSensor(type: String): Boolean = when (type) {
         "accelerometer", "shake" -> manager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null
         "gyroscope" -> manager.getDefaultSensor(Sensor.TYPE_GYROSCOPE) != null
+        "rotation" -> manager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR) != null
         else -> false
     }
 
@@ -79,6 +80,11 @@ private class SensorsModule(context: Context) : SensorEventListener {
                     manager.registerListener(this, it, delayUs, mainHandler)
                 }
             }
+            if ("rotation" in snapshot) {
+                manager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)?.let {
+                    manager.registerListener(this, it, delayUs, mainHandler)
+                }
+            }
         }
     }
 
@@ -88,14 +94,33 @@ private class SensorsModule(context: Context) : SensorEventListener {
         val type = when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> "accelerometer"
             Sensor.TYPE_GYROSCOPE -> "gyroscope"
+            Sensor.TYPE_ROTATION_VECTOR -> "rotation"
             else -> return
         }
-        if (type in snapshot) enqueue(JSONObject()
-            .put("type", type)
-            .put("x", event.values[0])
-            .put("y", event.values[1])
-            .put("z", event.values[2])
-            .put("timestamp", timestamp))
+        if (type in snapshot) {
+            if (type == "rotation") {
+                val matrix = FloatArray(9)
+                val orientation = FloatArray(3)
+                SensorManager.getRotationMatrixFromVector(matrix, event.values)
+                SensorManager.getOrientation(matrix, orientation)
+                enqueue(JSONObject()
+                    .put("type", type)
+                    .put("roll", orientation[2])
+                    // Android's SensorManager signs pitch and yaw opposite to
+                    // Core Motion. Match Reanimated's ROTATION sensor contract
+                    // so shared RN/Rayact effects respond identically.
+                    .put("pitch", -orientation[1])
+                    .put("yaw", -orientation[0])
+                    .put("timestamp", timestamp))
+            } else {
+                enqueue(JSONObject()
+                    .put("type", type)
+                    .put("x", event.values[0])
+                    .put("y", event.values[1])
+                    .put("z", event.values[2])
+                    .put("timestamp", timestamp))
+            }
+        }
 
         if (event.sensor.type == Sensor.TYPE_ACCELEROMETER && "shake" in snapshot) {
             val previous = previousAcceleration

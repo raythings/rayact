@@ -1,0 +1,36 @@
+/* Starter stylesheet. Classes here are matched against the `className` prop.
+   Rayact supports a large CSS subset natively — colors (including oklch/hsl),
+   flexbox layout, media queries, transitions, :hover/:active states and
+   CSS variables. See the styling guide: https://rayact.dev/guide/styling */
+
+:root {
+  --accent: #90caf9;
+}
+
+.screen {
+  flex: 1;
+  background-color: #1a237e;
+  padding: 28px;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+}
+
+.title {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.subtitle {
+  color: var(--accent);
+}
+
+.link {
+  color: #fff176;
+}
+
+.tap-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}

@@ -1,0 +1,108 @@
+/*
+ * Every construct the engine's CSS parser supports, written the way a human
+ * would write it — comments, generous whitespace, long-form colors and units.
+ * Minifying this must not change a single rendered pixel; each rule below is
+ * one esbuild rewrite that could break the hand-rolled parser:
+ *
+ *   rgba(...) with 2-decimal alpha -> 8-digit hex
+ *   0px in a shorthand            -> unitless 0
+ *   200ms                         -> .2s
+ *   scale(0.9)                    -> scale(.9)
+ *   @keyframes from/to            -> 0%/to
+ *   @media (a) and (b)            -> @media(a)and (b)
+ */
+
+:root {
+  --ink: #f3f3f7;
+  --muted: #aaaab8;
+  --accent: oklch(0.72 0.15 200);
+  --pad: 10px;
+  --radius: 12px;
+}
+
+.screen {
+  flex: 1;
+  background-color: #101014;
+  padding-inline: calc(var(--pad) * 2);
+  padding-block: 20px;
+}
+
+.title {
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.label {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+/* 8-digit-hex candidate: two-decimal alpha */
+.card {
+  background-color: rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  border-left-width: 3px;
+  border-left-color: var(--accent);
+}
+
+/* unitless-zero candidate: leading 0px in a shorthand */
+.elevated {
+  box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+/* colour functions the parser handles natively — esbuild must not lower these */
+.mixed {
+  background-color: color-mix(in srgb, #3ddc97 35%, #101014);
+}
+
+.hsl {
+  background-color: hsl(210 100% 50%);
+}
+
+/* time-unit candidate: ms -> s with a leading-dot number */
+.animated {
+  transition: opacity 200ms ease-in-out, transform 150ms linear;
+  animation: pulse 900ms ease-in-out infinite;
+}
+
+/* keyframe-selector candidate: from/to -> 0%/to */
+@keyframes pulse {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* media-header candidate: spaces around the parens get removed */
+@media (prefers-color-scheme: dark) {
+  .title {
+    color: #ffffff;
+  }
+}
+
+@media (min-width: 320px) and (orientation: portrait) {
+  .wide {
+    background-color: rgba(61, 220, 151, 0.18);
+    padding: 12px;
+    border-radius: 10px;
+  }
+}
+
+/* inset-collapse candidate: esbuild rewrites these four edges to `inset: 0`,
+ * which the parser must expand back (codesitter's orb backdrop vanished here) */
+.inset-fill {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background-color: rgba(255, 170, 0, 0.35);
+  border-radius: 8px;
+}

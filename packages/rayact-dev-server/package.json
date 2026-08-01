@@ -22,8 +22,10 @@
     "clean": "rm -rf dist schema"
   },
   "dependencies": {
+    "@rayact/dev-client": "0.0.4",
     "@rayact/devtools": "0.0.4",
     "@rayact/prebuild": "0.0.4",
+    "@rayact/router": "0.0.4",
     "@vitejs/plugin-react": "^5.1.1",
     "bonjour-service": "^1.3.0",
     "chokidar": "^4.0.3",

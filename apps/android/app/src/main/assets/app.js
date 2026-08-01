@@ -13932,7 +13932,7 @@
         if (node.type === "textInput" && "value" in props && typeof native.setValue === "function") {
           native.setValue(node.id, String(props.value ?? ""));
         }
-        if (node.type === "textInput" && typeof native.setTextInputProps === "function" && ("multiline" in props || "blurOnSubmit" in props || "readOnly" in props || "disabled" in props || "inputType" in props || "imeAction" in props || "autocorrect" in props || "autoCapitalize" in props || "secure" in props || "secureTextEntry" in props || "contextMenuHidden" in props)) {
+        if (node.type === "textInput" && typeof native.setTextInputProps === "function" && ("multiline" in props || "blurOnSubmit" in props || "readOnly" in props || "disabled" in props || "inputType" in props || "imeAction" in props || "autocorrect" in props || "autoCapitalize" in props || "secure" in props || "secureTextEntry" in props || "contextMenuHidden" in props || "nativeEditor" in props || "variant" in props || "drawBackground" in props || "drawOutline" in props || "drawStateLayer" in props || "label" in props || "placeholder" in props || "maxLength" in props || "caretHidden" in props || "selectTextOnFocus" in props || "textAlign" in props || "selectionColor" in props || "cursorColor" in props || "placeholderTextColor" in props)) {
           native.setTextInputProps(node.id, props);
         }
       },
@@ -14168,6 +14168,14 @@ ${stack}` : message;
     state$1 = next;
     for (const listener of [...listeners$4]) listener(state$1);
   }
+  function devVerboseEnabled$1(globalObject) {
+    return !!globalObject.__RAYACT_DEV_VERBOSE__;
+  }
+  function devInfo$1(globalObject, ...args) {
+    if (!devVerboseEnabled$1(globalObject)) return;
+    const console2 = globalObject.console;
+    console2?.info?.(...args);
+  }
   function joinUrl$1(serverUrl2, path) {
     return `${serverUrl2.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
   }
@@ -14270,7 +14278,7 @@ ${stack}` : message;
           return;
         }
         if (status.revision !== lastRevision) {
-          globalObject.console?.info?.(`[rayact] revision ${status.revision} detected (poll fallback)`);
+          devInfo$1(globalObject, `[rayact] revision ${status.revision} detected (poll fallback)`);
           if (await loadBundle()) lastRevision = status.revision;
         }
       } catch (error) {
@@ -14279,7 +14287,7 @@ ${stack}` : message;
     };
     const handleHmrMessage = (message) => {
       if (message.type === "reload" || message.type === "hmr-update") {
-        globalObject.console?.info?.(`[rayact] ${message.type} received`);
+        devInfo$1(globalObject, `[rayact] ${message.type} received`);
         const revision = typeof message.payload?.revision === "number" ? message.payload.revision : null;
         void loadBundle().then((ok) => {
           if (ok && revision !== null) lastRevision = revision;
@@ -14294,10 +14302,10 @@ ${stack}` : message;
       if (typeof WebSocketCtor !== "function") return;
       if (hmrSocket) return;
       const hmrUrl = manifest.hmrUrl ?? toWsUrl$1(options.serverUrl, "/rayact/hmr");
-      globalObject.console?.info?.(`[rayact] connecting hmr: ${hmrUrl}`);
+      devInfo$1(globalObject, `[rayact] connecting hmr: ${hmrUrl}`);
       hmrSocket = new WebSocketCtor(hmrUrl);
       hmrSocket.onopen = () => {
-        globalObject.console?.info?.("[rayact] hmr connected");
+        devInfo$1(globalObject, "[rayact] hmr connected");
       };
       hmrSocket.onclose = () => {
         globalObject.console?.warn?.("[rayact] hmr disconnected");
@@ -14319,10 +14327,10 @@ ${stack}` : message;
       if (typeof WebSocketCtor !== "function") return;
       if (debuggerSocket) return;
       const debuggerUrl = toWsUrl$1(options.serverUrl, "/rayact/debugger");
-      globalObject.console?.info?.(`[rayact] connecting debugger: ${debuggerUrl}`);
+      devInfo$1(globalObject, `[rayact] connecting debugger: ${debuggerUrl}`);
       debuggerSocket = new WebSocketCtor(debuggerUrl);
       debuggerSocket.onopen = () => {
-        globalObject.console?.info?.("[rayact] debugger connected");
+        devInfo$1(globalObject, "[rayact] debugger connected");
         send("client:ready", {
           serverUrl: options.serverUrl
         });
@@ -14407,6 +14415,88 @@ ${stack}` : message;
       };
     }
   }
+  var PointerEventType;
+  (function(PointerEventType2) {
+    PointerEventType2["DOWN"] = "pointerdown";
+    PointerEventType2["UP"] = "pointerup";
+    PointerEventType2["MOVE"] = "pointermove";
+    PointerEventType2["ENTER"] = "pointerenter";
+    PointerEventType2["LEAVE"] = "pointerleave";
+    PointerEventType2["OUT"] = "pointerout";
+  })(PointerEventType || (PointerEventType = {}));
+  var TouchEventType;
+  (function(TouchEventType2) {
+    TouchEventType2["START"] = "touchstart";
+    TouchEventType2["MOVE"] = "touchmove";
+    TouchEventType2["END"] = "touchend";
+    TouchEventType2["CANCEL"] = "touchcancel";
+  })(TouchEventType || (TouchEventType = {}));
+  var KeyboardEventType;
+  (function(KeyboardEventType2) {
+    KeyboardEventType2["DOWN"] = "keydown";
+    KeyboardEventType2["UP"] = "keyup";
+    KeyboardEventType2["PRESS"] = "keypress";
+  })(KeyboardEventType || (KeyboardEventType = {}));
+  var WindowEventType;
+  (function(WindowEventType2) {
+    WindowEventType2["RESIZE"] = "resize";
+    WindowEventType2["FOCUS"] = "focus";
+    WindowEventType2["BLUR"] = "blur";
+    WindowEventType2["CLOSE"] = "close";
+    WindowEventType2["MINIMIZE"] = "minimize";
+    WindowEventType2["MAXIMIZE"] = "maximize";
+    WindowEventType2["FULLSCREEN"] = "fullscreenchange";
+  })(WindowEventType || (WindowEventType = {}));
+  var Platform;
+  (function(Platform2) {
+    Platform2["WINDOWS"] = "windows";
+    Platform2["LINUX"] = "linux";
+    Platform2["MACOS"] = "macos";
+    Platform2["IOS"] = "ios";
+    Platform2["ANDROID"] = "android";
+    Platform2["WEB"] = "web";
+  })(Platform || (Platform = {}));
+  function detectPlatform() {
+    const injected = globalThis.__rayactPlatform;
+    if (injected && typeof injected.os === "string") {
+      switch (injected.os.toLowerCase()) {
+        case "android":
+          return Platform.ANDROID;
+        case "ios":
+          return Platform.IOS;
+        case "macos":
+          return Platform.MACOS;
+        case "windows":
+          return Platform.WINDOWS;
+        case "linux":
+          return Platform.LINUX;
+        case "web":
+          return Platform.WEB;
+      }
+    }
+    if (typeof window !== "undefined") {
+      if (/Android/i.test(navigator.userAgent)) return Platform.ANDROID;
+      if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return Platform.IOS;
+      if (/iPad/i.test(navigator.userAgent)) return Platform.IOS;
+      if (/Windows/i.test(navigator.userAgent)) return Platform.WINDOWS;
+      if (/Macintosh|Mac OS X/i.test(navigator.userAgent)) return Platform.MACOS;
+      if (/Linux/i.test(navigator.userAgent)) return Platform.LINUX;
+      if (typeof navigator !== "undefined" && navigator.vendor === "Google Inc." && navigator.platform === "Win32") {
+        return Platform.WINDOWS;
+      }
+    }
+    return Platform.WEB;
+  }
+  (function(Platform2) {
+    Platform2.OS = detectPlatform();
+    Platform2.Version = globalThis.__rayactPlatform?.version ?? "";
+    function select(specifics) {
+      if (Platform2.OS in specifics) return specifics[Platform2.OS];
+      if (Platform2.OS !== Platform2.WEB && "native" in specifics) return specifics.native;
+      return specifics.default;
+    }
+    Platform2.select = select;
+  })(Platform || (Platform = {}));
   function getGlobal$1(options) {
     return options?.global ?? globalThis;
   }
@@ -22878,6 +22968,9 @@ ${stack}` : message;
     borderRightColor: 54,
     borderBottomColor: 55,
     borderLeftColor: 56,
+    placeholderColor: 57,
+    caretColor: 58,
+    selectionColor: 59,
     // enums (int)
     flexDirection: 60,
     justifyContent: 61,
@@ -23376,6 +23469,7 @@ ${stack}` : message;
     "onLongPress",
     "onClick",
     "onChangeText",
+    "onNativeEvent",
     "onValueChange",
     "onScroll",
     "onRequestClose",
@@ -23543,7 +23637,7 @@ ${stack}` : message;
     if (prop === "onPressIn") return "pressIn";
     if (prop === "onPressOut") return "pressOut";
     if (prop === "onLongPress") return "longPress";
-    if (prop === "onChangeText") return "changeText";
+    if (prop === "onChangeText" || prop === "onNativeEvent") return "changeText";
     if (prop === "onValueChange") return "changeValue";
     if (prop === "onScroll") return "scroll";
     if (prop === "onRequestClose") return "requestClose";
@@ -29091,7 +29185,7 @@ ${stack}` : message;
       isDark: t.isDark ?? true
     };
   }
-  var define_RAYACT_BUNDLED_MODULES_default = [{ name: "barcode-scanner", lib: "rayact_barcode_scanner", nativeBus: false, jsPackage: "@rayact/barcode-scanner", platforms: ["android", "ios", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <3", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "clipboard", lib: "rayact_clipboard", nativeBus: false, jsPackage: "@rayact/clipboard", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <3", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "crash-reporter", lib: "rayact_crash_reporter", jsPackage: "@rayact/crash-reporter", platforms: ["android", "ios", "darwin", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=1 <3", engineRange: ">=0.0.3 <0.1.0", permissions: ["crash-report-storage", "network-when-consented"], officialDevApp: true }, { name: "haptics", lib: "rayact_haptics", nativeBus: false, jsPackage: "@rayact/haptics", platforms: ["android", "ios", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <3", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "image-picker", lib: "rayact_image_picker", nativeBus: false, jsPackage: "@rayact/image-picker", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <3", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "linking", lib: "rayact_linking", nativeBus: false, jsPackage: "@rayact/linking", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <3", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "mmkv", lib: "rayact_mmkv", jsPackage: "@rayact/mmkv", platforms: ["android", "ios", "darwin"], architectures: ["arm64", "x86_64"], abiRange: ">=1 <3", engineRange: ">=0.0.3 <0.1.0", permissions: [], officialDevApp: true }, { name: "secure-store", lib: "rayact_secure_store", jsPackage: "@rayact/secure-store", platforms: ["android", "ios", "darwin"], architectures: ["arm64", "x86_64"], abiRange: ">=1 <3", engineRange: ">=0.0.3 <0.1.0", permissions: ["keychain", "keystore"], officialDevApp: true }, { name: "sensors", lib: "rayact_sensors", nativeBus: false, jsPackage: "@rayact/sensors", platforms: ["android", "ios", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <3", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "svg", lib: "rayact_svg", jsPackage: "@rayact/svg", platforms: ["android", "ios", "darwin", "web"], architectures: ["arm64", "x86_64"], abiRange: ">=2 <3", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "webview", lib: "rayact_webview", nativeBus: false, jsPackage: "@rayact/webview", platforms: ["android", "ios", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <3", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }];
+  var define_RAYACT_BUNDLED_MODULES_default = [{ name: "barcode-scanner", lib: "rayact_barcode_scanner", nativeBus: false, jsPackage: "@rayact/barcode-scanner", platforms: ["android", "ios"], architectures: ["arm64", "x86_64"], abiRange: ">=2 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "clipboard", lib: "rayact_clipboard", nativeBus: false, jsPackage: "@rayact/clipboard", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "crash-reporter", lib: "rayact_crash_reporter", jsPackage: "@rayact/crash-reporter", platforms: ["android", "ios", "darwin", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=1 <4", engineRange: ">=0.0.3 <0.1.0", permissions: ["crash-report-storage", "network-when-consented"], officialDevApp: true }, { name: "haptics", lib: "rayact_haptics", nativeBus: false, jsPackage: "@rayact/haptics", platforms: ["android", "ios", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "image-picker", lib: "rayact_image_picker", nativeBus: false, jsPackage: "@rayact/image-picker", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "linking", lib: "rayact_linking", nativeBus: false, jsPackage: "@rayact/linking", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "mmkv", lib: "rayact_mmkv", jsPackage: "@rayact/mmkv", platforms: ["android", "ios", "darwin", "web"], architectures: ["arm64", "x86_64"], abiRange: ">=1 <4", engineRange: ">=0.0.3 <0.1.0", permissions: [], officialDevApp: true }, { name: "secure-store", lib: "rayact_secure_store", jsPackage: "@rayact/secure-store", platforms: ["android", "ios", "darwin"], architectures: ["arm64", "x86_64"], abiRange: ">=1 <4", engineRange: ">=0.0.3 <0.1.0", permissions: ["keychain", "keystore"], officialDevApp: true }, { name: "sensors", lib: "rayact_sensors", nativeBus: false, jsPackage: "@rayact/sensors", platforms: ["android", "ios", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "svg", lib: "rayact_svg", jsPackage: "@rayact/svg", platforms: ["android", "ios", "darwin", "web"], architectures: ["arm64", "x86_64"], abiRange: ">=2 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "webview", lib: "rayact_webview", nativeBus: false, jsPackage: "@rayact/webview", platforms: ["android", "ios", "web", "darwin"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=3 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }];
   var define_RAYACT_OFFICIAL_APP_default = { displayName: "Rayact Dev App", packageLabel: "Rayact Dev App", source: "official", androidPackageId: "com.rayact.app", creditTitle: "The official Rayact development client", links: [{ id: "github", icon: "github", set: "fab", label: "GitHub", url: "https://github.com/raythings/rayact" }, { id: "email", icon: "envelope", set: "fa", label: "ramnadroj@gmail.com", url: "mailto:ramnadroj@gmail.com" }] };
   function getOfficialApp() {
     try {
@@ -29654,7 +29748,8 @@ ${stack}` : message;
     }));
   }
   function DevLauncherProvider({
-    children
+    children,
+    projectDevTools = false
   }) {
     const [url, setUrlState] = reactExports.useState("");
     const [theme] = reactExports.useState(FALLBACK_THEME);
@@ -29697,13 +29792,15 @@ ${stack}` : message;
       }
     }, [inspectorPickMode]);
     const g = globalThis;
-    g.__rayactToggleDevMenu = () => setDevMenuOpen((open) => !open);
+    g.__rayactToggleDevMenu = projectDevTools ? () => setDevMenuOpen((open) => !open) : () => {
+    };
     reactExports.useEffect(() => {
+      if (!projectDevTools) return;
       const subscription = addShakeListener(() => {
         setDevMenuOpen((open_0) => !open_0);
       });
       return () => subscription.remove();
-    }, []);
+    }, [projectDevTools]);
     const setUrl = reactExports.useCallback((u) => {
       setUrlState(u);
       setConnectError("");
@@ -30150,6 +30247,23 @@ ${stack}` : message;
       ...style
     };
   }
+  function normalizeEditingColors(style) {
+    const nested = [["placeholder", "placeholderColor"], ["caret", "caretColor"], ["cursor", "caretColor"], ["selection", "selectionColor"]];
+    let out = style;
+    for (const [from, to] of nested) {
+      const value = out[from];
+      if (!value || typeof value !== "object") continue;
+      const color = value.color ?? value.backgroundColor;
+      if (out === style) out = {
+        ...style
+      };
+      delete out[from];
+      if (color != null && out[to] == null) {
+        out[to] = color;
+      }
+    }
+    return out;
+  }
   function TopSafeAreaSpacer({
     height,
     backgroundColor
@@ -30246,6 +30360,7 @@ ${stack}` : message;
     else if (ref && typeof ref === "object") ref.current = value;
   }
   function TextInput(props) {
+    useTheme();
     const {
       ref,
       // RN names mapped onto wire props:
@@ -30260,8 +30375,21 @@ ${stack}` : message;
       selection,
       ...rest
     } = props;
+    const nativeEditorPlatform = Platform.OS === Platform.ANDROID || Platform.OS === Platform.IOS || Platform.OS === Platform.WEB || Platform.OS === Platform.MACOS;
+    const [editorFocused, setEditorFocused] = React.useState(false);
+    const [uncontrolledValue, setUncontrolledValue] = React.useState(props.defaultValue ?? "");
+    const value = props.value ?? uncontrolledValue;
+    const nativeNodeId = React.useRef(0);
+    const raym3NodeId = React.useRef(0);
+    const resolvedVariant = props.variant ?? "plain";
+    const hasLabel = !!props.label && resolvedVariant !== "plain";
     const wire = {
       ...rest,
+      // Nested `placeholder`/`caret`/`cursor`/`selection` objects collapse onto
+      // the flat color keys the codec and CSS cascade share.
+      style: normalizeEditingColors(asStyleObject(props.style)),
+      variant: resolvedVariant,
+      value,
       inputType: inputTypeFromKeyboardType(keyboardType, multiline, secureTextEntry),
       imeAction: returnKeyType && returnKeyType !== "default" ? returnKeyType : "done",
       autoCapitalize: autoCapitalize ?? "sentences",
@@ -30271,31 +30399,218 @@ ${stack}` : message;
       readOnly: editable === false,
       multiline: !!multiline,
       // blurOnSubmit defaults to single-line behaviour (RN parity).
-      blurOnSubmit: props.blurOnSubmit ?? !multiline
+      blurOnSubmit: props.blurOnSubmit ?? !multiline,
+      // The renderer retains the complete Material field chrome. On mobile the
+      // transparent child editor owns only glyphs/caret/selection/composition.
+      nativeEditor: nativeEditorPlatform,
+      // The real mobile editor supplies the accessibility element. Keeping the
+      // raym3 chrome semantic as well would announce every field twice.
+      accessible: nativeEditorPlatform ? false : props.accessible
     };
     if (selection) {
       wire.selectionStart = selection.start;
       wire.selectionEnd = selection.end ?? selection.start;
     }
-    if (ref) {
-      wire.ref = (inst) => {
-        if (!inst || inst.node == null) {
-          assignRef(ref, null);
-          return;
+    if (nativeEditorPlatform) {
+      wire.onFocus = () => {
+        setEditorFocused(true);
+        if (typeof setExternalViewProps === "function" && nativeNodeId.current) {
+          setExternalViewProps(nativeNodeId.current, {
+            focused: true
+          });
         }
-        const id = inst.node.id;
+        props.onFocus?.();
+      };
+      wire.onBlur = () => {
+        setEditorFocused(false);
+        if (typeof setExternalViewProps === "function" && nativeNodeId.current) {
+          setExternalViewProps(nativeNodeId.current, {
+            focused: false
+          });
+        }
+        props.onBlur?.();
+      };
+    }
+    wire.ref = (inst) => {
+      if (!inst || inst.node == null) {
+        raym3NodeId.current = 0;
+        if (ref) {
+          assignRef(ref, null);
+        }
+        return;
+      }
+      const id = inst.node.id;
+      raym3NodeId.current = id;
+      if (ref) {
         assignRef(ref, {
           node: inst.node,
           focus: () => {
             if (typeof focusTextInput === "function") focusTextInput(id, true);
+            if (typeof setExternalViewProps === "function" && nativeNodeId.current) {
+              setExternalViewProps(nativeNodeId.current, {
+                focused: true
+              });
+            }
           },
           blur: () => {
             if (typeof focusTextInput === "function") focusTextInput(id, false);
+            if (typeof setExternalViewProps === "function" && nativeNodeId.current) {
+              setExternalViewProps(nativeNodeId.current, {
+                focused: false
+              });
+            }
           }
         });
-      };
+      }
+    };
+    if (!nativeEditorPlatform) {
+      return React.createElement("rayact-text-input", wire);
     }
-    return React.createElement("rayact-text-input", wire);
+    const flattenedStyle = asStyleObject(props.style);
+    const textStyle = flattenedStyle.text ?? {};
+    const contentHorizontal = 16;
+    let contentTop = 0;
+    let contentBottom = 0;
+    if (hasLabel) {
+      if (resolvedVariant === "outlined") {
+        contentTop = 8;
+      } else {
+        contentTop = 24;
+        contentBottom = 8;
+      }
+    }
+    const handleNativeEvent = (payload) => {
+      let event;
+      try {
+        event = JSON.parse(payload);
+      } catch {
+        return;
+      }
+      const text = event.text ?? value;
+      switch (event.type) {
+        case "change":
+          if (props.value == null) setUncontrolledValue(text);
+          props.onChangeText?.(text);
+          props.onChange?.({
+            nativeEvent: {
+              text
+            }
+          });
+          break;
+        case "focus":
+          if (raym3NodeId.current && typeof focusTextInput === "function") {
+            focusTextInput(raym3NodeId.current, true);
+          }
+          break;
+        case "blur":
+          if (raym3NodeId.current && typeof focusTextInput === "function") {
+            focusTextInput(raym3NodeId.current, false);
+          }
+          break;
+        case "submit":
+          props.onSubmitEditing?.({
+            nativeEvent: {
+              text
+            }
+          });
+          break;
+        case "selection":
+          if (props.value == null && typeof event.text === "string" && event.text !== value) {
+            setUncontrolledValue(event.text);
+          }
+          props.onSelectionChange?.({
+            nativeEvent: {
+              selection: {
+                start: event.selectionStart ?? 0,
+                end: event.selectionEnd ?? event.selectionStart ?? 0
+              }
+            }
+          });
+          break;
+        case "key":
+          props.onKeyPress?.({
+            nativeEvent: {
+              key: event.key ?? ""
+            }
+          });
+          break;
+        case "contentSize":
+          props.onContentSizeChange?.({
+            nativeEvent: {
+              contentSize: {
+                width: event.width ?? 0,
+                height: event.height ?? 0
+              }
+            }
+          });
+          break;
+      }
+    };
+    const nativeEditor = React.createElement("rayact-external-view", {
+      ref: (inst_0) => {
+        nativeNodeId.current = inst_0?.node?.id ?? 0;
+      },
+      kind: "rayact.internal.text-input",
+      // This native view is only a transparent editor. Preserve raym3 pixels
+      // beneath it instead of treating its bounds as an opaque platform view.
+      preserveFrameworkUnderlay: true,
+      hitTestBehavior: editable === false ? "transparent" : "opaque",
+      style: {
+        position: "absolute",
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0
+      },
+      value,
+      // The native editor shows a placeholder only for `plain` fields — every
+      // Material variant owns that spot with its chrome (resting label float,
+      // etc.), so the native hint stays off there on every platform.
+      //
+      // A plain field has nowhere to render `label`, but the label is still the
+      // field's name: fall back to it so switching variants doesn't silently
+      // change the text the user reads (Material variants rest their label in
+      // exactly this spot).
+      placeholder: hasLabel ? (
+        // M3: the label owns this spot at rest and floats out of the way on
+        // focus, at which point the placeholder is what the user should read.
+        editorFocused ? props.placeholder ?? "" : ""
+      ) : props.label ?? props.placeholder ?? "",
+      inputType: inputTypeFromKeyboardType(keyboardType, multiline, secureTextEntry),
+      imeAction: returnKeyType && returnKeyType !== "default" ? returnKeyType : "done",
+      autoCapitalize: autoCapitalize ?? "sentences",
+      autocorrect: autoCorrect !== false,
+      autoComplete: props.autoComplete ?? null,
+      secure: !!secureTextEntry,
+      editable: editable !== false,
+      multiline: !!multiline,
+      maxLength: props.maxLength ?? null,
+      selectTextOnFocus: !!props.selectTextOnFocus,
+      caretHidden: !!props.caretHidden,
+      contextMenuHidden: !!props.contextMenuHidden,
+      blurOnSubmit: props.blurOnSubmit ?? !multiline,
+      selectionStart: selection?.start ?? null,
+      selectionEnd: selection?.end ?? selection?.start ?? null,
+      // textColor / placeholderColor / cursorColor / selectionColor are NOT sent
+      // from here. Only the engine sees all three sources — the react-native
+      // prop, the resolved CSS/style cascade (`placeholder-color`, `caret-color`,
+      // `selection-color`, or nested `style={{ placeholder: { color } }}`), and
+      // the theme — so it resolves them and pushes the winner to the editor
+      // (syncNativeEditorAppearance). A theme guess sent from JS would race that
+      // and clobber a class-derived color.
+      fontSize: textStyle.fontSize ?? 16,
+      textAlign: props.textAlign ?? "auto",
+      contentHorizontal,
+      contentTop,
+      contentBottom,
+      hasLabel,
+      focused: !!props.autoFocus,
+      nativeAccessible: props.accessible !== false,
+      nativeAccessibilityLabel: props.accessibilityLabel ?? props.label ?? props.placeholder ?? null,
+      nativeAccessibilityHint: props.accessibilityHint ?? null,
+      onNativeEvent: handleNativeEvent
+    });
+    return React.createElement("rayact-text-input", wire, nativeEditor);
   }
   function flattenStyleProp(style) {
     if (!style) return {};
@@ -37856,7 +38171,7 @@ ${stack}` : message;
         if (node.type === "textInput" && "value" in props && typeof native.setValue === "function") {
           native.setValue(node.id, String(props.value ?? ""));
         }
-        if (node.type === "textInput" && typeof native.setTextInputProps === "function" && ("multiline" in props || "blurOnSubmit" in props || "readOnly" in props || "disabled" in props || "inputType" in props || "imeAction" in props || "autocorrect" in props || "autoCapitalize" in props || "secure" in props || "secureTextEntry" in props || "contextMenuHidden" in props)) {
+        if (node.type === "textInput" && typeof native.setTextInputProps === "function" && ("multiline" in props || "blurOnSubmit" in props || "readOnly" in props || "disabled" in props || "inputType" in props || "imeAction" in props || "autocorrect" in props || "autoCapitalize" in props || "secure" in props || "secureTextEntry" in props || "contextMenuHidden" in props || "nativeEditor" in props || "variant" in props || "drawBackground" in props || "drawOutline" in props || "drawStateLayer" in props || "label" in props || "placeholder" in props || "maxLength" in props || "caretHidden" in props || "selectTextOnFocus" in props || "textAlign" in props || "selectionColor" in props || "cursorColor" in props || "placeholderTextColor" in props)) {
           native.setTextInputProps(node.id, props);
         }
       },
@@ -38092,6 +38407,14 @@ ${stack}` : message;
     state = next;
     for (const listener of [...listeners]) listener(state);
   }
+  function devVerboseEnabled(globalObject) {
+    return !!globalObject.__RAYACT_DEV_VERBOSE__;
+  }
+  function devInfo(globalObject, ...args) {
+    if (!devVerboseEnabled(globalObject)) return;
+    const console2 = globalObject.console;
+    console2?.info?.(...args);
+  }
   function joinUrl(serverUrl2, path) {
     return `${serverUrl2.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
   }
@@ -38194,7 +38517,7 @@ ${stack}` : message;
           return;
         }
         if (status.revision !== lastRevision) {
-          globalObject.console?.info?.(`[rayact] revision ${status.revision} detected (poll fallback)`);
+          devInfo(globalObject, `[rayact] revision ${status.revision} detected (poll fallback)`);
           if (await loadBundle()) lastRevision = status.revision;
         }
       } catch (error) {
@@ -38203,7 +38526,7 @@ ${stack}` : message;
     };
     const handleHmrMessage = (message) => {
       if (message.type === "reload" || message.type === "hmr-update") {
-        globalObject.console?.info?.(`[rayact] ${message.type} received`);
+        devInfo(globalObject, `[rayact] ${message.type} received`);
         const revision = typeof message.payload?.revision === "number" ? message.payload.revision : null;
         void loadBundle().then((ok) => {
           if (ok && revision !== null) lastRevision = revision;
@@ -38218,10 +38541,10 @@ ${stack}` : message;
       if (typeof WebSocketCtor !== "function") return;
       if (hmrSocket) return;
       const hmrUrl = manifest.hmrUrl ?? toWsUrl(options.serverUrl, "/rayact/hmr");
-      globalObject.console?.info?.(`[rayact] connecting hmr: ${hmrUrl}`);
+      devInfo(globalObject, `[rayact] connecting hmr: ${hmrUrl}`);
       hmrSocket = new WebSocketCtor(hmrUrl);
       hmrSocket.onopen = () => {
-        globalObject.console?.info?.("[rayact] hmr connected");
+        devInfo(globalObject, "[rayact] hmr connected");
       };
       hmrSocket.onclose = () => {
         globalObject.console?.warn?.("[rayact] hmr disconnected");
@@ -38243,10 +38566,10 @@ ${stack}` : message;
       if (typeof WebSocketCtor !== "function") return;
       if (debuggerSocket) return;
       const debuggerUrl = toWsUrl(options.serverUrl, "/rayact/debugger");
-      globalObject.console?.info?.(`[rayact] connecting debugger: ${debuggerUrl}`);
+      devInfo(globalObject, `[rayact] connecting debugger: ${debuggerUrl}`);
       debuggerSocket = new WebSocketCtor(debuggerUrl);
       debuggerSocket.onopen = () => {
-        globalObject.console?.info?.("[rayact] debugger connected");
+        devInfo(globalObject, "[rayact] debugger connected");
         send("client:ready", {
           serverUrl: options.serverUrl
         });

@@ -1,4 +1,4 @@
-import { loadRayactConfig } from '@rayact/dev-server';
+import { loadRayactConfig, resolveProjectEntry } from '@rayact/dev-server';
 import type { RayactBuildMode } from '@rayact/dev-server';
 
 export interface CliFlags {
@@ -41,7 +41,7 @@ export function parseCli(argv: string[]): CliFlags {
     host: config.devServer?.host ?? '0.0.0.0',
     port: config.devServer?.port ?? 8081,
     webPort: 8768,
-    entry: config.entry ?? 'src/App.tsx',
+    entry: resolveProjectEntry(process.cwd(), config.entry ?? 'src/App.tsx'),
     // Target resolution: explicit CLI flag (--desktop/--android/--ios/--web,
     // applied below) > legacy config.platform (deprecated, warns on load) >
     // desktop for commands that need a single release target.

@@ -6,21 +6,39 @@
   "jsEntry": ".",
   "library": "rayact_haptics",
   "nativeBus": false,
-  "platforms": ["android", "ios", "web"],
-  "architectures": ["arm64", "x86_64", "wasm32"],
-  "abiRange": ">=2 <3",
+  "platforms": [
+    "android",
+    "ios",
+    "web"
+  ],
+  "architectures": [
+    "arm64",
+    "x86_64",
+    "wasm32"
+  ],
+  "abiRange": ">=2 <4",
   "engineRange": ">=0.0.4 <0.1.0",
   "artifacts": [],
   "linkage": "static",
   "permissions": [],
-  "configurationSchema": { "type": "object", "additionalProperties": false },
+  "configurationSchema": {
+    "type": "object",
+    "additionalProperties": false
+  },
   "officialDevApp": true,
   "android": {
-    "sourceDirs": ["android/src/main/java"],
+    "sourceDirs": [
+      "android/src/main/java"
+    ],
     "registrationClass": "dev.rayact.haptics.RayactHapticsRegistration"
   },
   "ios": {
-    "sources": ["ios/RayactHapticsRegistration.swift"],
+    "sources": [
+      "ios/RayactHapticsRegistration.swift"
+    ],
     "registrationType": "RayactHapticsRegistration"
+  },
+  "web": {
+    "script": "web/register.js"
   }
 }

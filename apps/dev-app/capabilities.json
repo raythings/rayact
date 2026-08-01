@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "engineVersion": "0.0.5",
+  "engineVersion": "0.0.4",
   "moduleAbiVersion": 1,
   "mode": "dev-app",
   "platforms": [
@@ -87,6 +87,24 @@
       "abiRange": ">=1 <3",
       "permissions": [],
       "smokeTest": "crash-reporter-local"
+    },
+    {
+      "name": "sensors",
+      "lib": "rayact_sensors",
+      "jsPackage": "@rayact/sensors",
+      "platforms": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=2 <3",
+      "permissions": [],
+      "smokeTest": "sensors-availability"
     },
     {
       "name": "svg",

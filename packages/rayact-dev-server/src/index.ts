@@ -20,8 +20,11 @@ export {
 } from './adb.js';
 export type { AdbReverseWatcher, AdbReverseWatcherOptions } from './adb.js';
 export { compileToBytecode } from './compile.js';
+export { minifyCssText, minifyCssTextSync } from './cssMinify.js';
+export type { MinifyCssResult } from './cssMinify.js';
 export {
   loadRayactConfig,
+  resolveProjectEntry,
   resolveAppName,
   resolveAndroidActivityName,
   resolveAndroidPackageName,

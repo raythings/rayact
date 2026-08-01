@@ -11,6 +11,7 @@ const packageMappings = [
   ['rayact-renderer', 'renderer'],
   ['rayact-react', 'react'],
   ['rayact-navigation', 'navigation'],
+  ['rayact-router', 'router'],
   ['rayact-worklets', 'worklets'],
   ['rayact-dev-client', 'dev-client'],
   ['rayact-dev-server', 'dev-server'],

@@ -7,7 +7,7 @@ import { createRayactApp, detectMonorepoRoot } from './create.js';
 
 function parseArgs(argv: string[]) {
   let projectName = '';
-  let template: 'default' | 'blank' = 'default';
+  let template: 'default' | 'default-router' | 'blank' = 'default';
   let install = true;
   let monorepo = false;
   let local: string | undefined = process.env.RAYACT_LOCAL || undefined;
@@ -19,7 +19,7 @@ function parseArgs(argv: string[]) {
     const arg = argv[i];
     const next = argv[i + 1];
     if (arg === '--template' && next) {
-      if (next !== 'default' && next !== 'blank') {
+      if (next !== 'default' && next !== 'default-router' && next !== 'blank') {
         console.error(`Unknown template: ${next}`);
         process.exit(1);
       }
@@ -45,7 +45,7 @@ function parseArgs(argv: string[]) {
 Usage: create-rayact-app <project-name> [options]
 
 Options:
-  --template <name>    default | blank (default: default)
+  --template <name>    default | default-router | blank (default: default)
   --no-install         Skip npm install
   --release-dir <path> Scaffold from a downloaded Rayact release: vendors the
                        package tarballs into vendor/rayact_pkgs and emits file:

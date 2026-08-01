@@ -224,7 +224,20 @@ export interface ModuleNodeHandlers {
   update?(native: RayactGlobal, nodeId: number, props: Record<string, unknown>): void;
 }
 
-const moduleNodeHandlers = new Map<string, ModuleNodeHandlers>();
+// Process-global, not module-local. In the dev flow this module exists TWICE: the
+// bootstrap bundle carries one copy (whose createNode consults this map), and the
+// dev module graph fetches another (which is what a component's
+// registerNativeComponent call reaches). With a module-local Map the registration
+// landed in the fetched copy and the bootstrap's createNode threw "Unsupported
+// Rayact host node type" for every module component — but only under the dev
+// server, and only for components using this registry (@rayact/svg was the first;
+// webview uses the built-in externalView kind and mmkv never touches nodes, which
+// is how the hole stayed invisible). Release bundles have a single module graph
+// and never hit this.
+const moduleNodeHandlers: Map<string, ModuleNodeHandlers> =
+  ((globalThis as Record<string, unknown>).__rayactModuleNodeHandlers as Map<string, ModuleNodeHandlers>) ??
+  new Map<string, ModuleNodeHandlers>();
+(globalThis as Record<string, unknown>).__rayactModuleNodeHandlers = moduleNodeHandlers;
 
 /**
  * Register the bridge half of a module-provided component. Pair with
@@ -468,7 +481,21 @@ export function createBridge(globalObject: RayactGlobal = globalThis as RayactGl
           'autoCapitalize' in props ||
           'secure' in props ||
           'secureTextEntry' in props ||
-          'contextMenuHidden' in props
+          'contextMenuHidden' in props ||
+          'nativeEditor' in props ||
+          'variant' in props ||
+          'drawBackground' in props ||
+          'drawOutline' in props ||
+          'drawStateLayer' in props ||
+          'label' in props ||
+          'placeholder' in props ||
+          'maxLength' in props ||
+          'caretHidden' in props ||
+          'selectTextOnFocus' in props ||
+          'textAlign' in props ||
+          'selectionColor' in props ||
+          'cursorColor' in props ||
+          'placeholderTextColor' in props
         )
       ) {
         native.setTextInputProps(node.id, props);

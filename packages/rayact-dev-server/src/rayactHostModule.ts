@@ -2,6 +2,7 @@ import type { Connect, ViteDevServer } from 'vite';
 import type { ServerResponse } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { getMinifiedCssFile } from './cssMinify.js';
 
 function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
@@ -26,12 +27,15 @@ function toNativeCssPath(filePath: string, root: string): string {
  * (caller falls back to the importCSS path, which at least names the file).
  */
 export function rayactCssInlineModule(cssFile: string, nativePath: string): string | null {
-  let cssText: string;
-  try {
-    cssText = fs.readFileSync(cssFile, 'utf8');
-  } catch {
-    return null;
-  }
+  // Minify even in dev: the text is inlined into the module as a string literal
+  // and handed straight to the engine's parser, and there is no CSS inspector on
+  // the native targets, so nothing is lost by shipping it compact.
+  //
+  // Served from the cache the dev server primes at launch and refreshes from the
+  // file watcher, so a request is a hit rather than a fresh read + minify.
+  const minified = getMinifiedCssFile(cssFile);
+  if (!minified) return null;
+  const cssText = minified.css;
   const baseDir = nativePath.slice(0, Math.max(0, nativePath.lastIndexOf('/'))) || '.';
   return [
     `var __cssText = ${JSON.stringify(cssText)};`,
@@ -256,6 +260,95 @@ export function wrapRayactModule(registryKey: string, code: string, moduleUrl?: 
   ].join('\n');
 }
 
+/**
+ * The exact text `/rayact/m/<path>` serves for one module, or null when it does
+ * not resolve. Shared by the module middleware and the dev bundler so a bundled
+ * module and a lazily-fetched one can never drift apart.
+ */
+export async function renderRayactModule(
+  vite: ViteDevServer,
+  modulePath: string,
+  query: string
+): Promise<string | null> {
+  const result = await transformRayactModule(vite, modulePath, query);
+  if (!result?.code) return null;
+  const registryKey = `/rayact/m${modulePath}${query}`;
+  return wrapRayactModule(registryKey, withInlineSourceMap(result.code, result.map), modulePath);
+}
+
+/**
+ * Render the entry's whole module graph into one script.
+ *
+ * The device's loader is registry-first: `loadModuleSync` returns a registered
+ * module and only fetches on a miss. Walking the graph therefore costs one
+ * blocking request per module — 241 of them for a real app, which is what makes
+ * a cold start slow. This emits every module the entry can reach as a
+ * `__rayactDefineModule(key, fn)` call, so the device does one request and every
+ * `__require` after that is a local lookup.
+ *
+ * Each module is wrapped, not executed: `wrapRayactModule` produces an IIFE that
+ * runs the body immediately and registers the finished exports, so concatenating
+ * those directly would execute every module eagerly in emission order, reordering
+ * side effects and breaking cycles. Deferring them behind `__rayactDefineModule`
+ * keeps today's lazy, dependency-driven execution order exactly as it is.
+ */
+export async function buildRayactDevBundle(
+  vite: ViteDevServer,
+  entryModulePath: string,
+  query: string,
+  opts: { budgetMs?: number } = {}
+): Promise<{ code: string; moduleCount: number; skipped: number }> {
+  const budgetMs = opts.budgetMs ?? 120_000;
+  const start = Date.now();
+  const seen = new Set<string>();
+  const parts: string[] = [];
+  let skipped = 0;
+
+  // Walk device-facing module URLs (node.url is the same form the device asks
+  // for), starting from the entry's own transform so the graph root exists.
+  await transformRayactModule(vite, entryModulePath, query).catch(() => {});
+  const wantFile = entryModulePath.replace(/^\//, '').split('?')[0];
+  let entry: import('vite').ModuleNode | undefined;
+  for (const node of vite.moduleGraph.idToModuleMap.values()) {
+    if (node.file && normalizePath(node.file).endsWith(wantFile)) { entry = node; break; }
+  }
+
+  const queue: import('vite').ModuleNode[] = entry ? [entry] : [];
+  while (queue.length && Date.now() - start < budgetMs) {
+    const node = queue.shift();
+    if (!node || !node.url) continue;
+    // `node.url` can already carry a query (vite appends its own, and the entry
+    // arrives with ?platform=…). The middleware always builds its registry key
+    // from a query-less path plus the platform query, so strip it here or the
+    // key ends up doubled and never matches what the device asks for.
+    const modulePath = node.url.split('?')[0] ?? node.url;
+    if (!modulePath || seen.has(modulePath)) continue;
+    seen.add(modulePath);
+    let rendered: string | null = null;
+    try {
+      rendered = await renderRayactModule(vite, modulePath, query);
+    } catch {
+      rendered = null;
+    }
+    if (rendered) {
+      parts.push(
+        `globalThis.__rayactDefineModule(${JSON.stringify(`/rayact/m${modulePath}${query}`)},` +
+          `function(){\n${rendered}\n});`
+      );
+    } else {
+      // Not fatal: anything omitted here is still reachable through the normal
+      // per-module fetch, so the bundle degrades to today's behaviour.
+      skipped += 1;
+    }
+    for (const dep of node.ssrImportedModules) {
+      const depPath = dep?.url?.split('?')[0];
+      if (depPath && !seen.has(depPath)) queue.push(dep);
+    }
+  }
+
+  return { code: parts.join('\n'), moduleCount: parts.length, skipped };
+}
+
 // Pre-transform the entry's whole SSR module graph so the first device connect
 // hits Vite's warm transform cache instead of cold-compiling hundreds of
 // modules on demand (each an in-order blocking fetch on the device — that was
@@ -381,8 +474,8 @@ export function createRayactModuleMiddleware(
     const query = url.includes('?') ? url.slice(url.indexOf('?')) : '';
 
     try {
-      const result = await transformRayactModule(vite, modulePath, query);
-      if (!result?.code) {
+      const rendered = await renderRayactModule(vite, modulePath, query);
+      if (!rendered) {
         sendModuleError(
           res,
           404,
@@ -397,8 +490,7 @@ export function createRayactModuleMiddleware(
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cache-Control', 'no-store');
       res.statusCode = 200;
-      const registryKey = `/rayact/m${modulePath}${query}`;
-      res.end(wrapRayactModule(registryKey, withInlineSourceMap(result.code, result.map), modulePath));
+      res.end(rendered);
     } catch (error) {
       sendModuleError(
         res,

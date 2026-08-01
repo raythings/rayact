@@ -55,6 +55,24 @@ void engineFlushStartupJobs();
 // runs JS before the first eval/pump (Android: render thread, not UI thread).
 void enginePrepareJSThread();
 
+#if !defined(RAYACT_ANDROID) && !defined(RAYACT_IOS)
+// Open the window from the host if the app never called initRaylib(). Mobile
+// hosts always own surface creation, so apps there never call it — and neither
+// do the scaffolded templates, which is why desktop and web rendered nothing.
+// No-op (returns true) when a window already exists, so an app that does call
+// initRaylib keeps control of size/title. Must run before engineFinishLoad(),
+// which needs a GL/GPU context to rasterize the icon atlas.
+bool engineEnsureHostWindow(int fallbackWidth = 0, int fallbackHeight = 0);
+#endif
+
+#if defined(__APPLE__) && defined(RAYACT_DESKTOP_METAL) && \
+    !defined(RAYACT_IOS) && !defined(RAYACT_ANDROID)
+// Install the macOS platform-view host (native/desktop/mac_platform_views.mm):
+// AppKit views composited into the raym3 scene through CAMetalLayer overlays.
+// Call after the window exists — it needs the window's own CAMetalLayer.
+void macInstallPlatformViews();
+#endif
+
 // After JS init has run and a window/surface exists: rasterize the icon sprite
 // sheet (needs GL) and run a GC pass. Also brings up raym3 + system appearance.
 void engineFinishLoad();

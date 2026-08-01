@@ -17,7 +17,7 @@
         "x64",
         "wasm32"
       ],
-      "abiRange": ">=1 <3",
+      "abiRange": ">=1 <4",
       "officialDevApp": true,
       "integratedInEngine": true,
       "smokeTest": "kv-roundtrip"
@@ -30,13 +30,14 @@
       "platforms": [
         "android",
         "ios",
-        "darwin"
+        "darwin",
+        "web"
       ],
       "architectures": [
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=1 <3",
+      "abiRange": ">=1 <4",
       "officialDevApp": true,
       "iosIntegratedInEngine": false,
       "smokeTest": "mmkv-roundtrip"
@@ -55,7 +56,7 @@
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=1 <3",
+      "abiRange": ">=1 <4",
       "officialDevApp": true,
       "iosIntegratedInEngine": false,
       "permissions": [
@@ -72,16 +73,38 @@
       "platforms": [
         "android",
         "ios",
-        "darwin"
+        "darwin",
+        "web"
       ],
       "architectures": [
         "arm64",
-        "x86_64"
+        "x86_64",
+        "wasm32"
       ],
-      "abiRange": ">=1 <3",
+      "abiRange": ">=1 <4",
       "officialDevApp": true,
       "iosIntegratedInEngine": false,
       "smokeTest": "crash-reporter-local"
+    },
+    {
+      "name": "sensors",
+      "lib": "rayact_sensors",
+      "jsPackage": "@rayact/sensors",
+      "pluginPackage": "@rayact/sensors",
+      "platforms": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=2 <4",
+      "officialDevApp": true,
+      "iosIntegratedInEngine": false,
+      "smokeTest": "sensors-availability"
     },
     {
       "name": "svg",
@@ -98,7 +121,7 @@
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=2 <3",
+      "abiRange": ">=2 <4",
       "officialDevApp": true,
       "iosIntegratedInEngine": false,
       "smokeTest": "svg-node-roundtrip"

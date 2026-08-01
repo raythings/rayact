@@ -316,8 +316,10 @@ extern "C" int rayact_svg_register(const RayactHost* host) {
     return 0;
 }
 
-// The generic dlopen entry point. Omitted where plugins are linked statically into
-// the host, since every module would otherwise define the same symbol.
+// The generic dlopen entry point, omitted on two platforms for opposite reasons:
+// iOS links plugins statically into the host, where every module defining this same
+// symbol would collide; web is dynamically loaded but declares the entry in its own
+// registration file (web_register.cpp), which would otherwise duplicate it here.
 #if !defined(RAYACT_IOS) && !defined(RAYACT_WEB)
 extern "C" int rayact_module_register(const RayactHost* host) {
     return rayact_svg_register(host);

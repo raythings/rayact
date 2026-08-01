@@ -15,7 +15,7 @@
     "arm64",
     "x86_64"
   ],
-  "abiRange": ">=2 <3",
+  "abiRange": ">=2 <4",
   "engineRange": ">=0.0.4 <0.1.0",
   "linkage": "dynamic",
   "permissions": [],
@@ -24,9 +24,6 @@
     "additionalProperties": false
   },
   "officialDevApp": true,
-  "webSources": [
-    "packages/rayact-svg/native/svg_plugin.cpp"
-  ],
   "nativeSources": [
     "packages/rayact-svg/native/svg_plugin.cpp",
     "packages/rayact-svg/native/raylib_gpu_shim.cpp",
@@ -68,20 +65,47 @@
     {
       "platform": "darwin",
       "architecture": "arm64",
-      "path": "darwin-arm64/librayact_svg.dylib",
-      "sha256": "3b304c552418ae2dff88f64386c0a30c25eda463ef76ef1fd3dc1a7343d499a1"
+      "path": "desktop/darwin-arm64/librayact_svg.dylib",
+      "sha256": "2b0342dbc18455de15b470482a4c9607fa9494c36c8bd3ce6a60b21e2f308c78"
     },
     {
       "platform": "darwin",
       "architecture": "x86_64",
-      "path": "darwin-x64/librayact_svg.dylib",
-      "sha256": "55b6255da94327bf1a9bb14c6afef605e3564c76050884e3342ce6aa34dde6e6"
+      "path": "desktop/darwin-x64/librayact_svg.dylib",
+      "sha256": "128feb7c4d8281dcfab1ca727a26cffd449681e23a77c8b32f585321b4813c16"
     },
     {
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_svg.xcframework",
-      "sha256": "6145e99ecd97259fa4ae5c10deed561b953367d2308e5df71b62fa546a093df9"
+      "sha256": "efc8731505bae412a1d6187fba2bac4f9ab36f227841167ce00b504bcfa0ac19"
+    },
+    {
+      "platform": "web",
+      "architecture": "wasm32",
+      "path": "web/wasm32/rayact_svg.wasm",
+      "sha256": "14d337487d5b96ac65bc63f00ca74824031d3310442b4984b53db62fba5d72c9"
     }
-  ]
+  ],
+  "web": {
+    "sources": [
+      "packages/rayact-svg/native/web_register.cpp",
+      "packages/rayact-svg/native/svg_plugin.cpp",
+      "packages/rayact-svg/native/raylib_gpu_shim.cpp",
+      "third_party/raysvg/src/raysvg.cpp",
+      "third_party/raysvg/src/rsvg_xml.cpp",
+      "third_party/raysvg/src/rsvg_parse.cpp",
+      "third_party/raysvg/src/rsvg_path.cpp",
+      "third_party/raysvg/src/rsvg_paint.cpp",
+      "third_party/raysvg/src/rsvg_transform.cpp",
+      "third_party/raysvg/src/rsvg_flatten.cpp",
+      "third_party/raysvg/src/rsvg_tess_fill.cpp",
+      "third_party/raysvg/src/rsvg_stroke.cpp",
+      "third_party/raysvg/src/rsvg_clip.cpp",
+      "third_party/raysvg/src/rsvg_render.cpp"
+    ],
+    "defines": [
+      "RAYACT_SVG_USE_GPU_SHIM=1"
+    ]
+  }
 }

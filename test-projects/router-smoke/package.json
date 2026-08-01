@@ -1,0 +1,15 @@
+{
+  "name": "rayact-router-smoke",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "File-based routing smoke app — no entry in config, routes in app/",
+  "scripts": {
+    "dev": "rayact dev",
+    "build": "rayact build --release"
+  },
+  "dependencies": {
+    "rayact": "file:../..",
+    "react": "^19.0.0"
+  }
+}

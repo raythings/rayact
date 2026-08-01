@@ -1,0 +1,14 @@
+{
+  "name": "emoji-verify",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Acceptance app for the OS emoji rasterizer backend (Android Paint/Canvas, Apple CoreText).",
+  "scripts": {
+    "dev": "rayact dev"
+  },
+  "dependencies": {
+    "rayact": "*",
+    "react": "^19.0.0"
+  }
+}

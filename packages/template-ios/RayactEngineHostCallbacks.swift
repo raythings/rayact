@@ -44,4 +44,11 @@ protocol RayactEngineHostCallbacks: AnyObject {
     func copyToClipboard(text: String)
     func readClipboard() -> String
     func performHapticFeedback()
+    func platformViewCreate(surfaceId: Int, nodeId: Int, kind: String, propertiesJson: String)
+    func platformViewSetProperties(surfaceId: Int, nodeId: Int, propertiesJson: String)
+    func platformViewDispose(surfaceId: Int, nodeId: Int)
+    func platformViewsBeginFrame(surfaceId: Int, width: Float, height: Float, density: Float)
+    func platformViewComposite(surfaceId: Int, nodeId: Int, compositionJson: String) -> Bool
+    func platformViewsEndFrame(surfaceId: Int)
+    func platformViewGestureDecision(surfaceId: Int, nodeId: Int, accepted: Bool)
 }

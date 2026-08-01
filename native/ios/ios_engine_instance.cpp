@@ -9,6 +9,9 @@
 
 extern "C" void CloseWindow(void);
 #include <raylib.h>
+#include <algorithm>
+#include <cstddef>
+#include <sstream>
 
 extern std::mutex g_engineMutex;
 
@@ -21,6 +24,144 @@ std::atomic<IOSEngineInstance*> g_currentInstance{nullptr};
 
 std::mutex g_graphicsLeaseMutex;
 int64_t g_graphicsLeaseHolder = 0;
+
+class IOSExternalViewEmbedder final
+    : public raym3::v2::ExternalViewEmbedder {
+public:
+    explicit IOSExternalViewEmbedder(IOSEngineInstance* instance)
+        : instance_(instance) {}
+
+    void BeginFrame(uint64_t surfaceId, Rectangle bounds,
+                    float density) override {
+        if (!instance_->hasHostCallbacks) return;
+        const auto& callbacks = instance_->hostCallbacks;
+        if (callbacks.platformViewsBeginFrame)
+            callbacks.platformViewsBeginFrame(
+                callbacks.context, static_cast<int>(surfaceId),
+                bounds.width, bounds.height, density);
+    }
+
+    bool CompositeExternalView(
+        const raym3::v2::ExternalViewComposition& composition) override {
+        if (!instance_->hasHostCallbacks ||
+            !instance_->hostCallbacks.platformViewComposite)
+            return false;
+        std::ostringstream json;
+        json << "{\"bounds\":{\"x\":" << composition.bounds.x
+             << ",\"y\":" << composition.bounds.y
+             << ",\"width\":" << composition.bounds.width
+             << ",\"height\":" << composition.bounds.height
+             << "},\"hitTestBehavior\":\"";
+        switch (composition.hitTestBehavior) {
+        case raym3::v2::ExternalViewHitTestBehavior::Transparent:
+            json << "transparent"; break;
+        case raym3::v2::ExternalViewHitTestBehavior::Translucent:
+            json << "translucent"; break;
+        default:
+            json << "opaque"; break;
+        }
+        json << "\",\"mutators\":[";
+        for (size_t i = 0; i < composition.mutators.size(); ++i) {
+            if (i) json << ',';
+            const auto& mutator = composition.mutators[i];
+            json << '{';
+            switch (mutator.kind) {
+            case raym3::v2::ExternalViewMutatorKind::Transform:
+                json << "\"kind\":\"transform\",\"matrix\":[";
+                for (size_t m = 0; m < mutator.transform.size(); ++m) {
+                    if (m) json << ',';
+                    json << mutator.transform[m];
+                }
+                json << ']';
+                break;
+            case raym3::v2::ExternalViewMutatorKind::ClipRect:
+            case raym3::v2::ExternalViewMutatorKind::ClipRoundedRect:
+                json << "\"kind\":\""
+                     << (mutator.kind ==
+                                 raym3::v2::ExternalViewMutatorKind::ClipRect
+                             ? "clipRect" : "clipRoundedRect")
+                     << "\",\"rect\":{\"x\":" << mutator.rect.x
+                     << ",\"y\":" << mutator.rect.y
+                     << ",\"width\":" << mutator.rect.width
+                     << ",\"height\":" << mutator.rect.height
+                     << "},\"radius\":" << mutator.radius;
+                break;
+            case raym3::v2::ExternalViewMutatorKind::Opacity:
+                json << "\"kind\":\"opacity\",\"opacity\":"
+                     << mutator.opacity;
+                break;
+            }
+            json << '}';
+        }
+        json << "],\"requiresOverlay\":"
+             << (composition.requiresOverlay ? "true" : "false")
+             << ",\"occludingRegions\":[";
+        for (size_t i = 0; i < composition.occludingRegions.size(); ++i) {
+            if (i) json << ',';
+            const Rectangle& r = composition.occludingRegions[i];
+            json << "{\"x\":" << r.x << ",\"y\":" << r.y
+                 << ",\"width\":" << r.width << ",\"height\":" << r.height << '}';
+        }
+        json << "]}";
+        const std::string payload = json.str();
+        const auto& callbacks = instance_->hostCallbacks;
+        return callbacks.platformViewComposite(
+            callbacks.context,
+            static_cast<int>(raym3::v2::Ctx().surfaceId),
+            composition.externalViewId, payload.c_str());
+    }
+
+    void EndFrame(uint64_t surfaceId) override {
+        if (!instance_->hasHostCallbacks) return;
+        const auto& callbacks = instance_->hostCallbacks;
+        if (callbacks.platformViewsEndFrame)
+            callbacks.platformViewsEndFrame(
+                callbacks.context, static_cast<int>(surfaceId));
+    }
+
+    void OnGestureDecision(int externalViewId, bool accepted) override {
+        if (!instance_->hasHostCallbacks) return;
+        const auto& callbacks = instance_->hostCallbacks;
+        if (callbacks.platformViewGestureDecision)
+            callbacks.platformViewGestureDecision(
+                callbacks.context, static_cast<int>(raym3::v2::Ctx().surfaceId),
+                externalViewId, accepted);
+    }
+
+private:
+    IOSEngineInstance* instance_;
+};
+
+static void iosPlatformViewCreate(int surfaceId, int nodeId,
+                                  const char* kind, const char* properties) {
+    IOSEngineInstance* instance = iosEngineCurrent();
+    if (!instance || !instance->hasHostCallbacks) return;
+    auto& callbacks = instance->hostCallbacks;
+    if (callbacks.platformViewCreate)
+        callbacks.platformViewCreate(callbacks.context, surfaceId, nodeId,
+                                     kind, properties);
+}
+
+static void iosPlatformViewRect(int, int, const char*, float, float, float, float) {}
+static void iosPlatformViewInput(int, int, int, float, float) {}
+
+static void iosPlatformViewProperties(int surfaceId, int nodeId,
+                                      const char* properties) {
+    IOSEngineInstance* instance = iosEngineCurrent();
+    if (!instance || !instance->hasHostCallbacks) return;
+    auto& callbacks = instance->hostCallbacks;
+    if (callbacks.platformViewSetProperties)
+        callbacks.platformViewSetProperties(callbacks.context, surfaceId,
+                                            nodeId, properties);
+}
+
+static void iosPlatformViewDispose(int surfaceId, int nodeId) {
+    IOSEngineInstance* instance = iosEngineCurrent();
+    if (!instance || !instance->hasHostCallbacks) return;
+    auto& callbacks = instance->hostCallbacks;
+    if (callbacks.platformViewDispose)
+        callbacks.platformViewDispose(callbacks.context, surfaceId, nodeId);
+}
 
 } // namespace
 
@@ -59,8 +200,29 @@ void IOSEngineInstance::registerHost(const RayactIOSHostCallbacks* callbacks) {
         hostCallbacks = {};
         return;
     }
-    hostCallbacks = *callbacks;
+    if (callbacks->abiVersion != RayactIOSHostCallbacks::kVersion ||
+        callbacks->structSize < offsetof(RayactIOSHostCallbacks, updateImeState) +
+                                    sizeof(callbacks->updateImeState)) {
+        TraceLog(LOG_ERROR,
+                 "RAYACT: rejected iOS host callbacks (version=%u size=%u expectedVersion=%u minimumSize=%zu)",
+                 callbacks->abiVersion, callbacks->structSize,
+                 RayactIOSHostCallbacks::kVersion,
+                 offsetof(RayactIOSHostCallbacks, updateImeState) +
+                     sizeof(callbacks->updateImeState));
+        hasHostCallbacks = false;
+        hostCallbacks = {};
+        return;
+    }
+    hostCallbacks = {};
+    std::memcpy(&hostCallbacks, callbacks,
+                std::min<size_t>(callbacks->structSize, sizeof(hostCallbacks)));
     hasHostCallbacks = true;
+    if (!externalViewEmbedder)
+        externalViewEmbedder =
+            std::make_unique<IOSExternalViewEmbedder>(this);
+    rayactSetExternalViewHostCallbacks(
+        iosPlatformViewCreate, iosPlatformViewRect, iosPlatformViewInput,
+        iosPlatformViewProperties, iosPlatformViewDispose);
 }
 
 void IOSEngineInstance::clearHost() {

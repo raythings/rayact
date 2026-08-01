@@ -536,6 +536,18 @@ static std::vector<std::string> logicalEdgeValues(const std::string& value, size
  */
 static CSSPropMap normalizeCssProps(const CSSPropMap& props) {
     CSSPropMap out = props;
+    // `inset: <1-4 values>` -> top/right/bottom/left. Authors rarely write it,
+    // but CSS minifiers do: esbuild collapses `top:0;right:0;bottom:0;left:0`
+    // into `inset:0`, so without this a minified stylesheet silently loses
+    // absolute positioning (codesitter's backdrop orbs vanished exactly here).
+    if (auto it = out.find("inset"); it != out.end()) {
+        const auto sides = expandEdgeParts(splitTrim(it->second, ' '));
+        static const char* kEdges[] = {"top", "right", "bottom", "left"};
+        for (size_t i = 0; i < sides.size() && i < 4; ++i) {
+            if (!out.count(kEdges[i])) out[kEdges[i]] = sides[i];
+        }
+        out.erase(it);
+    }
     for (const auto& [logical, physical] : logicalBoxExpansions()) {
         auto it = props.find(logical);
         if (it == props.end()) continue;
@@ -643,18 +655,41 @@ static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& rawProps) {
 
         // ── color properties ─────────────────────────────────────────────
         if (prop == "background-color" || prop == "border-color" ||
-            prop == "state-layer-color" || prop == "ripple-color") {
+            prop == "state-layer-color" || prop == "ripple-color" ||
+            prop == "placeholder-color" || prop == "caret-color" ||
+            prop == "selection-color") {
             JS_SetPropertyStr(ctx, obj, camelCase(prop).c_str(), JS_NewFloat64(ctx, parseColor(val)));
             continue;
         }
 
         if (prop == "background") {
             std::string lower = toLower(val);
-            if (lower.find("linear-gradient(") != std::string::npos) {
+            const bool hasGradient = lower.find("gradient(") != std::string::npos;
+            const bool hasBoxKeyword = lower.find("border-box") != std::string::npos ||
+                                       lower.find("padding-box") != std::string::npos ||
+                                       lower.find("content-box") != std::string::npos ||
+                                       lower.find("border-area") != std::string::npos;
+            // Multiple layers, or a layer pinned to a box area, needs the layered
+            // painter — that combination is the standard gradient-border idiom
+            // (`<gradient> border-box, <fill> padding-box`), which is how the web
+            // draws a gradient stroke that follows border-radius.
+            const bool multiLayer = splitTopLevel(val, ',').size() > 1;
+            if (hasBoxKeyword || (hasGradient && multiLayer)) {
+                JS_SetPropertyStr(ctx, obj, "backgroundLayersCss", JS_NewString(ctx, val.c_str()));
+            } else if (hasGradient) {
                 JS_SetPropertyStr(ctx, obj, "backgroundGradientCss", JS_NewString(ctx, val.c_str()));
             } else {
                 JS_SetPropertyStr(ctx, obj, "backgroundColor", JS_NewFloat64(ctx, parseColor(val)));
             }
+            continue;
+        }
+        if (prop == "background-image") {
+            if (toLower(val).find("gradient(") != std::string::npos)
+                JS_SetPropertyStr(ctx, obj, "backgroundGradientCss", JS_NewString(ctx, val.c_str()));
+            continue;
+        }
+        if (prop == "background-clip" || prop == "background-origin") {
+            JS_SetPropertyStr(ctx, obj, camelCase(prop).c_str(), JS_NewString(ctx, val.c_str()));
             continue;
         }
 
@@ -681,11 +716,13 @@ static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& rawProps) {
             continue;
         }
         if (prop == "border-width") {
-            // Uniform `border-width: 1px` stays the single shared field — the
-            // per-edge keys force the renderer onto the edge-by-edge painter,
-            // which cannot round corners, so emitting them for a uniform border
-            // squared off every `border-radius` card. Only a genuinely uneven
-            // shorthand (`border-width: 1px 0`) goes per-edge.
+            // Uniform `border-width: 1px` stays the single shared field: that
+            // path strokes the whole frame in one pass, while the per-edge keys
+            // put the renderer on the edge-by-edge painter (four runs plus eight
+            // corner arcs). Both round corners correctly now — the edge painter
+            // used to clip square bands, which squared off every `border-radius`
+            // card — so this is purely about taking the cheaper path. Only a
+            // genuinely uneven shorthand (`border-width: 1px 0`) goes per-edge.
             auto vals = parseEdgeShorthand(val);
             if (vals[0]==vals[1] && vals[1]==vals[2] && vals[2]==vals[3]) {
                 JS_SetPropertyStr(ctx, obj, "borderWidth", JS_NewFloat64(ctx, vals[0]));
@@ -1274,8 +1311,10 @@ JSValue JS_importCSS(JSContext* ctx, JSValue /*this_val*/,
     std::string basePath = std::filesystem::path(path).parent_path().string();
     if (basePath.empty()) basePath = ".";
     parseCSSIntoStylesheet(content, basePath);
-    printf("CSS loaded: %s (%zu selectors)\n", path.c_str(),
-           raym3::Stylesheet::Global().SelectorCount());
+    // LOG_DEBUG, not printf: on device stdout is relayed into the app developer's
+    // console, and a stylesheet load is routine bookkeeping they did not ask for.
+    TraceLog(LOG_DEBUG, "CSS loaded: %s (%zu selectors)", path.c_str(),
+             raym3::Stylesheet::Global().SelectorCount());
     return JS_UNDEFINED;
 }
 
@@ -1305,8 +1344,8 @@ JSValue JS_importCSSText(JSContext* ctx, JSValue /*this_val*/,
     if (basePath.empty()) basePath = ".";
 
     parseCSSIntoStylesheet(css, basePath);
-    printf("CSS loaded from text (%zu bytes, %zu selectors)\n", css.size(),
-           raym3::Stylesheet::Global().SelectorCount());
+    TraceLog(LOG_DEBUG, "CSS loaded from text (%zu bytes, %zu selectors)", css.size(),
+             raym3::Stylesheet::Global().SelectorCount());
     return JS_UNDEFINED;
 }
 

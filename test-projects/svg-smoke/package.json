@@ -1,0 +1,16 @@
+{
+  "name": "svg-smoke",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Acceptance app for @rayact/svg as a dynamically loaded module on every platform, including the web side module.",
+  "scripts": {
+    "dev": "rayact dev"
+  },
+  "dependencies": {
+    "rayact": "*",
+    "react": "^19.0.0",
+    "@rayact/svg": "*",
+    "@rayact/mmkv": "*"
+  }
+}

@@ -64,6 +64,7 @@ export const SK = {
   // colors (uint32)
   backgroundColor: 50, borderColor: 51, color: 52,
   borderTopColor: 53, borderRightColor: 54, borderBottomColor: 55, borderLeftColor: 56,
+  placeholderColor: 57, caretColor: 58, selectionColor: 59,
   // enums (int)
   flexDirection: 60, justifyContent: 61, alignItems: 62, alignSelf: 63,
   display: 64, position: 65, overflow: 66, pointerEvents: 67, flexWrap: 68,
@@ -89,6 +90,7 @@ export const F64_KEYS = new Set<string>([
 export const COLOR_KEYS = new Set<string>([
   'backgroundColor', 'borderColor', 'color',
   'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor',
+  'placeholderColor', 'caretColor', 'selectionColor',
 ]);
 
 // Enum string → int. MUST match native applyStyleKeyBinary.

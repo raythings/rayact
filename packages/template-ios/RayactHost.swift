@@ -9,6 +9,19 @@ final class RayactHost: RayactEngineHostCallbacks {
     private var devMenuOverlay: DevMenuOverlay?
 #endif
     private(set) weak var imeView: RayactSurfaceView?
+    private var surfaceViews: [Int: WeakSurfaceView] = [:]
+    private var pendingPlatformViewOperations: [Int: [PlatformViewOperation]] = [:]
+
+    private final class WeakSurfaceView {
+        weak var value: RayactSurfaceView?
+        init(_ value: RayactSurfaceView) { self.value = value }
+    }
+
+    private enum PlatformViewOperation {
+        case create(nodeId: Int, kind: String, propertiesJson: String)
+        case properties(nodeId: Int, propertiesJson: String)
+        case dispose(nodeId: Int)
+    }
 
     init(session: RayactEngineSession, renderScheduler: RayactRenderScheduler) {
         self.session = session
@@ -18,6 +31,22 @@ final class RayactHost: RayactEngineHostCallbacks {
     func registerImeView(_ view: RayactSurfaceView) { imeView = view }
     func unregisterImeView(_ view: RayactSurfaceView) {
         if imeView === view { imeView = nil }
+    }
+
+    func registerSurfaceView(_ view: RayactSurfaceView, surfaceId: Int) {
+        surfaceViews[surfaceId] = WeakSurfaceView(view)
+        let operations = pendingPlatformViewOperations.removeValue(
+            forKey: surfaceId) ?? []
+        for operation in operations {
+            applyPlatformViewOperation(operation, to: view.platformViewHost)
+        }
+    }
+
+    func unregisterSurfaceView(_ view: RayactSurfaceView, surfaceId: Int) {
+        if surfaceViews[surfaceId]?.value === view {
+            surfaceViews[surfaceId] = nil
+            pendingPlatformViewOperations[surfaceId] = nil
+        }
     }
 
     func setNavigationHost(_ host: NavigationHost) {
@@ -207,5 +236,73 @@ final class RayactHost: RayactEngineHostCallbacks {
         DispatchQueue.main.async {
             view.performHapticFeedback()
         }
+    }
+
+    func platformViewCreate(surfaceId: Int, nodeId: Int, kind: String, propertiesJson: String) {
+        DispatchQueue.main.async { [weak self] in
+            self?.routePlatformViewOperation(
+                .create(nodeId: nodeId, kind: kind,
+                        propertiesJson: propertiesJson),
+                surfaceId: surfaceId)
+        }
+    }
+
+    func platformViewSetProperties(surfaceId: Int, nodeId: Int, propertiesJson: String) {
+        DispatchQueue.main.async { [weak self] in
+            self?.routePlatformViewOperation(
+                .properties(nodeId: nodeId, propertiesJson: propertiesJson),
+                surfaceId: surfaceId)
+        }
+    }
+
+    func platformViewDispose(surfaceId: Int, nodeId: Int) {
+        DispatchQueue.main.async { [weak self] in
+            self?.routePlatformViewOperation(
+                .dispose(nodeId: nodeId), surfaceId: surfaceId)
+        }
+    }
+
+    private func routePlatformViewOperation(
+        _ operation: PlatformViewOperation, surfaceId: Int
+    ) {
+        if let host = surfaceViews[surfaceId]?.value?.platformViewHost {
+            applyPlatformViewOperation(operation, to: host)
+        } else {
+            pendingPlatformViewOperations[surfaceId, default: []].append(operation)
+        }
+    }
+
+    private func applyPlatformViewOperation(
+        _ operation: PlatformViewOperation, to host: RayactPlatformViewHost
+    ) {
+        switch operation {
+        case let .create(nodeId, kind, propertiesJson):
+            host.create(
+                nodeId: nodeId, kind: kind, propertiesJson: propertiesJson)
+        case let .properties(nodeId, propertiesJson):
+            host.setProperties(
+                nodeId: nodeId, propertiesJson: propertiesJson)
+        case let .dispose(nodeId):
+            host.dispose(nodeId: nodeId)
+        }
+    }
+
+    func platformViewsBeginFrame(surfaceId: Int, width: Float, height: Float, density: Float) {
+        surfaceViews[surfaceId]?.value?.platformViewHost.beginFrame(
+            width: width, height: height, density: density)
+    }
+
+    func platformViewComposite(surfaceId: Int, nodeId: Int, compositionJson: String) -> Bool {
+        surfaceViews[surfaceId]?.value?.platformViewHost.composite(
+            nodeId: nodeId, compositionJson: compositionJson) ?? false
+    }
+
+    func platformViewsEndFrame(surfaceId: Int) {
+        surfaceViews[surfaceId]?.value?.platformViewHost.endFrame()
+    }
+
+    func platformViewGestureDecision(surfaceId: Int, nodeId: Int, accepted: Bool) {
+        surfaceViews[surfaceId]?.value?.platformViewHost.resolveGesture(
+            nodeId: nodeId, accepted: accepted)
     }
 }

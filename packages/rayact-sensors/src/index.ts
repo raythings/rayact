@@ -1,10 +1,18 @@
-export type SensorType = 'accelerometer' | 'gyroscope';
+export type SensorType = 'accelerometer' | 'gyroscope' | 'rotation';
 
 export interface SensorMeasurement {
-  type: SensorType;
+  type: 'accelerometer' | 'gyroscope';
   x: number;
   y: number;
   z: number;
+  timestamp: number;
+}
+
+export interface RotationMeasurement {
+  type: 'rotation';
+  roll: number;
+  pitch: number;
+  yaw: number;
   timestamp: number;
 }
 
@@ -17,7 +25,7 @@ export interface SensorSubscription {
   remove(): void;
 }
 
-type NativeEvent = SensorMeasurement | ShakeEvent;
+type NativeEvent = SensorMeasurement | RotationMeasurement | ShakeEvent;
 type PlatformResponse = { ok: true; value: unknown } | { ok: false; error?: string };
 type PlatformHost = typeof globalThis & {
   platformCall?: (
@@ -95,15 +103,22 @@ export function isAvailableAsync(type: SensorType | 'shake'): Promise<boolean> {
 }
 
 export function addListener(
-  type: SensorType,
+  type: SensorMeasurement['type'],
   listener: (measurement: SensorMeasurement) => void,
   options: { intervalMs?: number } = {},
 ): SensorSubscription {
   return subscribe(type, listener, options.intervalMs);
 }
 
+export function addRotationListener(
+  listener: (measurement: RotationMeasurement) => void,
+  options: { intervalMs?: number } = {},
+): SensorSubscription {
+  return subscribe('rotation', listener, options.intervalMs);
+}
+
 export function addShakeListener(listener: (event: ShakeEvent) => void): SensorSubscription {
   return subscribe('shake', listener, 16);
 }
 
-export default { isAvailableAsync, addListener, addShakeListener };
+export default { isAvailableAsync, addListener, addRotationListener, addShakeListener };

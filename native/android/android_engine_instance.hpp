@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine_runtime.hpp"
+#include <raym3/v2/ExternalView.h>
 
 #include <android/native_window.h>
 #include <atomic>
@@ -8,6 +9,7 @@
 #include <jni.h>
 #include <map>
 #include <mutex>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -84,6 +86,7 @@ struct AndroidEngineInstance {
     int64_t lastRenderFrameNanos = 0;
 
     jobject hostCallbacksGlobal = nullptr;
+    std::unique_ptr<raym3::v2::ExternalViewEmbedder> externalViewEmbedder;
 
     void setCurrent();
     void registerHost(JNIEnv* env, jobject callbacks);

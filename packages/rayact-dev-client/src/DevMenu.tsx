@@ -4,7 +4,7 @@ import { View, Text, Icon, BottomSheet, Switch, useBackHandler } from '@rayact/r
 import { NavigationContainer, createStackNavigator, useNavigation } from '@rayact/navigation';
 import { useDevLauncher } from './DevLauncherContext.js';
 import { DiagnosticsPanel } from './DiagnosticsPanel.js';
-import { clearInspectorHighlight } from './inspector.js';
+import { clearInspectorHighlight, inspectorAvailable } from './inspector.js';
 
 type ToolRoutes = {
   Home: undefined;
@@ -107,13 +107,17 @@ function HomeScreen() {
       >
         <View style={{ gap: 3, flexShrink: 1 }}>
           <Text style={{ text: { color: colors.text, fontSize: 13, fontWeight: 600 } }}>Tap to inspect</Text>
-          <Text style={{ text: { color: colors.muted, fontSize: 10 } }}>
-            Closes this menu and highlights elements as you tap them
+          <Text style={{ text: { color: inspectorAvailable() ? colors.muted : colors.accent, fontSize: 10 } }}>
+            {inspectorAvailable()
+              ? 'Closes this menu and highlights elements as you tap them'
+              : 'Not available on this host'}
           </Text>
         </View>
         <Switch
           selected={launcher.inspectorPickMode}
+          disabled={!inspectorAvailable()}
           onPress={() => {
+            if (!inspectorAvailable()) return;
             if (launcher.inspectorPickMode) {
               clearInspectorHighlight();
               launcher.setInspectorPickMode(false);

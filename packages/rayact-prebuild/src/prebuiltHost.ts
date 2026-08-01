@@ -367,8 +367,16 @@ export async function ensureWebHost(version = RAYACT_ENGINE_VERSION): Promise<st
   const configured = process.env.RAYACT_WEB_HOST_DIR;
   if (configured && hasWebHost(configured)) return configured;
 
-  const local = path.resolve(process.cwd(), 'build-web/bin');
-  if (hasWebHost(local)) return local;
+  // Walk up for a locally built host, not just `./build-web/bin`. Building from
+  // a project directory inside the engine repo used to miss it and silently
+  // fall through to the downloaded prebuilt, so local changes to the web host
+  // (shell.html, native/web/*) never appeared in the output — the app booted
+  // fine and simply lacked whatever had just been added.
+  const local = findLocalWebHost(process.cwd());
+  if (local) {
+    warnIfWebHostStale(local);
+    return local;
+  }
 
   const dir = path.join(prebuiltCacheDir(version, 'web'), 'host');
   if (hasWebHost(dir)) return dir;
@@ -390,6 +398,61 @@ export async function ensureWebHost(version = RAYACT_ENGINE_VERSION): Promise<st
 
 function hasWebHost(dir: string): boolean {
   return ['rayact.html', 'rayact.js', 'rayact.wasm'].every((name) => fs.existsSync(path.join(dir, name)));
+}
+
+/** Nearest `build-web/bin` at or above `from` that holds a built web host. */
+function findLocalWebHost(from: string): string | null {
+  let dir = path.resolve(from);
+  for (;;) {
+    const candidate = path.join(dir, 'build-web/bin');
+    if (hasWebHost(candidate)) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+/**
+ * A release build stages `rayact_release.*`, which `cmake --build build-web
+ * --target rayact` does NOT produce — that only refreshes the dev `rayact.*`
+ * trio. Editing the web host and rebuilding the obvious target therefore leaves
+ * the staged app running old code, with no error to explain it.
+ */
+function warnIfWebHostStale(hostDir: string): void {
+  const repoRoot = path.resolve(hostDir, '../..');
+  const sources = [
+    path.join(repoRoot, 'apps/web/shell.html'),
+    path.join(repoRoot, 'native/web'),
+  ];
+  const newestSource = sources.reduce((newest, entry) => {
+    return Math.max(newest, newestMtime(entry));
+  }, 0);
+  if (newestSource === 0) return;
+
+  for (const host of ['rayact_release.wasm', 'rayact.wasm']) {
+    const file = path.join(hostDir, host);
+    if (!fs.existsSync(file)) continue;
+    const built = fs.statSync(file).mtimeMs;
+    if (built >= newestSource) continue;
+    const script = host.startsWith('rayact_release')
+      ? 'sh scripts/build-web-release-host.sh'
+      : 'cmake --build build-web --target rayact';
+    console.warn(
+      `warning: ${host} is older than the web host sources it was built from.\n` +
+        `  Rebuild it with \`${script}\`, or the app will run the previous host.`,
+    );
+  }
+}
+
+function newestMtime(entry: string): number {
+  if (!fs.existsSync(entry)) return 0;
+  const stat = fs.statSync(entry);
+  if (!stat.isDirectory()) return stat.mtimeMs;
+  let newest = stat.mtimeMs;
+  for (const child of fs.readdirSync(entry)) {
+    newest = Math.max(newest, newestMtime(path.join(entry, child)));
+  }
+  return newest;
 }
 
 function findWebHostDir(root: string): string | null {
