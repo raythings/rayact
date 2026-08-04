@@ -1,7 +1,7 @@
 {
-  "engineVersion": "0.0.0",
-  "moduleAbiVersion": 3,
+  "engineVersion": "0.0.5",
+  "moduleAbiVersion": 5,
   "platform": "linux",
   "arch": "x86_64",
-  "builtAt": "2026-07-31T15:30:51Z"
+  "builtAt": "2026-08-04T15:47:31Z"
 }

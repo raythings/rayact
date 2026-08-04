@@ -1,7 +1,7 @@
 {
-  "engineVersion": "0.0.4",
-  "moduleAbiVersion": 3,
+  "engineVersion": "0.0.5",
+  "moduleAbiVersion": 5,
   "platform": "ios",
   "arch": "arm64",
-  "builtAt": "2026-07-27T00:26:53Z"
+  "builtAt": "2026-08-04T15:47:48Z"
 }

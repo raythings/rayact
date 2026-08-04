@@ -19,6 +19,7 @@ export interface CliFlags {
   ios: boolean;
   iosSimulator: boolean;
   iosDevice: boolean;
+  windows: boolean;
   desktopApp: boolean;
   install: boolean;
   debug: boolean;
@@ -56,6 +57,7 @@ export function parseCli(argv: string[]): CliFlags {
     ios: false,
     iosSimulator: false,
     iosDevice: false,
+    windows: false,
     desktopApp: false,
     install: false,
     debug: true,
@@ -124,6 +126,7 @@ export function parseCli(argv: string[]): CliFlags {
     else if (arg === '--ios') { flags.ios = true; flags.platform = 'ios'; }
     else if (arg === '--ios-simulator') flags.iosSimulator = true;
     else if (arg === '--ios-device') flags.iosDevice = true;
+    else if (arg === '--windows') flags.windows = true;
     else if (arg === '--web') flags.platform = 'web';
     else if (arg === '--desktop') { flags.desktopApp = true; flags.platform = 'desktop'; }
     else if (arg === '--dev-client') flags.devClient = true;

@@ -762,9 +762,14 @@ export function rayactVitePlugin(options: BundleOptions, registry = new AssetReg
         // before the application imports rayact/react and creates a renderer.
         imports.push(`import ${JSON.stringify(REACT_DEVTOOLS_BACKEND_SETUP_ID)};`);
         imports.push(`import ${JSON.stringify(REFRESH_RUNTIME_SETUP_ID)};`);
-        // Install before evaluating the user's entry so its render(<App />)
-        // mounts the developer overlay in the project runtime, not the launcher.
-        imports.push(`import ${JSON.stringify(PROJECT_DEV_OVERLAY_ID)};`);
+        // Install before evaluating a project's entry so render(<App />)
+        // mounts the developer overlay in that project runtime. The branded
+        // dev-app source is the launcher itself; decorating it leaves a stale
+        // provider closure behind when the host swaps to a project bundle and
+        // the new overlay then reads a different React context instance.
+        if (!process.env.RAYACT_DEV_CLIENT_OFFICIAL_APP_METADATA_JSON) {
+          imports.push(`import ${JSON.stringify(PROJECT_DEV_OVERLAY_ID)};`);
+        }
       }
       imports.push(`import ${JSON.stringify(resolvedEntry)};`);
       return imports.join('\n');
@@ -826,7 +831,15 @@ export function createRayactViteConfig(
   const compiler = compilerForMode(mode);
   const minify = shouldMinify(options);
   const registry = assetRegistry ?? new AssetRegistry(root);
-  const bundledNativeModules = mode === 'dev-client'
+  // The official dev app is also run from source in development and release
+  // modes. Its branding wrapper is the authoritative signal that this bundle
+  // is the host launcher, so inject the host capability list there too; an
+  // ordinary project's development/release bundle must continue to describe
+  // requirements in the manifest rather than claiming to bundle them.
+  const isBrandedDevClient = Boolean(
+    process.env.RAYACT_DEV_CLIENT_OFFICIAL_APP_METADATA_JSON
+  );
+  const bundledNativeModules = mode === 'dev-client' || isBrandedDevClient
     ? resolveProjectNativeModules(root)
     : [];
   const devClientAppMetadata = resolveDevClientAppMetadata(root);

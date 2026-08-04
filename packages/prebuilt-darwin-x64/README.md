@@ -3,11 +3,10 @@
 Prebuilt Rayact desktop host for macOS x64
 
 This package contains only the generic host. Optional modules such as MMKV,
-Secure Store, and Crash Reporter are shipped by their own npm packages.
+Secure Store, and Crash Reporter are shipped by their own release packages.
 
-```sh
-npm install @rayact/prebuilt-darwin-x64@0.0.3
-```
+The CLI downloads this package from the matching signed GitHub Release when the
+prebuilt is not already installed or cached.
 
 Part of [Rayact](https://github.com/raythings/rayact) — a cross-platform React renderer with a native raylib + QuickJS backend. See the [documentation](https://rayact.dev).
 

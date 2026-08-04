@@ -10,7 +10,7 @@ near-native code runs without rebuilding the host either.
 
 Declared in `rayact.config.json` → `nativeModules`:
 
-| Module | npm wrapper | Backend |
+| Module | JavaScript package | Backend |
 |--------|-------------|---------|
 | `kv` | `@rayact/runtime` (`Storage`) | built-in |
 | `mmkv` | `@rayact/mmkv` | `librayact_mmkv` (file-backed) |
@@ -35,12 +35,12 @@ npm run build:desktop
 ## Install
 
 ```bash
-npx @rayact/dev-app@0.0.3 install --platform android
-npx @rayact/dev-app@0.0.3 install --platform ios-simulator
-npx @rayact/dev-app@0.0.3 install --platform ios-device
+DEV_APP=https://github.com/raythings/rayact/releases/download/v0.0.5/rayact-dev-app-0.0.5.tgz
+npx "$DEV_APP" install --platform android
+npx "$DEV_APP" install --platform ios-simulator
+npx "$DEV_APP" install --platform ios-device
+npx "$DEV_APP" install --platform windows
 ```
-
-The equivalent GitHub fallback is `https://github.com/raythings/rayact/releases/download/v0.0.3/rayact-dev-app-0.0.3.tgz`.
 
 The installer defaults to release assets from `raythings/rayact`. Override with
 `RAYACT_DEV_APP_REPO` or `RAYACT_DEV_APP_VERSION` only for maintainer testing.

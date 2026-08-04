@@ -1,6 +1,6 @@
 {
   "name": "@rayact/prebuilt-web-wasm",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Prebuilt Rayact WebGPU host for WebAssembly wasm32",
   "sideEffects": false,
   "files": [

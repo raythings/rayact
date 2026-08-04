@@ -1,6 +1,6 @@
 {
   "name": "@rayact/mmkv",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Optional high-performance MMKV-style storage for Rayact",
   "type": "module",
   "sideEffects": false,
@@ -22,6 +22,7 @@
     "android",
     "desktop",
     "ios",
+    "web",
     "rayact.module.json",
     "README.md",
     "CHANGELOG.md"

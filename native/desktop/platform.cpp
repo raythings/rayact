@@ -1,7 +1,13 @@
 #include "platform.hpp"
 #include <cstring>
 #include <iostream>
-#include <sys/utsname.h>
+#if defined(_WIN32)
+  #define WIN32_LEAN_AND_MEAN
+  #define NOMINMAX
+  #include <windows.h>
+#else
+  #include <sys/utsname.h>
+#endif
 
 #if defined(__EMSCRIPTEN__)
 bool PlatformBridge::isDesktop() { return false; }
@@ -36,9 +42,27 @@ const char* PlatformBridge::getPlatformName() {
 }
 
 std::string PlatformBridge::getPlatformVersion() {
+#if defined(_WIN32)
+    // GetVersionEx is deprecated and lies without a compatibility manifest;
+    // read the real build from the kernel's own version resource instead.
+    if (HMODULE ntdll = GetModuleHandleW(L"ntdll.dll")) {
+        using RtlGetVersionFn = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
+        if (auto rtlGetVersion = (RtlGetVersionFn)GetProcAddress(ntdll, "RtlGetVersion")) {
+            RTL_OSVERSIONINFOW info{};
+            info.dwOSVersionInfoSize = sizeof(info);
+            if (rtlGetVersion(&info) == 0) {
+                return std::to_string(info.dwMajorVersion) + "." +
+                       std::to_string(info.dwMinorVersion) + "." +
+                       std::to_string(info.dwBuildNumber);
+            }
+        }
+    }
+    return "unknown";
+#else
     struct utsname info;
     if (uname(&info) == 0) return info.release;
     return "unknown";
+#endif
 }
 
 void PlatformBridge::printPlatformInfo() {

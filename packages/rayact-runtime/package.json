@@ -1,6 +1,6 @@
 {
   "name": "@rayact/runtime",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Rayact host bridge and application lifecycle runtime",
   "type": "module",
   "sideEffects": false,
@@ -21,7 +21,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rayact/shared": "0.0.4"
+    "@rayact/shared": "0.0.5"
   },
   "engines": {
     "node": ">=22"

@@ -49,6 +49,10 @@ if (!fs.existsSync(OUT)) {
   process.exit(1);
 }
 
+run('node', ['scripts/verify-release-set.mjs', OUT, '--require-signature'], { cwd: ROOT });
+run('node', ['scripts/verify-stable-gate.mjs', OUT], { cwd: ROOT });
+run('shasum', ['-a', '256', '-c', path.join(OUT, 'SHA256SUMS')], { cwd: OUT });
+
 const assets = fs.readdirSync(OUT)
   .filter((file) => file !== 'RELEASE_NOTES.md')
   .filter((file) => fs.statSync(path.join(OUT, file)).isFile())
@@ -67,7 +71,7 @@ const assetPaths = assets.map((file) => path.join(OUT, file));
 const notesFile = path.join(OUT, 'RELEASE_NOTES.md');
 const notesArgs = fs.existsSync(notesFile)
   ? ['--notes-file', notesFile]
-  : ['--notes', `Rayact ${TAG} full-feature npm/prebuilt release.`];
+  : ['--notes', `Rayact ${TAG} release.`];
 const target = process.env.RAYACT_RELEASE_TARGET || output('git', ['rev-parse', 'HEAD']);
 
 console.log(`Deleting existing ${REPO} release/tag ${TAG} if present...`);

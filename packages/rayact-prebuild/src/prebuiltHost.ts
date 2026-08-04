@@ -12,7 +12,7 @@ import {
 import { resolvePackageDir, readPrebuiltManifest } from './resolvePrebuilt.js';
 import type { PrebuiltManifest } from './types.js';
 
-export type DesktopHostKey = 'darwin-arm64' | 'darwin-x64' | 'linux-x64';
+export type DesktopHostKey = 'darwin-arm64' | 'darwin-x64' | 'linux-x64' | 'windows-x64';
 
 export interface ResolvedDesktop {
   /** Absolute path to the rayact_desktop host executable. */
@@ -24,13 +24,16 @@ export interface ResolvedDesktop {
 }
 
 /** The desktop prebuilt key for the machine we're running on, or null if unsupported. */
-export function hostDesktopKey(): DesktopHostKey | null {
-  const arch = process.arch; // 'arm64' | 'x64' | ...
-  if (process.platform === 'darwin') {
+export function hostDesktopKey(
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch
+): DesktopHostKey | null {
+  if (platform === 'darwin') {
     if (arch === 'arm64') return 'darwin-arm64';
     if (arch === 'x64') return 'darwin-x64';
   }
-  if (process.platform === 'linux' && arch === 'x64') return 'linux-x64';
+  if (platform === 'linux' && arch === 'x64') return 'linux-x64';
+  if (platform === 'win32' && arch === 'x64') return 'windows-x64';
   return null;
 }
 
@@ -298,12 +301,13 @@ export async function downloadPrebuilt(
 
 // --- Dev app (prebuilt Expo-Go-style host) -----------------------------------
 
-export type DevAppPlatform = 'android' | 'ios-simulator' | 'ios-device';
+export type DevAppPlatform = 'android' | 'ios-simulator' | 'ios-device' | 'windows';
 
 const DEV_APP_ASSETS: Record<DevAppPlatform, string> = {
   android: 'rayact-dev-app.apk',
   'ios-simulator': 'rayact-dev-app-simulator.zip',
-  'ios-device': 'rayact-dev-app-device-unsigned.ipa'
+  'ios-device': 'rayact-dev-app-device-unsigned.ipa',
+  windows: 'rayact-dev-app-windows-x64.zip'
 };
 
 /** Per-user cache dir for downloaded dev-app binaries. */
@@ -318,7 +322,7 @@ export function devAppCacheDir(version = RAYACT_ENGINE_VERSION): string {
  * Ensure the prebuilt dev app for `platform` is in the per-user cache,
  * downloading it from the GitHub release if missing. Returns the installable
  * path: an .apk (android), an unzipped Rayact.app dir (ios-simulator), or an
- * unsigned .ipa (ios-device).
+ * unsigned .ipa (ios-device), or rayact_desktop.exe (Windows).
  */
 export async function ensureDevApp(
   platform: DevAppPlatform,
@@ -334,6 +338,9 @@ export async function ensureDevApp(
     if (platform === 'ios-simulator') {
       const localApp = path.join(localDist, 'Rayact.app');
       if (fs.existsSync(localApp)) return localApp;
+    } else if (platform === 'windows') {
+      const localExe = findFileNamed(localDist, 'rayact_desktop.exe');
+      if (localExe) return localExe;
     } else {
       const localAsset = path.join(localDist, assetName);
       if (fs.existsSync(localAsset)) return localAsset;
@@ -343,10 +350,26 @@ export async function ensureDevApp(
   const dir = devAppCacheDir(version);
   const assetPath = path.join(dir, assetName);
 
-  if (platform === 'ios-simulator') {
-    const appPath = path.join(dir, 'Rayact.app');
-    if (fs.existsSync(appPath)) return appPath;
+  if (platform === 'ios-simulator' || platform === 'windows') {
+    const extractedName = platform === 'windows' ? 'rayact_desktop.exe' : 'Rayact.app';
+    const extractedPath = platform === 'windows'
+      ? findFileNamed(dir, extractedName)
+      : path.join(dir, extractedName);
+    if (extractedPath && fs.existsSync(extractedPath)) return extractedPath;
     if (!fs.existsSync(assetPath)) await downloadReleaseAsset(assetName, dir, { version });
+
+    if (platform === 'windows') {
+      const extractDir = path.join(dir, 'windows-x64');
+      fs.rmSync(extractDir, { recursive: true, force: true });
+      fs.mkdirSync(extractDir, { recursive: true });
+      const res = spawnSync('tar', ['-xf', assetPath, '-C', extractDir], { stdio: 'inherit' });
+      if (res.status !== 0) throw new Error(`extract failed for ${assetName}`);
+      const exe = findFileNamed(extractDir, extractedName);
+      if (!exe) throw new Error(`${assetName} did not contain ${extractedName}`);
+      return exe;
+    }
+
+    const appPath = path.join(dir, 'Rayact.app');
     const res = spawnSync('unzip', ['-oq', assetPath, '-d', dir], { stdio: 'inherit' });
     if (res.status !== 0) throw new Error(`unzip failed for ${assetName}`);
     // The zip may contain Rayact.app at the root or one level down.
@@ -472,6 +495,19 @@ function findDirNamed(root: string, name: string): string | null {
     if (entry.name === name) return p;
     const nested = findDirNamed(p, name);
     if (nested) return nested;
+  }
+  return null;
+}
+
+function findFileNamed(root: string, name: string): string | null {
+  if (!fs.existsSync(root)) return null;
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const p = path.join(root, entry.name);
+    if (entry.isFile() && entry.name === name) return p;
+    if (entry.isDirectory()) {
+      const nested = findFileNamed(p, name);
+      if (nested) return nested;
+    }
   }
   return null;
 }

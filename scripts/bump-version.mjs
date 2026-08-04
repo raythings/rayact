@@ -51,7 +51,7 @@ for (const f of [
   edit(f, (raw) => {
     const p = JSON.parse(raw);
     if (p.version && p.version !== version) p.version = version;
-    for (const dk of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+    for (const dk of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies', 'overrides']) {
       if (!p[dk]) continue;
       for (const k of Object.keys(p[dk])) if (isInternal(k)) p[dk][k] = bumpRange(p[dk][k]);
     }

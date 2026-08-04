@@ -287,8 +287,8 @@ object DevClientBridge {
         val ctx = appContext
         return JSONObject()
             .put("bundleId", ctx?.packageName ?: "com.rayact.app")
-            .put("nativeAppVersion", BuildConfig.VERSION_NAME ?: "0.0.4")
-            .put("rayactVersion", "0.0.4")
+            .put("nativeAppVersion", BuildConfig.VERSION_NAME ?: "0.0.5")
+            .put("rayactVersion", "0.0.5")
             .toString()
     }
 

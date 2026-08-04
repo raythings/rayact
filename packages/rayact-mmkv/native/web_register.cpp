@@ -155,7 +155,7 @@ void mmkvRelease(void*, RayactBytes buf) { free((void*)buf.ptr); }
 
 // The entry every dynamically loaded rayact module exports, on every platform;
 // the web host's dlsym looks up exactly this name (native/web/web_plugin_loader.cpp).
-extern "C" int rayact_module_register(const RayactHost* host) {
+extern "C" RAYACT_MODULE_EXPORT int rayact_module_register(const RayactHost* host) {
     if (!host || host->abi_version < 1u) return -1;
     RayactModule mod{};
     mod.abi_version = RAYACT_MODULE_ABI_VERSION;

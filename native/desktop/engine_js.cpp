@@ -1042,9 +1042,24 @@ bool engineEnsureHostWindow(int fallbackWidth, int fallbackHeight) {
     // Desktop only: on web the browser owns placement, the "monitor" is the page,
     // and moving the window is meaningless — the canvas is authoritative and must
     // never be repositioned or resized from here.
-    if (const int monitor = GetCurrentMonitor(); GetMonitorWidth(monitor) > 0) {
-        SetWindowPosition((GetMonitorWidth(monitor) - width) / 2,
-                          (GetMonitorHeight(monitor) - height) / 2);
+    // Center on the PRIMARY monitor (index 0), not the "current" one: streaming
+    // tools (Parsec/Sunshine) register virtual displays parked tens of thousands
+    // of pixels away in virtual-screen space, GetCurrentMonitor() happily picks
+    // them, and a window centered there is unreachable (observed: y=26214 on a
+    // real machine). Positions are virtual-screen coordinates, so the monitor's
+    // own origin still matters; clamp keeps the title bar reachable.
+    if (GetMonitorWidth(0) > 0) {
+        const Vector2 monitorPos = GetMonitorPosition(0);
+        int px = (int)monitorPos.x + (GetMonitorWidth(0) - width) / 2;
+        int py = (int)monitorPos.y + (GetMonitorHeight(0) - height) / 2;
+        if (px < (int)monitorPos.x) px = (int)monitorPos.x;
+        if (py < (int)monitorPos.y + 32) py = (int)monitorPos.y + 32;
+        printf("[placement] monitors=%d primary=(%d,%d %dx%d) -> center %d,%d\n",
+               GetMonitorCount(), (int)monitorPos.x, (int)monitorPos.y,
+               GetMonitorWidth(0), GetMonitorHeight(0), px, py);
+        SetWindowPosition(px, py);
+        Vector2 after = GetWindowPosition();
+        printf("[placement] after SetWindowPosition: %d,%d\n", (int)after.x, (int)after.y);
     }
 #endif
 
@@ -1245,6 +1260,23 @@ static void registerBuiltInMaterialIconFonts(const char* assets) {
     }
 }
 
+static std::string findBuiltInMaterialIconAssets(const std::string& start) {
+    if (start.empty()) return {};
+    std::filesystem::path dir(start);
+    for (int depth = 0; depth < 8; ++depth) {
+        const std::filesystem::path fonts = dir / "resources/fonts";
+        if (std::filesystem::exists(fonts / "MaterialSymbolsRounded.ttf") ||
+            std::filesystem::exists(fonts / "MaterialIcons-Regular.ttf")) {
+            return dir.string();
+        }
+        if (!dir.has_parent_path()) break;
+        const std::filesystem::path parent = dir.parent_path();
+        if (parent == dir) break;
+        dir = parent;
+    }
+    return {};
+}
+
 // Inject material_icons into each JS context that does not already have Icons.
 // Prefers .jsc bytecode (faster load, no parse) if present alongside the .js.
 static void injectMaterialIconsRaw(JSContext* ctx) {
@@ -1322,19 +1354,19 @@ static void injectMaterialIconsRaw(JSContext* ctx) {
         std::filesystem::path dir = start;
         for (int depth = 0; depth < 6; ++depth) {
             const std::filesystem::path shared = dir / "packages/rayact-shared/dist/material_icons.js";
-            if (tryEvalSource(shared.c_str())) return true;
+            if (tryEvalSource(shared.string().c_str())) return true;
             const std::filesystem::path sharedJsc = dir / "packages/rayact-shared/dist/material_icons.jsc";
-            if (tryEvalBytecode(sharedJsc.c_str())) return true;
+            if (tryEvalBytecode(sharedJsc.string().c_str())) return true;
             const std::filesystem::path nodeModules = dir / "node_modules/@rayact/shared/dist/material_icons.js";
-            if (tryEvalSource(nodeModules.c_str())) return true;
+            if (tryEvalSource(nodeModules.string().c_str())) return true;
             const std::filesystem::path rayactNodeModules = dir / "node_modules/rayact/dist/shared/material_icons.js";
-            if (tryEvalSource(rayactNodeModules.c_str())) return true;
+            if (tryEvalSource(rayactNodeModules.string().c_str())) return true;
             const std::filesystem::path rayactRootExport = dir / "node_modules/rayact/shared-material-icons.js";
-            if (tryEvalSource(rayactRootExport.c_str())) return true;
+            if (tryEvalSource(rayactRootExport.string().c_str())) return true;
             const std::filesystem::path fontsJs = dir / "resources/fonts/material_icons.js";
-            if (tryEvalSource(fontsJs.c_str())) return true;
+            if (tryEvalSource(fontsJs.string().c_str())) return true;
             const std::filesystem::path fontsJsc = dir / "resources/fonts/material_icons.jsc";
-            if (tryEvalBytecode(fontsJsc.c_str())) return true;
+            if (tryEvalBytecode(fontsJsc.string().c_str())) return true;
             if (!dir.has_parent_path()) break;
             const auto parent = dir.parent_path();
             if (parent == dir) break;
@@ -1391,11 +1423,21 @@ static void injectMaterialIcons(JSContext* ctx) {
     // own directory, e.g. dist/) is the right base on desktop — appAssetsPath()
     // resolves to the *engine binary's* directory here, not the app's, so it's
     // only used as a fallback for platforms where it IS the app dir (Android).
-    std::string releaseBase = rayact::rayactAssetBaseDir();
-    const char* assets = !releaseBase.empty() ? releaseBase.c_str() : rayact::appAssetsPath();
-    if (assets && *assets) {
-        raym3::v2::SetIconFontSearchPrefix(assets);
-        registerBuiltInMaterialIconFonts(assets);
+    const std::string releaseBase = rayact::rayactAssetBaseDir();
+    const std::string appAssets = rayact::appAssetsPath();
+    std::string iconAssets = findBuiltInMaterialIconAssets(releaseBase);
+    if (iconAssets.empty()) iconAssets = findBuiltInMaterialIconAssets(appAssets);
+    // Source-workspace desktop hosts are commonly launched from an app
+    // directory while their executable lives under build/<platform>/bin. In
+    // that setup neither releaseBase nor appAssets contains the repo-owned
+    // resources directory. Walk up from the working directory as the existing
+    // material_icons.js lookup does so named icons and their fonts stay paired.
+    if (iconAssets.empty()) {
+        iconAssets = findBuiltInMaterialIconAssets(std::filesystem::current_path().string());
+    }
+    if (!iconAssets.empty()) {
+        raym3::v2::SetIconFontSearchPrefix(iconAssets.c_str());
+        registerBuiltInMaterialIconFonts(iconAssets.c_str());
     }
     injectMaterialIconsRaw(ctx);
     registerMaterialIconNamesIntoRaym3(ctx);
@@ -1982,6 +2024,29 @@ static bool loadDevServerBundle(JSContext* ctx, const std::string& devServer) {
     return false;
 #else
     printf("Connecting to Rayact dev server: %s\n", devServer.c_str());
+    if (!g_devServerUrl.empty()) {
+        const char* resetScript =
+            "if(typeof globalThis.__rayactResetDevRuntime==='function'){"
+            "globalThis.__rayactResetDevRuntime();"
+            "}else{"
+            "try{globalThis.__rayactReactRoot&&globalThis.__rayactReactRoot.publicRoot&&"
+            "globalThis.__rayactReactRoot.publicRoot.unmount&&globalThis.__rayactReactRoot.publicRoot.unmount();}catch(_){}"
+            "delete globalThis.__rayactReactRoot;"
+            "delete globalThis.__rayactDecorateRoot;"
+            "globalThis.__RAYACT_HMR_ACTIVE__=false;"
+            "}";
+        JSValue reset = JS_Eval(ctx, resetScript, strlen(resetScript),
+                                "rayact_dev_bundle_reset.js", JS_EVAL_TYPE_GLOBAL);
+        if (JS_IsException(reset)) {
+            JSValue exception = JS_GetException(ctx);
+            const char* exceptionStr = JS_ToCString(ctx, exception);
+            fprintf(stderr, "Rayact dev bundle reset failed: %s\n",
+                    exceptionStr ? exceptionStr : "unknown exception");
+            JS_FreeCString(ctx, exceptionStr);
+            JS_FreeValue(ctx, exception);
+        }
+        JS_FreeValue(ctx, reset);
+    }
     setGlobalString(ctx, "__RAYACT_DEV_SERVER__", devServer);
 
     std::string manifest;

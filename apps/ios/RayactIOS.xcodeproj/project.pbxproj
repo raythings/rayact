@@ -48,6 +48,7 @@
 		199F1B7E51721CCD60ABDEFB /* rsvg_parse.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2EAFD22B4DA486F88C9F8EEC /* rsvg_parse.cpp */; };
 		19C0068226BAF95EEED4C21F /* m3_function.c in Sources */ = {isa = PBXBuildFile; fileRef = F3A43D53B829B514AC4FCBD1 /* m3_function.c */; };
 		1A4BFE18FFBA9D3069B3EB6E /* Navigation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3650E902931A9E55A504E0FA /* Navigation.cpp */; };
+		1A6B220F3521B9C6506181E4 /* EmojiRasterizerWindows.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 286EED784F049510A8101805 /* EmojiRasterizerWindows.cpp */; };
 		1A99D0765DBF15CACDD636E5 /* data_dir.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9089E6D8BE1FFB1B63D3F8FE /* data_dir.cpp */; };
 		1A9FF9386FAB48A5C6B1D608 /* system_appearance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 49E704D3FE6E22A46FA74C75 /* system_appearance.cpp */; };
 		1AEBFFCDF019A64B531FFB77 /* window_manager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A9DFE135C70DA0D8EDD07FAD /* window_manager.cpp */; };
@@ -106,6 +107,7 @@
 		44419C81F245695CDF5154BD /* SystemAppearance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 90C676A667D5EF5515A6016E /* SystemAppearance.cpp */; };
 		45A5CFC92B22D3133A4A96C1 /* SystemAppearance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 90C676A667D5EF5515A6016E /* SystemAppearance.cpp */; };
 		462CFD47C996CD463152D5A8 /* Chip.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 15B78893FEC9E2EB16EAEA93 /* Chip.cpp */; };
+		47B3022602EE33A4E42C2D44 /* EmojiRasterizerWindows.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 286EED784F049510A8101805 /* EmojiRasterizerWindows.cpp */; };
 		483A104948CDE8DE8AD87E59 /* Modal.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EE8DF0A2D484B19EFDBDC81A /* Modal.cpp */; };
 		491FCFE837071667BA57689A /* commit_queue.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C1414C05570DD9C44E3EAA1A /* commit_queue.cpp */; };
 		498347526014CBE05C94F61C /* RadioButton.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AB3FD221D5E0461011D76DC5 /* RadioButton.cpp */; };
@@ -187,7 +189,9 @@
 		77C396704244D99C035E85D4 /* rlgl_stencil_gl.c in Sources */ = {isa = PBXBuildFile; fileRef = 3AA5676FCBA3D8D5374F1E4C /* rlgl_stencil_gl.c */; };
 		77C99E137700A8F6500441FC /* rsvg_tess_fill.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D03DDDC3CAD0DA5DFC0D1AF4 /* rsvg_tess_fill.cpp */; };
 		78356034A860CDD81EAD7FF2 /* Switch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A6823BC8335C79C6CD1BC7EE /* Switch.cpp */; };
+		784DF9B00BB22BA412076663 /* win_platform_views.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AB771A9926C6B41DFE5790CD /* win_platform_views.cpp */; };
 		7981C44E9D8F76143694DE55 /* RayactHapticsRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 064FE048FD9149B0E8885A4C /* RayactHapticsRegistration.swift */; };
+		79DDA16590FEED3C3F8409AF /* SystemUiFont.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 91F06E32749E8777D22D6DF7 /* SystemUiFont.cpp */; };
 		7A4B23999FB8B6F78A1AA124 /* DevMenuOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADA048B96ADC9AFDA99C4C08 /* DevMenuOverlay.swift */; };
 		7AFAD6CC6B790B2B900DC357 /* RangeSlider.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4ADA129237C4AD20879A6BB1 /* RangeSlider.cpp */; };
 		7B647ADE10FFBC547FC6B847 /* worklet_runtime.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 70D8D848C09D583397C08FB7 /* worklet_runtime.cpp */; };
@@ -238,6 +242,7 @@
 		9E6D3980058E37AAC430F584 /* Node.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 77D94C1DADD5AB4D125DE57D /* Node.cpp */; };
 		9F186EB555AD7647CD02B657 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 390CE3FE919320CBB64E90B5 /* Assets.xcassets */; };
 		A136622FA5AD4DA957BBF15B /* MaterialDefaults.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C4149BFBCA91BDC435ADB975 /* MaterialDefaults.cpp */; };
+		A1A206BF80E8C1A07344AEB1 /* win_platform_views.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AB771A9926C6B41DFE5790CD /* win_platform_views.cpp */; };
 		A1FE45E1B2DB343FC78FAF85 /* worker_native.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CB3C855D36B51CE29E8AAA3A /* worker_native.cpp */; };
 		A35D9475BA99EE74A727A6AB /* RayactSensorsRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CA978A3EBBCE129D8B3FB3D /* RayactSensorsRegistration.swift */; };
 		A3DAD6180F0CFC39540A8839 /* DevClientBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A2DAB3DA708FD3FD8F533FC /* DevClientBridge.swift */; };
@@ -295,11 +300,13 @@
 		C062AA9FD48F2A50FE3CCC74 /* RayactNativeTextInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30F92F3A298C1FC88A041828 /* RayactNativeTextInput.swift */; };
 		C0CDFD46ADDEBDA206D8E5B9 /* LayoutResults.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FADFB3523E24CBEFA34FAF8E /* LayoutResults.cpp */; };
 		C149A66B9B9FFA69425370CA /* raysvg.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0D64A69A148C5022990C6411 /* raysvg.cpp */; };
+		C173FFD27861C0DA5634078B /* SystemUiFont.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 91F06E32749E8777D22D6DF7 /* SystemUiFont.cpp */; };
 		C1AF0795FCB63DA225E38E44 /* View3D.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 26A2363B4CBAC90587376E4F /* View3D.cpp */; };
 		C3D5B3C3FC9C288BA658D5E4 /* Layout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 34CDCD40C0C701946B2232F9 /* Layout.cpp */; };
 		C422F6AFCA4CA727B387BE79 /* rsvg_tess_fill.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D03DDDC3CAD0DA5DFC0D1AF4 /* rsvg_tess_fill.cpp */; };
 		C4683EF979895AFAF18FB816 /* LayoutResults.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FADFB3523E24CBEFA34FAF8E /* LayoutResults.cpp */; };
 		C4A2D7F4A7E80B7E64537C61 /* worker_native.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CB3C855D36B51CE29E8AAA3A /* worker_native.cpp */; };
+		C4D53D8B45285874A41823CC /* module_views.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8387B97BAEE56B3D1775FE75 /* module_views.cpp */; };
 		C58F0EB10DC46B17780E5A8E /* dtoa.c in Sources */ = {isa = PBXBuildFile; fileRef = 22210114E93A4132C4F7029E /* dtoa.c */; };
 		C6665589E50203F7A1E4A877 /* Renderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1F6AAFA3FCBAA3AF64FF07A9 /* Renderer.cpp */; };
 		C67505ABC019F440B6C24A33 /* NavigationHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0212F7D9A4AD975A70B16DF /* NavigationHost.swift */; };
@@ -378,6 +385,7 @@
 		FC89F20BE1679C7A74401EDD /* shadow_tree.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C2FF8D3204D04C57EF6C3CE5 /* shadow_tree.cpp */; };
 		FCA3CB0A139C2870DC61C3A2 /* secure_store_plugin.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 59C1FBA894A809745E8CC4E5 /* secure_store_plugin.cpp */; };
 		FCC11D5BB7B561EDDDB15C8B /* Switch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A6823BC8335C79C6CD1BC7EE /* Switch.cpp */; };
+		FDBCDED4F3CD999BA70421BB /* module_views.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8387B97BAEE56B3D1775FE75 /* module_views.cpp */; };
 		FDCEE6E0CE55DC8500E10F22 /* kv_store.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5652D373531BC05A07AF0E14 /* kv_store.cpp */; };
 		FDEB2C00DC596FDD66034648 /* Animations.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0843C3B037B28BE2C80615D4 /* Animations.cpp */; };
 		FDFA905B60D4BEBD06612264 /* Checkbox.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2D844D815300F23880FBE1FA /* Checkbox.cpp */; };
@@ -440,6 +448,7 @@
 		26A2363B4CBAC90587376E4F /* View3D.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = View3D.cpp; sourceTree = "<group>"; };
 		27A1634508D7D5B513C6F602 /* qjs_compile.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = qjs_compile.cpp; sourceTree = "<group>"; };
 		28017968BFB09359F4901F61 /* CachedMeasurement.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CachedMeasurement.h; sourceTree = "<group>"; };
+		286EED784F049510A8101805 /* EmojiRasterizerWindows.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = EmojiRasterizerWindows.cpp; sourceTree = "<group>"; };
 		2946B84A4A7FF9FF1C43DFC2 /* rtextures.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rtextures.c; sourceTree = "<group>"; };
 		2A205E331E0AEB99ED3C10A5 /* accessibility_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = accessibility_bridge.hpp; sourceTree = "<group>"; };
 		2B8B9763872437656442769F /* m3_code.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = m3_code.c; sourceTree = "<group>"; };
@@ -521,6 +530,7 @@
 		6C6010B0A4149AF8F68CD4FA /* system_appearance.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = system_appearance.hpp; sourceTree = "<group>"; };
 		6C746BE382D7EB1D4DC2555C /* PixelGrid.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PixelGrid.h; sourceTree = "<group>"; };
 		6D0420A8A055553874A0C9D7 /* shadow_tree.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = shadow_tree.hpp; sourceTree = "<group>"; };
+		6E396D8DFA824A6E2580D399 /* module_views.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = module_views.hpp; sourceTree = "<group>"; };
 		6E51B3E4F4E82FE60F28FD4E /* css_bridge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = css_bridge.cpp; sourceTree = "<group>"; };
 		6E9E2BDB6DE2D9AE8AE0CB7A /* View.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = View.cpp; sourceTree = "<group>"; };
 		70D8D848C09D583397C08FB7 /* worklet_runtime.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = worklet_runtime.cpp; sourceTree = "<group>"; };
@@ -548,6 +558,7 @@
 		818812982FA7A044805E44EA /* TextLineBreak.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TextLineBreak.cpp; sourceTree = "<group>"; };
 		81E31863B107845C0A8FE311 /* CSSDeNest.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CSSDeNest.cpp; sourceTree = "<group>"; };
 		831D0F39EBE86FFE17FFF5B0 /* module_bus.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = module_bus.cpp; sourceTree = "<group>"; };
+		8387B97BAEE56B3D1775FE75 /* module_views.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = module_views.cpp; sourceTree = "<group>"; };
 		852E7399569C594258CB32F3 /* RayactPlatformRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayactPlatformRegistry.swift; sourceTree = "<group>"; };
 		8567FB0243169DBFCDEEE936 /* Mutations.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Mutations.cpp; sourceTree = "<group>"; };
 		856F631BEDDD2B68FFAB8DDA /* StyleValuePool.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StyleValuePool.h; sourceTree = "<group>"; };
@@ -563,6 +574,7 @@
 		8E5AB9052D5A582E28D603A6 /* Style.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Style.cpp; sourceTree = "<group>"; };
 		9089E6D8BE1FFB1B63D3F8FE /* data_dir.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = data_dir.cpp; sourceTree = "<group>"; };
 		90C676A667D5EF5515A6016E /* SystemAppearance.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SystemAppearance.cpp; sourceTree = "<group>"; };
+		91F06E32749E8777D22D6DF7 /* SystemUiFont.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = SystemUiFont.cpp; sourceTree = "<group>"; };
 		927BF999C9A4C208D4214B23 /* css_bridge.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = css_bridge.hpp; sourceTree = "<group>"; };
 		9320094D57E6B0C1D750BF4F /* FlexLine.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FlexLine.h; sourceTree = "<group>"; };
 		93579AB401D469E9F819C2C4 /* worker_js.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = worker_js.hpp; sourceTree = "<group>"; };
@@ -592,6 +604,7 @@
 		A8553035399C5D547BE08A8E /* LayoutableChildren.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LayoutableChildren.h; sourceTree = "<group>"; };
 		A9DFE135C70DA0D8EDD07FAD /* window_manager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = window_manager.cpp; sourceTree = "<group>"; };
 		AB3FD221D5E0461011D76DC5 /* RadioButton.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = RadioButton.cpp; sourceTree = "<group>"; };
+		AB771A9926C6B41DFE5790CD /* win_platform_views.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = win_platform_views.cpp; sourceTree = "<group>"; };
 		AD29354857DD2F2C1DCA7296 /* tests.conf */ = {isa = PBXFileReference; path = tests.conf; sourceTree = "<group>"; };
 		ADA048B96ADC9AFDA99C4C08 /* DevMenuOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevMenuOverlay.swift; sourceTree = "<group>"; };
 		B01133E2ACF7BF58A9A63AB9 /* rsvg_xml.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = rsvg_xml.cpp; sourceTree = "<group>"; };
@@ -990,6 +1003,7 @@
 				68469D2FE07DBA277E1658B0 /* Density.cpp */,
 				1CF8EAFC4FD8B1B033557097 /* EmojiFont.cpp */,
 				4FAAD9A25EC18CD490DB9A8F /* EmojiRasterizerApple.mm */,
+				286EED784F049510A8101805 /* EmojiRasterizerWindows.cpp */,
 				784D5054FF39E29FEBD3F3BB /* Gradient.cpp */,
 				A542F6F40A2E3A2B38CECD8D /* IconRenderer.cpp */,
 				2EDA5ACC9660444D2043B5D7 /* Input.cpp */,
@@ -1079,6 +1093,8 @@
 				831D0F39EBE86FFE17FFF5B0 /* module_bus.cpp */,
 				C2E39C21C3C70AED1071F5C8 /* module_bus.hpp */,
 				167C3C72AFCC2BC311FC48AE /* module_nodes.hpp */,
+				8387B97BAEE56B3D1775FE75 /* module_views.cpp */,
+				6E396D8DFA824A6E2580D399 /* module_views.hpp */,
 				0B8B502FEB56CFC73F60E738 /* net.hpp */,
 				B55C2CF2B0916AB2342C5289 /* platform_wayland.hpp */,
 				7E4AFA70E175927A372050E1 /* platform.hpp */,
@@ -1098,6 +1114,7 @@
 				4B6C514910B80601FDD7FD37 /* theme_bridge.hpp */,
 				25B7FE4A12BC024FA7A69E8D /* tree-sitter-typescript.h */,
 				D64CE86C42AA969248D4F78D /* utils.cpp */,
+				AB771A9926C6B41DFE5790CD /* win_platform_views.cpp */,
 				A9DFE135C70DA0D8EDD07FAD /* window_manager.cpp */,
 				F5872521C5CBC2EC3791272C /* worker_draw.cpp */,
 				A4542D3B066B1C074AEBD874 /* worker_draw.hpp */,
@@ -1293,6 +1310,7 @@
 			children = (
 				8D6C0183A7189F58E5EC79DC /* EmbeddedFonts.h */,
 				A73914BE9936EC5E072E99C9 /* FontManager.cpp */,
+				91F06E32749E8777D22D6DF7 /* SystemUiFont.cpp */,
 			);
 			path = fonts;
 			sourceTree = "<group>";
@@ -1652,6 +1670,7 @@
 				0680F7AB30870D565359F4F9 /* Divider.cpp in Sources */,
 				A633B49D47788CB85D2FAB10 /* EmojiFont.cpp in Sources */,
 				2F04B521DF14E6F7D609B3C0 /* EmojiRasterizerApple.mm in Sources */,
+				1A6B220F3521B9C6506181E4 /* EmojiRasterizerWindows.cpp in Sources */,
 				51BCE200DDB7822DD7183F1D /* FlexLine.cpp in Sources */,
 				1577608A9789B12F0FA486D2 /* FloatingActionButton.cpp in Sources */,
 				9BD0E98122F875EC2B1E70D2 /* FontManager.cpp in Sources */,
@@ -1721,6 +1740,7 @@
 				78356034A860CDD81EAD7FF2 /* Switch.cpp in Sources */,
 				44419C81F245695CDF5154BD /* SystemAppearance.cpp in Sources */,
 				ADFBA51BFE00F4CE13FFE980 /* SystemAppearance.mm in Sources */,
+				C173FFD27861C0DA5634078B /* SystemUiFont.cpp in Sources */,
 				4E36514D213619DE8BEAF32C /* TabBar.cpp in Sources */,
 				D0588FD07A9B4997E5DF02E9 /* Text.cpp in Sources */,
 				97D7BDA97AFDAB330C925D76 /* TextAnalysis.cpp in Sources */,
@@ -1782,6 +1802,7 @@
 				8DDB8789F9AC2391D5233DE5 /* m3_parse.c in Sources */,
 				F36B7AAF73A44ED7CAAB5B6F /* mmkv_plugin.cpp in Sources */,
 				587149023A8B3C82FE6993A4 /* module_bus.cpp in Sources */,
+				FDBCDED4F3CD999BA70421BB /* module_views.cpp in Sources */,
 				96962E57BF045D889E3AAEDA /* platform_ios.cpp in Sources */,
 				0398FB8BB5F0A35AB3A0BBDE /* plugin_loader.cpp in Sources */,
 				F4332F3E887B1E396CD1A283 /* qjs_compile.cpp in Sources */,
@@ -1817,6 +1838,7 @@
 				5733A093EEB0ADEC6B7168F7 /* system_appearance.cpp in Sources */,
 				D99132B5214B01EF3563A232 /* theme_bridge.cpp in Sources */,
 				2DA12B685C581ED14B7ED2D3 /* utils.cpp in Sources */,
+				784DF9B00BB22BA412076663 /* win_platform_views.cpp in Sources */,
 				4E86BB4C3AE21F3A95523095 /* window_manager.cpp in Sources */,
 				83C4A1E0F7B236F78EE2EFFC /* worker_draw.cpp in Sources */,
 				E3993B3961DFED6BD1A9E306 /* worker_js.cpp in Sources */,
@@ -1858,6 +1880,7 @@
 				537CCDA908F3E0374A73C04F /* Divider.cpp in Sources */,
 				3A50DF258529727021A88304 /* EmojiFont.cpp in Sources */,
 				C9222DAE034A596EFB57946A /* EmojiRasterizerApple.mm in Sources */,
+				47B3022602EE33A4E42C2D44 /* EmojiRasterizerWindows.cpp in Sources */,
 				9668C4FFE59AD49E5B81CF68 /* FlexLine.cpp in Sources */,
 				51497134BDA5919DC1F5F7C3 /* FloatingActionButton.cpp in Sources */,
 				8AEC684306E9F88EB3A1EA06 /* FontManager.cpp in Sources */,
@@ -1899,6 +1922,7 @@
 				FCC11D5BB7B561EDDDB15C8B /* Switch.cpp in Sources */,
 				45A5CFC92B22D3133A4A96C1 /* SystemAppearance.cpp in Sources */,
 				B870195D94778C6A4768EFD9 /* SystemAppearance.mm in Sources */,
+				79DDA16590FEED3C3F8409AF /* SystemUiFont.cpp in Sources */,
 				1760B07EFF2949AE3570F480 /* TabBar.cpp in Sources */,
 				D7E59D744503CCF444433CB1 /* Text.cpp in Sources */,
 				B9BAD944CAED4AD97C43D833 /* TextAnalysis.cpp in Sources */,
@@ -1957,6 +1981,7 @@
 				30B97B19B96B5C002EA6083E /* m3_module.c in Sources */,
 				BD7FA53D9617BC4E0D31C4C3 /* m3_parse.c in Sources */,
 				BD8D1CF27329927B935827C6 /* module_bus.cpp in Sources */,
+				C4D53D8B45285874A41823CC /* module_views.cpp in Sources */,
 				69C313BEE54637A6C8E10ADB /* platform_ios.cpp in Sources */,
 				0DCCFC0F0DC082373825C5FE /* plugin_loader.cpp in Sources */,
 				B2EBC1561F8685ED0EF0D771 /* qjs_compile.cpp in Sources */,
@@ -1988,6 +2013,7 @@
 				1A9FF9386FAB48A5C6B1D608 /* system_appearance.cpp in Sources */,
 				91E620714CA8FBFACD268E1A /* theme_bridge.cpp in Sources */,
 				9956E022EFEBDBB93D612A96 /* utils.cpp in Sources */,
+				A1A206BF80E8C1A07344AEB1 /* win_platform_views.cpp in Sources */,
 				1AEBFFCDF019A64B531FFB77 /* window_manager.cpp in Sources */,
 				D2C063F01A3ED9FE03C936AC /* worker_draw.cpp in Sources */,
 				53CBDA720ACC2F5FE3A15C57 /* worker_js.cpp in Sources */,

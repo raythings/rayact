@@ -1193,11 +1193,10 @@ extern "C" {
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     g_jvm = vm;
     // Rasterize emoji with the device's own emoji font (Paint/Canvas) instead of
-    // bundling a 10.6 MB CBDT NotoColorEmoji — the same trade the CoreText path
-    // makes on Apple, and it picks up whatever the OS ships (COLRv1 on 13+).
-    // EmojiFont probes this backend before committing to it and falls back to a
-    // bundled font when the probe fails, which is what the earlier "some devices
-    // draw missing-glyph boxes" concern needed.
+    // bundling a 10.6 MB CBDT NotoColorEmoji — the same trade CoreText makes on
+    // Apple and DirectWrite/D2D on Windows. Picks up whatever the OS ships
+    // (COLRv1 on 13+). EmojiFont probes this backend before committing; on probe
+    // failure there is no automatic CBDT fallback (apps can still loadEmoji()).
     raym3::v2::EmojiFont::Instance().SetRasterizer(AndroidRasterizeEmoji);
     installAndroidTextInputHostHooksOnce();
     // Let native subsystems (CDP inbound, later net) wake an idle render loop
@@ -1333,11 +1332,14 @@ public:
              << ",\"occludingRegions\":[";
         for (size_t i = 0; i < composition.occludingRegions.size(); ++i) {
             if (i) json << ',';
-            const auto& r = composition.occludingRegions[i];
+            const auto& occlusion = composition.occludingRegions[i];
+            const Rectangle& r = occlusion.rect;
             json << "{\"x\":" << raym3::v2::Density::RasterPixels(r.x)
                  << ",\"y\":" << raym3::v2::Density::RasterPixels(r.y)
                  << ",\"width\":" << raym3::v2::Density::RasterPixels(r.width)
-                 << ",\"height\":" << raym3::v2::Density::RasterPixels(r.height) << '}';
+                 << ",\"height\":" << raym3::v2::Density::RasterPixels(r.height)
+                 << ",\"radius\":"
+                 << raym3::v2::Density::RasterPixels(occlusion.radius) << '}';
         }
         json << "]}";
         const std::string payload = json.str();

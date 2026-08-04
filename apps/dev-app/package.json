@@ -1,6 +1,6 @@
 {
   "name": "@rayact/dev-app",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "type": "module",
   "description": "Standalone Rayact dev app — Expo-Go-style prebuilt host bundling native plugins + the dev client launcher (QR scan, HMR).",
   "license": "MIT",
@@ -13,6 +13,7 @@
     "build:android:install": "node scripts/with-branding.cjs build --android --install",
     "build:android:install:release": "node scripts/with-branding.cjs build --android --install --release",
     "build:desktop": "node scripts/with-branding.cjs build --release --desktop",
+    "build:windows": "node ../../scripts/stage-windows-release.mjs --dev-app",
     "start:dev": "node scripts/with-branding.cjs start --dev"
   },
   "files": [
@@ -34,19 +35,19 @@
     "url": "https://github.com/raythings/rayact/issues"
   },
   "dependencies": {
-    "@rayact/barcode-scanner": "0.0.4",
-    "@rayact/clipboard": "0.0.4",
-    "@rayact/crash-reporter": "0.0.4",
-    "@rayact/dev-client": "0.0.4",
-    "@rayact/haptics": "0.0.4",
-    "@rayact/image-picker": "0.0.4",
-    "@rayact/linking": "0.0.4",
-    "@rayact/mmkv": "0.0.4",
-    "@rayact/secure-store": "0.0.4",
-    "@rayact/sensors": "0.0.4",
-    "@rayact/svg": "0.0.4",
-    "@rayact/webview": "0.0.4",
-    "rayact": "0.0.4",
+    "@rayact/barcode-scanner": "0.0.5",
+    "@rayact/clipboard": "0.0.5",
+    "@rayact/crash-reporter": "0.0.5",
+    "@rayact/dev-client": "0.0.5",
+    "@rayact/haptics": "0.0.5",
+    "@rayact/image-picker": "0.0.5",
+    "@rayact/linking": "0.0.5",
+    "@rayact/mmkv": "0.0.5",
+    "@rayact/secure-store": "0.0.5",
+    "@rayact/sensors": "0.0.5",
+    "@rayact/svg": "0.0.5",
+    "@rayact/webview": "0.0.5",
+    "rayact": "0.0.5",
     "react": "^19.0.0"
   },
   "devDependencies": {

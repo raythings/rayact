@@ -13,7 +13,7 @@
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=2 <4",
+      "abiRange": ">=2 <6",
       "engineRange": ">=0.0.4 <0.1.0",
       "permissions": [],
       "officialDevApp": true
@@ -36,7 +36,7 @@
         "x86_64",
         "wasm32"
       ],
-      "abiRange": ">=2 <4",
+      "abiRange": ">=2 <6",
       "engineRange": ">=0.0.4 <0.1.0",
       "permissions": [],
       "officialDevApp": true
@@ -49,6 +49,7 @@
         "android",
         "ios",
         "darwin",
+        "windows",
         "web"
       ],
       "architectures": [
@@ -56,7 +57,7 @@
         "x86_64",
         "wasm32"
       ],
-      "abiRange": ">=1 <4",
+      "abiRange": ">=1 <6",
       "engineRange": ">=0.0.3 <0.1.0",
       "permissions": [
         "crash-report-storage",
@@ -79,7 +80,7 @@
         "x86_64",
         "wasm32"
       ],
-      "abiRange": ">=2 <4",
+      "abiRange": ">=2 <6",
       "engineRange": ">=0.0.4 <0.1.0",
       "permissions": [],
       "officialDevApp": true
@@ -102,7 +103,7 @@
         "x86_64",
         "wasm32"
       ],
-      "abiRange": ">=2 <4",
+      "abiRange": ">=2 <6",
       "engineRange": ">=0.0.4 <0.1.0",
       "permissions": [],
       "officialDevApp": true
@@ -125,7 +126,7 @@
         "x86_64",
         "wasm32"
       ],
-      "abiRange": ">=2 <4",
+      "abiRange": ">=2 <6",
       "engineRange": ">=0.0.4 <0.1.0",
       "permissions": [],
       "officialDevApp": true
@@ -138,13 +139,14 @@
         "android",
         "ios",
         "darwin",
+        "windows",
         "web"
       ],
       "architectures": [
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=1 <4",
+      "abiRange": ">=1 <6",
       "engineRange": ">=0.0.3 <0.1.0",
       "permissions": [],
       "officialDevApp": true
@@ -156,13 +158,14 @@
       "platforms": [
         "android",
         "ios",
-        "darwin"
+        "darwin",
+        "windows"
       ],
       "architectures": [
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=1 <4",
+      "abiRange": ">=1 <6",
       "engineRange": ">=0.0.3 <0.1.0",
       "permissions": [
         "keychain",
@@ -185,7 +188,7 @@
         "x86_64",
         "wasm32"
       ],
-      "abiRange": ">=2 <4",
+      "abiRange": ">=2 <6",
       "engineRange": ">=0.0.4 <0.1.0",
       "permissions": [],
       "officialDevApp": true
@@ -198,13 +201,14 @@
         "android",
         "ios",
         "darwin",
+        "windows",
         "web"
       ],
       "architectures": [
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=2 <4",
+      "abiRange": ">=2 <6",
       "engineRange": ">=0.0.4 <0.1.0",
       "permissions": [],
       "officialDevApp": true
@@ -218,14 +222,15 @@
         "android",
         "ios",
         "web",
-        "darwin"
+        "darwin",
+        "windows"
       ],
       "architectures": [
         "arm64",
         "x86_64",
         "wasm32"
       ],
-      "abiRange": ">=3 <4",
+      "abiRange": ">=3 <6",
       "engineRange": ">=0.0.4 <0.1.0",
       "permissions": [],
       "officialDevApp": true

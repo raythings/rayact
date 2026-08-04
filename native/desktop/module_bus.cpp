@@ -227,6 +227,15 @@ void hostEmitViewEvent(int32_t node_id, const char* json_utf8, size_t len) {
   rayactExternalViewEmitText(node_id, owned.c_str());
 }
 
+// Visual-hosted platform views (Windows) need the host's window and compositor
+// device to allocate visuals the host can actually compose. Both stay null until
+// the platform-view host installs them, and remain null on platforms where a
+// module just hands back its own view.
+void* g_nativeWindow = nullptr;
+void* g_compositor = nullptr;
+void* hostNativeWindow(void) { return g_nativeWindow; }
+void* hostCompositor(void) { return g_compositor; }
+
 RayactHost g_host = {
     RAYACT_MODULE_ABI_VERSION, hostDataDir, hostRegister, hostInvoke,
     hostRandom, hostLog, hostJavaVM,
@@ -236,12 +245,17 @@ RayactHost g_host = {
     hostRequestFrame, hostRegisterWasmImports,
     // ABI 3
     hostRegisterViewFactory, hostEmitViewEvent,
+    // ABI 4
+    hostNativeWindow, hostCompositor,
 };
 } // namespace
 
 const RayactHost* busHost() { return &g_host; }
 
 void busSetJavaVM(void* vm) { g_javaVm = vm; }
+
+void busSetNativeWindow(void* window) { g_nativeWindow = window; }
+void busSetCompositor(void* compositor) { g_compositor = compositor; }
 
 std::vector<BusWasmImport> busWasmImports() {
   std::lock_guard<std::mutex> lk(g_wasmMtx);

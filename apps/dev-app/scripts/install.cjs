@@ -5,6 +5,7 @@
  *   npx @rayact/dev-app@0.0.3 install --platform android
  *   npx @rayact/dev-app@0.0.3 install --platform ios-device
  *   npx @rayact/dev-app@0.0.3 install --platform ios-simulator
+ *   npx @rayact/dev-app@0.0.3 install --platform windows
  */
 const { spawnSync } = require('child_process');
 const fs = require('fs');
@@ -20,6 +21,7 @@ const ASSET_BY_PLATFORM = {
   android: 'rayact-dev-app.apk',
   'ios-device': 'rayact-dev-app-device-unsigned.ipa',
   'ios-simulator': 'rayact-dev-app-simulator.zip',
+  windows: 'rayact-dev-app-windows-x64.zip',
   ios: 'rayact-dev-app-device-unsigned.ipa'
 };
 
@@ -132,11 +134,41 @@ See: https://github.com/${REPO}/blob/main/rayact/docs/maintainer-prebuilts.md
 `);
 }
 
+function installWindows(zipPath) {
+  const installDir = path.join(os.homedir(), '.rayact', 'dev-app', 'windows-x64');
+  fs.rmSync(installDir, { recursive: true, force: true });
+  fs.mkdirSync(installDir, { recursive: true });
+  const unpack = spawnSync('tar', ['-xf', zipPath, '-C', installDir], { stdio: 'inherit' });
+  if (unpack.status !== 0) {
+    console.error('Could not extract the Windows dev-app zip (Windows 10 or newer is required).');
+    process.exit(unpack.status || 1);
+  }
+  const stack = [installDir];
+  let executable = '';
+  while (stack.length && !executable) {
+    const dir = stack.pop();
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const absolute = path.join(dir, entry.name);
+      if (entry.isDirectory()) stack.push(absolute);
+      else if (entry.name === 'rayact_desktop.exe') { executable = absolute; break; }
+    }
+  }
+  if (!executable) throw new Error('Windows dev-app archive did not contain rayact_desktop.exe');
+  const launchArgs = process.env.RAYACT_DEV_SERVER
+    ? ['--dev-server', process.env.RAYACT_DEV_SERVER]
+    : [];
+  const child = require('child_process').spawn(executable, launchArgs, {
+    cwd: path.dirname(executable), detached: true, stdio: 'ignore', env: process.env
+  });
+  child.unref();
+  console.log(`Launched Rayact Dev App from ${executable}`);
+}
+
 async function main() {
   const { platform } = parseArgs(process.argv.slice(2));
   const assetName = ASSET_BY_PLATFORM[platform];
   if (!assetName) {
-    console.error(`Unknown platform: ${platform}. Use android, ios-device, or ios-simulator.`);
+    console.error(`Unknown platform: ${platform}. Use android, ios-device, ios-simulator, or windows.`);
     process.exit(1);
   }
 
@@ -147,6 +179,7 @@ async function main() {
     android: path.resolve(__dirname, '../dist/rayact-dev-app.apk'),
     'ios-device': path.resolve(__dirname, '../dist/rayact-dev-app-device-unsigned.ipa'),
     'ios-simulator': path.resolve(__dirname, '../dist/rayact-dev-app-simulator.zip'),
+    windows: path.resolve(__dirname, '../dist/rayact-dev-app-windows-x64.zip'),
     ios: path.resolve(__dirname, '../dist/rayact-dev-app-device-unsigned.ipa')
   };
 
@@ -176,6 +209,8 @@ Build locally:
     await installAndroid(dest);
   } else if (platform === 'ios-simulator') {
     installIosSimulator(dest);
+  } else if (platform === 'windows') {
+    installWindows(dest);
   } else {
     printIosDeviceInstructions(dest);
   }

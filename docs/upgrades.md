@@ -1,12 +1,13 @@
 # Upgrades and migration
 
-Commit the application before upgrading. Install the desired Rayact version and
-run:
+Commit the application before upgrading. Download the desired signed GitHub
+Release, replace the complete `vendor/rayact_pkgs` package set, and update every
+Rayact `file:` dependency and override to the matching tarball filename. Keep
+the entire package set on one version, then run:
 
 ```sh
-npm install rayact@0.0.4
-npx rayact migrate
 npm install
+npx rayact migrate
 npx rayact prebuild --force
 ```
 

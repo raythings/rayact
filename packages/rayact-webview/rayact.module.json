@@ -10,27 +10,76 @@
     "android",
     "ios",
     "web",
-    "darwin"
+    "darwin",
+    "windows"
   ],
   "architectures": [
     "arm64",
     "x86_64",
     "wasm32"
   ],
-  "abiRange": ">=3 <4",
+  "abiRange": ">=3 <6",
   "engineRange": ">=0.0.4 <0.1.0",
   "artifacts": [
     {
       "platform": "darwin",
       "architecture": "arm64",
       "path": "desktop/darwin-arm64/librayact_webview.dylib",
-      "sha256": "0c5d31a768f8b3b1a2902eef80a3cb0b0bcabf6973762b30727eb31745143e6d"
+      "sha256": "35faf636e051780d5580821cdb74eaeaa263e81ee38ef9ae8bb61f702a4b8387"
     },
     {
       "platform": "darwin",
       "architecture": "x86_64",
       "path": "desktop/darwin-x64/librayact_webview.dylib",
-      "sha256": "37306cd1918976249663f6572d446df8bbc78d80138bbd7e088bca8997700c7d"
+      "sha256": "75617bcc9f31d4109b35697bda73c0e680eb24f992d6a5ee8b37ab579cc46116"
+    },
+    {
+      "platform": "windows",
+      "architecture": "x86_64",
+      "path": "desktop/windows-x64/chrome_elf.dll",
+      "sha256": "649bf628bc21274bd38dc906295cd9b8ee018f4c4a5180b743ac5bf0409dd38f"
+    },
+    {
+      "platform": "windows",
+      "architecture": "x86_64",
+      "path": "desktop/windows-x64/d3dcompiler_47.dll",
+      "sha256": "a05f99734f7c4822fefc12b367af21fd0976ed6608752fb1e1e80b6ece7ecbbb"
+    },
+    {
+      "platform": "windows",
+      "architecture": "x86_64",
+      "path": "desktop/windows-x64/libcef.dll",
+      "sha256": "8b64b1ff57b0150e8a7d26180b510c8cbc7a6b3fa63d5576e7ee914d614a90b1"
+    },
+    {
+      "platform": "windows",
+      "architecture": "x86_64",
+      "path": "desktop/windows-x64/libEGL.dll",
+      "sha256": "789a42ce2df9980054eb3d484b3063e2cd41e9f594a781d0d4a5d66175e2f17e"
+    },
+    {
+      "platform": "windows",
+      "architecture": "x86_64",
+      "path": "desktop/windows-x64/libGLESv2.dll",
+      "sha256": "498538e9f8b03f7dfb0b3ddffcfe74ed60701b68551968421daba7337585e306"
+    },
+    {
+      "platform": "windows",
+      "architecture": "x86_64",
+      "path": "desktop/windows-x64/librayact_webview.dll",
+      "sha256": "ecfa6308814d5f2b9bd260f24bd517f7e743fc7a528012d31d9dcbf561f476fc"
+    },
+    {
+      "platform": "windows",
+      "architecture": "x86_64",
+      "path": "desktop/windows-x64/vk_swiftshader.dll",
+      "sha256": "2f5cbfc7eec798f9337d5580136ae0ee7208613461d3e6763d7220eee525637c"
+    },
+    {
+      "platform": "windows",
+      "architecture": "x86_64",
+      "path": "desktop/windows-x64/vulkan-1.dll",
+      "sha256": "84cefa83c14c10230c1c8605da0181cb2bae016cb32e984b9335dd080547642c"
     }
   ],
   "linkage": "static",

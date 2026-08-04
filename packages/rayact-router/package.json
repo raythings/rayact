@@ -1,6 +1,6 @@
 {
   "name": "@rayact/router",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "File-based routing for Rayact applications",
   "type": "module",
   "sideEffects": [
@@ -34,10 +34,10 @@
     "@react-navigation/routers": "^7.0.0"
   },
   "peerDependencies": {
-    "@rayact/linking": "0.0.4",
-    "@rayact/navigation": "0.0.4",
-    "@rayact/react": "0.0.4",
-    "@rayact/shared": "0.0.4",
+    "@rayact/linking": "0.0.5",
+    "@rayact/navigation": "0.0.5",
+    "@rayact/react": "0.0.5",
+    "@rayact/shared": "0.0.5",
     "react": "^19.0.0"
   },
   "engines": {

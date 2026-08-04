@@ -68,12 +68,15 @@ npm run test:native    # desktop smoke test
 
 ```bash
 node scripts/bump-version.mjs <version> && node scripts/bump-version.mjs --check
-npm run build && npm test && npm run test:packages
-# build all prebuilts (see table above), then:
-RAYACT_RELEASE_PRIVATE_KEY="$(cat ~/.rayact-release/rayact-release-key.pem)" npm run pack:release
-npm run verify:release                 # full consumer matrix against release1/
-RAYACT_CONFIRM_REPLACE_RELEASE=v<version> npm run release:replace
+export RAYACT_RELEASE_PRIVATE_KEY="$(cat ~/.rayact-release/rayact-release-key.pem)"
+npm run release:prepare
+RAYACT_CONFIRM_PUBLISH_RELEASE=v<version> npm run release:publish
 ```
+
+The prepare command builds and tests every platform locally. The GitHub workflow
+only verifies and attests the uploaded release assets. npm publication remains
+dormant unless `RAYACT_PUBLISH_NPM=true` is explicitly configured as a
+repository variable.
 
 `docs/maintainer/prebuilts.md` covers prebuilt packaging details;
 `docs/` is the VitePress site (`npm --prefix docs run dev`), with generated

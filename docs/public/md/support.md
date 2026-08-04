@@ -7,7 +7,7 @@ imports; they are scheduled for removal in `0.2.0`.
 
 Bug reports should include a minimal project, platform, Rayact version, Node
 version, toolchain versions, and reproducible commands. Tier 1 is Android, iOS,
-Apple Silicon macOS, and Web. Intel macOS and Rosetta are not supported targets. Linux x64 is preview; Windows is a graduation target. Safari and
+Apple Silicon macOS, Windows x64, and Web. Intel macOS, Rosetta, and Windows arm64 are not supported targets. Linux x64 is preview. Safari and
 Firefox WebGPU remain experimental until they pass the same release matrix.
 
 Security reports follow the private process and response targets in the

@@ -34,8 +34,18 @@ import { isSlimmableFont, slimFont } from '../fonts/slimFont.js';
 
 function assertModuleSupport(config: RayactConfig, platform: string): void {
   const modules = mergeNativeModules(config.nativeModules, resolveRayactPlugins(process.cwd()));
+  const isOfficialDevApp = Boolean(
+    process.env.RAYACT_DEV_CLIENT_OFFICIAL_APP_METADATA_JSON
+  );
   const unsupported = modules.filter(module =>
-    module.platforms?.length && !module.platforms.includes(platform)
+    module.platforms?.length &&
+    !module.platforms.includes(platform) &&
+    // The official development host intentionally declares the union of the
+    // first-party modules available across mobile, desktop and Web. Each
+    // platform build stages only artifacts that actually target it, while the
+    // launcher advertises the full capability matrix. Keep strict rejection
+    // for ordinary apps and for any non-official third-party module.
+    !(isOfficialDevApp && module.officialDevApp)
   );
   if (unsupported.length) {
     throw new Error(
@@ -165,20 +175,44 @@ async function copyCssInto(src: string, dest: string): Promise<void> {
 
 /**
  * The bundled CBDT emoji font is only worth shipping where the platform has no
- * emoji rasterizer of its own. Android draws emoji through Paint/Canvas and
- * Apple through CoreText (see EmojiFont::EnsureBackend), so on those targets
- * this file is ~10.7 MB of dead weight. Linux desktop still needs it as a
- * fallback when the system has no Noto emoji font, and the web build embeds it
- * because wasm has no OS rasterizer at all.
+ * emoji rasterizer of its own. Android draws emoji through Paint/Canvas, Apple
+ * through CoreText, and Windows through DirectWrite/D2D (see
+ * EmojiFont::EnsureBackend), so on those targets the full ~10.7 MB file is dead
+ * weight. Linux desktop still needs it as a fallback when the system has no
+ * Noto emoji font, and the web build embeds it because wasm has no OS
+ * rasterizer at all.
+ *
+ * Windows is a special case for country flags: Segoe UI Emoji has no ISO flag
+ * glyphs (regional indicators render as "US"/"JP"), so we ship a small
+ * `NotoColorEmoji-Flags.ttf` CBDT subset (~0.85 MB) alongside the OS rasterizer.
  *
  * An app that wants a specific emoji set on any platform can still ship one and
  * register it with `loadEmoji()`, which overrides the OS rasterizer.
  */
 const BUNDLED_EMOJI_FONT = 'NotoColorEmoji.ttf';
+const BUNDLED_FLAGS_FONT = 'NotoColorEmoji-Flags.ttf';
 
-function skipBundledEmojiFont(name: string, target: 'android' | 'ios' | 'desktop'): boolean {
-  if (path.basename(name) !== BUNDLED_EMOJI_FONT) return false;
-  return target !== 'desktop' || process.platform !== 'linux';
+function skipBundledEmojiFont(
+  name: string,
+  target: 'android' | 'ios' | 'desktop',
+  desktopOs: NodeJS.Platform = process.platform
+): boolean {
+  const base = path.basename(name);
+  if (base === BUNDLED_EMOJI_FONT) {
+    // Keep only for Linux desktop builds. Android/iOS always skip; macOS/Windows
+    // desktop hosts skip because those OSes provide an emoji rasterizer.
+    return target !== 'desktop' || desktopOs !== 'linux';
+  }
+  if (base === BUNDLED_FLAGS_FONT) {
+    // Only Windows needs the flags subset (Segoe has no country flags).
+    return !(target === 'desktop' && desktopOs === 'win32');
+  }
+  return false;
+}
+
+/** Native hosts use the OS UI face — never stage Roboto TTF trees. */
+function skipBundledRobotoFont(name: string): boolean {
+  return /^Roboto/i.test(path.basename(name));
 }
 
 /**
@@ -187,12 +221,38 @@ function skipBundledEmojiFont(name: string, target: 'android' | 'ios' | 'desktop
  * older rayact keeps a stale 10.7 MB emoji font in its app bundle and never
  * sees the size win. Prune it explicitly whenever we are skipping it.
  */
-async function pruneUnusedEmojiFont(destFontsDir: string, target: 'android' | 'ios' | 'desktop'): Promise<void> {
-  if (!skipBundledEmojiFont(BUNDLED_EMOJI_FONT, target)) return;
-  const stale = path.join(destFontsDir, BUNDLED_EMOJI_FONT);
-  if (!existsSync(stale)) return;
-  await fs.rm(stale, { force: true });
-  console.log(`  removed stale ${BUNDLED_EMOJI_FONT} (this platform rasterizes emoji via the OS)`);
+async function pruneUnusedEmojiFont(
+  destFontsDir: string,
+  target: 'android' | 'ios' | 'desktop',
+  desktopOs: NodeJS.Platform = process.platform
+): Promise<void> {
+  for (const font of [BUNDLED_EMOJI_FONT, BUNDLED_FLAGS_FONT]) {
+    if (!skipBundledEmojiFont(font, target, desktopOs)) continue;
+    const stale = path.join(destFontsDir, font);
+    if (!existsSync(stale)) continue;
+    await fs.rm(stale, { force: true });
+    console.log(`  removed stale ${font} (not needed on this platform)`);
+  }
+  // Native hosts use the OS UI face; never ship Roboto TTF trees.
+  if (target === 'desktop' && desktopOs === 'linux') {
+    // Linux desktop also uses system UI fonts — same prune.
+  }
+  await pruneRobotoFonts(destFontsDir);
+}
+
+/** Drop any Roboto*.ttf / Roboto/ directory left over from older packages. */
+async function pruneRobotoFonts(destFontsDir: string): Promise<void> {
+  if (!existsSync(destFontsDir)) return;
+  const robotoDir = path.join(destFontsDir, 'Roboto');
+  if (existsSync(robotoDir)) {
+    await fs.rm(robotoDir, { recursive: true, force: true });
+    console.log('  removed stale Roboto/ (native hosts use the OS UI font)');
+  }
+  for (const name of await fs.readdir(destFontsDir)) {
+    if (!/^Roboto/i.test(name)) continue;
+    await fs.rm(path.join(destFontsDir, name), { recursive: true, force: true });
+    console.log(`  removed stale ${name} (native hosts use the OS UI font)`);
+  }
 }
 
 /**
@@ -435,7 +495,7 @@ async function buildAndroidApk(
     const fontsDir = path.join(androidPrebuiltDir, 'resources/fonts');
     if (existsSync(fontsDir)) {
       for (const name of await fs.readdir(fontsDir)) {
-        if (skipBundledEmojiFont(name, 'android')) continue;
+        if (skipBundledEmojiFont(name, 'android') || skipBundledRobotoFont(name)) continue;
         await copyFontInto(path.join(fontsDir, name), path.join(apkAssets, 'runtime/resources/fonts', name));
       }
       await pruneUnusedEmojiFont(path.join(apkAssets, 'runtime/resources/fonts'), 'android');
@@ -752,7 +812,7 @@ async function buildIosApp(
     const fontsDir = path.join(iosPrebuiltDir, 'resources/fonts');
     if (existsSync(fontsDir)) {
       for (const name of await fs.readdir(fontsDir)) {
-        if (skipBundledEmojiFont(name, 'ios')) continue;
+        if (skipBundledEmojiFont(name, 'ios') || skipBundledRobotoFont(name)) continue;
         await copyFontInto(path.join(fontsDir, name), path.join(iosAssets, 'runtime/resources/fonts', name));
       }
       await pruneUnusedEmojiFont(path.join(iosAssets, 'runtime/resources/fonts'), 'ios');
@@ -906,8 +966,9 @@ async function packageDesktopApp(
   await fs.copyFile(bin, destBin);
   await fs.chmod(destBin, 0o755);
 
-  // Bundled native plugins: copy librayact_*.{dylib,so,dll} into outDir/modules so
-  // the host's RAYACT_MODULE_PATH=<exeDir>/modules hook (main.cpp) dlopen's them.
+  // Bundled native plugins and their adjacent runtime dependencies go into
+  // outDir/modules. Some plugins are a single library; CEF additionally ships
+  // libcef.dll, a subprocess executable, resources and locales in this folder.
   const ext = process.platform === 'darwin' ? '.dylib'
     : process.platform === 'win32' ? '.dll' : '.so';
   const isPlugin = (n: string) =>
@@ -920,9 +981,9 @@ async function packageDesktopApp(
   ].filter((d): d is string => Boolean(d));
   for (const dir of moduleDirs) {
     if (!existsSync(dir)) continue;
-    for (const name of await fs.readdir(dir)) {
-      if (isPlugin(name)) await copyInto(path.join(dir, name), path.join(outDir, 'modules', name));
-    }
+    const names = await fs.readdir(dir);
+    if (!names.some(isPlugin)) continue;
+    await copyInto(dir, path.join(outDir, 'modules'));
     break;
   }
   await writeNativeModules(config, path.join(outDir, 'native-modules.json'));
@@ -952,7 +1013,7 @@ async function packageDesktopApp(
   ]) {
     if (!existsSync(fontsDir)) continue;
     for (const name of await fs.readdir(fontsDir)) {
-      if (skipBundledEmojiFont(name, 'desktop')) continue;
+      if (skipBundledEmojiFont(name, 'desktop') || skipBundledRobotoFont(name)) continue;
       await copyFontInto(path.join(fontsDir, name), path.join(outDir, 'resources/fonts', name));
     }
     await pruneUnusedEmojiFont(path.join(outDir, 'resources/fonts'), 'desktop');

@@ -61,8 +61,18 @@ bool isPluginName(const std::string& f) {
 
 void registerFromLib(const std::string& path) {
 #ifdef _WIN32
-  HMODULE h = LoadLibraryA(path.c_str());
-  if (!h) return;
+  // A module may ship private runtime DLLs beside the plugin (CEF is the first
+  // such module). The default LoadLibrary search starts at the host executable,
+  // not at an absolute plugin path's directory, so delay-loading libcef.dll
+  // would raise STATUS_DLL_NOT_FOUND even though it is adjacent to the plugin.
+  HMODULE h = LoadLibraryExA(
+      path.c_str(), nullptr,
+      LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+  if (!h) {
+    pluginLog("[plugin] LoadLibrary failed for %s (error %lu)\n",
+              path.c_str(), (unsigned long)GetLastError());
+    return;
+  }
   auto fn = (RayactModuleRegisterFn)GetProcAddress(h, "rayact_module_register");
 #else
   void* h = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
@@ -137,6 +147,7 @@ void loadPlugins(const std::string& extraDir) {
   // plugin refusing to register against a host it was never built for.
   std::set<std::string> seen; // by filename, so a plugin in two dirs loads once
   scanDir(extraDir, seen);
+  bool hasExplicitModulePath = false;
   if (const char* mp = std::getenv("RAYACT_MODULE_PATH")) {
     std::string s(mp);
     size_t start = 0;
@@ -150,12 +161,20 @@ void loadPlugins(const std::string& extraDir) {
           start);
       std::string part = s.substr(start, sep == std::string::npos ? std::string::npos
                                                                   : sep - start);
-      if (!part.empty()) scanDir(part, seen);
+      if (!part.empty()) {
+        hasExplicitModulePath = true;
+        scanDir(part, seen);
+      }
       if (sep == std::string::npos) break;
       start = sep + 1;
     }
   }
-  scanDir(rayactDataDir() + "/modules", seen);
+  // An explicit project/package module path is authoritative. Mixing in the
+  // per-user cache can load a differently named stale predecessor (for example
+  // securestore vs secure_store) even though filename precedence protected the
+  // current modules, producing noisy ABI failures and potentially duplicate
+  // registrations.
+  if (!hasExplicitModulePath) scanDir(rayactDataDir() + "/modules", seen);
 }
 
 } // namespace rayact

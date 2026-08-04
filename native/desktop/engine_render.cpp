@@ -593,10 +593,12 @@ static void engineRenderScreenInSurface(int screenId, int width, int height, boo
     resolvePopoverAnchors();
 
     Vector2 mouse = GetMousePosition();
-    // Android/iOS touch positions are physical pixels; macOS/desktop GLFW mouse
-    // positions are already logical window coords even when the Metal drawable
-    // is supersampled.
-#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS)
+    // Android/iOS touch positions are physical pixels. Windows GLFW also reports
+    // physical client coordinates in this HiDPI Vulkan path (the framebuffer-
+    // sized window is 600px for a 480dp surface at 125%); treating them as dp
+    // makes every Rayact hit target drift down/right. macOS and the remaining
+    // desktop GLFW paths already report logical window coordinates.
+#if defined(RAYACT_ANDROID) || defined(RAYACT_IOS) || defined(_WIN32)
     Vector2 mouseDp = raym3::v2::Density::PxToDp(mouse);
 #else
     Vector2 mouseDp = mouse;

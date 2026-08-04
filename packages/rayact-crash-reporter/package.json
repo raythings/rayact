@@ -1,6 +1,6 @@
 {
   "name": "@rayact/crash-reporter",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Provider-neutral, privacy-first crash reporting for Rayact",
   "type": "module",
   "sideEffects": [
@@ -22,6 +22,7 @@
     "android",
     "desktop",
     "ios",
+    "web",
     "rayact.module.json",
     "README.md",
     "CHANGELOG.md"

@@ -16,7 +16,7 @@ for (const item of [...release.packages, ...release.artifacts]) {
 import { fileURLToPath } from 'node:url';
 const defaultKeyPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'release-public-key.pem');
 const publicKey = process.env.RAYACT_RELEASE_PUBLIC_KEY
-  ?? (fs.existsSync(defaultKeyPath) ? fs.readFileSync(defaultKeyPath, 'utf8') : null);
+  || (fs.existsSync(defaultKeyPath) ? fs.readFileSync(defaultKeyPath, 'utf8') : null);
 const sigPath = path.join(directory, 'release-set.sig');
 if (publicKey && fs.existsSync(sigPath)) {
   const signature = Buffer.from(fs.readFileSync(sigPath, 'utf8').trim(), 'base64');

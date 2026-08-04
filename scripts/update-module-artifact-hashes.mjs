@@ -37,7 +37,9 @@ function artifactCandidates(packageDir) {
     ['desktop/darwin-x64', 'darwin', 'x86_64'],
     ['desktop/linux-arm64', 'linux', 'arm64'],
     ['desktop/linux-x64', 'linux', 'x86_64'],
-    ['desktop/windows-arm64', 'windows', 'arm64'],
+    // Windows arm64 remains a compile gate, not a 0.0.5 release target. Keep
+    // its generated binaries out of the published manifest so universal
+    // module packages do not promise or pack an unsupported CEF runtime.
     ['desktop/windows-x64', 'windows', 'x86_64'],
     ['ios', 'ios', 'universal'],
     ['web/wasm32', 'web', 'wasm32'],

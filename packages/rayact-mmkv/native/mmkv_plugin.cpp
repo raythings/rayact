@@ -25,6 +25,12 @@
 #include <mutex>
 #include <string>
 #include <sys/stat.h>
+#ifdef _WIN32
+  #include <direct.h>          // _mkdir
+  #define WIN32_LEAN_AND_MEAN
+  #define NOMINMAX
+  #include <windows.h>         // MoveFileExA
+#endif
 
 namespace {
 
@@ -41,6 +47,17 @@ void ensureDir(const std::string& dir) {
   _mkdir(dir.c_str());
 #else
   mkdir(dir.c_str(), 0700);
+#endif
+}
+
+// Atomically replace dest with tmp. POSIX rename() overwrites; the MSVC CRT's
+// rename() fails when dest exists, which would silently drop every write after
+// the first, so Windows needs MoveFileEx.
+bool replaceFile(const std::string& tmp, const std::string& dest) {
+#ifdef _WIN32
+  return MoveFileExA(tmp.c_str(), dest.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+#else
+  return rename(tmp.c_str(), dest.c_str()) == 0;
 #endif
 }
 
@@ -123,7 +140,7 @@ void persist(const std::string& id, const Store& s) {
   if (!f) return;
   if (!out.empty()) fwrite(out.data(), 1, out.size(), f);
   fclose(f);
-  rename(tmp.c_str(), filePath(id).c_str());
+  replaceFile(tmp, filePath(id));
 }
 
 RayactBytes dup(const std::string& s) {
@@ -223,7 +240,7 @@ extern "C" int rayact_mmkv_register(const RayactHost* host) {
 // so it's omitted wherever linking is static (iOS, web) — those hosts call the
 // unique rayact_mmkv_register directly.
 #if !defined(RAYACT_IOS) && !defined(RAYACT_WEB)
-extern "C" int rayact_module_register(const RayactHost* host) {
+extern "C" RAYACT_MODULE_EXPORT int rayact_module_register(const RayactHost* host) {
   return rayact_mmkv_register(host);
 }
 #endif

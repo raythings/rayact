@@ -1,6 +1,6 @@
 {
   "name": "@rayact/image-picker",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "System image library picker for Rayact",
   "type": "module",
   "sideEffects": false,

@@ -8,6 +8,7 @@ echo "==> Building Rayact desktop (Linux)..."
 BUILD_DIR="$RAYACT_ROOT/build-linux"
 QUICKJS_BUILD_DIR="$RAYACT_ROOT/build-linux/quickjs"
 BUILD_JOBS="${RAYACT_BUILD_JOBS:-2}"
+rm -rf "$BUILD_DIR"
 cmake -B "$QUICKJS_BUILD_DIR" -S "$RAYACT_ROOT/third_party/quickjs" \
   -DCMAKE_BUILD_TYPE=Release -DQJS_BUILD_EXAMPLES=OFF
 cmake --build "$QUICKJS_BUILD_DIR" --parallel "$BUILD_JOBS"

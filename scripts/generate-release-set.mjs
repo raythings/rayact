@@ -69,6 +69,7 @@ const supportedPlatforms = [];
 if (packageNames.has('@rayact/prebuilt-android-arm64')) supportedPlatforms.push('android');
 if (packageNames.has('@rayact/prebuilt-ios-arm64')) supportedPlatforms.push('ios');
 if (packageNames.has('@rayact/prebuilt-darwin-arm64')) supportedPlatforms.push('macos');
+if (packageNames.has('@rayact/prebuilt-windows-x64')) supportedPlatforms.push('windows');
 if (packageNames.has('@rayact/prebuilt-web-wasm')) supportedPlatforms.push('web');
 const releaseSet = {
   schemaVersion: 1,

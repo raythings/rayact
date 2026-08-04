@@ -68,10 +68,11 @@ else
   fail "port-fallback (see $OUT/port-fallback.log)"
 fi
 
-if [ ! -f "$ROOT/release1/SHA256SUMS" ]; then
-  fail "release1/SHA256SUMS missing — run npm run pack:release"
+log "=== canonical release pack ==="
+if npm run pack:release >"$OUT/pack-release.log" 2>&1; then
+  pass "release1 packed for $VERSION"
 else
-  pass "release1 packed"
+  fail "pack:release (see $OUT/pack-release.log)"
 fi
 
 log "=== local release asset server ==="
@@ -85,7 +86,7 @@ else
 fi
 
 log "=== release1 asset inventory ==="
-for asset in "rayact-$VERSION.tgz" "create-rayact-app-$VERSION.tgz" rayact-dev-app.apk rayact-dev-app-simulator.zip "rayact-prebuilt-darwin-arm64-$VERSION.tgz" "rayact-web-$VERSION.tar.gz"; do
+for asset in "rayact-$VERSION.tgz" "create-rayact-app-$VERSION.tgz" rayact-dev-app.apk rayact-dev-app-simulator.zip rayact-dev-app-windows-x64.zip "rayact-prebuilt-darwin-arm64-$VERSION.tgz" "rayact-prebuilt-windows-x64-$VERSION.tgz" "rayact-web-$VERSION.tar.gz"; do
   if curl -sf "http://127.0.0.1:9191/$TAG/$asset" -o /dev/null; then
     pass "release asset $asset"
   else
@@ -130,7 +131,7 @@ log "=== desktop release build ==="
 (
   cd "$SMOKE"
   npx rayact build --release --desktop --out dist-desktop-check >"$OUT/smoke-desktop-build.log" 2>&1
-  test -f dist-desktop-check/bundle.js
+  test -f dist-desktop-check/bundle.js || test -f dist-desktop-check/bundle.qjsbc
 ) && pass "desktop release build" || fail "desktop release build"
 
 log "=== web release build ==="

@@ -61,8 +61,8 @@ if should_check darwin; then
   check_file "$ROOT/packages/prebuilt-darwin-arm64/bin/rayact_desktop"
   check_file "$ROOT/packages/prebuilt-darwin-arm64/manifest.json"
   check_absent "$ROOT/packages/prebuilt-darwin-*/modules/librayact_*"
-  check_file "$ROOT/packages/rayact-mmkv/darwin-arm64/librayact_mmkv.dylib"
-  check_file "$ROOT/packages/rayact-secure-store/darwin-arm64/librayact_secure_store.dylib"
+  check_file "$ROOT/packages/rayact-mmkv/desktop/darwin-arm64/librayact_mmkv.dylib"
+  check_file "$ROOT/packages/rayact-secure-store/desktop/darwin-arm64/librayact_secure_store.dylib"
 fi
 
 echo "==> prebuilt-ios-arm64"
@@ -70,11 +70,25 @@ if should_check ios; then
   check_file "$ROOT/packages/prebuilt-ios-arm64/manifest.json"
 fi
 
+echo "==> prebuilt-windows-x64"
+if should_check windows; then
+  check_file "$ROOT/packages/prebuilt-windows-x64/bin/rayact_desktop.exe"
+  check_file "$ROOT/packages/prebuilt-windows-x64/bin/rayact_tool.exe"
+  check_file "$ROOT/packages/prebuilt-windows-x64/manifest.json"
+  check_absent "$ROOT/packages/prebuilt-windows-x64/modules/librayact_*"
+  check_file "$ROOT/packages/rayact-mmkv/desktop/windows-x64/librayact_mmkv.dll"
+  check_file "$ROOT/packages/rayact-secure-store/desktop/windows-x64/librayact_secure_store.dll"
+  check_file "$ROOT/packages/rayact-crash-reporter/desktop/windows-x64/librayact_crash_reporter.dll"
+  check_file "$ROOT/packages/rayact-svg/desktop/windows-x64/librayact_svg.dll"
+  check_file "$ROOT/packages/rayact-webview/desktop/windows-x64/librayact_webview.dll"
+fi
+
 echo "==> dev-app dist"
 if should_check dev-app; then
   check_file "$ROOT/apps/dev-app/dist/rayact-dev-app.apk"
   check_file "$ROOT/apps/dev-app/dist/rayact-dev-app-device-unsigned.ipa"
   check_file "$ROOT/apps/dev-app/dist/rayact-dev-app-simulator.zip"
+  check_file "$ROOT/apps/dev-app/dist/rayact-dev-app-windows-x64.zip"
 fi
 
 if [[ "$fail" -ne 0 ]]; then

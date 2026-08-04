@@ -40,6 +40,6 @@ test('rayact migrate rewrites optional imports, legacy config, and npm dependenc
     '@rayact/secure-store',
   ]);
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  assert.equal(pkg.dependencies['@rayact/mmkv'], '0.0.4');
-  assert.equal(pkg.dependencies['@rayact/secure-store'], '0.0.4');
+  assert.equal(pkg.dependencies['@rayact/mmkv'], '0.0.5');
+  assert.equal(pkg.dependencies['@rayact/secure-store'], '0.0.5');
 });

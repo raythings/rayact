@@ -17,7 +17,7 @@ import {
 
 const manifestFixture = (overrides = {}) => ({
   schemaVersion: 1, name: 'sample', package: '@rayact/sample', jsEntry: '.', library: 'rayact_sample',
-  platforms: ['android'], architectures: ['arm64'], abiRange: '>=1 <4', engineRange: '>=0.0.3 <0.1.0',
+  platforms: ['android'], architectures: ['arm64'], abiRange: '>=1 <6', engineRange: '>=0.0.3 <0.1.0',
   linkage: 'dynamic', permissions: [], configurationSchema: {}, officialDevApp: false, artifacts: [],
   ...overrides,
 });
@@ -238,7 +238,7 @@ test('module compatibility rejects actionable ABI and engine mismatches', () => 
   assert.doesNotThrow(() => assertModuleCompatibility(manifestFixture()));
   // Both directions must fail: a module needing a newer ABI than this host, and
   // one pinned to an ABI this host has moved past.
-  assert.throws(() => assertModuleCompatibility(manifestFixture({ abiRange: '>=4 <5' })), /ABI mismatch.*regenerate native projects/);
+  assert.throws(() => assertModuleCompatibility(manifestFixture({ abiRange: '>=6 <7' })), /ABI mismatch.*regenerate native projects/);
   assert.throws(() => assertModuleCompatibility(manifestFixture({ abiRange: '>=1 <2' })), /ABI mismatch.*regenerate native projects/);
   assert.throws(() => assertModuleCompatibility(manifestFixture({ engineRange: '>=1.0.0 <2.0.0' })), /engine mismatch.*rayact migrate/);
 });
@@ -257,7 +257,7 @@ test('Android custom module libraries are copied into generated clients', () => 
     manifestPath: path.join(packageDir, 'rayact.module.json'),
     manifest: {
       schemaVersion: 1, name: 'sample', package: '@rayact/sample', jsEntry: '.', library: 'rayact_sample',
-      platforms: ['android'], architectures: ['arm64'], abiRange: '>=1 <4', engineRange: '>=0.0.3 <0.1.0',
+      platforms: ['android'], architectures: ['arm64'], abiRange: '>=1 <6', engineRange: '>=0.0.3 <0.1.0',
       linkage: 'dynamic', permissions: [], configurationSchema: {}, officialDevApp: false,
       artifacts: [{ platform: 'android', architecture: 'arm64', path: 'android/arm64-v8a/librayact_sample.so', sha256 }]
     }
@@ -282,7 +282,7 @@ test('installed native module packages are discovered without monorepo scanning'
   }));
   fs.writeFileSync(path.join(packageDir, 'rayact.module.json'), JSON.stringify({
     schemaVersion: 1, name: 'sample', package: '@rayact/sample', jsEntry: '.', library: 'rayact_sample',
-    platforms: ['android', 'ios', 'darwin'], architectures: ['arm64'], abiRange: '>=1 <4', engineRange: '>=0.0.3 <0.1.0',
+    platforms: ['android', 'ios', 'darwin'], architectures: ['arm64'], abiRange: '>=1 <6', engineRange: '>=0.0.3 <0.1.0',
     linkage: 'dynamic', permissions: [], configurationSchema: {}, officialDevApp: false, artifacts: []
   }));
 
@@ -324,7 +324,7 @@ test('iOS custom module XCFrameworks are copied and linked into generated client
     manifestPath: path.join(packageDir, 'rayact.module.json'),
     manifest: {
       schemaVersion: 1, name: 'sample', package: '@rayact/sample', jsEntry: '.', library: 'rayact_sample',
-      platforms: ['ios'], architectures: ['arm64'], abiRange: '>=1 <3', engineRange: '>=0.0.3 <0.1.0',
+      platforms: ['ios'], architectures: ['arm64'], abiRange: '>=1 <6', engineRange: '>=0.0.3 <0.1.0',
       linkage: 'framework', permissions: [], configurationSchema: {}, officialDevApp: false,
       artifacts: [{ platform: 'ios', architecture: 'arm64', path: 'ios/Sample.xcframework', sha256 }]
     }
@@ -494,6 +494,15 @@ test('module manifests only claim platforms they actually implement', () => {
   // first-party-modules.json mirrors the manifests; drift there silently changes
   // what the dev app and release set advertise.
   const firstParty = read('packages/first-party-modules.json');
+  const catalogNames = new Set(firstParty.modules.map((entry) => entry.name));
+  for (const manifestPath of fs.readdirSync(path.resolve('packages'))
+    .map((dir) => path.resolve('packages', dir, 'rayact.module.json'))
+    .filter((file) => fs.existsSync(file))) {
+    const manifest = read(manifestPath);
+    if (manifest.officialDevApp) {
+      assert.ok(catalogNames.has(manifest.name), `${manifest.name}: missing from first-party-modules.json`);
+    }
+  }
   for (const entry of firstParty.modules) {
     const manifestPath = path.resolve('packages', `rayact-${entry.name}`, 'rayact.module.json');
     if (!fs.existsSync(manifestPath)) continue;

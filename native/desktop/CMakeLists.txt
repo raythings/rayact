@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(rayact_quickjs_desktop VERSION 0.0.4 LANGUAGES CXX C)
+project(rayact_quickjs_desktop VERSION 0.0.5 LANGUAGES CXX C)
 if(APPLE)
     enable_language(OBJC)
     enable_language(OBJCXX)
@@ -40,10 +40,47 @@ message(STATUS "Building rayact QuickJS Desktop example")
 
 # Find dependencies
 find_package(Threads REQUIRED)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(CURL     REQUIRED libcurl)
-pkg_check_modules(LWS      REQUIRED libwebsockets)
-pkg_check_modules(OPENSSL  REQUIRED openssl)
+if(PLATFORM_WINDOWS)
+    # Windows has no pkg-config and no system libcurl/libwebsockets. The deps are
+    # cross-built into third_party/windows-deps/<arch> by
+    # scripts/build-windows-deps.sh; libcurl uses Schannel there, so OpenSSL is
+    # not needed at all (only the CDP inspector wanted it, and devtools are off).
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")
+        set(RAYACT_WIN_DEPS_ARCH arm64)
+    else()
+        set(RAYACT_WIN_DEPS_ARCH x64)
+    endif()
+    set(RAYACT_WIN_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/windows-deps/${RAYACT_WIN_DEPS_ARCH}"
+        CACHE PATH "Prefix holding the cross-built Windows dependencies")
+    if(NOT EXISTS "${RAYACT_WIN_DEPS}/lib")
+        message(FATAL_ERROR
+            "Windows dependencies not found at ${RAYACT_WIN_DEPS}.\n"
+            "Build them first:  XWIN_DIR=<splat> scripts/build-windows-deps.sh ${RAYACT_WIN_DEPS_ARCH}")
+    endif()
+    set(CURL_INCLUDE_DIRS "${RAYACT_WIN_DEPS}/include")
+    set(LWS_INCLUDE_DIRS  "${RAYACT_WIN_DEPS}/include")
+    set(OPENSSL_INCLUDE_DIRS "")
+    set(CURL_LIBRARY_DIRS "${RAYACT_WIN_DEPS}/lib")
+    set(LWS_LIBRARY_DIRS  "${RAYACT_WIN_DEPS}/lib")
+    set(OPENSSL_LIBRARY_DIRS "")
+    # Schannel/WinHTTP pull these in; ws2_32 backs both curl and lws sockets.
+    set(CURL_LIBRARIES "${RAYACT_WIN_DEPS}/lib/libcurl.lib" ws2_32 crypt32 bcrypt advapi32 normaliz)
+    # lws names its static target websockets_static; userenv/psapi/iphlpapi are
+    # its own Windows platform dependencies.
+    set(LWS_LIBRARIES  "${RAYACT_WIN_DEPS}/lib/websockets_static.lib"
+                       "${RAYACT_WIN_DEPS}/lib/mbedtls.lib"
+                       "${RAYACT_WIN_DEPS}/lib/mbedx509.lib"
+                       "${RAYACT_WIN_DEPS}/lib/mbedcrypto.lib"
+                       ws2_32 userenv psapi iphlpapi crypt32)
+    set(OPENSSL_LIBRARIES "")
+    # _USE_MATH_DEFINES: the MSVC CRT hides M_PI and friends without it.
+    add_compile_definitions(CURL_STATICLIB _USE_MATH_DEFINES)
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(CURL     REQUIRED libcurl)
+    pkg_check_modules(LWS      REQUIRED libwebsockets)
+    pkg_check_modules(OPENSSL  REQUIRED openssl)
+endif()
 
 # Native DNS-SD powers launcher discovery on desktop. macOS exposes Bonjour
 # through libSystem; Linux can provide the compatible API via Avahi's
@@ -98,7 +135,12 @@ else()
 endif()
 
 # Find QuickJS library
-set(QUICKJS_BUILD_DIR "${QUICKJS_DIR}/build" CACHE PATH "QuickJS build directory")
+if(PLATFORM_WINDOWS)
+    # Cross-built alongside the other Windows deps (scripts/build-windows-deps.sh).
+    set(QUICKJS_BUILD_DIR "${RAYACT_WIN_DEPS}/lib" CACHE PATH "QuickJS build directory")
+else()
+    set(QUICKJS_BUILD_DIR "${QUICKJS_DIR}/build" CACHE PATH "QuickJS build directory")
+endif()
 if(PLATFORM_LINUX OR PLATFORM_MACOS)
     # Look for static library first, then shared
     find_library(QUICKJS_LIBRARY NAMES qjs PATHS ${QUICKJS_BUILD_DIR})
@@ -133,12 +175,24 @@ else()
     set(QUICKJS_LIBC_LIBRARY "")
 endif()
 
-set(RAYLIB_RCORE_SRC ${RAYLIB_DIR}/src/rcore.c)
+# Which backend this build attaches. Without an overlay the rcore/rlgl include
+# site stays vanilla OpenGL and RAYLIB_USE_RLVK is inert, so the overlay has to
+# run for Vulkan too — not just Metal.
+set(RAYACT_DESKTOP_BACKEND "NONE")
 if(PLATFORM_MACOS AND RAYACT_DESKTOP_USE_METAL)
+    set(RAYACT_DESKTOP_BACKEND "METAL")
+elseif((PLATFORM_LINUX OR PLATFORM_WINDOWS) AND RAYACT_DESKTOP_USE_VULKAN)
+    set(RAYACT_DESKTOP_BACKEND "VULKAN")
+endif()
+message(STATUS "Desktop render backend: ${RAYACT_DESKTOP_BACKEND}")
+
+set(RAYLIB_RCORE_SRC ${RAYLIB_DIR}/src/rcore.c)
+if(NOT RAYACT_DESKTOP_BACKEND STREQUAL "NONE")
     raylib_backend_prepare_rcore_overlay(
         OUT_VAR RAYLIB_RCORE_SRC
         RAYLIB_DIR "${RAYLIB_DIR}"
         RAYLIB_BACKENDS_DIR "${RAYLIB_BACKENDS_DIR}"
+        BACKEND "${RAYACT_DESKTOP_BACKEND}"
     )
 endif()
 
@@ -151,15 +205,16 @@ set(RAYLIB_SRC
     ${RAYLIB_DIR}/src/raudio.c
 )
 add_library(raylib STATIC ${RAYLIB_SRC})
-# The plain-GL rcore (everything except the macOS Metal overlay above) compiles
-# vanilla rlgl, which lacks the extended stencil API raym3's rounded clips use;
-# supply the GL passthrough implementations. See rlgl_stencil_gl.c.
-if(NOT (PLATFORM_MACOS AND RAYACT_DESKTOP_USE_METAL))
+# The plain-GL rcore (any build with no backend attached) compiles vanilla rlgl,
+# which lacks the extended stencil API raym3's rounded clips use; supply the GL
+# passthrough implementations. rlvk/rlmt define rlStencil* themselves, so adding
+# this alongside a real backend would be a duplicate definition.
+if(RAYACT_DESKTOP_BACKEND STREQUAL "NONE")
     target_sources(raylib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/rlgl_stencil_gl.c)
 endif()
 target_include_directories(raylib PUBLIC ${RAYLIB_DIR}/src ${RAYLIB_DIR}/src/platforms)
 target_compile_options(raylib PRIVATE -Wno-unknown-pragmas)
-if(PLATFORM_LINUX OR PLATFORM_MACOS)
+if(PLATFORM_LINUX OR PLATFORM_MACOS OR PLATFORM_WINDOWS)
     set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
@@ -184,9 +239,9 @@ if(NOT RAYLIB_GLFW_LIBRARY)
     message(FATAL_ERROR "raylib GLFW library not found. Build raylib or provide libglfw3.a")
 endif()
 
-if(PLATFORM_MACOS AND RAYACT_DESKTOP_USE_METAL)
+if(RAYACT_DESKTOP_BACKEND STREQUAL "METAL")
     raylib_backend_attach(TARGET raylib BACKEND METAL RAYLIB_BACKENDS_DIR ${RAYLIB_BACKENDS_DIR})
-elseif(PLATFORM_LINUX AND RAYACT_DESKTOP_USE_VULKAN)
+elseif(RAYACT_DESKTOP_BACKEND STREQUAL "VULKAN")
     raylib_backend_attach(TARGET raylib BACKEND VULKAN RAYLIB_BACKENDS_DIR ${RAYLIB_BACKENDS_DIR})
 endif()
 
@@ -249,9 +304,11 @@ set(RAYM3_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(RAYM3_USE_YOGA ON CACHE BOOL "" FORCE)
 set(RAYM3_USE_INPUT_LAYERS 0 CACHE BOOL "" FORCE)
 add_subdirectory("${RAYM3_DIR}" "${CMAKE_BINARY_DIR}/raym3" EXCLUDE_FROM_ALL)
-if(PLATFORM_MACOS AND RAYACT_DESKTOP_USE_METAL)
+# raym3's rounded clipping calls the extended rlStencil* API, which only the
+# backend headers declare — without this it fails to compile against vanilla rlgl.
+if(RAYACT_DESKTOP_BACKEND STREQUAL "METAL")
     target_include_directories(raym3 BEFORE PRIVATE "${RAYLIB_BACKENDS_DIR}/backends/rlmt")
-elseif(PLATFORM_LINUX AND RAYACT_DESKTOP_USE_VULKAN)
+elseif(RAYACT_DESKTOP_BACKEND STREQUAL "VULKAN")
     target_include_directories(raym3 BEFORE PRIVATE "${RAYLIB_BACKENDS_DIR}/backends/rlvk")
 endif()
 
@@ -400,15 +457,65 @@ target_link_libraries(rayact_desktop
 
 # Platform-specific settings
 if(PLATFORM_LINUX)
+    set(GLSLANG_SOURCE_DIR
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/raygpu/amalgamation/glslang")
+    set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
+    set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
+    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    set(GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
+    set(ENABLE_SPVREMAPPER OFF CACHE BOOL "" FORCE)
+    set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${GLSLANG_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/glslang" EXCLUDE_FROM_ALL)
+    target_include_directories(raylib BEFORE PUBLIC
+        "${GLSLANG_SOURCE_DIR}"
+        "${GLSLANG_SOURCE_DIR}/glslang/Include")
     target_link_libraries(rayact_desktop
         X11
         GL
+        glslang
+        glslang-default-resource-limits
+        MachineIndependent
+        GenericCodeGen
+        OSDependent
+        SPIRV
     )
 endif()
 
 if(PLATFORM_WINDOWS)
+    # DirectComposition host for module-owned platform views (@rayact/webview).
+    target_sources(rayact_desktop PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/win_platform_views.cpp)
+    target_link_libraries(rayact_desktop dcomp)
     # Windows-specific settings
-    target_compile_definitions(rayact_desktop PRIVATE WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0601)
+    # NOGDI/NOUSER: windows.h declares Rectangle, CloseWindow and ShowCursor,
+    # which collide with raylib's type and functions of the same names. The host's
+    # own sources only need the kernel/file APIs, so drop those SDK sections here.
+    # Scoped to this target deliberately — GLFW and raylib genuinely need them.
+    # _WIN32_WINNT=0x0A00 (Windows 10), not the old 0x0601: DirectComposition is
+    # declared only for Windows 8+, so at 0x0601 dcomp.h expands to nothing and
+    # the platform-view host sees no interfaces. WebView2 and Vulkan both require
+    # newer than 7 regardless.
+    target_compile_definitions(rayact_desktop PRIVATE
+        WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00 NOGDI NOUSER NOMINMAX)
+    if(RAYACT_DESKTOP_BACKEND STREQUAL "VULKAN")
+        # rlvk compiles GLSL to SPIR-V at runtime (RLVK_ENABLE_GLSLANG); the
+        # backend only sets the define, the consumer supplies the libraries.
+        # rlvk includes <glslang_c_interface.h> unqualified but
+        # <glslang/Public/resource_limits_c.h> qualified, so both roots are needed.
+        target_include_directories(raylib BEFORE PUBLIC
+            "${RAYACT_WIN_DEPS}/include"
+            "${RAYACT_WIN_DEPS}/include/glslang/Include")
+        target_link_libraries(rayact_desktop
+            "${RAYACT_WIN_DEPS}/lib/glslang.lib"
+            "${RAYACT_WIN_DEPS}/lib/glslang-default-resource-limits.lib"
+            "${RAYACT_WIN_DEPS}/lib/MachineIndependent.lib"
+            "${RAYACT_WIN_DEPS}/lib/GenericCodeGen.lib"
+            "${RAYACT_WIN_DEPS}/lib/OSDependent.lib"
+            "${RAYACT_WIN_DEPS}/lib/SPIRV.lib")
+    endif()
+    # GLFW/raylib need the window + input + timer libs; raym3 reads the light/dark
+    # theme out of the registry (advapi32); shell32 backs the URL/open helpers.
+    target_link_libraries(rayact_desktop
+        user32 gdi32 shell32 advapi32 winmm ole32 oleaut32 imm32 version setupapi)
 endif()
 
 if(PLATFORM_MACOS)

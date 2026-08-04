@@ -1,6 +1,6 @@
 {
   "name": "@rayact/secure-store",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Optional Keychain and Keystore-backed secure storage for Rayact",
   "type": "module",
   "sideEffects": false,

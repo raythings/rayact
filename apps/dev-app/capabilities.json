@@ -1,12 +1,13 @@
 {
   "schemaVersion": 1,
-  "engineVersion": "0.0.4",
-  "moduleAbiVersion": 1,
+  "engineVersion": "0.0.5",
+  "moduleAbiVersion": 5,
   "mode": "dev-app",
   "platforms": [
     "android",
     "ios",
-    "darwin"
+    "darwin",
+    "windows"
   ],
   "diagnostics": [
     "frame-time",
@@ -16,6 +17,105 @@
   ],
   "modules": [
     {
+      "name": "barcode-scanner",
+      "lib": "rayact_barcode_scanner",
+      "jsPackage": "@rayact/barcode-scanner",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "abiRange": ">=2 <6",
+      "permissions": [],
+      "smokeTest": "barcode-scanner-wrapper"
+    },
+    {
+      "name": "clipboard",
+      "lib": "rayact_clipboard",
+      "jsPackage": "@rayact/clipboard",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin",
+        "linux",
+        "windows",
+        "web"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=2 <6",
+      "permissions": [],
+      "smokeTest": "clipboard-wrapper"
+    },
+    {
+      "name": "crash-reporter",
+      "lib": "rayact_crash_reporter",
+      "jsPackage": "@rayact/crash-reporter",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin",
+        "windows",
+        "web"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=1 <6",
+      "permissions": [
+        "crash-report-storage",
+        "network-when-consented"
+      ],
+      "smokeTest": "crash-reporter-local"
+    },
+    {
+      "name": "haptics",
+      "lib": "rayact_haptics",
+      "jsPackage": "@rayact/haptics",
+      "platforms": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=2 <6",
+      "permissions": [],
+      "smokeTest": "haptics-wrapper"
+    },
+    {
+      "name": "image-picker",
+      "lib": "rayact_image_picker",
+      "jsPackage": "@rayact/image-picker",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin",
+        "linux",
+        "windows",
+        "web"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=2 <6",
+      "permissions": [],
+      "smokeTest": "image-picker-wrapper"
+    },
+    {
       "name": "kv",
       "lib": "",
       "jsPackage": "rayact/kv",
@@ -23,16 +123,38 @@
         "android",
         "ios",
         "darwin",
+        "web",
+        "windows"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=1 <6",
+      "permissions": [],
+      "smokeTest": "kv-roundtrip"
+    },
+    {
+      "name": "linking",
+      "lib": "rayact_linking",
+      "jsPackage": "@rayact/linking",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin",
+        "linux",
+        "windows",
         "web"
       ],
       "architectures": [
         "arm64",
-        "x64",
+        "x86_64",
         "wasm32"
       ],
-      "abiRange": ">=1 <3",
+      "abiRange": ">=2 <6",
       "permissions": [],
-      "smokeTest": "kv-roundtrip"
+      "smokeTest": "linking-wrapper"
     },
     {
       "name": "mmkv",
@@ -41,13 +163,15 @@
       "platforms": [
         "android",
         "ios",
-        "darwin"
+        "darwin",
+        "windows",
+        "web"
       ],
       "architectures": [
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=1 <3",
+      "abiRange": ">=1 <6",
       "permissions": [],
       "smokeTest": "mmkv-roundtrip"
     },
@@ -58,35 +182,19 @@
       "platforms": [
         "android",
         "ios",
-        "darwin"
+        "darwin",
+        "windows"
       ],
       "architectures": [
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=1 <3",
+      "abiRange": ">=1 <6",
       "permissions": [
         "keychain",
         "keystore"
       ],
       "smokeTest": "secure-store-roundtrip"
-    },
-    {
-      "name": "crash-reporter",
-      "lib": "rayact_crash_reporter",
-      "jsPackage": "@rayact/crash-reporter",
-      "platforms": [
-        "android",
-        "ios",
-        "darwin"
-      ],
-      "architectures": [
-        "arm64",
-        "x86_64"
-      ],
-      "abiRange": ">=1 <3",
-      "permissions": [],
-      "smokeTest": "crash-reporter-local"
     },
     {
       "name": "sensors",
@@ -102,7 +210,7 @@
         "x86_64",
         "wasm32"
       ],
-      "abiRange": ">=2 <3",
+      "abiRange": ">=2 <6",
       "permissions": [],
       "smokeTest": "sensors-availability"
     },
@@ -114,15 +222,36 @@
         "android",
         "ios",
         "darwin",
+        "windows",
         "web"
       ],
       "architectures": [
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=2 <3",
+      "abiRange": ">=2 <6",
       "permissions": [],
       "smokeTest": "svg-node-roundtrip"
+    },
+    {
+      "name": "webview",
+      "lib": "rayact_webview",
+      "jsPackage": "@rayact/webview",
+      "platforms": [
+        "android",
+        "ios",
+        "web",
+        "darwin",
+        "windows"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=3 <6",
+      "permissions": [],
+      "smokeTest": "webview-node-registration"
     }
   ]
 }

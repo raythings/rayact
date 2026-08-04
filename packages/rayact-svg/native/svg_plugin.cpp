@@ -20,6 +20,7 @@
 #include "raysvg.h"
 #include "rsvg_scene.hpp" // raysvg's own colour parser, so vars parse like any paint
 
+#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <map>
@@ -321,7 +322,7 @@ extern "C" int rayact_svg_register(const RayactHost* host) {
 // symbol would collide; web is dynamically loaded but declares the entry in its own
 // registration file (web_register.cpp), which would otherwise duplicate it here.
 #if !defined(RAYACT_IOS) && !defined(RAYACT_WEB)
-extern "C" int rayact_module_register(const RayactHost* host) {
+extern "C" RAYACT_MODULE_EXPORT int rayact_module_register(const RayactHost* host) {
     return rayact_svg_register(host);
 }
 #endif

@@ -68,27 +68,31 @@ void rlmtUnregisterSurface(unsigned long long surfaceId);
 // view reports its regions here, and the wrapper declines hits inside them so
 // those pixels stay clickable by the engine.
 @interface RayactPlatformHitTestView : NSView
-- (void)setOccludingRegions:(const std::vector<Rectangle>&)regions
+- (void)setOccludingRegions:(const std::vector<raym3::v2::ExternalViewOcclusion>&)regions
                      origin:(Rectangle)bounds;
 @end
 
 @implementation RayactPlatformHitTestView {
-    std::vector<Rectangle> _ignore;   // local to this view's bounds
+    std::vector<raym3::v2::ExternalViewOcclusion> _ignore;
 }
 - (BOOL)isFlipped { return YES; }
 
-- (void)setOccludingRegions:(const std::vector<Rectangle>&)regions
+- (void)setOccludingRegions:(const std::vector<raym3::v2::ExternalViewOcclusion>&)regions
                      origin:(Rectangle)bounds {
     _ignore.clear();
     _ignore.reserve(regions.size());
-    for (const Rectangle& r : regions) {
-        _ignore.push_back({r.x - bounds.x, r.y - bounds.y, r.width, r.height});
+    for (const auto& occlusion : regions) {
+        const Rectangle& r = occlusion.rect;
+        _ignore.push_back({
+            {r.x - bounds.x, r.y - bounds.y, r.width, r.height},
+            occlusion.radius});
     }
 }
 
 - (NSView*)hitTest:(NSPoint)point {
     const NSPoint local = [self convertPoint:point fromView:self.superview];
-    for (const Rectangle& r : _ignore) {
+    for (const auto& occlusion : _ignore) {
+        const Rectangle& r = occlusion.rect;
         if (local.x >= r.x && local.x <= r.x + r.width &&
             local.y >= r.y && local.y <= r.y + r.height) {
             return nil;

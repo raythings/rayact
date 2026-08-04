@@ -1,6 +1,6 @@
 {
   "name": "@rayact/devtools",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Development-only Chrome DevTools Protocol support for Rayact hosts",
   "type": "module",
   "sideEffects": false,

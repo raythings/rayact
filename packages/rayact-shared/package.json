@@ -1,6 +1,6 @@
 {
   "name": "@rayact/shared",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Shared public types and constants for Rayact",
   "type": "module",
   "sideEffects": false,

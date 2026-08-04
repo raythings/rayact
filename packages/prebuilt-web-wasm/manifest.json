@@ -1,6 +1,6 @@
 {
-  "engineVersion": "0.0.4",
-  "moduleAbiVersion": 3,
+  "engineVersion": "0.0.5",
+  "moduleAbiVersion": 5,
   "platform": "web",
   "arch": "wasm32",
   "requirements": [

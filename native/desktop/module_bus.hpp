@@ -45,6 +45,12 @@ const RayactHost* busHost();
 // Set the JavaVM pointer exposed to plugins via host->get_java_vm (Android).
 void busSetJavaVM(void* vm);
 
+// Publishes the handles ABI-4 visual-hosted platform views ask for. Called by the
+// platform-view host once the window and compositor device exist; both stay null
+// on platforms that do not composite module visuals (macOS hands back an NSView).
+void busSetNativeWindow(void* window);
+void busSetCompositor(void* compositor);
+
 // Per-context JS bindings: __rayact_invoke / __rayact_invoke_async /
 // __rayact_module_buffer.
 void installModuleBindings(JSContext* ctx, JSValue global);

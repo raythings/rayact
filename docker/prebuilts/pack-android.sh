@@ -107,6 +107,9 @@ for abi in "${ABIS[@]}"; do
     # Android rasterizes emoji with Paint/Canvas via JNI (AndroidRasterizeEmoji),
     # so the bundled ~10.7 MB CBDT font is never read on this platform.
     rm -f "$RAYACT_ROOT/packages/prebuilt-android-${package_arch}/resources/fonts/NotoColorEmoji.ttf"
+    # Body text uses the system Roboto face from /system/fonts — never ship TTF.
+    rm -rf "$RAYACT_ROOT/packages/prebuilt-android-${package_arch}/resources/fonts/Roboto"
+    rm -f "$RAYACT_ROOT/packages/prebuilt-android-${package_arch}/resources/fonts"/Roboto*
     # Drop the variable-font tables stb_truetype cannot read (~88% of the
     # Material Symbols files). `rayact build` slims again at staging time; doing
     # it here keeps the published npm package small too.

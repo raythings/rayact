@@ -1,5 +1,5 @@
-export const RAYACT_ENGINE_VERSION = '0.0.4';
-export const RAYACT_MODULE_ABI_VERSION = 3;
+export const RAYACT_ENGINE_VERSION = '0.0.5';
+export const RAYACT_MODULE_ABI_VERSION = 5;
 export const RAYACT_NDK_VERSION = '27.3.13750724';
 
 /** GitHub repo (owner/name) prebuilt tarballs are released from. */
@@ -12,6 +12,7 @@ export const PREBUILT_PACKAGES = {
   'darwin-arm64': '@rayact/prebuilt-darwin-arm64',
   'darwin-x64': '@rayact/prebuilt-darwin-x64',
   'linux-x64': '@rayact/prebuilt-linux-x64',
+  'windows-x64': '@rayact/prebuilt-windows-x64',
   'web-wasm': '@rayact/prebuilt-web-wasm'
 } as const;
 

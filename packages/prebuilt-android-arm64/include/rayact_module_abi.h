@@ -33,6 +33,8 @@
  *   2  node kinds (modules can own render nodes), GPU table, shared buffers,
  *      frame requests, WASM host-import registration
  *   3  platform view factories (modules can own composited native views)
+ *   4  visual-hosting handles and forwarded pointer/key input
+ *   5  off-screen platform-view frame delivery
  */
 #ifndef RAYACT_MODULE_ABI_H
 #define RAYACT_MODULE_ABI_H
@@ -44,7 +46,7 @@
 extern "C" {
 #endif
 
-#define RAYACT_MODULE_ABI_VERSION 3u
+#define RAYACT_MODULE_ABI_VERSION 5u
 
 typedef struct {
   const uint8_t* ptr;
@@ -136,6 +138,38 @@ typedef struct RayactViewFactory {
    */
   void (*notify_layout)(void* instance, float width, float height);
   void (*dispose)(void* instance);
+  /*
+   * ABI 4, and only for visual-hosted views. A view composited as a bare visual
+   * owns no window, so the OS never routes input to it — the host forwards what
+   * lands inside the view's bounds instead. Both may be NULL, and a host must
+   * check struct_size before reading them.
+   *
+   * Coordinates are in view-local dp, origin top-left. `kind` is 0=move, 1=down,
+   * 2=up for pointers and 0=down, 1=up, 2=char for keys; `buttons` is a bitmask
+   * of held buttons (1=left, 2=right, 4=middle); `wheel` is in detents.
+   * Windows platform views that host a window of their own ignore these.
+   */
+  void (*notify_pointer)(void* instance, int32_t kind, float x, float y,
+                         int32_t buttons, float wheel);
+  void (*notify_key)(void* instance, int32_t kind, int32_t key_code,
+                     int32_t modifiers, uint32_t text_codepoint);
+  /*
+   * ABI 5. Optional off-screen frame producer. A factory that implements this
+   * returns NULL in *out_native_view from create(); the host then calls this
+   * function on its render thread and paints the returned pixels as the
+   * external view's ordinary scene texture. This avoids native-window airspace
+   * and gives framework content above and below the view exact pixel ordering.
+   *
+   * Pixels are premultiplied BGRA8, top row first. `generation` is in/out: the
+   * caller supplies the generation it already uploaded. Return 0 when no newer
+   * frame exists, a positive required byte count when `dst` is NULL/too small,
+   * or the copied byte count on success. width/height/stride are always filled
+   * when a frame exists. The producer retains ownership of its source buffer;
+   * the callback must copy before returning.
+   */
+  int (*copy_frame_bgra8)(void* instance, uint8_t* dst, size_t capacity,
+                          int32_t* width, int32_t* height, int32_t* stride,
+                          uint64_t* generation);
 } RayactViewFactory;
 
 /*
@@ -241,7 +275,44 @@ typedef struct RayactHost {
    * silently dropped when the node has no JS handler attached.
    */
   void (*emit_view_event)(int32_t node_id, const char* json_utf8, size_t len);
+  /* --- ABI 4. --- */
+  /*
+   * Handles a visual-hosted platform view needs from the host. Both are NULL on
+   * platforms where a module simply hands back its own view (macOS/iOS: AppKit
+   * and UIKit composite an NSView/UIView with no host handles involved).
+   *
+   * native_window: the host's top-level window — HWND on Windows.
+   * compositor:    the host's compositor device, whose visual tree a module must
+   *                allocate from for its visuals to be composable with the
+   *                host's — IDCompositionDevice* on Windows.
+   *
+   * A Windows module using DirectComposition needs both: its visual must come
+   * from the host's device and receives input through notify_pointer/notify_key.
+   * ABI-5 off-screen modules can ignore compositor and return frame pixels.
+   */
+  void* (*native_window)(void);
+  void* (*compositor)(void);
+  /* --- ABI 5. --- */
+  /* ABI 5 is carried by RayactViewFactory::copy_frame_bgra8. No new host
+   * function is required: frame wakeups use the ABI-2 request_frame callback. */
 } RayactHost;
+
+/*
+ * Export marker for a plugin's entry points.
+ *
+ * Mach-O and ELF give every symbol default visibility, so the entry point was
+ * historically declared bare. A Windows DLL exports nothing unless asked, and
+ * the loader's GetProcAddress would come back empty — so entry points must be
+ * marked. Applies to the dynamic (dlopen'd) entry point only; iOS links its
+ * modules statically and needs no marker.
+ */
+#if defined(_WIN32)
+  #define RAYACT_MODULE_EXPORT __declspec(dllexport)
+#elif defined(__GNUC__) || defined(__clang__)
+  #define RAYACT_MODULE_EXPORT __attribute__((visibility("default")))
+#else
+  #define RAYACT_MODULE_EXPORT
+#endif
 
 /* Plugin entry point. Implemented by every plugin. */
 typedef int (*RayactModuleRegisterFn)(const RayactHost* host);

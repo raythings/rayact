@@ -86,6 +86,40 @@ the content container or on rows inside your own nested containers, they can
 be compressed to fit instead of scrolling. Opt back out with
 `flexGrow: 1, flexShrink: 0` on the offending row.
 
+### FlatList (alias `List`)
+
+Windowed, variable-height list for large data sets. It renders only the visible
+range plus an overscan window, updates measured row heights incrementally, and
+recycles mounted cells by default.
+
+```tsx
+import { FlatList, type FlatListHandle } from 'rayact/react';
+
+const ref = React.useRef<FlatListHandle>(null);
+<FlatList
+  ref={ref}
+  data={messages}
+  keyExtractor={(message) => message.id}
+  renderItem={({ item, index }) => <MessageRow message={item} index={index} />}
+  estimatedItemSize={64}
+  onEndReached={loadMore}
+/>
+
+ref.current?.scrollToIndex({ index: 25, viewOffset: 8 });
+```
+
+Important props include `windowSize`, `initialNumToRender`, `inverted`,
+`maintainVisibleContentPosition`, `ListHeaderComponent`,
+`ListFooterComponent`, `ListEmptyComponent`, `onEndReached`, `extraData`, and
+`getItemType`. `FlatListHandle` exposes `scrollToOffset`, `scrollToIndex`, and
+`scrollToEnd`.
+
+Recycled rows retain their component identity, so row-local state can survive
+when a cell is reassigned to another item. Derive row state from props, reset it
+when the item key changes, or set `recycleItems={false}` to use legacy
+unmount/remount windowing. Return stable row categories from `getItemType` when
+different items render different component trees.
+
 ### Pressable
 
 A `View` that tracks pressed state and exposes it to `style` and `children`
@@ -152,19 +186,34 @@ Wraps content that should slide out of the IME's way. Uses native keyboard
 insets and animates with the CSS transition engine. Pair with `useKeyboard()`
 for custom behavior.
 
+### KeyboardStickyView
+
+Absolutely positions its children immediately above the animated software
+keyboard. Set `offset` to add space between the keyboard and the sticky
+content. It uses `useKeyboard()` internally and fills the horizontal bounds of
+its positioned parent.
+
 ### ExternalView / NativeTextInput
 
-Platform-view escape hatches: `ExternalView` composites an OS-native view
-(Android `AHardwareBuffer` texture path) into the render tree;
-`NativeTextInput` is the raw platform text field the higher-level `TextInput`
-drives. Reach for these only when the built-ins can't express something.
+Platform-view escape hatches: `ExternalView` composites an OS-native view into
+the render tree; `NativeTextInput` is the raw platform text field the
+higher-level `TextInput` drives. These are real platform controls, not
+JavaScript-painted imitations. Android uses its native view/texture path,
+Apple hosts native Cocoa/UIKit controls, and Windows integrates native controls
+and off-screen platform-view frames into Vulkan composition.
+
+The same platform-view system powers `@rayact/webview`: Android WebView, Apple
+WebKit, and Windows CEF handle browser behavior while Rayact owns layout,
+clipping, z-order, and input arbitration. See [Native modules](/native-modules).
+Reach for the escape hatches only when the built-ins cannot express something.
 
 ## Forms & input
 
 ### TextInput (alias `Input`; Material-styled `TextField`)
 
-React-native `TextInput` prop surface mapped onto the native editing engine
-(Flutter-style editing model — real caret, selection, IME):
+React Native's `TextInput` prop surface mapped onto the operating system's
+editing control: real caret, selection, focus, keyboard behavior, and IME
+composition, wrapped in Rayact's cross-platform layout and Material styling:
 
 | RN prop | Behaviour |
 | --- | --- |

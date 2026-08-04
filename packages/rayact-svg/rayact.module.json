@@ -9,13 +9,14 @@
     "android",
     "ios",
     "darwin",
+    "windows",
     "web"
   ],
   "architectures": [
     "arm64",
     "x86_64"
   ],
-  "abiRange": ">=2 <4",
+  "abiRange": ">=2 <6",
   "engineRange": ">=0.0.4 <0.1.0",
   "linkage": "dynamic",
   "permissions": [],
@@ -66,25 +67,31 @@
       "platform": "darwin",
       "architecture": "arm64",
       "path": "desktop/darwin-arm64/librayact_svg.dylib",
-      "sha256": "2b0342dbc18455de15b470482a4c9607fa9494c36c8bd3ce6a60b21e2f308c78"
+      "sha256": "e580a68c5fb203c360041bcac892eb756c02b11cc7d9279707738ab9374e98c6"
     },
     {
       "platform": "darwin",
       "architecture": "x86_64",
       "path": "desktop/darwin-x64/librayact_svg.dylib",
-      "sha256": "128feb7c4d8281dcfab1ca727a26cffd449681e23a77c8b32f585321b4813c16"
+      "sha256": "1848be337feddd4cc50bf21baf7a6c97f5eebf68ca2854a2d5ff1f0f754043a6"
     },
     {
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_svg.xcframework",
-      "sha256": "efc8731505bae412a1d6187fba2bac4f9ab36f227841167ce00b504bcfa0ac19"
+      "sha256": "4e4f3a356ab5e941da9e3502a71f5fbe371f0468450c30cd4591eed35e1cc9ee"
     },
     {
       "platform": "web",
       "architecture": "wasm32",
       "path": "web/wasm32/rayact_svg.wasm",
       "sha256": "14d337487d5b96ac65bc63f00ca74824031d3310442b4984b53db62fba5d72c9"
+    },
+    {
+      "platform": "windows",
+      "architecture": "x86_64",
+      "path": "desktop/windows-x64/librayact_svg.dll",
+      "sha256": "b78439b9bcccf8b44d8cabed444c13435d22901aed5013b29e1cd9fb1452459c"
     }
   ],
   "web": {

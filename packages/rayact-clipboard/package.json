@@ -1,6 +1,6 @@
 {
   "name": "@rayact/clipboard",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Cross-platform clipboard API for Rayact",
   "type": "module",
   "sideEffects": true,

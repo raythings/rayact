@@ -18,10 +18,16 @@
     "bundleId": "com.rayact.app"
   },
   "nativeModules": [
+    "@rayact/barcode-scanner",
+    "@rayact/clipboard",
+    "@rayact/crash-reporter",
+    "@rayact/haptics",
+    "@rayact/image-picker",
+    "@rayact/linking",
     "@rayact/mmkv",
     "@rayact/secure-store",
-    "@rayact/crash-reporter",
     "@rayact/sensors",
-    "@rayact/svg"
+    "@rayact/svg",
+    "@rayact/webview"
   ]
 }

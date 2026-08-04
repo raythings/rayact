@@ -42,7 +42,8 @@ export default defineConfig({
       {
         text: 'Platforms',
         items: [
-          { text: 'Desktop (macOS & Linux)', link: '/guide/desktop' },
+          { text: 'Desktop', link: '/guide/desktop' },
+          { text: 'Windows', link: '/guide/windows' },
           { text: 'Android', link: '/guide/android' },
           { text: 'iOS', link: '/guide/ios' },
           { text: 'Web', link: '/guide/web' },

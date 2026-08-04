@@ -1,7 +1,117 @@
 {
   "schemaVersion": 1,
-  "engineVersion": "0.0.4",
+  "engineVersion": "0.0.5",
   "modules": [
+    {
+      "name": "barcode-scanner",
+      "lib": "rayact_barcode_scanner",
+      "jsPackage": "@rayact/barcode-scanner",
+      "pluginPackage": "@rayact/barcode-scanner",
+      "platforms": [
+        "android",
+        "ios"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "abiRange": ">=2 <6",
+      "officialDevApp": true,
+      "iosIntegratedInEngine": false,
+      "smokeTest": "barcode-scanner-wrapper"
+    },
+    {
+      "name": "clipboard",
+      "lib": "rayact_clipboard",
+      "jsPackage": "@rayact/clipboard",
+      "pluginPackage": "@rayact/clipboard",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin",
+        "linux",
+        "windows",
+        "web"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=2 <6",
+      "officialDevApp": true,
+      "iosIntegratedInEngine": false,
+      "smokeTest": "clipboard-wrapper"
+    },
+    {
+      "name": "crash-reporter",
+      "lib": "rayact_crash_reporter",
+      "jsPackage": "@rayact/crash-reporter",
+      "pluginPackage": "@rayact/crash-reporter",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin",
+        "windows",
+        "web"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=1 <6",
+      "officialDevApp": true,
+      "iosIntegratedInEngine": false,
+      "permissions": [
+        "crash-report-storage",
+        "network-when-consented"
+      ],
+      "smokeTest": "crash-reporter-local"
+    },
+    {
+      "name": "haptics",
+      "lib": "rayact_haptics",
+      "jsPackage": "@rayact/haptics",
+      "pluginPackage": "@rayact/haptics",
+      "platforms": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=2 <6",
+      "officialDevApp": true,
+      "iosIntegratedInEngine": false,
+      "smokeTest": "haptics-wrapper"
+    },
+    {
+      "name": "image-picker",
+      "lib": "rayact_image_picker",
+      "jsPackage": "@rayact/image-picker",
+      "pluginPackage": "@rayact/image-picker",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin",
+        "linux",
+        "windows",
+        "web"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=2 <6",
+      "officialDevApp": true,
+      "iosIntegratedInEngine": false,
+      "smokeTest": "image-picker-wrapper"
+    },
     {
       "name": "kv",
       "lib": "",
@@ -10,17 +120,41 @@
         "android",
         "ios",
         "darwin",
+        "web",
+        "windows"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=1 <6",
+      "officialDevApp": true,
+      "integratedInEngine": true,
+      "smokeTest": "kv-roundtrip"
+    },
+    {
+      "name": "linking",
+      "lib": "rayact_linking",
+      "jsPackage": "@rayact/linking",
+      "pluginPackage": "@rayact/linking",
+      "platforms": [
+        "android",
+        "ios",
+        "darwin",
+        "linux",
+        "windows",
         "web"
       ],
       "architectures": [
         "arm64",
-        "x64",
+        "x86_64",
         "wasm32"
       ],
-      "abiRange": ">=1 <4",
+      "abiRange": ">=2 <6",
       "officialDevApp": true,
-      "integratedInEngine": true,
-      "smokeTest": "kv-roundtrip"
+      "iosIntegratedInEngine": false,
+      "smokeTest": "linking-wrapper"
     },
     {
       "name": "mmkv",
@@ -31,13 +165,14 @@
         "android",
         "ios",
         "darwin",
+        "windows",
         "web"
       ],
       "architectures": [
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=1 <4",
+      "abiRange": ">=1 <6",
       "officialDevApp": true,
       "iosIntegratedInEngine": false,
       "smokeTest": "mmkv-roundtrip"
@@ -50,13 +185,14 @@
       "platforms": [
         "android",
         "ios",
-        "darwin"
+        "darwin",
+        "windows"
       ],
       "architectures": [
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=1 <4",
+      "abiRange": ">=1 <6",
       "officialDevApp": true,
       "iosIntegratedInEngine": false,
       "permissions": [
@@ -64,27 +200,6 @@
         "keystore"
       ],
       "smokeTest": "secure-store-roundtrip"
-    },
-    {
-      "name": "crash-reporter",
-      "lib": "rayact_crash_reporter",
-      "jsPackage": "@rayact/crash-reporter",
-      "pluginPackage": "@rayact/crash-reporter",
-      "platforms": [
-        "android",
-        "ios",
-        "darwin",
-        "web"
-      ],
-      "architectures": [
-        "arm64",
-        "x86_64",
-        "wasm32"
-      ],
-      "abiRange": ">=1 <4",
-      "officialDevApp": true,
-      "iosIntegratedInEngine": false,
-      "smokeTest": "crash-reporter-local"
     },
     {
       "name": "sensors",
@@ -101,7 +216,7 @@
         "x86_64",
         "wasm32"
       ],
-      "abiRange": ">=2 <4",
+      "abiRange": ">=2 <6",
       "officialDevApp": true,
       "iosIntegratedInEngine": false,
       "smokeTest": "sensors-availability"
@@ -115,16 +230,39 @@
         "android",
         "ios",
         "darwin",
+        "windows",
         "web"
       ],
       "architectures": [
         "arm64",
         "x86_64"
       ],
-      "abiRange": ">=2 <4",
+      "abiRange": ">=2 <6",
       "officialDevApp": true,
       "iosIntegratedInEngine": false,
       "smokeTest": "svg-node-roundtrip"
+    },
+    {
+      "name": "webview",
+      "lib": "rayact_webview",
+      "jsPackage": "@rayact/webview",
+      "pluginPackage": "@rayact/webview",
+      "platforms": [
+        "android",
+        "ios",
+        "web",
+        "darwin",
+        "windows"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64",
+        "wasm32"
+      ],
+      "abiRange": ">=3 <6",
+      "officialDevApp": true,
+      "iosIntegratedInEngine": false,
+      "smokeTest": "webview-node-registration"
     }
   ]
 }

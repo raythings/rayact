@@ -4,7 +4,7 @@ Optional encrypted storage backed by the package-owned
 `librayact_secure_store` native module (Apple Keychain / Android Keystore).
 
 ```sh
-npm install @rayact/secure-store@0.0.3
+npm install file:vendor/rayact_pkgs/rayact-secure-store-0.0.5.tgz
 ```
 
 ```ts

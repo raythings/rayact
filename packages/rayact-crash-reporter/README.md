@@ -3,7 +3,7 @@
 Privacy-first crash storage for Rayact. Reports stay local unless upload mode is configured with HTTPS and runtime consent is explicitly granted.
 
 ```sh
-npm install @rayact/crash-reporter@0.0.3
+npm install file:vendor/rayact_pkgs/rayact-crash-reporter-0.0.5.tgz
 ```
 
 ```ts

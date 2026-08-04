@@ -8,12 +8,24 @@ packaged libraries on Android/iOS, browser scripts on web — see
 
 ## Installing
 
-Add them like any other `@rayact/*` package (vendored from the release set in
-a scaffolded project):
+Add them like any other `@rayact/*` package vendored from the release set.
+Rayact 0.0.5 includes:
 
-- `@rayact/mmkv` — fast persistent key-value storage (MMKV)
+- `@rayact/sensors` — accelerometer, gyroscope, magnetometer, device motion,
+  and orientation streams
+- `@rayact/barcode-scanner` — native barcode and QR scanning
+- `@rayact/clipboard` — platform clipboard reads and writes
+- `@rayact/haptics` — selection, impact, and notification feedback
+- `@rayact/image-picker` — platform image-library picker
+- `@rayact/linking` — external URLs, initial URLs, and deep-link events
+- `@rayact/webview` — Android WebView, Apple WebKit, Windows CEF, and Web
+- `@rayact/svg` — retained native SVG rendering
+- `@rayact/mmkv` — fast persistent key-value storage
 - `@rayact/secure-store` — Keychain/Keystore-backed secret storage
 - `@rayact/crash-reporter` — native crash capture with local reports
+
+The official dev app includes all supported first-party capabilities, while
+production apps autolink only the packages they declare.
 
 Each package owns a `rayact.module.json` manifest; autolinking follows your
 declared dependencies and verifies artifact SHA-256s. It never scans arbitrary

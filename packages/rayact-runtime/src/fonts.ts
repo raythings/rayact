@@ -61,10 +61,10 @@ export async function loadIcons(
 }
 
 /**
- * Register a custom fallback emoji font (CBDT/CBLC). Only used when no OS
- * emoji rasterizer is available (Linux/Windows/web) — never overrides a
- * platform's native emoji rendering (Android, macOS/iOS). Resolves to which
- * backend ends up active.
+ * Register a custom CBDT/CBLC emoji font. Clears any OS rasterizer so the
+ * custom font is used on every platform (Android/Apple/Windows included).
+ * Without an explicit call, Linux and web use system/bundled Noto Color Emoji;
+ * OS-capable platforms use their native emoji renderer only.
  */
 export async function loadEmoji(source: FontSource): Promise<'os' | 'bundled' | 'none'> {
   const g = getGlobal();

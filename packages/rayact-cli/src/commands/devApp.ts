@@ -1,4 +1,5 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import path from 'node:path';
 import { adbInstall, adbLaunch, loadRayactConfig, setupAdbReverse } from '@rayact/dev-server';
 import { ensureDevApp } from '@rayact/prebuild';
 import type { DevAppPlatform } from '@rayact/prebuild';
@@ -18,13 +19,15 @@ function pickPlatform(flags: CliFlags): DevAppPlatform {
   if (flags.android) return 'android';
   if (flags.iosSimulator) return 'ios-simulator';
   if (flags.iosDevice) return 'ios-device';
+  if (flags.windows) return 'windows';
   // No explicit platform: an attached Android device wins, then the iOS
   // simulator on macOS. Error with guidance otherwise.
   if (adbDeviceAttached()) return 'android';
+  if (process.platform === 'win32') return 'windows';
   if (process.platform === 'darwin') return 'ios-simulator';
   throw new Error(
     'No target found. Connect an Android device (USB debugging on) or pass ' +
-      '--android / --ios-simulator / --ios-device.'
+      '--android / --ios-simulator / --ios-device / --windows.'
   );
 }
 
@@ -63,11 +66,25 @@ export async function runDevApp(flags: CliFlags): Promise<void> {
   } else if (platform === 'ios-simulator') {
     if (!installOnSimulator(artifact, 'com.rayact.app', devServerUrl)) process.exit(1);
     console.log('\nDev app installed and launched on the simulator.');
-  } else {
+  } else if (platform === 'ios-device') {
     console.log(`\nUnsigned device IPA downloaded to:\n  ${artifact}`);
     console.log('\nRe-sign it with your Apple Developer certificate, then install, e.g.:');
     console.log('  1. unzip the .ipa, codesign Payload/Rayact.app with your identity');
     console.log('  2. install via Xcode Devices & Simulators or `ios-deploy`');
+    return;
+  } else {
+    const child = spawn(artifact, devServerUrl ? ['--dev-server', devServerUrl] : [], {
+      cwd: path.dirname(artifact),
+      detached: true,
+      stdio: 'ignore',
+      env: {
+        ...process.env,
+        ...(devServerUrl ? { RAYACT_DEV_SERVER: devServerUrl } : {})
+      }
+    });
+    child.unref();
+    console.log(`\nWindows dev app launched from:\n  ${artifact}`);
+    if (devServerUrl) console.log(`Connected directly to ${devServerUrl}`);
     return;
   }
 

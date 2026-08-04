@@ -9,6 +9,12 @@ import { getItemAsync, setItemAsync } from '@rayact/secure-store';
 import { configureCrashReporter, listCrashReports, recordCrash } from '@rayact/crash-reporter';
 import { isAvailableAsync } from '@rayact/sensors';
 import { Svg } from '@rayact/svg';
+import * as BarcodeScanner from '@rayact/barcode-scanner';
+import * as Clipboard from '@rayact/clipboard';
+import * as Haptics from '@rayact/haptics';
+import * as ImagePicker from '@rayact/image-picker';
+import * as Linking from '@rayact/linking';
+import { WebView } from '@rayact/webview';
 
 function App() {
   // Stable identifiers consumed by the publication gate in
@@ -18,8 +24,14 @@ function App() {
     'mmkv-roundtrip',
     'secure-store-roundtrip',
     'crash-reporter-local',
+    'barcode-scanner-wrapper',
+    'clipboard-wrapper',
+    'haptics-wrapper',
+    'image-picker-wrapper',
+    'linking-wrapper',
     'sensors-availability',
-    'svg-node-roundtrip'
+    'svg-node-roundtrip',
+    'webview-node-registration'
   ];
   const [kvLine, setKvLine] = useState('kv: …');
   const [mmkvLine, setMmkvLine] = useState('mmkv: …');
@@ -29,6 +41,17 @@ function App() {
   const [svgLine, setSvgLine] = useState('svg: …');
 
   useEffect(() => {
+    const wrapperChecks = [
+      ['barcode-scanner-wrapper', typeof BarcodeScanner.isAvailableAsync === 'function'],
+      ['clipboard-wrapper', typeof Clipboard.getStringAsync === 'function'],
+      ['haptics-wrapper', typeof Haptics.selectionAsync === 'function'],
+      ['image-picker-wrapper', typeof ImagePicker.launchImageLibraryAsync === 'function'],
+      ['linking-wrapper', typeof Linking.openURL === 'function'],
+      ['webview-node-registration', typeof WebView === 'object' || typeof WebView === 'function']
+    ] as const;
+    for (const [id, available] of wrapperChecks) {
+      console.log(`MODTEST ${id} ${available ? 'PASS' : 'FAIL'}`, available ? 'loaded' : 'missing export');
+    }
     try {
       KV.set('dev-app-probe', 'kv-ok');
       const value = KV.get('dev-app-probe');

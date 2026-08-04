@@ -5,7 +5,7 @@ Optional high-performance key/value storage backed by the package-owned
 package.
 
 ```sh
-npm install @rayact/mmkv@0.0.3
+npm install file:vendor/rayact_pkgs/rayact-mmkv-0.0.5.tgz
 ```
 
 ```ts

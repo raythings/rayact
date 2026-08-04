@@ -10,7 +10,7 @@ Usage:
 Commands:
   init [name]           Create a new Rayact app (alias for create-rayact-app)
   dev                   Start dev server + bundler + TUI
-  dev-app               Install + launch the prebuilt dev app on a device/simulator
+  dev-app               Install + launch the prebuilt dev app on mobile or Windows
   prebuild              Scaffold native android/ + ios/ shells (prebuilt engine linked)
   doctor                Check toolchains, prebuilts, modules, signing, and Web requirements
   migrate               Update package imports/config and regenerate native projects
@@ -40,6 +40,7 @@ Options:
   --template <name>     init template: default | blank
   --ios-simulator       dev-app: target the iOS simulator
   --ios-device          dev-app: download the unsigned device IPA
+  --windows             dev-app: download and launch the Windows x64 app
   --production          prebuild: scaffold without the dev-client launcher
   --force               prebuild: overwrite existing android/ios projects
   --dev                 start: connect to dev server instead of bundle
@@ -56,6 +57,7 @@ Options:
 Examples:
   npx create-rayact-app my-app
   rayact dev-app --android
+  rayact dev-app --windows
   rayact prebuild && rayact build --debug --android --install
   cd my-app && npm install && npm run dev
   rayact start --dev

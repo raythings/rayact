@@ -51,25 +51,24 @@ if [[ "$DO_DARWIN" -eq 1 ]]; then
   echo "==> Building macOS desktop prebuilts..."
   "$ROOT/scripts/build-macos-module-artifacts.sh"
 
-  # macOS support is Apple Silicon only. Android and iOS simulator x86_64
-  # artifacts remain independent and are not affected by this policy.
+  # macOS release support is Apple Silicon only.
   for arch in arm64; do
     cmake_arch="$arch"
     [[ "$arch" == "x64" ]] && cmake_arch="x86_64"
     quickjs_dir="$ROOT/build/quickjs-$arch"
     build_dir="$ROOT/build/darwin-$arch"
     release_dir="$ROOT/build/darwin-$arch-release"
-    cmake -B "$quickjs_dir" -S "$ROOT/third_party/quickjs" -DCMAKE_BUILD_TYPE=Release \
+    cmake --fresh -B "$quickjs_dir" -S "$ROOT/third_party/quickjs" -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_OSX_ARCHITECTURES="$cmake_arch" -DQJS_BUILD_EXAMPLES=OFF -DQJS_BUILD_LIBC=ON
-    cmake --build "$quickjs_dir" --target qjs --parallel
-    cmake -B "$build_dir" -S . -DENABLE_DESKTOP=ON -DCMAKE_BUILD_TYPE=Release \
+    cmake --build "$quickjs_dir" --target qjs --clean-first --parallel
+    cmake --fresh -B "$build_dir" -S . -DENABLE_DESKTOP=ON -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_OSX_ARCHITECTURES="$cmake_arch" -DQUICKJS_BUILD_DIR="$quickjs_dir"
-    cmake --build "$build_dir" --target rayact_desktop rayact_tool --parallel
-    cmake -B "$release_dir" -S . -DENABLE_DESKTOP=ON -DCMAKE_BUILD_TYPE=Release \
+    cmake --build "$build_dir" --target rayact_desktop rayact_tool --clean-first --parallel
+    cmake --fresh -B "$release_dir" -S . -DENABLE_DESKTOP=ON -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_OSX_ARCHITECTURES="$cmake_arch" \
       -DQUICKJS_BUILD_DIR="$quickjs_dir" \
       -DRAYACT_RELEASE_HOST=ON -DRAYACT_ENABLE_DEVTOOLS=OFF
-    cmake --build "$release_dir" --target rayact_desktop --parallel
+    cmake --build "$release_dir" --target rayact_desktop --clean-first --parallel
     pkg="$ROOT/packages/prebuilt-darwin-$arch"
     rm -rf "$pkg/modules"
     mkdir -p "$pkg/bin"
@@ -110,7 +109,10 @@ if [[ "$DO_IOS" -eq 1 ]]; then
     # iOS rasterizes emoji with CoreText (EmojiRasterizerApple.mm), so the
     # bundled ~10.7 MB CBDT font is never read on this platform.
     rm -f "$IOS_PKG/resources/fonts/NotoColorEmoji.ttf"
-    echo "  copied resources/fonts (minus the unused bundled emoji font)"
+    # Body text uses the system UI font — never ship Roboto.
+    rm -rf "$IOS_PKG/resources/fonts/Roboto"
+    rm -f "$IOS_PKG/resources/fonts"/Roboto*
+    echo "  copied resources/fonts (minus unused emoji/Roboto)"
     # Drop the variable-font tables stb_truetype cannot read (~88% of the
     # Material Symbols files). `rayact build` slims again at staging time, but
     # doing it here keeps the published npm package small too.

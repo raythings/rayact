@@ -38,6 +38,10 @@ Add the `$schema` key for editor autocomplete:
 | `ios` | object |  |
 | `ios.projectDir` | string |  |
 | `ios.bundleId` | string | iOS product bundle identifier used by prebuild, install, and launch. |
+| `linking` | object | Application deep-link schemes generated into native platform projects. |
+| `linking.schemes` | string[] |  |
+| `router` | object | File-based routing (@rayact/router) options. |
+| `router.appDir` | string | Routes directory relative to the project root. Default "app". |
 | `nativeModules` | any[] | Installed native modules autolink automatically. Entries may disable or configure a package. Legacy name/lib/jsPackage objects are accepted with a warning through 0.0.x. |
 | `transform` | object | Per-build-mode transforms. Defaults: dev=false, debug=false, release=true. |
 | `transform.minify` | object |  |

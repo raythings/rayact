@@ -1,6 +1,6 @@
 {
   "name": "@rayact/dev-client",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Rayact custom development-client UI and diagnostics",
   "type": "module",
   "sideEffects": false,
@@ -21,12 +21,12 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rayact/barcode-scanner": "0.0.4",
-    "@rayact/navigation": "0.0.4",
-    "@rayact/react": "0.0.4",
-    "@rayact/runtime": "0.0.4",
-    "@rayact/sensors": "0.0.4",
-    "@rayact/shared": "0.0.4"
+    "@rayact/barcode-scanner": "0.0.5",
+    "@rayact/navigation": "0.0.5",
+    "@rayact/react": "0.0.5",
+    "@rayact/runtime": "0.0.5",
+    "@rayact/sensors": "0.0.5",
+    "@rayact/shared": "0.0.5"
   },
   "peerDependencies": {
     "react": "^19.0.0"

@@ -1,6 +1,6 @@
 {
   "name": "@rayact/webview",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "WebView component for Rayact",
   "type": "module",
   "sideEffects": false,
@@ -18,6 +18,7 @@
     "native",
     "web",
     "desktop",
+    "!desktop/windows-arm64",
     "README.md",
     "rayact.module.json"
   ],
@@ -29,7 +30,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rayact/react": "0.0.4"
+    "@rayact/react": "0.0.5"
   },
   "peerDependencies": {
     "react": "^19.0.0"

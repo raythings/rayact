@@ -9,13 +9,14 @@
     "android",
     "ios",
     "darwin",
+    "windows",
     "web"
   ],
   "architectures": [
     "arm64",
     "x86_64"
   ],
-  "abiRange": ">=1 <4",
+  "abiRange": ">=1 <6",
   "engineRange": ">=0.0.3 <0.1.0",
   "linkage": "dynamic",
   "permissions": [],
@@ -37,7 +38,7 @@
       "platform": "android",
       "architecture": "arm64",
       "path": "android/arm64-v8a/librayact_mmkv.so",
-      "sha256": "9d4d71c6bc081953646e793f736688a96178a7c7dc440bd61fede9fe908f57e5"
+      "sha256": "8c71b4ed62176303ad53d1d2f965fcf9401c568c88141152db3cdd776b24e001"
     },
     {
       "platform": "android",
@@ -49,25 +50,31 @@
       "platform": "darwin",
       "architecture": "arm64",
       "path": "desktop/darwin-arm64/librayact_mmkv.dylib",
-      "sha256": "3efaf014ccf24978fbfd5f61cce4f2697f69dcebddaf46171cd73be1cb3a4e49"
+      "sha256": "005e36d102b0939da3574169d8c65ea26d6961e45011291235c93f0cf9736501"
     },
     {
       "platform": "darwin",
       "architecture": "x86_64",
       "path": "desktop/darwin-x64/librayact_mmkv.dylib",
-      "sha256": "59da9e6717985cb7a4919a2f9e2972c100f809dff7ef6cc3a0942d9669ec727c"
+      "sha256": "4caf791d2b6b9624488bb29b2508190795934447237e4a7b09046c2b77cdb119"
     },
     {
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_mmkv.xcframework",
-      "sha256": "7ae9f3f5121c6749950eaaf6e856ac5d0c0213bb48f579f4bcf11645ba55b548"
+      "sha256": "a22deaeaecf7cecc3b12c7276fbf39425198e169995622fbd78062c03566e1f1"
     },
     {
       "platform": "web",
       "architecture": "wasm32",
       "path": "web/wasm32/rayact_mmkv.wasm",
       "sha256": "84a333044760080d63619ffb550d62aca0071f29ad290cc12a79be8d35da02be"
+    },
+    {
+      "platform": "windows",
+      "architecture": "x86_64",
+      "path": "desktop/windows-x64/librayact_mmkv.dll",
+      "sha256": "d13dcbf7f0a4501cd8eb05274eba0582aafa556c735de6d5afda8420f5f436a9"
     }
   ]
 }

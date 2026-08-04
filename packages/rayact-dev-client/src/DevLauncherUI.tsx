@@ -25,12 +25,12 @@ import {
   secondaryButtonStyle,
   sectionStyle,
 } from './devLauncherStyles.js';
-import { getAppInfo, openExternalUrl } from './native.js';
+import { devCallAvailable, getAppInfo, openExternalUrl } from './native.js';
 import { getOfficialApp, getBundledModules } from './officialApp.js';
 
 type Tab = 'connect' | 'about';
 
-const DEV_CLIENT_VERSION = '0.0.4';
+const DEV_CLIENT_VERSION = '0.0.5';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'connect', label: 'Connect', icon: 'link' },
@@ -177,6 +177,7 @@ function AboutPage() {
   const [rayactVersion, setRayactVersion] = useState('—');
 
   useEffect(() => {
+    if (!devCallAvailable()) return;
     void getAppInfo().then(info => {
       setBundleId(info.bundleId || '—');
       setNativeVersion(info.nativeAppVersion || '—');

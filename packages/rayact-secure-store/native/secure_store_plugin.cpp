@@ -88,7 +88,7 @@ extern "C" int rayact_secure_store_register(const RayactHost* host) {
 // Omitted where plugins are static-linked together (iOS, web) to avoid a
 // duplicate rayact_module_register; those hosts call rayact_secure_store_register.
 #if !defined(RAYACT_IOS) && !defined(RAYACT_WEB)
-extern "C" int rayact_module_register(const RayactHost* host) {
+extern "C" RAYACT_MODULE_EXPORT int rayact_module_register(const RayactHost* host) {
   return rayact_secure_store_register(host);
 }
 #endif
@@ -98,6 +98,12 @@ extern "C" int rayact_module_register(const RayactHost* host) {
 #include <cctype>
 #include <cstdio>
 #include <sys/stat.h>
+#ifdef _WIN32
+  #include <direct.h>          // _mkdir
+  #define WIN32_LEAN_AND_MEAN
+  #define NOMINMAX
+  #include <windows.h>         // MoveFileExA
+#endif
 
 namespace rayact_secure_store {
 
@@ -115,6 +121,16 @@ void ensureDir(const std::string& dir) {
   _mkdir(dir.c_str());
 #else
   mkdir(dir.c_str(), 0700);
+#endif
+}
+
+// See mmkv_plugin.cpp: the MSVC CRT's rename() refuses an existing destination,
+// so a plain rename would drop every write after the first on Windows.
+bool replaceFile(const std::string& tmp, const std::string& dest) {
+#ifdef _WIN32
+  return MoveFileExA(tmp.c_str(), dest.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+#else
+  return rename(tmp.c_str(), dest.c_str()) == 0;
 #endif
 }
 
@@ -150,7 +166,7 @@ bool backendSet(const std::string& key, const std::string& value) {
 #ifndef _WIN32
   chmod(tmp.c_str(), 0600);
 #endif
-  return rename(tmp.c_str(), pathFor(key).c_str()) == 0;
+  return replaceFile(tmp, pathFor(key));
 }
 
 int backendGet(const std::string& key, std::string& out) {

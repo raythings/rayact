@@ -1,0 +1,28 @@
+{
+  "name": "@rayact/prebuilt-windows-x64",
+  "version": "0.0.5",
+  "description": "Prebuilt Rayact desktop host for Windows x86_64",
+  "sideEffects": false,
+  "files": [
+    "bin",
+    "manifest.json",
+    "resources"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raythings/rayact.git",
+    "directory": "packages/prebuilt-windows-x64"
+  },
+  "homepage": "https://github.com/raythings/rayact#readme",
+  "bugs": {
+    "url": "https://github.com/raythings/rayact/issues"
+  },
+  "maintainers": [
+    "Rayact Maintainers"
+  ]
+}

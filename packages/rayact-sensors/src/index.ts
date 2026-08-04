@@ -40,17 +40,27 @@ type PlatformHost = typeof globalThis & {
 const listeners = new Map<string, Set<(event: NativeEvent) => void>>();
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 
+function rejectAfterHandlersAttach<T>(error: Error): Promise<T> {
+  return new Promise<T>((_resolve, reject) => {
+    setTimeout(() => reject(error), 0);
+  });
+}
+
 function call<T>(method: string, payload: unknown = {}): Promise<T> {
   const host = globalThis as PlatformHost;
   if (!host.platformCall) {
-    return Promise.reject(new Error('Rayact sensors are unavailable on this platform'));
+    return rejectAfterHandlersAttach(new Error('Rayact sensors are unavailable on this platform'));
   }
   let response: PlatformResponse | undefined;
-  host.platformCall('sensors', method, payload, value => { response = value; });
-  if (!response) return Promise.reject(new Error(`Sensor operation did not complete: ${method}`));
+  try {
+    host.platformCall('sensors', method, payload, value => { response = value; });
+  } catch (error) {
+    return rejectAfterHandlersAttach(error instanceof Error ? error : new Error(String(error)));
+  }
+  if (!response) return rejectAfterHandlersAttach(new Error(`Sensor operation did not complete: ${method}`));
   return response.ok
     ? Promise.resolve(response.value as T)
-    : Promise.reject(new Error(response.error || `Sensor operation failed: ${method}`));
+    : rejectAfterHandlersAttach(new Error(response.error || `Sensor operation failed: ${method}`));
 }
 
 async function drainEvents(): Promise<void> {

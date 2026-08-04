@@ -235,7 +235,8 @@ export function TextInput(props: TextInputProps): React.ReactElement {
     Platform.OS === Platform.ANDROID ||
     Platform.OS === Platform.IOS ||
     Platform.OS === Platform.WEB ||
-    Platform.OS === Platform.MACOS;
+    Platform.OS === Platform.MACOS ||
+    Platform.OS === Platform.WINDOWS;
   // Material fields hide the placeholder behind their resting label and reveal
   // it once the label floats (M3 spec). Tracking focus here is what lets the
   // editor's hint follow that.

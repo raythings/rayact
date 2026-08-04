@@ -44,8 +44,9 @@ function writeManifest(dir, over = {}) {
 
 test('hostDesktopKey + desktopBinName basics', () => {
   const key = hostDesktopKey();
-  // On CI/dev this runs on darwin or linux; key may be null on unsupported hosts.
-  assert.ok(key === null || /^(darwin|linux)-/.test(key));
+  assert.ok(key === null || /^(darwin|linux|windows)-/.test(key));
+  assert.equal(hostDesktopKey('win32', 'x64'), 'windows-x64');
+  assert.equal(hostDesktopKey('win32', 'arm64'), null);
   assert.match(desktopBinName(), /rayact_desktop(\.exe)?$/);
 });
 

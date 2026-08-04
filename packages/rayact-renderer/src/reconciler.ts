@@ -914,7 +914,7 @@ let currentUpdatePriority: number = NoEventPriority;
 const HostTransitionContext = createContext<unknown>(null);
 
 export const RayactReconciler = __reconcilerGlobal.__RAYACT_RECONCILER__ ?? (__reconcilerGlobal.__RAYACT_RECONCILER__ = ReactReconciler({
-  rendererVersion: '0.0.4',
+  rendererVersion: '0.0.5',
   rendererPackageName: 'rayact/react',
   supportsMutation: true,
   supportsPersistence: false,

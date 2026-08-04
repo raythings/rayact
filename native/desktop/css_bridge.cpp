@@ -626,6 +626,17 @@ static JSValue buildStyleObject(JSContext* ctx, const CSSPropMap& rawProps) {
         if (prop == "font-weight")     { JS_SetPropertyStr(ctx, textObj, "fontWeight",   JS_NewString(ctx, val.c_str())); hasText=true; continue; }
         if (prop == "font-style")      { JS_SetPropertyStr(ctx, textObj, "fontStyle",    JS_NewString(ctx, toLower(val).c_str())); hasText=true; continue; }
         if (prop == "text-align")      { JS_SetPropertyStr(ctx, textObj, "textAlign",    JS_NewString(ctx, toLower(val).c_str())); hasText=true; continue; }
+        if (prop == "text-decoration" || prop == "text-decoration-line") {
+            const std::string lower = toLower(val);
+            const bool none = lower.find("none") != std::string::npos;
+            JS_SetPropertyStr(ctx, textObj, "underline",
+                              JS_NewBool(ctx, !none && lower.find("underline") != std::string::npos));
+            JS_SetPropertyStr(ctx, textObj, "lineThrough",
+                              JS_NewBool(ctx, !none && (lower.find("line-through") != std::string::npos ||
+                                                        lower.find("linethrough") != std::string::npos)));
+            hasText = true;
+            continue;
+        }
         // CSS line clamping. `-webkit-line-clamp: 2` is the web spelling of
         // react-native's numberOfLines; `text-overflow` picks the ellipsis mode.
         if (prop == "-webkit-line-clamp" || prop == "line-clamp") {

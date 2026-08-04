@@ -1,6 +1,6 @@
 {
   "name": "rayact",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Cross-platform React renderer with raylib backend",
   "type": "module",
   "sideEffects": [
@@ -64,15 +64,15 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rayact/cli": "0.0.4",
-    "@rayact/react": "0.0.4",
-    "@rayact/renderer": "0.0.4",
-    "@rayact/runtime": "0.0.4",
-    "@rayact/shared": "0.0.4"
+    "@rayact/cli": "0.0.5",
+    "@rayact/react": "0.0.5",
+    "@rayact/renderer": "0.0.5",
+    "@rayact/runtime": "0.0.5",
+    "@rayact/shared": "0.0.5"
   },
   "peerDependencies": {
-    "@rayact/mmkv": "0.0.4",
-    "@rayact/secure-store": "0.0.4",
+    "@rayact/mmkv": "0.0.5",
+    "@rayact/secure-store": "0.0.5",
     "react": "^19.0.0"
   },
   "peerDependenciesMeta": {

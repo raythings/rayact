@@ -148,6 +148,11 @@ function hasValidNativePayload(pkg) {
     if (!fs.existsSync(path.join(ROOT, 'packages', pkg, 'bin', 'rayact_tool'))) return false;
     return fs.existsSync(binary) && !containsOptionalRegistration([binary]);
   }
+  if (pkg === 'prebuilt-windows-x64') {
+    const binary = path.join(ROOT, 'packages', pkg, 'bin', 'rayact_desktop.exe');
+    const tool = path.join(ROOT, 'packages', pkg, 'bin', 'rayact_tool.exe');
+    return fs.existsSync(binary) && fs.existsSync(tool) && !containsOptionalRegistration([binary]);
+  }
   return true;
 }
 
@@ -180,6 +185,7 @@ for (const pkg of releasePackageDirs) {
 add(copyIfExists(path.join(ROOT, 'apps/dev-app/dist/rayact-dev-app.apk')), 'rayact-dev-app.apk');
 add(copyIfExists(path.join(ROOT, 'apps/dev-app/dist/rayact-dev-app-device-unsigned.ipa')), 'rayact-dev-app-device-unsigned.ipa');
 add(copyIfExists(path.join(ROOT, 'apps/dev-app/dist/rayact-dev-app-simulator.zip')), 'rayact-dev-app-simulator.zip');
+add(copyIfExists(path.join(ROOT, 'apps/dev-app/dist/rayact-dev-app-windows-x64.zip')), 'rayact-dev-app-windows-x64.zip');
 
 const webBin = path.join(ROOT, 'build-web/bin');
 add(packWebHost(webBin, `rayact-web-${VERSION}.tar.gz`), `rayact-web-${VERSION}.tar.gz`);

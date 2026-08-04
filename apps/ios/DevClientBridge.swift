@@ -309,8 +309,8 @@ enum DevClientBridge {
     private static func appInfoJson() -> String {
         let info: [String: Any] = [
             "bundleId": Bundle.main.bundleIdentifier ?? "com.rayact.app",
-            "nativeAppVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.4",
-            "rayactVersion": "0.0.4",
+            "nativeAppVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.5",
+            "rayactVersion": "0.0.5",
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: info),
               let json = String(data: data, encoding: .utf8) else { return "{}" }

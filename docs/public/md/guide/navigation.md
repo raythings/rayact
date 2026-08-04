@@ -5,6 +5,12 @@ on Rayact — same mental model and hooks as React Native, with Rayact-native
 navigators for stacks and tabs (screen transitions render through the native
 animation system).
 
+> [!TIP]
+> New apps should usually start with [file-based routing](/guide/router)
+> (`@rayact/router`) — an Expo-Router-style `app/` directory with zero wiring.
+> `@rayact/navigation` remains the underlying engine and stays fully supported
+> for hand-wired navigators.
+
 ```sh
 # already vendored in scaffolded projects; add the dependency like any other @rayact package
 ```

@@ -11,6 +11,18 @@
 #include "../core/config_loader.hpp"
 #include "../shared/rayactpack.h"
 
+#if defined(_WIN32)
+#undef NOUSER
+#undef NOGDI
+#define Rectangle Win32Rectangle
+#define CloseWindow Win32CloseWindow
+#define ShowCursor Win32ShowCursor
+#include <windows.h>
+#undef ShowCursor
+#undef CloseWindow
+#undef Rectangle
+#endif
+
 #include <raym3/raym3.h>
 #include <raym3/styles/Stylesheet.h>
 #include <raym3/v2/Density.h>
@@ -78,25 +90,32 @@ static void publishWindowDimensions(JSContext* ctx, int widthPx, int heightPx) {
     JS_FreeValue(ctx, global);
 }
 
-// During interactive resize (macOS modal drag loop) the main loop is blocked;
-// raylib invokes this hook from the framebuffer-size callback so the UI
-// reflows live instead of stretching the last frame. PollInputEvents is
-// suppressed inside the hook (see rcore_desktop_glfw.c).
+// During interactive resize (the macOS and Windows modal drag loops) the main
+// loop is blocked; raylib invokes this hook from the framebuffer-size callback
+// so the UI reflows live instead of stretching the last frame. PollInputEvents
+// is suppressed inside the hook (see rcore_desktop_glfw.c).
 extern "C" void SetWindowLiveResizeHook(void (*hook)(int width, int height));
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
 static JSContext* g_liveResizeCtx = nullptr;
 static void liveResizeRender(int, int) {
     if (!rayact::engineThreadedModeEnabled())
         rayact::enginePumpJS();
     publishWindowDimensions(g_liveResizeCtx, GetRenderWidth(), GetRenderHeight());
     rayact::engineRenderFrame(GetRenderWidth(), GetRenderHeight());
+#if defined(_WIN32)
+    // On Vulkan/Win32 the first present after WM_SIZE can be the operation that
+    // reports an out-of-date swapchain and rebuilds it. The modal sizing loop
+    // prevents the normal next main-loop frame, so draw that replacement frame
+    // here or DWM keeps showing the old-sized surface until mouse-up.
+    rayact::engineRenderFrame(GetRenderWidth(), GetRenderHeight());
+#endif
 }
 #endif
 
 // Desktop render loop: thin driver over the engine API.
 void mainLoop(JSContext* ctx) {
     printf("Starting main loop\n");
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     g_liveResizeCtx = ctx;
     SetWindowLiveResizeHook(liveResizeRender);
 #endif
@@ -301,7 +320,14 @@ void mainLoop(JSContext* ctx) {
 }
 
 int main(int argc, char** argv) {
+#if defined(_WIN32)
+    // The MSVC CRT rejects size 0 for the buffered modes and raises
+    // STATUS_INVALID_CRUNTIME_PARAMETER, and it treats _IOLBF as full buffering
+    // anyway. Unbuffered gives the same promptly-visible logs.
+    setvbuf(stdout, nullptr, _IONBF, 0);
+#else
     setvbuf(stdout, nullptr, _IOLBF, 0);
+#endif
     setvbuf(stderr, nullptr, _IONBF, 0);
 
     std::filesystem::path executableDir = std::filesystem::current_path();
@@ -313,24 +339,66 @@ int main(int argc, char** argv) {
         }
     }
 
-#ifndef _WIN32
     // A packaged desktop app ships bundled native plugins in <exeDir>/modules.
     // Point the plugin loader there (without clobbering a user-set value) before
     // engineCreate() boots the module bus and scans RAYACT_MODULE_PATH.
+    // executableDir above is already resolved portably, so this needs no
+    // realpath/PATH_MAX and runs on Windows too — where skipping it used to
+    // leave packaged apps with no modules and no bundled fonts.
     if (!std::getenv("RAYACT_MODULE_PATH") && argc > 0 && argv[0]) {
-        char resolved[PATH_MAX];
-        if (realpath(argv[0], resolved)) {
-            std::string p(resolved);
-            auto slash = p.rfind('/');
-            std::string dir = slash == std::string::npos ? "." : p.substr(0, slash);
-            std::string mod = dir + "/modules";
-            setenv("RAYACT_MODULE_PATH", mod.c_str(), 0);
-            // Point the assets root at the host's own dir so bundled resources/
-            // fonts/* (icon fonts + material_icons map) resolve from the prebuilt
-            // for consumers who only downloaded the prebuilt host. Source/dev
-            // runs fall through to the CWD search when no resources/ sits here.
-            if (rayact::appAssetsPath()[0] == '\0') {
-                rayact::setAppAssetsPath((dir + "/..").c_str());
+        const std::string mod = (executableDir / "modules").string();
+#ifdef _WIN32
+        _putenv_s("RAYACT_MODULE_PATH", mod.c_str());
+#else
+        setenv("RAYACT_MODULE_PATH", mod.c_str(), 0);
+#endif
+        // Point the assets root at the host's own dir so bundled resources/
+        // fonts/* (icon fonts + material_icons map) resolve from the prebuilt
+        // for consumers who only downloaded the prebuilt host. Source/dev
+        // runs fall through to the CWD search when no resources/ sits here.
+        if (rayact::appAssetsPath()[0] == '\0') {
+            rayact::setAppAssetsPath((executableDir / "..").string().c_str());
+        }
+    }
+
+#ifdef _WIN32
+    // Some optional native modules (currently CEF) have a process-level entry
+    // hook that must run before QuickJS, GLFW and Vulkan initialize. Load only
+    // the webview module here; normal plugin discovery later reuses the same
+    // module handle and calls rayact_module_register as usual.
+    {
+        const char* modulePath = std::getenv("RAYACT_MODULE_PATH");
+        if (modulePath && *modulePath) {
+            for (const char* name : {"librayact_webview.dll", "rayact_webview.dll"}) {
+                const std::filesystem::path candidate =
+                    std::filesystem::path(modulePath) / name;
+                if (!std::filesystem::exists(candidate)) continue;
+                // Keep the module directory in the process DLL search path.
+                // CEF delay-loads libcef.dll only when its bootstrap function
+                // runs, after LoadLibraryEx has returned; DLL_LOAD_DIR applies
+                // only during the original load and is therefore insufficient.
+                AddDllDirectory(candidate.parent_path().wstring().c_str());
+                const std::filesystem::path cefRuntime =
+                    candidate.parent_path() / "libcef.dll";
+                if (std::filesystem::exists(cefRuntime)) {
+                    LoadLibraryExW(
+                        cefRuntime.wstring().c_str(), nullptr,
+                        LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+                            LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+                }
+                HMODULE module = LoadLibraryExW(
+                    candidate.wstring().c_str(), nullptr,
+                    LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+                        LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+                if (!module) break;
+                using BootstrapFn = int (*)();
+                auto bootstrap = reinterpret_cast<BootstrapFn>(
+                    GetProcAddress(module, "rayact_module_process_bootstrap"));
+                if (bootstrap) {
+                    const int processExit = bootstrap();
+                    if (processExit >= 0) return processExit;
+                }
+                break;
             }
         }
     }
@@ -338,7 +406,7 @@ int main(int argc, char** argv) {
 
     std::cout << "========================================" << std::endl;
     std::cout << "  Rayact - QuickJS Desktop Renderer" << std::endl;
-    std::cout << "  Version 0.0.4" << std::endl;
+    std::cout << "  Version 0.0.5" << std::endl;
     std::cout << "========================================" << std::endl;
 
     PlatformBridge::printPlatformInfo();
@@ -514,6 +582,11 @@ if (!success && !devMode) {
     // window exists. Registration before the app's first commit is not required
     // here: unlike the mobile hosts, desktop finishes loading before any frame.
     rayact::macInstallPlatformViews();
+#endif
+#if defined(_WIN32)
+    // Same ordering rationale: the DirectComposition target needs the HWND, so
+    // this runs once the window exists.
+    rayact::winInstallPlatformViews();
 #endif
 
     // Start main loop

@@ -42,7 +42,7 @@ for (const module of catalog.modules.filter(module => module.officialDevApp)) {
             !iosSources.some(source => fs.existsSync(path.join(packageDir, source)))) {
           failures.push(`${module.name}: iOS native source missing`);
         }
-      } else {
+      } else if (manifest.linkage !== 'static') {
         for (const platform of module.platforms.filter(platform => platform !== 'web')) {
           if (!nativeArtifacts.some(artifact => artifact.platform === platform)) failures.push(`${module.name}: ${platform} artifact missing`);
         }

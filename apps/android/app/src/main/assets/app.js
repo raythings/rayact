@@ -13804,7 +13804,8 @@
     }
     return String(value ?? "");
   }
-  const moduleNodeHandlers$1 = /* @__PURE__ */ new Map();
+  const moduleNodeHandlers$1 = globalThis.__rayactModuleNodeHandlers ?? /* @__PURE__ */ new Map();
+  globalThis.__rayactModuleNodeHandlers = moduleNodeHandlers$1;
   const materialHostTypes$1 = /* @__PURE__ */ new Set(["appBar", "badge", "banner", "bottomAppBar", "bottomSheet", "dataTable", "dockedToolbar", "floatingToolbar", "buttonGroup", "card", "carousel", "checkbox", "chip", "datePicker", "dialog", "divider", "extendedFab", "fab", "fabMenu", "iconButton", "list", "loadingIndicator", "menu", "menuItem", "navigationBar", "navigationBarItem", "navigationDrawer", "navigationRail", "progressIndicator", "radioButton", "rangeSlider", "search", "searchBar", "segmentedButton", "sideSheet", "slider", "snackbar", "splitButton", "switch", "tabs", "textField", "timePicker", "toolbar", "tooltip", "popover"]);
   function materialProps$1(type, props, style) {
     const childLabel = typeof props.children === "string" || typeof props.children === "number" ? props.children : void 0;
@@ -24127,7 +24128,7 @@ ${stack}` : message;
   let currentUpdatePriority = NoEventPriority;
   const HostTransitionContext = reactExports.createContext(null);
   const RayactReconciler = __reconcilerGlobal.__RAYACT_RECONCILER__ ?? (__reconcilerGlobal.__RAYACT_RECONCILER__ = ReactReconciler({
-    rendererVersion: "0.0.4",
+    rendererVersion: "0.0.5",
     rendererPackageName: "rayact/react",
     supportsMutation: true,
     supportsPersistence: false,
@@ -29073,17 +29074,26 @@ ${stack}` : message;
   };
   const listeners$2 = /* @__PURE__ */ new Map();
   let pollTimer;
+  function rejectAfterHandlersAttach(error) {
+    return new Promise((_resolve, reject) => {
+      setTimeout(() => reject(error), 0);
+    });
+  }
   function call$1(method, payload = {}) {
     const host2 = globalThis;
     if (!host2.platformCall) {
-      return Promise.reject(new Error("Rayact sensors are unavailable on this platform"));
+      return rejectAfterHandlersAttach(new Error("Rayact sensors are unavailable on this platform"));
     }
     let response;
-    host2.platformCall("sensors", method, payload, (value) => {
-      response = value;
-    });
-    if (!response) return Promise.reject(new Error(`Sensor operation did not complete: ${method}`));
-    return response.ok ? Promise.resolve(response.value) : Promise.reject(new Error(response.error || `Sensor operation failed: ${method}`));
+    try {
+      host2.platformCall("sensors", method, payload, (value) => {
+        response = value;
+      });
+    } catch (error) {
+      return rejectAfterHandlersAttach(error instanceof Error ? error : new Error(String(error)));
+    }
+    if (!response) return rejectAfterHandlersAttach(new Error(`Sensor operation did not complete: ${method}`));
+    return response.ok ? Promise.resolve(response.value) : rejectAfterHandlersAttach(new Error(response.error || `Sensor operation failed: ${method}`));
   }
   async function drainEvents() {
     const events = await call$1("drainEvents").catch(() => []);
@@ -29185,7 +29195,7 @@ ${stack}` : message;
       isDark: t.isDark ?? true
     };
   }
-  var define_RAYACT_BUNDLED_MODULES_default = [{ name: "barcode-scanner", lib: "rayact_barcode_scanner", nativeBus: false, jsPackage: "@rayact/barcode-scanner", platforms: ["android", "ios"], architectures: ["arm64", "x86_64"], abiRange: ">=2 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "clipboard", lib: "rayact_clipboard", nativeBus: false, jsPackage: "@rayact/clipboard", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "crash-reporter", lib: "rayact_crash_reporter", jsPackage: "@rayact/crash-reporter", platforms: ["android", "ios", "darwin", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=1 <4", engineRange: ">=0.0.3 <0.1.0", permissions: ["crash-report-storage", "network-when-consented"], officialDevApp: true }, { name: "haptics", lib: "rayact_haptics", nativeBus: false, jsPackage: "@rayact/haptics", platforms: ["android", "ios", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "image-picker", lib: "rayact_image_picker", nativeBus: false, jsPackage: "@rayact/image-picker", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "linking", lib: "rayact_linking", nativeBus: false, jsPackage: "@rayact/linking", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "mmkv", lib: "rayact_mmkv", jsPackage: "@rayact/mmkv", platforms: ["android", "ios", "darwin", "web"], architectures: ["arm64", "x86_64"], abiRange: ">=1 <4", engineRange: ">=0.0.3 <0.1.0", permissions: [], officialDevApp: true }, { name: "secure-store", lib: "rayact_secure_store", jsPackage: "@rayact/secure-store", platforms: ["android", "ios", "darwin"], architectures: ["arm64", "x86_64"], abiRange: ">=1 <4", engineRange: ">=0.0.3 <0.1.0", permissions: ["keychain", "keystore"], officialDevApp: true }, { name: "sensors", lib: "rayact_sensors", nativeBus: false, jsPackage: "@rayact/sensors", platforms: ["android", "ios", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "svg", lib: "rayact_svg", jsPackage: "@rayact/svg", platforms: ["android", "ios", "darwin", "web"], architectures: ["arm64", "x86_64"], abiRange: ">=2 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "webview", lib: "rayact_webview", nativeBus: false, jsPackage: "@rayact/webview", platforms: ["android", "ios", "web", "darwin"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=3 <4", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }];
+  var define_RAYACT_BUNDLED_MODULES_default = [{ name: "barcode-scanner", lib: "rayact_barcode_scanner", nativeBus: false, jsPackage: "@rayact/barcode-scanner", platforms: ["android", "ios"], architectures: ["arm64", "x86_64"], abiRange: ">=2 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "clipboard", lib: "rayact_clipboard", nativeBus: false, jsPackage: "@rayact/clipboard", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "crash-reporter", lib: "rayact_crash_reporter", jsPackage: "@rayact/crash-reporter", platforms: ["android", "ios", "darwin", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=1 <6", engineRange: ">=0.0.3 <0.1.0", permissions: ["crash-report-storage", "network-when-consented"], officialDevApp: true }, { name: "haptics", lib: "rayact_haptics", nativeBus: false, jsPackage: "@rayact/haptics", platforms: ["android", "ios", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "image-picker", lib: "rayact_image_picker", nativeBus: false, jsPackage: "@rayact/image-picker", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "linking", lib: "rayact_linking", nativeBus: false, jsPackage: "@rayact/linking", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "mmkv", lib: "rayact_mmkv", jsPackage: "@rayact/mmkv", platforms: ["android", "ios", "darwin", "windows", "web"], architectures: ["arm64", "x86_64"], abiRange: ">=1 <6", engineRange: ">=0.0.3 <0.1.0", permissions: [], officialDevApp: true }, { name: "secure-store", lib: "rayact_secure_store", jsPackage: "@rayact/secure-store", platforms: ["android", "ios", "darwin", "windows"], architectures: ["arm64", "x86_64"], abiRange: ">=1 <6", engineRange: ">=0.0.3 <0.1.0", permissions: ["keychain", "keystore"], officialDevApp: true }, { name: "sensors", lib: "rayact_sensors", nativeBus: false, jsPackage: "@rayact/sensors", platforms: ["android", "ios", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "svg", lib: "rayact_svg", jsPackage: "@rayact/svg", platforms: ["android", "ios", "darwin", "windows", "web"], architectures: ["arm64", "x86_64"], abiRange: ">=2 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "webview", lib: "rayact_webview", nativeBus: false, jsPackage: "@rayact/webview", platforms: ["android", "ios", "web", "darwin", "windows"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=3 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }];
   var define_RAYACT_OFFICIAL_APP_default = { displayName: "Rayact Dev App", packageLabel: "Rayact Dev App", source: "official", androidPackageId: "com.rayact.app", creditTitle: "The official Rayact development client", links: [{ id: "github", icon: "github", set: "fab", label: "GitHub", url: "https://github.com/raythings/rayact" }, { id: "email", icon: "envelope", set: "fa", label: "ramnadroj@gmail.com", url: "mailto:ramnadroj@gmail.com" }] };
   function getOfficialApp() {
     try {
@@ -30154,16 +30164,20 @@ ${stack}` : message;
       left: typeof snapshot.left === "number" ? snapshot.left : 0
     };
   }
+  function sameKeyboard(a, b) {
+    return a.visible === b.visible && a.height === b.height && a.duration === b.duration && a.progress === b.progress;
+  }
   function sameSafeArea(a, b) {
     return a.top === b.top && a.right === b.right && a.bottom === b.bottom && a.left === b.left;
   }
   function getKeyboardSnapshot() {
     if (!listenerInstalled) {
       const initial = readKeyboardRaw();
-      cachedKeyboard = {
+      const next = {
         ...initial,
         progress: 1
       };
+      if (!sameKeyboard(next, cachedKeyboard)) cachedKeyboard = next;
     }
     return cachedKeyboard;
   }
@@ -30375,7 +30389,7 @@ ${stack}` : message;
       selection,
       ...rest
     } = props;
-    const nativeEditorPlatform = Platform.OS === Platform.ANDROID || Platform.OS === Platform.IOS || Platform.OS === Platform.WEB || Platform.OS === Platform.MACOS;
+    const nativeEditorPlatform = Platform.OS === Platform.ANDROID || Platform.OS === Platform.IOS || Platform.OS === Platform.WEB || Platform.OS === Platform.MACOS || Platform.OS === Platform.WINDOWS;
     const [editorFocused, setEditorFocused] = React.useState(false);
     const [uncontrolledValue, setUncontrolledValue] = React.useState(props.defaultValue ?? "");
     const value = props.value ?? uncontrolledValue;
@@ -31900,7 +31914,7 @@ ${stack}` : message;
     padding: 20,
     gap: 12
   };
-  const DEV_CLIENT_VERSION = "0.0.4";
+  const DEV_CLIENT_VERSION = "0.0.5";
   const TABS = [{
     id: "connect",
     label: "Connect",
@@ -32188,6 +32202,9 @@ ${stack}` : message;
     let t1;
     if ($[0] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
       t0 = () => {
+        if (!devCallAvailable()) {
+          return;
+        }
         getAppInfo().then((info) => {
           setBundleId(info.bundleId || "—");
           setNativeVersion(info.nativeAppVersion || "—");
@@ -37105,6 +37122,9 @@ ${stack}` : message;
   function clearInspectorHighlight() {
     if (typeof setInspectorHighlight === "function") setInspectorHighlight(-1);
   }
+  function inspectorAvailable() {
+    return typeof getNodeTree === "function" && typeof setInspectorHighlight === "function" && typeof getInspectorPickedNode === "function";
+  }
   function parseTree(raw) {
     try {
       return JSON.parse(raw);
@@ -37400,22 +37420,116 @@ ${stack}` : message;
     });
   }
   function HomeScreen() {
-    const $ = compilerRuntimeExports.c(9);
+    const $ = compilerRuntimeExports.c(10);
     const launcher = useDevLauncher();
     const navigation = useNavigation();
     let t0;
     if ($[0] !== launcher || $[1] !== navigation) {
-      let t1;
+      const t1 = jsxRuntimeExports.jsx(SectionLabel, {
+        children: "PROJECT"
+      });
+      const t2 = jsxRuntimeExports.jsx(ActionRow, {
+        title: "Reload project",
+        detail: "Re-evaluate the current development bundle",
+        onPress: launcher.reload
+      });
+      const t3 = jsxRuntimeExports.jsx(ActionRow, {
+        title: "Back to launcher",
+        detail: "Disconnect and choose another development server",
+        onPress: launcher.returnToLauncher
+      });
+      const t4 = jsxRuntimeExports.jsx(SectionLabel, {
+        children: "TOOLS"
+      });
+      let t5;
       if ($[3] !== launcher) {
-        t1 = () => launcher.setDevToolsEnabled(!launcher.devToolsState.enabled);
+        t5 = () => launcher.setDevToolsEnabled(!launcher.devToolsState.enabled);
         $[3] = launcher;
-        $[4] = t1;
+        $[4] = t5;
       } else {
-        t1 = $[4];
+        t5 = $[4];
       }
-      let t2;
-      if ($[5] !== launcher) {
-        t2 = () => {
+      const t6 = jsxRuntimeExports.jsxs(View, {
+        style: {
+          backgroundColor: colors.surfaceRaised,
+          paddingHorizontal: 14,
+          paddingVertical: 12,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: colors.border,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12
+        },
+        capturesInput: true,
+        children: [jsxRuntimeExports.jsxs(View, {
+          style: {
+            gap: 3,
+            flexShrink: 1
+          },
+          children: [jsxRuntimeExports.jsx(Text, {
+            style: {
+              text: {
+                color: colors.text,
+                fontSize: 13,
+                fontWeight: 600
+              }
+            },
+            children: "Rayact DevTools"
+          }), jsxRuntimeExports.jsx(Text, {
+            style: {
+              text: {
+                color: launcher.devToolsState.forcedOff ? colors.accent : colors.muted,
+                fontSize: 10
+              }
+            },
+            children: launcher.devToolsState.reason || (launcher.devToolsState.enabled ? "Disable for better startup, frame pacing, and memory performance" : "Disabled for better performance; enable when active debugging is needed")
+          })]
+        }), jsxRuntimeExports.jsx(Switch, {
+          selected: launcher.devToolsState.enabled,
+          disabled: launcher.devToolsState.forcedOff,
+          onPress: t5
+        })]
+      });
+      const t7 = jsxRuntimeExports.jsxs(View, {
+        style: {
+          gap: 3,
+          flexShrink: 1
+        },
+        children: [jsxRuntimeExports.jsx(Text, {
+          style: {
+            text: {
+              color: colors.text,
+              fontSize: 13,
+              fontWeight: 600
+            }
+          },
+          children: "Tap to inspect"
+        }), jsxRuntimeExports.jsx(Text, {
+          style: {
+            text: {
+              color: inspectorAvailable() ? colors.muted : colors.accent,
+              fontSize: 10
+            }
+          },
+          children: inspectorAvailable() ? "Closes this menu and highlights elements as you tap them" : "Not available on this host"
+        })]
+      });
+      const t8 = launcher.inspectorPickMode;
+      let t9;
+      if ($[5] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
+        t9 = inspectorAvailable();
+        $[5] = t9;
+      } else {
+        t9 = $[5];
+      }
+      let t10;
+      if ($[6] !== launcher) {
+        t10 = () => {
+          if (!inspectorAvailable()) {
+            return;
+          }
           if (launcher.inspectorPickMode) {
             clearInspectorHighlight();
             launcher.setInspectorPickMode(false);
@@ -37426,18 +37540,18 @@ ${stack}` : message;
           launcher.setInspectorOpen(true);
           launcher.setDevMenuOpen(false);
         };
-        $[5] = launcher;
-        $[6] = t2;
+        $[6] = launcher;
+        $[7] = t10;
       } else {
-        t2 = $[6];
+        t10 = $[7];
       }
-      let t3;
-      if ($[7] !== navigation) {
-        t3 = () => navigation.navigate("Diagnostics");
-        $[7] = navigation;
-        $[8] = t3;
+      let t11;
+      if ($[8] !== navigation) {
+        t11 = () => navigation.navigate("Diagnostics");
+        $[8] = navigation;
+        $[9] = t11;
       } else {
-        t3 = $[8];
+        t11 = $[9];
       }
       t0 = jsxRuntimeExports.jsxs(View, {
         style: {
@@ -37445,19 +37559,7 @@ ${stack}` : message;
           padding: 14,
           gap: 9
         },
-        children: [jsxRuntimeExports.jsx(SectionLabel, {
-          children: "PROJECT"
-        }), jsxRuntimeExports.jsx(ActionRow, {
-          title: "Reload project",
-          detail: "Re-evaluate the current development bundle",
-          onPress: launcher.reload
-        }), jsxRuntimeExports.jsx(ActionRow, {
-          title: "Back to launcher",
-          detail: "Disconnect and choose another development server",
-          onPress: launcher.returnToLauncher
-        }), jsxRuntimeExports.jsx(SectionLabel, {
-          children: "TOOLS"
-        }), jsxRuntimeExports.jsxs(View, {
+        children: [t1, t2, t3, t4, t6, jsxRuntimeExports.jsxs(View, {
           style: {
             backgroundColor: colors.surfaceRaised,
             paddingHorizontal: 14,
@@ -37471,79 +37573,15 @@ ${stack}` : message;
             gap: 12
           },
           capturesInput: true,
-          children: [jsxRuntimeExports.jsxs(View, {
-            style: {
-              gap: 3,
-              flexShrink: 1
-            },
-            children: [jsxRuntimeExports.jsx(Text, {
-              style: {
-                text: {
-                  color: colors.text,
-                  fontSize: 13,
-                  fontWeight: 600
-                }
-              },
-              children: "Rayact DevTools"
-            }), jsxRuntimeExports.jsx(Text, {
-              style: {
-                text: {
-                  color: launcher.devToolsState.forcedOff ? colors.accent : colors.muted,
-                  fontSize: 10
-                }
-              },
-              children: launcher.devToolsState.reason || (launcher.devToolsState.enabled ? "Disable for better startup, frame pacing, and memory performance" : "Disabled for better performance; enable when active debugging is needed")
-            })]
-          }), jsxRuntimeExports.jsx(Switch, {
-            selected: launcher.devToolsState.enabled,
-            disabled: launcher.devToolsState.forcedOff,
-            onPress: t1
-          })]
-        }), jsxRuntimeExports.jsxs(View, {
-          style: {
-            backgroundColor: colors.surfaceRaised,
-            paddingHorizontal: 14,
-            paddingVertical: 12,
-            borderRadius: 10,
-            borderWidth: 1,
-            borderColor: colors.border,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12
-          },
-          capturesInput: true,
-          children: [jsxRuntimeExports.jsxs(View, {
-            style: {
-              gap: 3,
-              flexShrink: 1
-            },
-            children: [jsxRuntimeExports.jsx(Text, {
-              style: {
-                text: {
-                  color: colors.text,
-                  fontSize: 13,
-                  fontWeight: 600
-                }
-              },
-              children: "Tap to inspect"
-            }), jsxRuntimeExports.jsx(Text, {
-              style: {
-                text: {
-                  color: colors.muted,
-                  fontSize: 10
-                }
-              },
-              children: "Closes this menu and highlights elements as you tap them"
-            })]
-          }), jsxRuntimeExports.jsx(Switch, {
-            selected: launcher.inspectorPickMode,
-            onPress: t2
+          children: [t7, jsxRuntimeExports.jsx(Switch, {
+            selected: t8,
+            disabled: !t9,
+            onPress: t10
           })]
         }), jsxRuntimeExports.jsx(ActionRow, {
           title: "Performance",
           detail: "Frame pacing, CPU, memory, HMR and runtime information",
-          onPress: t3
+          onPress: t11
         })]
       });
       $[0] = launcher;
@@ -38043,7 +38081,8 @@ ${stack}` : message;
     }
     return String(value ?? "");
   }
-  const moduleNodeHandlers = /* @__PURE__ */ new Map();
+  const moduleNodeHandlers = globalThis.__rayactModuleNodeHandlers ?? /* @__PURE__ */ new Map();
+  globalThis.__rayactModuleNodeHandlers = moduleNodeHandlers;
   const materialHostTypes = /* @__PURE__ */ new Set(["appBar", "badge", "banner", "bottomAppBar", "bottomSheet", "dataTable", "dockedToolbar", "floatingToolbar", "buttonGroup", "card", "carousel", "checkbox", "chip", "datePicker", "dialog", "divider", "extendedFab", "fab", "fabMenu", "iconButton", "list", "loadingIndicator", "menu", "menuItem", "navigationBar", "navigationBarItem", "navigationDrawer", "navigationRail", "progressIndicator", "radioButton", "rangeSlider", "search", "searchBar", "segmentedButton", "sideSheet", "slider", "snackbar", "splitButton", "switch", "tabs", "textField", "timePicker", "toolbar", "tooltip", "popover"]);
   function materialProps(type, props, style) {
     const childLabel = typeof props.children === "string" || typeof props.children === "number" ? props.children : void 0;

@@ -73,6 +73,13 @@ bool engineEnsureHostWindow(int fallbackWidth = 0, int fallbackHeight = 0);
 void macInstallPlatformViews();
 #endif
 
+#if defined(_WIN32)
+// Install the Windows platform-view host (native/desktop/win_platform_views.cpp):
+// module-owned views composited into the scene as DirectComposition visuals.
+// Call after the window exists — it targets the window's HWND.
+void winInstallPlatformViews();
+#endif
+
 // After JS init has run and a window/surface exists: rasterize the icon sprite
 // sheet (needs GL) and run a GC pass. Also brings up raym3 + system appearance.
 void engineFinishLoad();

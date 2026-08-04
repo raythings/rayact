@@ -376,7 +376,7 @@ extern "C" int rayact_webview_register(const RayactHost* host) {
 // it is omitted wherever linking is static (iOS, web) — those hosts call the
 // unique rayact_webview_register directly.
 #if !defined(RAYACT_IOS) && !defined(RAYACT_WEB)
-extern "C" int rayact_module_register(const RayactHost* host) {
+extern "C" RAYACT_MODULE_EXPORT int rayact_module_register(const RayactHost* host) {
   return rayact_webview_register(host);
 }
 #endif

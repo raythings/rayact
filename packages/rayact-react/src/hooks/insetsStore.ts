@@ -46,7 +46,8 @@ function sameSafeArea(a: SafeAreaInsets, b: SafeAreaInsets) {
 export function getKeyboardSnapshot(): KeyboardInsets {
   if (!listenerInstalled) {
     const initial = readKeyboardRaw();
-    cachedKeyboard = { ...initial, progress: 1 };
+    const next = { ...initial, progress: 1 };
+    if (!sameKeyboard(next, cachedKeyboard)) cachedKeyboard = next;
   }
   return cachedKeyboard;
 }

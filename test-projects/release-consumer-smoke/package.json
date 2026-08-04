@@ -1,6 +1,6 @@
 {
   "name": "release-consumer-smoke",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
   "type": "module",
   "description": "Consumer smoke test using packed release1 tarballs",
@@ -24,7 +24,7 @@
     "start:dev": "rayact start --dev"
   },
   "dependencies": {
-    "rayact": "file:../../release1/rayact-0.0.4.tgz",
+    "rayact": "file:../../release1/rayact-0.0.5.tgz",
     "react": "^19.0.0"
   },
   "devDependencies": {
@@ -34,6 +34,6 @@
     "vite": "^7.3.6"
   },
   "overrides": {
-    "create-rayact-app": "file:../../release1/create-rayact-app-0.0.4.tgz"
+    "create-rayact-app": "file:../../release1/create-rayact-app-0.0.5.tgz"
   }
 }

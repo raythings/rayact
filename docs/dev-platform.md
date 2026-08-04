@@ -3,8 +3,9 @@
 ## Create a new app
 
 ```bash
-npx create-rayact-app@0.0.4 my-app
-cd my-app && npm install
+RELEASE=https://github.com/raythings/rayact/releases/download/v0.0.5
+npx "$RELEASE/create-rayact-app-0.0.5.tgz" my-app --release-url "$RELEASE"
+cd my-app
 npm run dev
 ```
 
@@ -69,8 +70,9 @@ Native bridge: global `devCall(method, data, callback)` is wired to the platform
 
 ### Native-module selection
 
-`packages/first-party-modules.json` is the canonical catalog for the official
-Dev App. Its capability/config files are generated from that catalog, and the
+Every package manifest marked `officialDevApp` is collected into
+`packages/first-party-modules.json`; the generated catalog is the canonical
+input for the official Dev App. Its capability/config files are generated from that catalog, and the
 publication workflow invokes every catalog smoke test on an iOS simulator.
 Publication fails if a wrapper/artifact is missing or the recorded on-device
 evidence is stale or incomplete.
@@ -78,7 +80,7 @@ evidence is stale or incomplete.
 `rayact prebuild` follows the project's installed dependency graph and resolves
 packages that declare `package.json#rayact.manifest` and a `rayact.module.json` manifest. Android
 `.so` files, iOS `.xcframework`/`.framework`/`.a` files, and macOS/Linux shared
-libraries are copied into the generated client automatically. Explicit
+libraries and Windows DLL/adjacent runtimes are copied into the generated client automatically. Explicit
 `nativeModules` entries in `rayact.config.json` can add configuration or narrow
 the generated capability manifest.
 
@@ -86,6 +88,17 @@ Web/WASM cannot load mobile or desktop dynamic libraries. A module selected for
 Web must list `web` in `platforms` and provide a JS/WASM implementation already
 linked into the Web host; builds fail when a selected module does not advertise
 Web support.
+
+### Platform-specific bundles and direct launch
+
+One server owns revisioned desktop, Android, iOS, and Web contexts. Each context
+has its own transformed entry, native-module requirements, browser scripts/WASM,
+CSS/assets, and route tree, while connected clients share HMR and diagnostics.
+
+Desktop and dev-app launch commands honor `RAYACT_DEV_SERVER`. On macOS or
+Windows this opens the active project directly; use the server machine's LAN URL
+when the client is on another computer. The TUI's desktop shortcut supplies both
+the argument and environment form for compatibility with older hosts.
 
 ## Release mode
 

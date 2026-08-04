@@ -1,6 +1,6 @@
 # Security
 
-Install only published `0.0.4` tarballs represented in the signed release set.
+Install only published `0.0.5` tarballs represented in the signed release set.
 Rayact verifies native artifact SHA-256 values during prebuild; release CI also
 checks provenance, SBOM/license policy, vulnerabilities, and reproducibility.
 Never bypass an ABI or checksum failure.

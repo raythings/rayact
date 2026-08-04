@@ -1,6 +1,12 @@
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { loadRayactConfig, setupAdbReverse } from '@rayact/dev-server';
+import {
+  copyDesktopPluginArtifacts,
+  mergeNativeModules,
+  resolveRayactPlugins,
+  selectedPlugins,
+} from '@rayact/prebuild';
 import type { CliFlags } from '../parse.js';
 import { runDesktopHost } from '../desktop.js';
 import { runBuild } from './build.js';
@@ -26,6 +32,18 @@ export async function runStart(flags: CliFlags): Promise<void> {
       console.log(`Android: adb reverse configured for ${devUrl}`);
       console.log('Launch the debug APK and connect via the in-app dev launcher.');
       return;
+    }
+    // A desktop dev client must run with the same native-module payload as a
+    // packaged desktop build. `prebuild` normally creates this directory, but
+    // source-workspace apps (including @rayact/dev-app itself) can legitimately
+    // run `start --dev` before scaffolding mobile projects. Stage the verified
+    // host-architecture artifacts here so runDesktopHost can point
+    // RAYACT_MODULE_PATH at a complete project-owned module directory instead
+    // of falling back to unrelated per-user plugins.
+    if (!process.env.RAYACT_MODULE_PATH) {
+      const plugins = resolveRayactPlugins(process.cwd());
+      const modules = mergeNativeModules(config.nativeModules, plugins);
+      copyDesktopPluginArtifacts(process.cwd(), selectedPlugins(modules, plugins));
     }
     const code = runDesktopHost({
       cwd: process.cwd(),

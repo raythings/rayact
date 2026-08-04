@@ -250,7 +250,7 @@ async function copyAndroidPrebuilts(
     if (!fs.existsSync(source)) {
       throw new Error(
         `@rayact/prebuilt-android-${abi === 'x86_64' ? 'x64' : 'arm64'} is missing ` +
-          `${packageSubdir}/${abi}. Reinstall matching Rayact 0.0.4 packages; ` +
+          `${packageSubdir}/${abi}. Reinstall matching Rayact 0.0.5 packages; ` +
           'a release-host librayact.so cannot run a development client.'
       );
     }
@@ -711,13 +711,26 @@ export function copyDesktopPluginArtifacts(
   const platform = process.platform === 'darwin' ? 'darwin' : process.platform;
   const arch = process.arch === 'x64' ? 'x86_64' : 'arm64';
   const destination = path.join(projectRoot, RAYACT_ASSETS_DIR, 'modules');
+  if (platform === 'darwin') {
+    fs.rmSync(path.join(destination, 'librayact_webview.dylib'), { force: true });
+    fs.rmSync(path.join(destination, 'rayact_webview.dylib'), { force: true });
+  }
   for (const plugin of plugins) {
+    // The macOS host statically owns its WKWebView platform-view classes. A
+    // second dylib copy would make Objective-C load duplicate class names
+    // before rayact_module_register can reject the redundant registration.
+    // Windows uses the separately shipped CEF module, so keep staging it there.
+    if (platform === 'darwin' && plugin.name === 'webview') continue;
     for (const artifact of plugin.manifest.artifacts.filter(
       item => item.platform === platform && item.architecture === arch
     )) {
       const source = verifyModuleArtifact(plugin, artifact);
       fs.mkdirSync(destination, { recursive: true });
-      fs.copyFileSync(source, path.join(destination, path.basename(source)));
+      // Desktop modules may have adjacent runtime dependencies. CEF, for
+      // example, requires libcef.dll, its subprocess, resources and locales to
+      // remain beside librayact_webview.dll. Merge the artifact directory, not
+      // just the manifest's entry-point library.
+      copyDirRecursive(path.dirname(source), destination);
     }
   }
 }

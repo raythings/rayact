@@ -1979,6 +1979,19 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
             std::string fs = jsGetString(ctx, textObj, "fontStyle");
             if (fs == "italic" || fs == "oblique") s.text.fontStyle = raym3::FontStyle::Italic;
             else if (fs == "normal")               s.text.fontStyle = raym3::FontStyle::Normal;
+            if (jsHasProperty(ctx, textObj, "underline"))
+                s.text.underline = jsGetBool(ctx, textObj, "underline", false);
+            if (jsHasProperty(ctx, textObj, "lineThrough"))
+                s.text.lineThrough = jsGetBool(ctx, textObj, "lineThrough", false);
+            std::string deco = jsGetString(ctx, textObj, "textDecoration");
+            if (!deco.empty()) {
+                for (char &ch : deco) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                const bool none = deco.find("none") != std::string::npos;
+                s.text.underline = !none && deco.find("underline") != std::string::npos;
+                s.text.lineThrough =
+                    !none && (deco.find("line-through") != std::string::npos ||
+                              deco.find("linethrough") != std::string::npos);
+            }
         }
         JSValue fv = JS_GetPropertyStr(ctx, textObj, "fontFamily");
         if (!JS_IsUndefined(fv)) {
@@ -2065,6 +2078,21 @@ static void applyStyleProps(JSContext* ctx, JSValue obj, raym3::v2::Style& s) {
         std::string fs = jsGetString(ctx, obj, "fontStyle");
         if (fs == "italic" || fs == "oblique") s.text.fontStyle = raym3::FontStyle::Italic;
         else if (fs == "normal")               s.text.fontStyle = raym3::FontStyle::Normal;
+    }
+    if (!s.text.underline && jsHasProperty(ctx, obj, "underline"))
+        s.text.underline = jsGetBool(ctx, obj, "underline", false);
+    if (!s.text.lineThrough && jsHasProperty(ctx, obj, "lineThrough"))
+        s.text.lineThrough = jsGetBool(ctx, obj, "lineThrough", false);
+    if (!s.text.underline && !s.text.lineThrough) {
+        std::string deco = jsGetString(ctx, obj, "textDecoration");
+        if (!deco.empty()) {
+            for (char &ch : deco) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            const bool none = deco.find("none") != std::string::npos;
+            s.text.underline = !none && deco.find("underline") != std::string::npos;
+            s.text.lineThrough =
+                !none && (deco.find("line-through") != std::string::npos ||
+                          deco.find("linethrough") != std::string::npos);
+        }
     }
     if (!hasNestedFontFamily) {
         JSValue fv = JS_GetPropertyStr(ctx, obj, "fontFamily");

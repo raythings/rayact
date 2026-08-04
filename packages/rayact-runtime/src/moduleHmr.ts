@@ -137,6 +137,7 @@ type GlobalHmr = RayactGlobal & {
   __rayactDevFetch?: (url: string) => string;
   __rayactDevServerUrl?: string;
   __rayactHmrRuntime?: ModuleHmrRuntime;
+  __rayactResetDevRuntime?: () => void;
   __RAYACT_HMR_ACTIVE__?: boolean;
   /** Set by hosts whose native HMR client (ProjectHmrClient) owns the socket. */
   __RAYACT_NATIVE_HMR__?: boolean;
@@ -144,6 +145,8 @@ type GlobalHmr = RayactGlobal & {
   __REACT_REFRESH__?: { performReactRefresh: () => void };
   __rayactPlatform?: { os?: string; target?: string; version?: string };
   navigator?: { userAgent?: string };
+  __rayactReactRoot?: { publicRoot?: { unmount?: () => void } };
+  __rayactDecorateRoot?: unknown;
 };
 
 /**
@@ -192,9 +195,38 @@ export class ModuleHmrRuntime {
     this.globalObject.__rayactDevServerUrl = this.serverUrl;
     this.installRegistry();
     this.globalObject.__rayactHmrRuntime = this;
+    this.globalObject.__rayactResetDevRuntime = () => this.disposeForBundleSwap();
     this.globalObject.__rayactApplyModuleUpdate = (path, source) => {
       this.applyModuleUpdate(path, source);
     };
+  }
+
+  /** Tear down state that belongs to one dev-server bundle before loading another. */
+  disposeForBundleSwap(): void {
+    if (this.hmrReconnect) {
+      clearTimeout(this.hmrReconnect);
+      this.hmrReconnect = null;
+    }
+    if (this.hmrSocket) {
+      try { this.hmrSocket.close(); } catch { /* already closed */ }
+      this.hmrSocket = null;
+    }
+    try { this.globalObject.__rayactReactRoot?.publicRoot?.unmount?.(); } catch { /* best effort */ }
+    delete this.globalObject.__rayactReactRoot;
+    delete this.globalObject.__rayactDecorateRoot;
+    this.globalObject.__rayactModuleRegistry?.clear();
+    this.globalObject.__rayactModuleLoading?.clear();
+    this.globalObject.__rayactModuleDefinitions?.clear();
+    this.globalObject.__RAYACT_HMR_ACTIVE__ = false;
+    delete this.globalObject.__rayactRequire;
+    delete this.globalObject.__rayactRequireAsync;
+    delete this.globalObject.__rayactRegisterModule;
+    delete this.globalObject.__rayactDefineModule;
+    delete this.globalObject.__rayactApplyModuleUpdate;
+    if (this.globalObject.__rayactHmrRuntime === this) {
+      delete this.globalObject.__rayactHmrRuntime;
+      delete this.globalObject.__rayactResetDevRuntime;
+    }
   }
 
   private installRegistry(): void {

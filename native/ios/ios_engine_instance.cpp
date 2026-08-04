@@ -98,9 +98,11 @@ public:
              << ",\"occludingRegions\":[";
         for (size_t i = 0; i < composition.occludingRegions.size(); ++i) {
             if (i) json << ',';
-            const Rectangle& r = composition.occludingRegions[i];
+            const auto& occlusion = composition.occludingRegions[i];
+            const Rectangle& r = occlusion.rect;
             json << "{\"x\":" << r.x << ",\"y\":" << r.y
-                 << ",\"width\":" << r.width << ",\"height\":" << r.height << '}';
+                 << ",\"width\":" << r.width << ",\"height\":" << r.height
+                 << ",\"radius\":" << occlusion.radius << '}';
         }
         json << "]}";
         const std::string payload = json.str();

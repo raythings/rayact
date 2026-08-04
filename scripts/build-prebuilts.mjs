@@ -4,6 +4,7 @@
  *
  *   node scripts/build-prebuilts.mjs --target android
  *   node scripts/build-prebuilts.mjs --target linux
+ *   node scripts/build-prebuilts.mjs --target windows
  *   node scripts/build-prebuilts.mjs --target darwin --target ios --target dev-app  # macOS only
  *   node scripts/build-prebuilts.mjs --target all
  */
@@ -19,6 +20,7 @@ const IS_MAC = process.platform === 'darwin';
 
 const DOCKER_TARGETS = new Set(['android', 'linux']);
 const MAC_TARGETS = new Set(['darwin', 'ios', 'dev-app']);
+const WINDOWS_TARGETS = new Set(['windows']);
 
 let dockerAndroid = false;
 
@@ -39,6 +41,7 @@ Targets:
             prebuilt + package-owned module .so files; x86_64 emulator target
             not built as of 0.0.4
   linux     Docker — @rayact/prebuilt-linux-x64
+  windows   Cross-build — @rayact/prebuilt-windows-x64 + Windows dev-app zip
   darwin    macOS  — prebuilt-darwin-arm64/x64
   ios       macOS  — generic engine and package-owned module XCFrameworks
   dev-app   macOS  — rayact-dev-app APK + unsigned IPA + simulator zip
@@ -49,14 +52,14 @@ Options:
                       (reproducible build; the host Gradle build is faster
                       and is what release 0.0.4 shipped from)
 
-Maintainer-only. App developers consume npm prebuilts + GitHub Releases.
+Maintainer-only. App developers consume packages from GitHub Releases.
 `.trim());
       process.exit(0);
     }
   }
   if (targets.length === 0) targets.push('all');
   if (targets.includes('all')) {
-    return ['android', 'linux', 'darwin', 'ios', 'dev-app'];
+    return ['android', 'linux', 'darwin', 'ios', 'dev-app', 'windows'];
   }
   return targets;
 }
@@ -97,7 +100,7 @@ function buildDocker(target) {
       buildAndroidNative();
       return;
     }
-    throw new Error(`Docker required for --target ${target}. Install Docker or run on CI.`);
+    throw new Error(`Docker required for --target ${target}. Install and start Docker.`);
   }
   const tag = `rayact-prebuilt-${target}`;
   const dockerDir = path.join(ROOT, 'docker/prebuilts');
@@ -132,6 +135,7 @@ function buildMacos(targets) {
 const targets = parseArgs(process.argv.slice(2));
 const docker = targets.filter(t => DOCKER_TARGETS.has(t));
 const mac = targets.filter(t => MAC_TARGETS.has(t));
+const windows = targets.filter(t => WINDOWS_TARGETS.has(t));
 
 for (const t of docker) {
   buildDocker(t);
@@ -140,10 +144,14 @@ for (const t of docker) {
 if (mac.length > 0) {
   if (!IS_MAC) {
     console.warn(`\nSkipping macOS-only targets (${mac.join(', ')}): not on darwin.`);
-    console.warn('Run on macOS or wait for macos-14 CI artifacts.');
+    console.warn('Run the complete release build on macOS.');
   } else {
     buildMacos(mac);
   }
+}
+
+if (windows.length > 0) {
+  run('bash', [path.join(ROOT, 'scripts/build-prebuilts-windows.sh')]);
 }
 
 console.log('\n==> Done. Run ./scripts/verify-prebuilts.sh to validate outputs.');
