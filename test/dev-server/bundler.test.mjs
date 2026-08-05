@@ -87,12 +87,25 @@ test('dev-client identity comes from rayact.config.json while official extras ar
 test('custom dev clients use their own configured name without official-only metadata', (t) => {
   const root = fs.mkdtempSync(path.join(repoRoot, '.tmp-dev-client-name-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  fs.writeFileSync(path.join(root, 'rayact.config.json'), JSON.stringify({ name: 'Customer Client' }));
+  fs.writeFileSync(path.join(root, 'rayact.config.json'), JSON.stringify({
+    name: 'Customer Client',
+    android: { packageName: 'com.customer.client' },
+    ios: { bundleId: 'com.customer.client' },
+  }));
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+    name: 'customer-client',
+    version: '1.2.3',
+  }));
 
-  assert.deepEqual(resolveDevClientAppMetadata(root, ''), {
-    displayName: 'Customer Client',
-    packageLabel: 'Customer Client',
-  });
+  const metadata = resolveDevClientAppMetadata(root, '');
+  assert.equal(metadata.displayName, 'Customer Client');
+  assert.equal(metadata.packageLabel, 'Customer Client');
+  assert.equal(metadata.androidPackageId, 'com.customer.client');
+  assert.equal(metadata.iosBundleId, 'com.customer.client');
+  assert.equal(metadata.nativeAppVersion, '1.2.3');
+  assert.equal(metadata.source, undefined);
+  assert.equal(metadata.creditTitle, undefined);
+  assert.equal(metadata.links, undefined);
 });
 
 test('release bundles require bytecode and disable React Compiler transforms', async () => {
