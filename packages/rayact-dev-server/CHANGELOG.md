@@ -10,6 +10,7 @@
 - Added direct macOS/Windows project launch through `RAYACT_DEV_SERVER`.
 - Added the Web host bridge, manifest-first prefetch, native module asset routes,
   scriptable reload/status endpoints, and expanded CDP/DevTools source serving.
+- Fixed native development bootstrap generation for projects that import CSS.
 
 ## 0.0.4
 
