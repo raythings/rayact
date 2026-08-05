@@ -2,8 +2,9 @@
  * App identity + bundled-module metadata for every Rayact dev client.
  *
  * The bundler injects these via __RAYACT_OFFICIAL_APP__ and
- * __RAYACT_BUNDLED_MODULES__. Name and modules come from rayact.config.json;
- * the official app supplements the shared shape with credit/resource links.
+ * __RAYACT_BUNDLED_MODULES__. Name, package ids, and versions come from
+ * rayact.config.json / package.json; the official app supplements the shared
+ * shape with credit/resource links.
  */
 
 export interface OfficialAppLink {
@@ -19,6 +20,9 @@ export interface OfficialApp {
   packageLabel?: string;
   source?: string;
   androidPackageId?: string;
+  iosBundleId?: string;
+  nativeAppVersion?: string;
+  rayactVersion?: string;
   creditTitle?: string;
   links?: OfficialAppLink[];
 }
@@ -40,6 +44,18 @@ export function getOfficialApp(): OfficialApp {
   } catch {
     return {};
   }
+}
+
+/** Platform-appropriate application id for About fallbacks. */
+export function getConfiguredAppId(): string {
+  const app = getOfficialApp();
+  const g = globalThis as {
+    __rayactPlatform?: { os?: string; target?: string };
+  };
+  const platform = g.__rayactPlatform?.target || g.__rayactPlatform?.os || '';
+  if (platform === 'ios' && app.iosBundleId) return app.iosBundleId;
+  if (platform === 'android' && app.androidPackageId) return app.androidPackageId;
+  return app.iosBundleId || app.androidPackageId || '';
 }
 
 export function getBundledModules(): BundledModule[] {

@@ -10,5 +10,5 @@ export { DevConsole, installDevConsoleCapture } from './DevConsole.js';
 export { resolveTheme, themeColors, hexToRayactColor, FALLBACK_THEME, LIGHT_FALLBACK } from './devLauncherTheme.js';
 export type { DevLauncherTheme } from './devLauncherTheme.js';
 export * from './native.js';
-export { getOfficialApp, getBundledModules, getBundledModuleNames } from './officialApp.js';
+export { getOfficialApp, getConfiguredAppId, getBundledModules, getBundledModuleNames } from './officialApp.js';
 export type { OfficialApp, OfficialAppLink, BundledModule } from './officialApp.js';

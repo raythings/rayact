@@ -11,6 +11,8 @@
 - Added the Web host bridge, manifest-first prefetch, native module asset routes,
   scriptable reload/status endpoints, and expanded CDP/DevTools source serving.
 - Fixed native development bootstrap generation for projects that import CSS.
+- Dev-client About metadata now includes project Android/iOS ids and versions
+  from `rayact.config.json` / `package.json` for launcher fallbacks.
 
 ## 0.0.4
 

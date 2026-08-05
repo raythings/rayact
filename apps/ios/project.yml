@@ -417,5 +417,10 @@ targets:
         Debug:
           OTHER_CFLAGS: "$(inherited) -DRAYACT_ENABLE_DEVTOOLS=1"
         Release:
-          OTHER_CFLAGS: "$(inherited) -DRAYACT_ENABLE_DEVTOOLS=0 -DRAYACT_RELEASE_HOST=1"
-          EXCLUDED_SOURCE_FILE_NAMES: "devtools.cpp cdp_handler.cpp dev_client_bridge.cpp desktop_dev_loader.cpp desktop_mdns.cpp"
+          # Custom clients (template-ios / FieldKit) link this XCFramework for
+          # both debug and release app builds. Keep RELEASE_HOST off so
+          # rayactDevFetch + module-HMR stay available — matching Android's
+          # jni-debug prebuilt. The RayactIOS app target still sets
+          # RAYACT_RELEASE_HOST=1 for the store/release host binary.
+          OTHER_CFLAGS: "$(inherited) -DRAYACT_ENABLE_DEVTOOLS=1"
+          EXCLUDED_SOURCE_FILE_NAMES: "desktop_dev_loader.cpp desktop_mdns.cpp"

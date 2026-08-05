@@ -67,7 +67,12 @@ final class RayactEngineSession {
         let transport = """
         globalThis.__RAYACT_DEV_SERVER__ = \(Self.jsonQuote(serverUrl));
         globalThis.__rayactNativeDevtoolsTransport = true;
-        globalThis.__rayactDevFetch = function(url) { return rayactDevFetch(url); };
+        globalThis.__rayactDevFetch = function(url) {
+          if (typeof globalThis.rayactDevFetch !== 'function') {
+            throw new Error('rayactDevFetch is not defined (engine built without dev fetch)');
+          }
+          return globalThis.rayactDevFetch(url);
+        };
         """
         return loadSource(transport + "\n" + source)
     }

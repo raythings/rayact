@@ -15,6 +15,9 @@ Scaffold a new app from a Rayact release, run it with hot reload, then build a r
   native platform views.
 - New first-party modules add sensors, barcode scanning, clipboard, haptics,
   image picking, deep linking, SVG, storage, security, and crash reporting.
+- Custom iOS/Android debug clients keep live-connect / HMR bindings; the
+  launcher About page uses your project package/bundle id and versions as
+  fallbacks. Light/dark theme changes refresh material UI in place.
 
 ## Create an app
 

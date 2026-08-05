@@ -66,7 +66,14 @@ manifest-first prefetch immediately, before WASM initialization. Only the
 bootstrap and entry module gate startup, while bounded asset warming continues
 in the background.
 
-Native bridge: global `devCall(method, data, callback)` is wired to the platform dev-client bridge on Android/iOS.
+Native bridge: global `devCall(method, data, callback)` is wired to the platform
+dev-client bridge on Android/iOS. The About tab prefers native `getAppInfo`
+(bundle id, app version, Rayact runtime) and falls back to values injected from
+`rayact.config.json` / `package.json` when the host bridge is missing.
+
+Custom iOS clients link `@rayact/prebuilt-ios-arm64`'s `RayactEngine.xcframework`,
+which keeps `rayactDevFetch` and `devCall` available for Debug live-connect
+(matching Android's `jni-debug` librayact).
 
 ### Native-module selection
 

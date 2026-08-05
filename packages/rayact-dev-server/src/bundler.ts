@@ -10,7 +10,7 @@ import { buildSync as esbuildSync } from 'esbuild';
 import type { Server as HttpServer } from 'node:http';
 import { REACT_DEVTOOLS_BACKEND_SETUP_ID, reactDevtoolsBackendSource } from '@rayact/devtools/react';
 import { mergeNativeModules, resolveRayactPlugins, type RayactNativeModuleEntry } from '@rayact/prebuild';
-import { loadRayactConfig, resolveAppName } from './config.js';
+import { loadRayactConfig, resolveAndroidPackageName, resolveAppName } from './config.js';
 import { rayactCssInlineModule } from './rayactHostModule.js';
 import { findAppDir, rayactRouterPlugin } from '@rayact/router/vite';
 
@@ -103,7 +103,14 @@ export interface DevClientAppMetadata {
   displayName: string;
   packageLabel: string;
   source?: string;
+  /** Android application id from rayact.config.json (About fallback). */
   androidPackageId?: string;
+  /** iOS bundle id from rayact.config.json (About fallback). */
+  iosBundleId?: string;
+  /** Project package.json version (About native-app fallback). */
+  nativeAppVersion?: string;
+  /** @rayact/* engine version this client was built against. */
+  rayactVersion?: string;
   creditTitle?: string;
   links?: Array<{
     id: string;
@@ -112,6 +119,30 @@ export interface DevClientAppMetadata {
     label: string;
     url: string;
   }>;
+}
+
+function readProjectPackageVersion(root: string): string | undefined {
+  try {
+    const raw = fs.readFileSync(path.join(path.resolve(root), 'package.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { version?: unknown };
+    return typeof parsed.version === 'string' && parsed.version ? parsed.version : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readRayactPackageVersion(root: string): string | undefined {
+  for (const name of ['@rayact/dev-client', '@rayact/runtime', 'rayact']) {
+    try {
+      const pkgJson = path.join(path.resolve(root), 'node_modules', ...name.split('/'), 'package.json');
+      const raw = fs.readFileSync(pkgJson, 'utf8');
+      const parsed = JSON.parse(raw) as { version?: unknown };
+      if (typeof parsed.version === 'string' && parsed.version) return parsed.version;
+    } catch {
+      // try next
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -134,11 +165,21 @@ export function resolveDevClientAppMetadata(
       console.warn('Ignoring invalid RAYACT_DEV_CLIENT_OFFICIAL_APP_METADATA_JSON.');
     }
   }
-  const appName = resolveAppName(loadRayactConfig(path.resolve(root)));
+  const projectRoot = path.resolve(root);
+  const config = loadRayactConfig(projectRoot);
+  const appName = resolveAppName(config);
+  const androidPackageId = resolveAndroidPackageName(config);
+  const iosBundleId = config.ios?.bundleId?.trim() || androidPackageId;
+  const nativeAppVersion = readProjectPackageVersion(projectRoot);
+  const rayactVersion = readRayactPackageVersion(projectRoot);
   return {
     ...supplied,
     displayName: appName,
     packageLabel: appName,
+    androidPackageId: supplied.androidPackageId ?? androidPackageId,
+    iosBundleId: supplied.iosBundleId ?? iosBundleId,
+    nativeAppVersion: supplied.nativeAppVersion ?? nativeAppVersion,
+    rayactVersion: supplied.rayactVersion ?? rayactVersion,
   };
 }
 

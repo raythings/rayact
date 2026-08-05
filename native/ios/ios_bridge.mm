@@ -258,6 +258,86 @@ static JSValue JS_iosMobileWsPollEvents(JSContext* ctx, JSValue, int, JSValueCon
 }
 
 
+// Sync HTTP shim for module-HMR / dev bootstrap. Custom iOS clients link the
+// prebuilt XCFramework and always install this binding here so a Release-built
+// engine (historically RAYACT_RELEASE_HOST=1) still exposes rayactDevFetch when
+// Swift wires g_iosDevFetch. engine_js.cpp registers the same name when
+// RELEASE_HOST is off; overwriting with an identical binding is fine.
+static JSValue JS_iosRayactDevFetch(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    const char* url = JS_ToCString(ctx, argv[0]);
+    if (!url) return JS_UNDEFINED;
+    std::string body = rayact::iosDevFetch(url);
+    if (body.empty()) {
+        body = std::string("Error: [rayact:devfetch] empty response from ") + url;
+    }
+    JS_FreeCString(ctx, url);
+    return JS_NewString(ctx, body.c_str());
+}
+
+// Host bridge for the launcher About page (getAppInfo), discovery, connect,
+// etc. Always register on iOS — custom clients set g_iosDevCall from Swift
+// even when the shared engine was historically compiled as RAYACT_RELEASE_HOST.
+static JSValue JS_iosDevCall(JSContext* ctx, JSValue, int argc, JSValueConst* argv) {
+    if (argc < 1) return JS_UNDEFINED;
+    const char* method = JS_ToCString(ctx, argv[0]);
+    if (!method) return JS_UNDEFINED;
+
+    std::string dataJson;
+    if (argc >= 2 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1])) {
+        if (JS_IsObject(argv[1])) {
+            JSValue json = JS_JSONStringify(ctx, argv[1], JS_UNDEFINED, JS_UNDEFINED);
+            if (!JS_IsException(json)) {
+                const char* s = JS_ToCString(ctx, json);
+                if (s) {
+                    dataJson = s;
+                    JS_FreeCString(ctx, s);
+                }
+            } else {
+                JSValue exc = JS_GetException(ctx);
+                JS_FreeValue(ctx, exc);
+            }
+            JS_FreeValue(ctx, json);
+        } else {
+            const char* s = JS_ToCString(ctx, argv[1]);
+            if (s) {
+                dataJson = s;
+                JS_FreeCString(ctx, s);
+            }
+        }
+    }
+
+    std::string resultJson = rayact::iosDevCall(method, dataJson.empty() ? nullptr : dataJson.c_str());
+    JS_FreeCString(ctx, method);
+
+    if (argc >= 3 && JS_IsFunction(ctx, argv[2])) {
+        JSValue arg = JS_UNDEFINED;
+        if (resultJson == "null") {
+            arg = JS_NULL;
+        } else if (!resultJson.empty() && resultJson.front() == '"') {
+            arg = JS_ParseJSON(ctx, resultJson.c_str(), resultJson.size(), "<devCall>");
+            if (JS_IsException(arg)) {
+                JSValue exc = JS_GetException(ctx);
+                JS_FreeValue(ctx, exc);
+                arg = JS_NewString(ctx, resultJson.substr(1, resultJson.size() - 2).c_str());
+            }
+        } else if (!resultJson.empty() && (resultJson.front() == '[' || resultJson.front() == '{')) {
+            arg = JS_ParseJSON(ctx, resultJson.c_str(), resultJson.size(), "<devCall>");
+            if (JS_IsException(arg)) {
+                JSValue exc = JS_GetException(ctx);
+                JS_FreeValue(ctx, exc);
+                arg = JS_UNDEFINED;
+            }
+        } else if (!resultJson.empty()) {
+            arg = JS_NewString(ctx, resultJson.c_str());
+        }
+        JSValue cbResult = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, &arg);
+        JS_FreeValue(ctx, arg);
+        JS_FreeValue(ctx, cbResult);
+    }
+    return JS_UNDEFINED;
+}
+
 static void installIOSMobileNetworkBindings(JSContext* ctx) {
     if (!ctx) return;
     JSValue global = JS_GetGlobalObject(ctx);
@@ -269,6 +349,10 @@ static void installIOSMobileNetworkBindings(JSContext* ctx) {
                       JS_NewCFunction(ctx, JS_iosMobileFetchStart, "__rayactNativeFetchStart", 5));
     JS_SetPropertyStr(ctx, global, "__rayactNativeFetchAbort",
                       JS_NewCFunction(ctx, JS_iosMobileFetchAbort, "__rayactNativeFetchAbort", 1));
+    JS_SetPropertyStr(ctx, global, "rayactDevFetch",
+                      JS_NewCFunction(ctx, JS_iosRayactDevFetch, "rayactDevFetch", 1));
+    JS_SetPropertyStr(ctx, global, "devCall",
+                      JS_NewCFunction(ctx, JS_iosDevCall, "devCall", 3));
     JS_SetPropertyStr(ctx, global, "__rayactDevtoolsActive",
                       JS_NewCFunction(ctx, JS_iosDevtoolsActive, "__rayactDevtoolsActive", 0));
     JS_SetPropertyStr(ctx, global, "__rayactDevtoolsNetwork",

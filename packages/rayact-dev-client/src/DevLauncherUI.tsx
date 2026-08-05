@@ -26,11 +26,21 @@ import {
   sectionStyle,
 } from './devLauncherStyles.js';
 import { devCallAvailable, getAppInfo, openExternalUrl } from './native.js';
-import { getOfficialApp, getBundledModules } from './officialApp.js';
+import { getOfficialApp, getConfiguredAppId, getBundledModules } from './officialApp.js';
 
 type Tab = 'connect' | 'about';
 
 const DEV_CLIENT_VERSION = '0.0.5';
+
+function aboutFallbacks() {
+  const app = getOfficialApp();
+  const g = globalThis as { __RAYACT_ENGINE_VERSION__?: string };
+  return {
+    bundleId: getConfiguredAppId() || '—',
+    nativeAppVersion: app.nativeAppVersion || DEV_CLIENT_VERSION,
+    rayactVersion: app.rayactVersion || g.__RAYACT_ENGINE_VERSION__ || DEV_CLIENT_VERSION,
+  };
+}
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'connect', label: 'Connect', icon: 'link' },
@@ -172,17 +182,38 @@ function ConnectPage() {
 function AboutPage() {
   const launcher = useDevLauncher();
   const colors = themeColors(launcher.theme);
-  const [bundleId, setBundleId] = useState('—');
-  const [nativeVersion, setNativeVersion] = useState('—');
-  const [rayactVersion, setRayactVersion] = useState('—');
+  const defaults = aboutFallbacks();
+  const [bundleId, setBundleId] = useState(defaults.bundleId);
+  const [nativeVersion, setNativeVersion] = useState(defaults.nativeAppVersion);
+  const [rayactVersion, setRayactVersion] = useState(defaults.rayactVersion);
 
   useEffect(() => {
-    if (!devCallAvailable()) return;
-    void getAppInfo().then(info => {
-      setBundleId(info.bundleId || '—');
-      setNativeVersion(info.nativeAppVersion || '—');
-      setRayactVersion(info.rayactVersion || '—');
-    }).catch(() => {});
+    let cancelled = false;
+    const fallbacks = aboutFallbacks();
+    const apply = (info: { bundleId?: string; nativeAppVersion?: string; rayactVersion?: string }) => {
+      if (cancelled) return;
+      setBundleId(info.bundleId || fallbacks.bundleId);
+      setNativeVersion(info.nativeAppVersion || fallbacks.nativeAppVersion);
+      setRayactVersion(info.rayactVersion || fallbacks.rayactVersion);
+    };
+    const load = () => {
+      if (!devCallAvailable()) return false;
+      void getAppInfo().then(apply).catch(() => apply(fallbacks));
+      return true;
+    };
+    if (load()) return () => { cancelled = true; };
+    // Prefer project-config defaults immediately; retry native getAppInfo in
+    // case the host bridge appears a moment later.
+    apply(fallbacks);
+    const id = setInterval(() => {
+      if (load()) clearInterval(id);
+    }, 250);
+    const stop = setTimeout(() => clearInterval(id), 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      clearTimeout(stop);
+    };
   }, []);
 
   const cardBorder = colors.isDark ? 0x1affffff : 0x14000000;
@@ -235,7 +266,7 @@ function AboutPage() {
         <View style={{ gap: 6, marginTop: 12 }}>
           <Text style={{ text: { color: colors.onSurface, fontSize: 14 } }}>Dev client (npm)</Text>
           <Text style={{ text: { color: colors.onSurface, fontSize: 15, fontWeight: 500 } }}>
-            Version {nativeVersion !== '—' ? nativeVersion : DEV_CLIENT_VERSION}
+            Version {rayactVersion}
           </Text>
         </View>
       </View>

@@ -16,9 +16,15 @@ Rayact packages, native prebuilts, web hosts, and dev apps are distributed throu
 - **Expanded native modules** — barcode/QR scanning, clipboard, haptics, image
   picking, deep linking, sensors, SVG, WebView, MMKV, Secure Store, and Crash
   Reporter ship as autolinked first-party packages.
+- **Custom iOS/Android clients** — the iOS `RayactEngine.xcframework` keeps
+  `rayactDevFetch` / `devCall` for live connect and HMR; the launcher About
+  page falls back to your `rayact.config.json` bundle/package id and versions
+  when native app info is unavailable. Light/dark switches refresh material
+  surfaces in place (no navigation remount).
 
-See the [Windows guide](docs/guide/windows.md), [components
-reference](docs/reference/components.md), and [native modules](docs/native-modules.md).
+See the [Windows guide](docs/guide/windows.md), [iOS guide](docs/guide/ios.md),
+[components reference](docs/reference/components.md), and
+[native modules](docs/native-modules.md).
 
 ## Quick start
 

@@ -121,7 +121,14 @@ manifest-first prefetch immediately, before WASM initialization. Only the
 bootstrap and entry module gate startup, while bounded asset warming continues
 in the background.
 
-Native bridge: global `devCall(method, data, callback)` is wired to the platform dev-client bridge on Android/iOS.
+Native bridge: global `devCall(method, data, callback)` is wired to the platform
+dev-client bridge on Android/iOS. The About tab prefers native `getAppInfo`
+(bundle id, app version, Rayact runtime) and falls back to values injected from
+`rayact.config.json` / `package.json` when the host bridge is missing.
+
+Custom iOS clients link `@rayact/prebuilt-ios-arm64`'s `RayactEngine.xcframework`,
+which keeps `rayactDevFetch` and `devCall` available for Debug live-connect
+(matching Android's `jni-debug` librayact).
 
 ### Native-module selection
 
@@ -585,6 +592,9 @@ Scaffold a new app from a Rayact release, run it with hot reload, then build a r
   native platform views.
 - New first-party modules add sensors, barcode scanning, clipboard, haptics,
   image picking, deep linking, SVG, storage, security, and crash reporting.
+- Custom iOS/Android debug clients keep live-connect / HMR bindings; the
+  launcher About page uses your project package/bundle id and versions as
+  fallbacks. Light/dark theme changes refresh material UI in place.
 
 ## Create an app
 
@@ -799,6 +809,13 @@ npm run ios:dev-client    # rayact build --debug --ios --install
 `ios/` contains `project.yml` (source of truth — regenerate the `.xcodeproj`
 with `xcodegen generate` after editing it), the Swift host sources, and
 `Frameworks/RayactEngine.xcframework` copied from the prebuilt. Commit it.
+
+The prebuilt XCFramework includes `rayactDevFetch` and `devCall` so Debug
+clients can bootstrap against `rayact dev`, run module-HMR, and fill the
+launcher About page (bundle id / native version / Rayact runtime). When native
+`getAppInfo` is unavailable, About falls back to `ios.bundleId` /
+`android.packageName` from `rayact.config.json` and the project /
+`@rayact/*` package versions.
 
 ## Release build
 

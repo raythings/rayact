@@ -2146,7 +2146,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CLANG_CXX_LIBRARY = "libc++";
 				DEVELOPMENT_TEAM = "";
-				EXCLUDED_SOURCE_FILE_NAMES = "devtools.cpp cdp_handler.cpp dev_client_bridge.cpp desktop_dev_loader.cpp desktop_mdns.cpp";
+				EXCLUDED_SOURCE_FILE_NAMES = "desktop_dev_loader.cpp desktop_mdns.cpp";
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) RAYACT_PLATFORM_NET_BACKEND=1 RAYACT_NO_TS=1 RAYACT_IOS=1 RAYM3_USE_YOGA=1 RAYLIB_USE_RLMT=1 PLATFORM_IOS_METAL=1";
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = "$(inherited) ../../packages/rayact-svg/native ../../third_party/raysvg/include ../../third_party/raysvg/src ../../third_party/raysvg/third_party/earcut ../../native ../../native/core ../../native/desktop ../../native/ios ../../native/android ../../third_party/raylib-backends/backends/rlmt ../../third_party/raylib-backends/backends/rlmt/platforms ../../third_party/raylib/src ../../third_party/raym3/include ../../third_party/yoga ../../third_party/quickjs ../../third_party/wasm3/source ../../third_party/cssparser";
@@ -2155,7 +2155,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				OTHER_CFLAGS = "$(inherited) -DRAYACT_ENABLE_DEVTOOLS=0 -DRAYACT_RELEASE_HOST=1";
+				OTHER_CFLAGS = "$(inherited) -DRAYACT_ENABLE_DEVTOOLS=1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.rayact.RayactEngineStatic;
 				PRODUCT_NAME = RayactEngine;
 				SDKROOT = iphoneos;
