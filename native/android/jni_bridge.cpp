@@ -1808,9 +1808,14 @@ Java_com_rayact_engine_RayactEngineSession_nativeCreateSurface(JNIEnv* env, jcla
         InitWindow(0, 0, "Rayact");
         if (!IsWindowReady()) { LOGE("nativeCreateSurface: InitWindow failed"); ANativeWindow_release(win); return 0; }
         setRaym3AndroidDensity(density, layoutDensity);
+        // Prior releaseGraphics may leave FontManager initialized_ with empty
+        // caches; Reset+Initialize rebakes atlases against this GPU device.
+        raym3::FontManager::ResetDeviceCache();
+        raym3::v2::IconRendererResetDeviceCache();
+        raym3::v2::EmojiFont::Instance().ResetTextureCache();
         raym3::FontManager::Initialize();
-        raym3::v2::IconRendererInvalidateLiveDeviceCache();
         rayact::engineLoadConfig(g_dataPath.c_str());
+        rayact::engineResyncMaterialIcons();
         rayact::engineFinishLoad();
         windowId = RcoreAndroidSurface_GetCurrentId();
         if (windowId <= 0) windowId = 1; // raylib legacy path: first surface id is 1

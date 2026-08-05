@@ -3,6 +3,7 @@ import UIKit
 final class ReleaseViewController: UIViewController {
     private var session: RayactEngineSession?
     private var navigationHost: NavigationHost?
+    private var graphicsSuspended = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -24,6 +25,15 @@ final class ReleaseViewController: UIViewController {
         ])
         navigationHost = host
 
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(appDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification, object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(appWillEnterForeground),
+            name: UIApplication.willEnterForegroundNotification, object: nil
+        )
+
         let loaded: Bool
         if let url = Bundle.main.url(forResource: "app", withExtension: "qjsbc"),
            let data = try? Data(contentsOf: url), !data.isEmpty {
@@ -39,12 +49,33 @@ final class ReleaseViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        session?.acquireGraphics()
+        resumeGraphicsIfNeeded()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
-        session?.releaseGraphics()
+        suspendGraphics()
         super.viewWillDisappear(animated)
+    }
+
+    @objc private func appDidEnterBackground() {
+        suspendGraphics()
+    }
+
+    @objc private func appWillEnterForeground() {
+        resumeGraphicsIfNeeded()
+    }
+
+    private func suspendGraphics() {
+        guard !graphicsSuspended else { return }
+        session?.releaseGraphics()
+        graphicsSuspended = true
+    }
+
+    private func resumeGraphicsIfNeeded() {
+        guard graphicsSuspended else { return }
+        guard session?.acquireGraphics() == true else { return }
+        navigationHost?.recreateSurfacesAfterGraphicsResume()
+        graphicsSuspended = false
     }
 
     override func viewDidLayoutSubviews() {

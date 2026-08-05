@@ -81,6 +81,21 @@ if [[ "$DO_DARWIN" -eq 1 ]]; then
     chmod +x "$pkg/bin/rayact_release"
     chmod +x "$pkg/bin/rayact_tool"
     write_manifest "$pkg" "darwin" "$arch"
+    # Dev-server desktop hosts resolve icon fonts from <prebuilt>/resources/fonts.
+    # Slim like iOS/Android — stb_truetype cannot read variable-font deltas, and
+    # unslimmed Material Symbols render as "?" tofu on macOS desktop.
+    mkdir -p "$pkg/resources/fonts"
+    if [[ -d "$ROOT/resources/fonts" ]]; then
+      cp "$ROOT/resources/fonts/"* "$pkg/resources/fonts/"
+      rm -f "$pkg/resources/fonts/NotoColorEmoji.ttf"
+      rm -rf "$pkg/resources/fonts/Roboto"
+      rm -f "$pkg/resources/fonts"/Roboto*
+      node "$ROOT/tools/fonts/slim-fonts.mjs" "$pkg/resources/fonts" \
+        || echo "  WARNING: font slimming skipped — desktop prebuilt ships full-size fonts"
+      echo "  copied+slimmed resources/fonts into prebuilt-darwin-$arch"
+    else
+      echo "  WARNING: $ROOT/resources/fonts not found — desktop icons may render as tofu"
+    fi
     echo "  packed prebuilt-darwin-$arch"
   done
 fi

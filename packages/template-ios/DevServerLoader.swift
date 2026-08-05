@@ -44,15 +44,36 @@ enum DevServerLoader {
     }
 
     static func devFetchFromNative(url: String) -> String {
-        let data = takePrefetchedResource(url: url) ?? (try? httpGetBytes(url)) ?? Data()
-        return String(data: data, encoding: .utf8) ?? ""
+        do {
+            let data: Data
+            if let prefetched = takePrefetchedResource(url: url) {
+                data = prefetched
+            } else {
+                data = try httpGetBytes(url)
+            }
+            return String(data: data, encoding: .utf8) ?? ""
+        } catch {
+            // Module HMR treats Error: [rayact:devfetch] … as a failed fetch
+            // instead of evaluating an empty body as a module.
+            return "Error: [rayact:devfetch] \(error.localizedDescription) (\(url))"
+        }
     }
 
     private static var devFetchBytesStorage: [UInt8] = []
 
     static let devFetchBytesCallback: RayactNativeBridge.DevFetchBytesFn = { urlPtr, outLenPtr in
         let url = urlPtr.map { String(cString: $0) } ?? ""
-        let data = takePrefetchedResource(url: url) ?? (try? httpGetBytes(url)) ?? Data()
+        let data: Data
+        do {
+            if let prefetched = takePrefetchedResource(url: url) {
+                data = prefetched
+            } else {
+                data = try httpGetBytes(url)
+            }
+        } catch {
+            let message = "Error: [rayact:devfetch] \(error.localizedDescription) (\(url))"
+            data = Data(message.utf8)
+        }
         devFetchBytesStorage = Array(data)
         outLenPtr?.pointee = UInt32(devFetchBytesStorage.count)
         return devFetchBytesStorage.withUnsafeBufferPointer { $0.baseAddress }

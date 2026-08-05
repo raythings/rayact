@@ -1260,15 +1260,21 @@ static void registerBuiltInMaterialIconFonts(const char* assets) {
     }
 }
 
+static bool materialIconFontsPresent(const std::filesystem::path& root) {
+    const std::filesystem::path fonts = root / "resources/fonts";
+    return std::filesystem::exists(fonts / "MaterialSymbolsRounded.ttf") ||
+           std::filesystem::exists(fonts / "MaterialIcons-Regular.ttf");
+}
+
 static std::string findBuiltInMaterialIconAssets(const std::string& start) {
     if (start.empty()) return {};
     std::filesystem::path dir(start);
     for (int depth = 0; depth < 8; ++depth) {
-        const std::filesystem::path fonts = dir / "resources/fonts";
-        if (std::filesystem::exists(fonts / "MaterialSymbolsRounded.ttf") ||
-            std::filesystem::exists(fonts / "MaterialIcons-Regular.ttf")) {
-            return dir.string();
-        }
+        // Host prebuilts and release bundles: <root>/resources/fonts/
+        if (materialIconFontsPresent(dir)) return dir.string();
+        // Consumer apps after `rayact prebuild` / build: rayact-assets/runtime/
+        const std::filesystem::path staged = dir / "rayact-assets" / "runtime";
+        if (materialIconFontsPresent(staged)) return staged.string();
         if (!dir.has_parent_path()) break;
         const std::filesystem::path parent = dir.parent_path();
         if (parent == dir) break;
@@ -1419,25 +1425,24 @@ static void injectMaterialIcons(JSContext* ctx) {
     // Desktop never calls engineLoadConfig() (Android's only caller of
     // SetIconFontSearchPrefix), so without this the "material" set's font
     // fallback search has no prefix to search under and always misses,
-    // rendering tofu. rayactAssetBaseDir() (derived from the loaded bundle's
-    // own directory, e.g. dist/) is the right base on desktop — appAssetsPath()
-    // resolves to the *engine binary's* directory here, not the app's, so it's
-    // only used as a fallback for platforms where it IS the app dir (Android).
+    // rendering tofu.
+    //
+    // Prefer project-local fonts (cwd / rayact-assets/runtime) over the host
+    // prebuilt's copy: `rayact build`/`prebuild` slim Material Symbols (strip
+    // fvar/gvar) for stb_truetype, while older darwin prebuilts still ship the
+    // full variable font — LoadFontEx then falls back to the default font and
+    // every icon draws as "?".
     const std::string releaseBase = rayact::rayactAssetBaseDir();
     const std::string appAssets = rayact::appAssetsPath();
-    std::string iconAssets = findBuiltInMaterialIconAssets(releaseBase);
+    std::string iconAssets = findBuiltInMaterialIconAssets(std::filesystem::current_path().string());
+    if (iconAssets.empty()) iconAssets = findBuiltInMaterialIconAssets(releaseBase);
     if (iconAssets.empty()) iconAssets = findBuiltInMaterialIconAssets(appAssets);
-    // Source-workspace desktop hosts are commonly launched from an app
-    // directory while their executable lives under build/<platform>/bin. In
-    // that setup neither releaseBase nor appAssets contains the repo-owned
-    // resources directory. Walk up from the working directory as the existing
-    // material_icons.js lookup does so named icons and their fonts stay paired.
-    if (iconAssets.empty()) {
-        iconAssets = findBuiltInMaterialIconAssets(std::filesystem::current_path().string());
-    }
     if (!iconAssets.empty()) {
         raym3::v2::SetIconFontSearchPrefix(iconAssets.c_str());
         registerBuiltInMaterialIconFonts(iconAssets.c_str());
+        printf("Material icon fonts: %s/resources/fonts\n", iconAssets.c_str());
+    } else {
+        fprintf(stderr, "Material icon fonts not found — icons will render as tofu\n");
     }
     injectMaterialIconsRaw(ctx);
     registerMaterialIconNamesIntoRaym3(ctx);

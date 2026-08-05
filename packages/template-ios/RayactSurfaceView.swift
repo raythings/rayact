@@ -257,6 +257,22 @@ final class RayactSurfaceView: UIView, UITextFieldDelegate {
         }
     }
 
+    /// After `releaseGraphics` / `CloseWindow`, Swift still holds a stale
+    /// `surfaceId` while native `g_surfaces` and Metal font atlases are gone.
+    /// Destroy + recreate so createSurface runs the resume path that rebakes fonts.
+    func recreateNativeSurfaceAfterGraphicsResume() {
+        if surfaceId > 0 {
+            session.host.unregisterSurfaceView(self, surfaceId: surfaceId)
+            session.host.unregisterImeView(self)
+            session.destroySurface(surfaceId)
+            session.host.renderScheduler.releaseSurface()
+            surfaceId = 0
+        }
+        guard window != nil, bounds.width > 0, bounds.height > 0 else { return }
+        createNativeSurface()
+        reportSurfaceResize()
+    }
+
     func pushToFront() {
         if surfaceId > 0 { session.pushSurface(surfaceId) }
     }

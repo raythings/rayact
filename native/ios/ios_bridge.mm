@@ -951,9 +951,14 @@ extern "C" int RayactIOSSessionCreateSurface(RayactIOSHandle handle, void* metal
         SetConfigFlags(FLAG_MSAA_4X_HINT); // 4x MSAA on the main pass (standard raylib opt-in)
         InitWindow(0, 0, "Rayact");
         if (!IsWindowReady()) return 0;
+        // A prior releaseGraphics may have left FontManager::initialized_ true
+        // with empty caches; Reset+Initialize always rebakes against this device.
+        raym3::FontManager::ResetDeviceCache();
+        raym3::v2::IconRendererResetDeviceCache();
+        raym3::v2::EmojiFont::Instance().ResetTextureCache();
         raym3::FontManager::Initialize();
-        raym3::v2::IconRendererInvalidateLiveDeviceCache();
         rayact::engineLoadConfig(g_dataPath.c_str());
+        rayact::engineResyncMaterialIcons();
         rayact::engineFinishLoad();
         ownsContext = true;
         if (g_rootScreenId <= 0) g_rootScreenId = screenId;

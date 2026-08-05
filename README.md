@@ -20,7 +20,11 @@ Rayact packages, native prebuilts, web hosts, and dev apps are distributed throu
   `rayactDevFetch` / `devCall` for live connect and HMR; the launcher About
   page falls back to your `rayact.config.json` bundle/package id and versions
   when native app info is unavailable. Light/dark switches refresh material
-  surfaces in place (no navigation remount).
+  surfaces in place (no navigation remount). Dynamic file routes like
+  `app/assets/[id].tsx` load over module-HMR on iOS; background/resume
+  recreates Metal surfaces so text and icons do not turn into white squares.
+  Desktop prebuilts ship slimmed Material Symbols fonts so icons render instead
+  of "?".
 
 See the [Windows guide](docs/guide/windows.md), [iOS guide](docs/guide/ios.md),
 [components reference](docs/reference/components.md), and

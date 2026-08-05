@@ -13,6 +13,10 @@ controls: `TextInput` delegates editing and IME to the operating system, and
 `@rayact/webview` uses Apple WebKit or Windows CEF inside Rayact's layout,
 clipping, and z-order.
 
+Desktop prebuilts ship slimmed Material Symbols fonts (variable-font tables
+removed). The host prefers project-local `rayact-assets/runtime/resources/fonts`
+when present so icons stay paired with the app's staged copy.
+
 ## Develop
 
 ```sh

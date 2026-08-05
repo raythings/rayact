@@ -410,7 +410,7 @@ class DevLauncherActivity : AppCompatActivity() {
     }
 
     private fun mountPane(pane: ActivePane, host: NavigationHost, session: RayactEngineSession) {
-        session.acquireGraphics()
+        val acquired = session.acquireGraphics()
         if (host.parent === root) {
             host.bringToFront()
         } else if (host.parent != null) {
@@ -425,6 +425,9 @@ class DevLauncherActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             ))
         }
+        // park/unmount releaseGraphics clears GPU font atlases; ensure surfaces
+        // recreate even when addView does not re-fire surfaceCreated.
+        if (acquired) host.recreateSurfacesAfterGraphicsResume()
         DevClientBridge.attach(this, session)
         if (pane == ActivePane.PROJECT) {
             startProjectDebugTools(session, host)

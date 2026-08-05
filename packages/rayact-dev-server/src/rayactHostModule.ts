@@ -484,7 +484,16 @@ export function createRayactModuleMiddleware(
       return;
     }
 
-    const modulePath = url.slice('/rayact/m'.length).split('?')[0] ?? '/';
+    const rawModulePath = url.slice('/rayact/m'.length).split('?')[0] ?? '/';
+    // Clients percent-encode path segments (e.g. app/asset/[id].tsx → %5Bid%5D)
+    // so Foundation/URLSession accept the URL. Vite needs the decoded filesystem
+    // path; registry keys stay decoded so they match importer moduleUrl keys.
+    let modulePath = rawModulePath;
+    try {
+      modulePath = decodeURIComponent(rawModulePath);
+    } catch {
+      modulePath = rawModulePath;
+    }
     const query = url.includes('?') ? url.slice(url.indexOf('?')) : '';
 
     try {

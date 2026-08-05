@@ -18,6 +18,9 @@ final class DevLauncherController: UIViewController {
     private var reloadInProgress = false
     private var projectBackBlockedUntil: TimeInterval = 0
     private var launcherBackBlockedUntil: TimeInterval = 0
+    /// Set when releaseGraphics runs (background / disappear / park). Cleared
+    /// after the matching acquire recreates Metal surfaces + font atlases.
+    private var graphicsSuspended = false
 
     init(initialDevServerUrl: String? = nil) {
         self.initialDevServerUrl = initialDevServerUrl
@@ -60,6 +63,15 @@ final class DevLauncherController: UIViewController {
         edge.edges = .left
         view.addGestureRecognizer(edge)
 
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(appDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification, object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(appWillEnterForeground),
+            name: UIApplication.willEnterForegroundNotification, object: nil
+        )
+
         if let initialUrl = initialDevServerUrl, !initialUrl.isEmpty {
             openProject(url: initialUrl)
         } else {
@@ -70,7 +82,7 @@ final class DevLauncherController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        activeSession()?.acquireGraphics()
+        resumeGraphicsIfNeeded()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -82,8 +94,29 @@ final class DevLauncherController: UIViewController {
     }
 
     override func viewWillDisappear(_ animated: Bool) {
-        activeSession()?.releaseGraphics()
+        suspendGraphics()
         super.viewWillDisappear(animated)
+    }
+
+    @objc private func appDidEnterBackground() {
+        suspendGraphics()
+    }
+
+    @objc private func appWillEnterForeground() {
+        resumeGraphicsIfNeeded()
+    }
+
+    private func suspendGraphics() {
+        guard !graphicsSuspended else { return }
+        activeSession()?.releaseGraphics()
+        graphicsSuspended = true
+    }
+
+    private func resumeGraphicsIfNeeded() {
+        guard graphicsSuspended else { return }
+        guard activeSession()?.acquireGraphics() == true else { return }
+        activeHost()?.recreateSurfacesAfterGraphicsResume()
+        graphicsSuspended = false
     }
 
     deinit {
@@ -248,6 +281,7 @@ final class DevLauncherController: UIViewController {
         }
         if launcherSession.isAlive() {
             launcherSession.releaseGraphics()
+            graphicsSuspended = true
         }
     }
 
@@ -334,7 +368,7 @@ final class DevLauncherController: UIViewController {
     }
 
     private func mountPane(_ pane: ActivePane, host: NavigationHost, session: RayactEngineSession) {
-        session.acquireGraphics()
+        let acquired = session.acquireGraphics()
         if host.superview === rootContainer {
             rootContainer.bringSubviewToFront(host)
         } else if host.superview != nil {
@@ -357,6 +391,13 @@ final class DevLauncherController: UIViewController {
                 host.bottomAnchor.constraint(equalTo: rootContainer.bottomAnchor),
             ])
         }
+        // releaseGraphics (park/unmount) clears native surfaces + font atlases.
+        // Recreate after the host is in the hierarchy so Metal layers have a window.
+        if acquired {
+            host.layoutIfNeeded()
+            host.recreateSurfacesAfterGraphicsResume()
+            graphicsSuspended = false
+        }
         DevClientBridge.attach(self, session: session)
         if pane == .project {
             startProjectDebugTools(session: session, host: host)
@@ -370,6 +411,7 @@ final class DevLauncherController: UIViewController {
             host.removeFromSuperview()
         }
         session.releaseGraphics()
+        graphicsSuspended = true
     }
 
     private func destroyProjectSession() {

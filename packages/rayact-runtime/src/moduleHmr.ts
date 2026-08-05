@@ -765,6 +765,21 @@ export function resolveModuleUrl(specifier: string, fromUrl: string, serverUrl: 
   return `${serverUrl}/rayact/resolve?spec=${encodeURIComponent(specifier)}&from=${encodeURIComponent(from)}`;
 }
 
+/** Encode each path segment so `[id].tsx` routes are valid HTTP URLs. */
+function encodePathnameSegments(pathname: string): string {
+  return pathname
+    .split('/')
+    .map((segment) => {
+      if (!segment) return segment;
+      try {
+        return encodeURIComponent(decodeURIComponent(segment));
+      } catch {
+        return encodeURIComponent(segment);
+      }
+    })
+    .join('/');
+}
+
 export function toRayactModuleUrl(moduleUrl: string, serverUrl: string): string {
   const absolute = moduleUrl.startsWith('http') ? moduleUrl : `${serverUrl}${moduleUrl.startsWith('/') ? '' : '/'}${moduleUrl}`;
   const parsed = parseUrlParts(absolute);
@@ -775,9 +790,11 @@ export function toRayactModuleUrl(moduleUrl: string, serverUrl: string): string 
   if (parsed.pathname === '/rayact/entry.js' || parsed.pathname === '/rayact/resolve') {
     return absolute;
   }
+  const base = serverUrl.replace(/\/+$/, '');
   if (parsed.pathname.startsWith('/rayact/m/')) {
-    return absolute;
+    const rest = parsed.pathname.slice('/rayact/m'.length);
+    return `${base}/rayact/m${encodePathnameSegments(rest)}${parsed.search}`;
   }
-  const path = `/rayact/m${parsed.pathname}${parsed.search}`;
-  return `${serverUrl.replace(/\/+$/, '')}${path}`;
+  const path = `/rayact/m${encodePathnameSegments(parsed.pathname)}${parsed.search}`;
+  return `${base}${path}`;
 }

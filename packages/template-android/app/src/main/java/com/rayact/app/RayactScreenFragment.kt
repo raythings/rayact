@@ -19,6 +19,14 @@ class RayactScreenFragment(
 
     fun rayactSurfaceView(): RayactSurfaceView? = surfaceView
 
+    fun syncSurfaceIdFromView() {
+        val sid = surfaceView?.surfaceId ?: 0
+        if (sid > 0) {
+            surfaceId = sid
+            surfaceReadyFired = true
+        }
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -31,11 +39,12 @@ class RayactScreenFragment(
             ViewGroup.LayoutParams.MATCH_PARENT,
         )
         view.surfaceReadyListener = { sid ->
-            if (!surfaceReadyFired && sid > 0) {
+            if (sid > 0) {
+                val first = !surfaceReadyFired
                 surfaceReadyFired = true
                 surfaceId = sid
                 view.pushToFront()
-                onSurfaceReady?.invoke(sid)
+                if (first) onSurfaceReady?.invoke(sid)
             }
         }
         surfaceView = view

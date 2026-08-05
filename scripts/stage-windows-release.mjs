@@ -75,6 +75,17 @@ function stageFonts(destination) {
   ]) {
     if (fs.existsSync(candidate)) copyTree(candidate, path.join(destination, 'resources/fonts', path.basename(candidate)));
   }
+  // Match Android/iOS/darwin: strip variable-font tables stb_truetype cannot
+  // read so Material Symbols icons do not render as "?" tofu.
+  try {
+    spawnSync(
+      process.execPath,
+      [path.join(ROOT, 'tools/fonts/slim-fonts.mjs'), fontsDir],
+      { stdio: 'inherit' }
+    );
+  } catch (error) {
+    console.warn('warning: font slimming skipped for Windows prebuilt', error);
+  }
 }
 
 if (doPrebuilt) {

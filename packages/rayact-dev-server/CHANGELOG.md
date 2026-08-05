@@ -13,6 +13,8 @@
 - Fixed native development bootstrap generation for projects that import CSS.
 - Dev-client About metadata now includes project Android/iOS ids and versions
   from `rayact.config.json` / `package.json` for launcher fallbacks.
+- `/rayact/m/` percent-decodes path segments so dynamic routes such as
+  `app/assets/%5Bid%5D.tsx` resolve to the on-disk `[id].tsx` file.
 
 ## 0.0.4
 

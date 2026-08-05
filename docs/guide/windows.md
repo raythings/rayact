@@ -33,7 +33,8 @@ dist\rayact_desktop.exe dist\app.rayactpack
 ```
 
 Ship the entire output directory. Native modules live in `modules/`; fonts and
-icon metadata live in `resources/fonts/`. `@rayact/webview` owns a windowless
+icon metadata live in `resources/fonts/` (Material Symbols are slimmed for
+stb_truetype — variable-font tables are stripped). `@rayact/webview` owns a windowless
 CEF runtime, so WebView-enabled apps include its DLLs, subprocess, resources,
 and locales and are considerably larger than the generic host.
 

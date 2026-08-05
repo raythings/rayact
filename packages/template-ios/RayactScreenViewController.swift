@@ -19,14 +19,24 @@ final class RayactScreenViewController: UIViewController {
 
     func rayactSurfaceView() -> RayactSurfaceView? { surfaceView }
 
+    func syncSurfaceIdFromView() {
+        if let sid = surfaceView?.surfaceId, sid > 0 {
+            surfaceId = sid
+            surfaceReadyFired = true
+        }
+    }
+
     override func loadView() {
         let view = RayactSurfaceView(session: session)
         view.onSurfaceReady = { [weak self] sid in
-            guard let self, !self.surfaceReadyFired, sid > 0 else { return }
+            guard let self, sid > 0 else { return }
+            let first = !self.surfaceReadyFired
             self.surfaceReadyFired = true
             self.surfaceId = sid
             view.pushToFront()
-            self.onSurfaceReady?(sid)
+            if first {
+                self.onSurfaceReady?(sid)
+            }
         }
         surfaceView = view
         self.view = view

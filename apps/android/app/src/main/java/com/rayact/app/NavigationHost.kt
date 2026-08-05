@@ -79,8 +79,13 @@ class NavigationHost @JvmOverloads constructor(
         requestLayout()
         post {
             rootSurfaceView?.recreateNativeSurfaceAfterGraphicsResume()
-            for (fragment in fragmentsBySurfaceId.values) {
+            if ((rootSurfaceView?.surfaceId ?: 0) > 0) {
+                rootSurfaceId = rootSurfaceView!!.surfaceId
+            }
+            for (fragment in pushedFragments.toList()) {
                 fragment.rayactSurfaceView()?.recreateNativeSurfaceAfterGraphicsResume()
+                fragment.syncSurfaceIdFromView()
+                noteSurfaceReady(fragment, fragment.surfaceId)
             }
         }
     }
@@ -98,6 +103,7 @@ class NavigationHost @JvmOverloads constructor(
     }
 
     fun noteSurfaceReady(fragment: RayactScreenFragment, surfaceId: Int) {
+        fragmentsBySurfaceId.entries.removeAll { it.value === fragment }
         if (surfaceId > 0) fragmentsBySurfaceId[surfaceId] = fragment
     }
 

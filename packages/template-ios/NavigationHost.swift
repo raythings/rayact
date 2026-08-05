@@ -70,6 +70,22 @@ final class NavigationHost: UIView {
         }
     }
 
+    /// Mirror Android: after acquireGraphics following a release, recreate every
+    /// Metal surface so font/icon atlases rebake against the live GPU device.
+    func recreateSurfacesAfterGraphicsResume() {
+        setNeedsLayout()
+        layoutIfNeeded()
+        rootSurfaceView?.recreateNativeSurfaceAfterGraphicsResume()
+        if let sid = rootSurfaceView?.surfaceId, sid > 0 {
+            rootSurfaceId = sid
+        }
+        for screen in childScreens {
+            screen.rayactSurfaceView()?.recreateNativeSurfaceAfterGraphicsResume()
+            screen.syncSurfaceIdFromView()
+            noteSurfaceReady(screen, surfaceId: screen.surfaceId)
+        }
+    }
+
     @discardableResult
     func pushScreen() -> RayactScreenViewController {
         let screen = RayactScreenViewController(session: session)
@@ -89,6 +105,7 @@ final class NavigationHost: UIView {
     }
 
     func noteSurfaceReady(_ screen: RayactScreenViewController, surfaceId: Int) {
+        screensBySurfaceId = screensBySurfaceId.filter { $0.value !== screen }
         if surfaceId > 0 {
             screensBySurfaceId[surfaceId] = screen
         }
