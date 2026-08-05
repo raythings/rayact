@@ -4,31 +4,56 @@ import { useIsDarkColorScheme } from './colorSchemeStore.js';
 import { getNativeTheme, lerpTheme, type RayactTheme } from './tokens.js';
 import { useAnimatedValue } from '../anim/useAnimatedValue.js';
 
+/**
+ * Mount-keyed blender so each scheme change animates 0→1 from the previous
+ * palette. Reusing a single useAnimatedValue across changes left progress at 0
+ * (or stalled mid-rAF) and kept title/nav colours on the old scheme until a
+ * navigation remount forced a fresh tree.
+ */
+function ThemeBlend({
+  from,
+  to,
+  onSettled,
+  children,
+}: {
+  from: RayactTheme;
+  to: RayactTheme;
+  onSettled: () => void;
+  children: React.ReactNode;
+}): React.ReactElement {
+  const progress = useAnimatedValue(1, { duration: 350, from: 0, onSettled });
+  const theme = useMemo(() => lerpTheme(from, to, progress), [from, to, progress]);
+  return <ThemeProvider theme={theme}>{children}</ThemeProvider>;
+}
+
 export function RayactThemeProvider({ children }: { children: React.ReactNode }): React.ReactElement {
   const isDark = useIsDarkColorScheme();
   const targetTheme = useMemo(() => getNativeTheme(isDark), [isDark]);
   const stableThemeRef = useRef(targetTheme);
   const [blend, setBlend] = useState<{ from: RayactTheme; to: RayactTheme } | null>(null);
-  const progress = useAnimatedValue(blend ? 1 : 0, { duration: blend ? 350 : 0 });
 
   useEffect(() => {
     if (stableThemeRef.current.dark === targetTheme.dark) {
       stableThemeRef.current = targetTheme;
       return;
     }
-    setBlend({ from: stableThemeRef.current, to: targetTheme });
+    const from = stableThemeRef.current;
+    stableThemeRef.current = targetTheme;
+    setBlend({ from, to: targetTheme });
   }, [targetTheme]);
 
-  useEffect(() => {
-    if (!blend || progress < 1) return;
-    stableThemeRef.current = blend.to;
-    setBlend(null);
-  }, [blend, progress]);
+  if (blend) {
+    return (
+      <ThemeBlend
+        key={blend.to.dark ? 'to-dark' : 'to-light'}
+        from={blend.from}
+        to={blend.to}
+        onSettled={() => setBlend(null)}
+      >
+        {children}
+      </ThemeBlend>
+    );
+  }
 
-  const displayTheme = useMemo(() => {
-    if (!blend) return targetTheme;
-    return lerpTheme(blend.from, blend.to, progress);
-  }, [blend, targetTheme, progress]);
-
-  return <ThemeProvider theme={displayTheme}>{children}</ThemeProvider>;
+  return <ThemeProvider theme={targetTheme}>{children}</ThemeProvider>;
 }

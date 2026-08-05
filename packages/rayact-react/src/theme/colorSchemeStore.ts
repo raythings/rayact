@@ -94,6 +94,12 @@ export function getColorSchemePreferenceSnapshot(): ColorSchemePreference {
 export function setColorSchemePreference(next: ColorSchemePreference): void {
   initColorSchemeStore();
   preference = next;
+  // Apply explicit schemes to the JS snapshot before/with the native call so
+  // React theme consumers don't render a frame against a stale isDark while
+  // waiting for onColorSchemeChange.
+  if (next === 'light' || next === 'dark') {
+    isDark = next === 'dark';
+  }
   const g = globalThis as {
     __rayactSetColorScheme?: (mode: ColorSchemePreference) => void;
   };

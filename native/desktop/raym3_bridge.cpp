@@ -872,20 +872,8 @@ static std::optional<raym3::FontWeight> jsGetFontWeight(JSContext* ctx, JSValue 
     return result;
 }
 
-static raym3::v2::Style preserveLayoutStyle(const raym3::v2::Style& visualStyle,
-                                            const raym3::v2::Style& previousStyle) {
-    raym3::v2::Style result = visualStyle;
-    // Preserve the caller-set background across a partial (style-less) material
-    // update. React sends DIFF payloads, so an AppBar that re-renders because a
-    // child/title changed omits its unchanged style — and `visualStyle` is the
-    // freshly-rebuilt M3 default (backgroundColor = theme.surface). Without this,
-    // an AppBar with a custom backgroundColor (e.g. surfaceVariant) reverted to
-    // surface on every such update, so only the JS-level status-bar spacer kept
-    // the intended colour ("AppBar only shows the background colour on the status
-    // bar"). A real colour change always carries `style`, taking the other branch.
-    result.backgroundColor = previousStyle.backgroundColor;
-    result.backgroundGradient = previousStyle.backgroundGradient;
-    result.backgroundLayers = previousStyle.backgroundLayers;
+static void copyLayoutFields(raym3::v2::Style& result,
+                             const raym3::v2::Style& previousStyle) {
     result.display = previousStyle.display;
     result.flexDirection = previousStyle.flexDirection;
     result.flexWrap = previousStyle.flexWrap;
@@ -917,6 +905,35 @@ static raym3::v2::Style preserveLayoutStyle(const raym3::v2::Style& visualStyle,
     result.margin = previousStyle.margin;
     result.padding = previousStyle.padding;
     result.inset = previousStyle.inset;
+}
+
+static raym3::v2::Style preserveLayoutStyle(const raym3::v2::Style& visualStyle,
+                                            const raym3::v2::Style& previousStyle) {
+    raym3::v2::Style result = visualStyle;
+    // Preserve the caller-set background across a partial (style-less) material
+    // update. React sends DIFF payloads, so an AppBar that re-renders because a
+    // child/title changed omits its unchanged style — and `visualStyle` is the
+    // freshly-rebuilt M3 default (backgroundColor = theme.surface). Without this,
+    // an AppBar with a custom backgroundColor (e.g. surfaceVariant) reverted to
+    // surface on every such update, so only the JS-level status-bar spacer kept
+    // the intended colour ("AppBar only shows the background colour on the status
+    // bar"). A real colour change always carries `style`, taking the other branch.
+    result.backgroundColor = previousStyle.backgroundColor;
+    result.backgroundGradient = previousStyle.backgroundGradient;
+    result.backgroundLayers = previousStyle.backgroundLayers;
+    copyLayoutFields(result, previousStyle);
+    return result;
+}
+
+// Color-scheme refresh: keep React/layout geometry, but take the newly tokenized
+// colours (background, text, state layers). preserveLayoutStyle would freeze the
+// previous scheme's surfaces — nav pills and card chrome then lagged until a
+// screen remount rebuilt the nodes.
+static raym3::v2::Style preserveLayoutTakeVisualStyle(
+    const raym3::v2::Style& visualStyle,
+    const raym3::v2::Style& previousStyle) {
+    raym3::v2::Style result = visualStyle;
+    copyLayoutFields(result, previousStyle);
     return result;
 }
 
@@ -2332,7 +2349,8 @@ void refreshStylesForColorScheme(JSContext* ctx) {
         props.zIndex = nodeIt->second->zIndex;
         props.onPress = nodeIt->second->onPress;
         auto updated = raym3::v2::MaterialComponent(component, props);
-        nodeIt->second->style = preserveLayoutStyle(updated->style, nodeIt->second->style);
+        nodeIt->second->style =
+            preserveLayoutTakeVisualStyle(updated->style, nodeIt->second->style);
         nodeIt->second->stateStyles = updated->stateStyles;
         nodeIt->second->motion = updated->motion;
         if (nodeIt->second->role == raym3::v2::NodeRole::NavItem) {
