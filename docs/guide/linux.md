@@ -1,6 +1,6 @@
 # Linux
 
-Linux is a **preview platform** in 0.0.4: the x64 host prebuilt is built and
+Linux is a **preview platform** in 0.0.5: the x64 host prebuilt is built and
 released, but gets less routine testing than macOS.
 
 ## Using the prebuilt

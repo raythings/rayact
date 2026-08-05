@@ -1,11 +1,21 @@
-# Desktop (macOS & Linux)
+# Desktop (macOS, Windows & Linux)
 
 The desktop host is a prebuilt native binary (`rayact_desktop`) — Metal-backed on
-macOS, Vulkan on Linux — that runs your bundle directly. No Electron, no
-webview: the window is a raylib surface painted by the raym3 renderer.
+macOS and Vulkan on Windows/Linux — that runs your bundle directly. No
+Electron: the window is a raylib surface painted by the raym3 renderer.
 
-Supported hosts in 0.0.4: **macOS arm64** and **Linux x64** (preview). macOS
-x64 is not shipped this release.
+Supported hosts in 0.0.5: **macOS arm64** and **Windows x64**. **Linux x64** is
+preview. macOS x64 and Windows arm64 are not shipped this release.
+
+Windows support is new in 0.0.5. Desktop rendering remains Rayact-native rather
+than Electron, while components that require OS behavior use true platform
+controls: `TextInput` delegates editing and IME to the operating system, and
+`@rayact/webview` uses Apple WebKit or Windows CEF inside Rayact's layout,
+clipping, and z-order.
+
+Desktop prebuilts ship slimmed Material Symbols fonts (variable-font tables
+removed). The host prefers project-local `rayact-assets/runtime/resources/fonts`
+when present so icons stay paired with the app's staged copy.
 
 ## Develop
 
@@ -36,7 +46,7 @@ Output (in `dist/` by default):
 
 | File | Purpose |
 | --- | --- |
-| `rayact_desktop` (or `rayact_release`) | The host binary, copied next to your app |
+| `rayact_desktop` / `.exe` (or `rayact_release`) | The host binary, copied next to your app |
 | `app.rayactpack` | Single-file container: bytecode bundle + CSS + fonts + images ([format](/reference/rayactpack)) |
 | `app.qjsbc` / `bundle.qjsbc` | The QuickJS bytecode bundle (also inside the pack) |
 | `native-modules.json` | Which native modules the host should load |
@@ -49,8 +59,10 @@ Run it:
 cd dist && ./rayact_desktop app.rayactpack
 ```
 
+On Windows, run `rayact_desktop.exe app.rayactpack` from PowerShell or Explorer.
+
 The bytecode compile and packing steps run through the headless `rayact_tool`
-binary (shipped in the host prebuilt since 0.0.4), so CI machines without a
+binary (shipped in the host prebuilt since 0.0.5), so CI machines without a
 display or GPU can produce desktop releases; only *running* the app needs one.
 
 ## Distribution notes
@@ -61,3 +73,6 @@ display or GPU can produce desktop releases; only *running* the app needs one.
   `modules/` and `resources/` relative to its own location.
 - macOS: the binary is not notarized by the build; sign/notarize with your own
   identity before distributing outside your machine.
+- Windows: distribute the complete directory. A selected WebView copies CEF,
+  its subprocess, resources, and locales under `modules/`; those adjacent files
+  are required at runtime.

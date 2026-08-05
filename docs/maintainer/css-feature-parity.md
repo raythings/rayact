@@ -25,7 +25,7 @@ Audited against rayact's CSS engine as of 2026-07-24:
 | Custom CSS / arbitrary values | any class name, not a fixed utility list |
 | `@font-face` | project fonts |
 | Layout | flex box model, wrap, gap, inset, min/max sizing |
-| Paint | background (incl. `linear-gradient`), border, radius, `box-shadow`, `backdrop-filter`, opacity, elevation |
+| Paint | background (multi-layer, `linear-gradient` + `conic-gradient`, `background-clip`/`background-origin`), border, radius, `box-shadow`, `backdrop-filter`, opacity, elevation |
 | Interaction | `state-layer-color`, `ripple-color` (rayact extension) |
 
 ## 2. Gaps — selectors and variants
@@ -75,7 +75,7 @@ Chasing anything in the right-hand column is wasted effort.
 | `float-*`, `clear-*` | no floats in Yoga |
 | `fixed`, `sticky` | RN position is `relative` / `absolute` only |
 | **`space-x/y-*`, `divide-*`** | compile to `> * + *` — the child combinator native doesn't support |
-| `bg-{image,repeat,size,position,attachment}` | no CSS background images (gradients are the exception) |
+| `bg-{image,repeat,size,position,attachment}` | no raster background images (gradients and `background-clip`/`background-origin` are supported) |
 | `list-*`, `content-[]` / `::before` / `::after` | no pseudo-elements or list rendering |
 | `scroll-*`, `snap-*`, `resize-*`, `cursor-*` | web-only interaction models |
 | `mix-blend-*`, `bg-blend-*`, `isolation`, `clip-path`, `mask-*`, `will-change` | no compositing equivalents |
@@ -113,6 +113,33 @@ Ordered by how often Tailwind users hit them.
   separate non-standard properties — Tailwind emits `transform`)
 
 **Paint / effects:**
+- ~~multi-stop gradients~~ **DONE** — the parser dropped explicit stop positions
+  and the painter interpolated only the first and last stop
+  (`DrawRectangleGradientEx`), so `linear-gradient(red, yellow, blue)` rendered
+  red→blue. Stops now carry real positions, normalized per css-images-3, and are
+  interpolated in premultiplied alpha (a fade to `transparent` no longer greys).
+- ~~gradients ignored `border-radius`~~ **DONE** — gradients paint through a mesh
+  that carries the rounded outline (`v2/Gradient.cpp`), the same technique
+  `Ripple.cpp` uses. No scissor or stencil, so it behaves identically on rlvk,
+  rlmt, rlwg and GL — `PushRoundedStencil` degrades to a square scissor on rlwg.
+- ~~`conic-gradient()`~~ **DONE** — `from <angle>` and `at <position>`. Painted as
+  an angular fan; each slice carries its own centre colour so the centre
+  singularity does not bleed one averaged colour outward.
+- ~~`background-clip` / `background-origin` / multi-layer `background`~~ **DONE** —
+  layers paint front-to-back as in CSS, each confined to its box area. This is
+  what enables the standard **gradient border**:
+
+  ```css
+  border: 1px solid transparent;
+  background: conic-gradient(from 0deg, #fff2, #fffc, #fff2) border-box,
+              #ffffff14 padding-box;
+  ```
+
+  Note `border-image-source: <gradient>` is NOT the way to do this: per spec
+  `border-image` ignores `border-radius`, so it squares the corners. `mask-composite`
+  is the other web idiom and is still unsupported.
+- hard stops at non-axis-aligned angles soften over about one mesh cell (~3dp);
+  stop boundaries are pinned exactly for `0deg`/`90deg`/`180deg`/`270deg`
 - `filter` (blur, brightness, …) — only `backdrop-filter` today
 - `outline` / NativeWind's `ring-*`
 - `tint-color` (NativeWind RN extension for images/icons)

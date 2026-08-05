@@ -4,40 +4,130 @@
   "title": "Rayact native module manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "name", "package", "jsEntry", "library", "platforms", "architectures", "abiRange", "engineRange", "artifacts", "linkage", "permissions", "configurationSchema", "officialDevApp"],
+  "required": [
+    "schemaVersion",
+    "name",
+    "package",
+    "jsEntry",
+    "library",
+    "platforms",
+    "architectures",
+    "abiRange",
+    "engineRange",
+    "artifacts",
+    "linkage",
+    "permissions",
+    "configurationSchema",
+    "officialDevApp"
+  ],
   "properties": {
-    "$schema": { "type": "string" },
-    "schemaVersion": { "const": 1 },
-    "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
-    "package": { "type": "string" },
-    "jsEntry": { "type": "string" },
-    "library": { "type": "string" },
-    "platforms": { "type": "array", "uniqueItems": true, "items": { "enum": ["android", "ios", "darwin", "linux", "windows", "web"] } },
-    "architectures": { "type": "array", "uniqueItems": true, "items": { "enum": ["arm64", "x86_64", "wasm32"] } },
-    "abiRange": { "type": "string" },
-    "engineRange": { "type": "string" },
-    "linkage": { "enum": ["dynamic", "static", "framework"] },
-    "permissions": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
-    "configurationSchema": { "type": "object" },
-    "officialDevApp": { "type": "boolean" },
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "package": {
+      "type": "string"
+    },
+    "jsEntry": {
+      "type": "string"
+    },
+    "library": {
+      "type": "string"
+    },
+    "nativeBus": {
+      "type": "boolean",
+      "description": "False for platform-only packages that do not publish a C ABI module."
+    },
+    "platforms": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "android",
+          "ios",
+          "darwin",
+          "linux",
+          "windows",
+          "web"
+        ]
+      }
+    },
+    "architectures": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "arm64",
+          "x86_64",
+          "wasm32"
+        ]
+      }
+    },
+    "abiRange": {
+      "type": "string"
+    },
+    "engineRange": {
+      "type": "string"
+    },
+    "linkage": {
+      "enum": [
+        "dynamic",
+        "static",
+        "framework"
+      ]
+    },
+    "permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "configurationSchema": {
+      "type": "object"
+    },
+    "officialDevApp": {
+      "type": "boolean"
+    },
     "wasmImports": {
       "description": "Host functions this module publishes to WASM workers (ABI 2). Declarative metadata: the module still registers them at runtime via host->register_wasm_imports. signature uses wasm3's grammar, e.g. \"i(iii)\".",
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["namespace", "functions"],
+        "required": [
+          "namespace",
+          "functions"
+        ],
         "properties": {
-          "namespace": { "type": "string", "minLength": 1 },
+          "namespace": {
+            "type": "string",
+            "minLength": 1
+          },
           "functions": {
             "type": "array",
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["name", "signature"],
+              "required": [
+                "name",
+                "signature"
+              ],
               "properties": {
-                "name": { "type": "string", "minLength": 1 },
-                "signature": { "type": "string", "pattern": "^[viIfF]\\([viIfF]*\\)$" }
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "signature": {
+                  "type": "string",
+                  "pattern": "^[viIfF]\\([viIfF]*\\)$"
+                }
               }
             }
           }
@@ -47,40 +137,196 @@
     "nativeSources": {
       "description": "Sources for building this module from a source checkout (the dev app does this so plugin edits rebuild with the app). Repo-root relative. Consumers use the prebuilt artifacts instead.",
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "nativeIncludeDirs": {
       "description": "Extra include directories for nativeSources, repo-root relative.",
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "nativeDefines": {
       "description": "Compile definitions applied to nativeSources when building from source.",
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "webSources": {
-      "description": "Sources compiled into the Emscripten host for this module, repo-relative. Web has no dynamic loading, so web modules are linked statically.",
+      "description": "DEPRECATED. Superseded by `web.sources` + `web.register`, which also names the entry point.",
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
+    },
+    "android": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "type": "string"
+        },
+        "registrationClass": {
+          "type": "string"
+        },
+        "dependencies": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "manifest": {
+          "type": "string"
+        },
+        "sourceDirs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "resourceDirs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ios": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sources": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "registrationType": {
+          "type": "string"
+        },
+        "frameworks": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "resources": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "infoPlist": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
+        }
+      }
     },
     "artifacts": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["platform", "architecture", "path", "sha256"],
+        "required": [
+          "platform",
+          "architecture",
+          "path",
+          "sha256"
+        ],
         "properties": {
-          "platform": { "type": "string" },
-          "architecture": { "type": "string" },
-          "path": { "type": "string" },
-          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "platform": {
+            "type": "string"
+          },
+          "architecture": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
           "kind": {
-            "description": "library (default) is a native binary the loader dlopens or links. wasm is a module-shipped .wasm payload — reserved; nothing consumes it yet.",
-            "enum": ["library", "wasm"]
+            "description": "library (default) is a native binary the loader dlopens or links — including the web side module (platform \"web\", architecture \"wasm32\"), which is a library that happens to be wasm. wasm is a module-shipped auxiliary .wasm payload — reserved; nothing consumes it yet.",
+            "enum": [
+              "library",
+              "wasm"
+            ]
           }
         }
       }
+    },
+    "web": {
+      "description": "Optional web integration owned by this package. Either browser JavaScript (`script`) or native sources built into a dlopen-able side module (`sources`, via scripts/build-web-module-artifacts.sh; the artifact is declared in `artifacts` with platform \"web\").",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "script": {
+          "description": "Browser script, package-relative. Staged next to the app and loaded with a <script> tag; registers platform view factories via window.__rayactModuleRegistrations.",
+          "type": "string"
+        },
+        "sources": {
+          "description": "Native sources compiled into an Emscripten SIDE_MODULE (web/wasm32/rayact_<name>.wasm), repo-relative. The host dlopens the artifact at boot, exactly as desktop dlopens the .dylib. Must include a registration file exporting rayact_module_register (C++ lives in native/ — platform folders hold only platform-language bindings and build output).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "register": {
+          "description": "Deprecated: the side module exports the universal rayact_module_register entry instead, declared by the package's web/ registration file. Ignored.",
+          "type": "string",
+          "deprecated": true
+        },
+        "defines": {
+          "description": "Preprocessor defines for the side-module build only. nativeDefines configures the desktop dylib and is deliberately NOT inherited: RAYACT_SVG_USE_GPU_SHIM, for instance, is correct for every dynamically loaded artifact but wrong for the statically linked iOS build.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [],
+      "anyOf": [
+        {
+          "required": [
+            "script"
+          ]
+        },
+        {
+          "required": [
+            "sources"
+          ]
+        }
+      ]
     }
   }
 }

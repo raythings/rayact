@@ -12,5 +12,5 @@ engine binary with newer module artifacts. For crash recovery, inspect local
 reports with `listCrashReports()` / `exportCrashReport()` before deleting them;
 local mode never uploads.
 
-Keep the preceding signed release set available so operators can restore npm
-dist-tags and GitHub `latest` without deleting immutable artifacts.
+Keep the preceding signed release set available so operators can restore
+GitHub `latest` without deleting immutable artifacts.

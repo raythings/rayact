@@ -45,9 +45,9 @@ your release signing key. Apple archives require the distribution certificate,
 provisioning profile, bundle identifier, and Xcode archive signing configured by
 your team.
 
-Keep `release-set.json`, its detached signature, `SHA256SUMS`, npm tarballs,
+Keep `release-set.json`, its detached signature, `SHA256SUMS`, package tarballs,
 native archives, SBOMs, and attestations together. The GitHub Release is the
-fallback source for the exact npm bits, not a separate rebuild.
+canonical source for those exact locally built bits.
 
 
 ---
@@ -58,8 +58,9 @@ fallback source for the exact npm bits, not a separate rebuild.
 ## Create a new app
 
 ```bash
-npx create-rayact-app@0.0.4 my-app
-cd my-app && npm install
+RELEASE=https://github.com/raythings/rayact/releases/download/v0.0.5
+npx "$RELEASE/create-rayact-app-0.0.5.tgz" my-app --release-url "$RELEASE"
+cd my-app
 npm run dev
 ```
 
@@ -120,12 +121,20 @@ manifest-first prefetch immediately, before WASM initialization. Only the
 bootstrap and entry module gate startup, while bounded asset warming continues
 in the background.
 
-Native bridge: global `devCall(method, data, callback)` is wired to the platform dev-client bridge on Android/iOS.
+Native bridge: global `devCall(method, data, callback)` is wired to the platform
+dev-client bridge on Android/iOS. The About tab prefers native `getAppInfo`
+(bundle id, app version, Rayact runtime) and falls back to values injected from
+`rayact.config.json` / `package.json` when the host bridge is missing.
+
+Custom iOS clients link `@rayact/prebuilt-ios-arm64`'s `RayactEngine.xcframework`,
+which keeps `rayactDevFetch` and `devCall` available for Debug live-connect
+(matching Android's `jni-debug` librayact).
 
 ### Native-module selection
 
-`packages/first-party-modules.json` is the canonical catalog for the official
-Dev App. Its capability/config files are generated from that catalog, and the
+Every package manifest marked `officialDevApp` is collected into
+`packages/first-party-modules.json`; the generated catalog is the canonical
+input for the official Dev App. Its capability/config files are generated from that catalog, and the
 publication workflow invokes every catalog smoke test on an iOS simulator.
 Publication fails if a wrapper/artifact is missing or the recorded on-device
 evidence is stale or incomplete.
@@ -133,7 +142,7 @@ evidence is stale or incomplete.
 `rayact prebuild` follows the project's installed dependency graph and resolves
 packages that declare `package.json#rayact.manifest` and a `rayact.module.json` manifest. Android
 `.so` files, iOS `.xcframework`/`.framework`/`.a` files, and macOS/Linux shared
-libraries are copied into the generated client automatically. Explicit
+libraries and Windows DLL/adjacent runtimes are copied into the generated client automatically. Explicit
 `nativeModules` entries in `rayact.config.json` can add configuration or narrow
 the generated capability manifest.
 
@@ -141,6 +150,17 @@ Web/WASM cannot load mobile or desktop dynamic libraries. A module selected for
 Web must list `web` in `platforms` and provide a JS/WASM implementation already
 linked into the Web host; builds fail when a selected module does not advertise
 Web support.
+
+### Platform-specific bundles and direct launch
+
+One server owns revisioned desktop, Android, iOS, and Web contexts. Each context
+has its own transformed entry, native-module requirements, browser scripts/WASM,
+CSS/assets, and route tree, while connected clients share HMR and diagnostics.
+
+Desktop and dev-app launch commands honor `RAYACT_DEV_SERVER`. On macOS or
+Windows this opens the active project directly; use the server machine's LAN URL
+when the client is on another computer. The TUI's desktop shortcut supplies both
+the argument and environment form for compatibility with older hosts.
 
 ## Release mode
 
@@ -163,6 +183,26 @@ WebGPU/COOP/COEP hosting requirements.
 - WebSocket `/rayact/hmr` — primary transport
 - HTTP `/rayact/status` poll — fallback
 - Bytecode incompatible with React Fast Refresh; dev server serves JS when HMR clients are connected
+
+### Scripted / agent-driven reloads
+
+Saving a file is normally all it takes: the dev server pushes a hot update and
+the connected app applies it in place, keeping app state. Nothing needs to be
+rebuilt, reinstalled, or relaunched for a JS change.
+
+Two HTTP endpoints cover everything else, so scripts and AI agents never need
+the interactive TUI or a raw websocket client:
+
+- `POST /rayact/reload` — rebuild the bundles and full-reload every connected
+  client. This restarts the JS entry (fresh state) without restarting the app
+  process; use it after config/asset changes or when you want a clean re-run.
+- `GET /rayact/status` — `ok: true` + current revision, or `ok: false` with
+  the build error when the last save didn't compile.
+
+If the app hit a build error or an uncaught render error, it shows the red
+error screen; the next save that evaluates cleanly (or a `POST /rayact/reload`)
+clears it and remounts the app — no restart required. Scaffolded projects ship
+an `AGENTS.md` documenting this loop for coding agents working in the repo.
 
 ## Chrome DevTools (CDP)
 
@@ -207,7 +247,7 @@ Gradle project that links `librayact.so`; your machine never compiles C++.
 
 - Android SDK with platform tools (`adb` on PATH).
 - JDK 17+ for Gradle.
-- A device or emulator running **Android 8.0+ (API 26)**. 0.0.4 ships
+- A device or emulator running **Android 8.0+ (API 26)**. 0.0.5 ships
   `arm64-v8a` engine binaries — use a physical device or an arm64 emulator
   image.
 
@@ -252,7 +292,7 @@ Produces a release APK with the bundle compiled to QuickJS bytecode and staged
 into APK assets (`app.qjsbc` + your CSS under `assets/runtime/`).
 
 ::: warning Debug-signed releases
-0.0.4 release APKs are signed with the debug keystore — fine for sideloading
+0.0.5 release APKs are signed with the debug keystore — fine for sideloading
 and testing, not for Play submission. Configure your own `signingConfig` in
 `android/app/build.gradle` before shipping to a store.
 :::
@@ -371,14 +411,20 @@ const reduce = useReducedMotion();   // respect the OS setting
 ---
 # Source: guide/desktop.md
 
-# Desktop (macOS & Linux)
+# Desktop (macOS, Windows & Linux)
 
 The desktop host is a prebuilt native binary (`rayact_desktop`) — Metal-backed on
-macOS, Vulkan on Linux — that runs your bundle directly. No Electron, no
-webview: the window is a raylib surface painted by the raym3 renderer.
+macOS and Vulkan on Windows/Linux — that runs your bundle directly. No
+Electron: the window is a raylib surface painted by the raym3 renderer.
 
-Supported hosts in 0.0.4: **macOS arm64** and **Linux x64** (preview). macOS
-x64 is not shipped this release.
+Supported hosts in 0.0.5: **macOS arm64** and **Windows x64**. **Linux x64** is
+preview. macOS x64 and Windows arm64 are not shipped this release.
+
+Windows support is new in 0.0.5. Desktop rendering remains Rayact-native rather
+than Electron, while components that require OS behavior use true platform
+controls: `TextInput` delegates editing and IME to the operating system, and
+`@rayact/webview` uses Apple WebKit or Windows CEF inside Rayact's layout,
+clipping, and z-order.
 
 ## Develop
 
@@ -409,7 +455,7 @@ Output (in `dist/` by default):
 
 | File | Purpose |
 | --- | --- |
-| `rayact_desktop` (or `rayact_release`) | The host binary, copied next to your app |
+| `rayact_desktop` / `.exe` (or `rayact_release`) | The host binary, copied next to your app |
 | `app.rayactpack` | Single-file container: bytecode bundle + CSS + fonts + images ([format](/reference/rayactpack)) |
 | `app.qjsbc` / `bundle.qjsbc` | The QuickJS bytecode bundle (also inside the pack) |
 | `native-modules.json` | Which native modules the host should load |
@@ -422,8 +468,10 @@ Run it:
 cd dist && ./rayact_desktop app.rayactpack
 ```
 
+On Windows, run `rayact_desktop.exe app.rayactpack` from PowerShell or Explorer.
+
 The bytecode compile and packing steps run through the headless `rayact_tool`
-binary (shipped in the host prebuilt since 0.0.4), so CI machines without a
+binary (shipped in the host prebuilt since 0.0.5), so CI machines without a
 display or GPU can produce desktop releases; only *running* the app needs one.
 
 ## Distribution notes
@@ -434,6 +482,9 @@ display or GPU can produce desktop releases; only *running* the app needs one.
   `modules/` and `resources/` relative to its own location.
 - macOS: the binary is not notarized by the build; sign/notarize with your own
   identity before distributing outside your machine.
+- Windows: distribute the complete directory. A selected WebView copies CEF,
+  its subprocess, resources, and locales under `modules/`; those adjacent files
+  are required at runtime.
 
 
 ---
@@ -443,11 +494,31 @@ display or GPU can produce desktop releases; only *running* the app needs one.
 
 ## Built-in fonts
 
-Every host bundles Roboto (text), Material Symbols (icons) and Noto Color
-Emoji. Full-color emoji render everywhere — including inside `Text` runs —
-via the engine's CBDT/GSUB pipeline. Glyph coverage includes extended
-punctuation; if a codepoint is missing from the baked atlas you'll see `?`
-tofu, which is a signal to load a custom font that covers it.
+**Body text** uses a glyph atlas baked at each integer `font-size` (device-independent
+dp). Glyphs start as ASCII and grow lazily from the strings you measure/draw.
+
+- **Android / Apple / Windows / Linux** — default family is the platform UI font
+  (Roboto on Android, SFNS on Apple, Segoe UI on Windows, sans-serif via
+  fontconfig/common paths on Linux). No Roboto TTF is bundled in native
+  packages or binaries.
+- **Web** — embedded Roboto (no system font file API).
+
+**Full-color emoji** inside `Text` runs on every platform:
+
+- **Android / Apple** — OS emoji rasterizer (Paint/Canvas, CoreText). No Noto
+  Color Emoji TTF is shipped.
+- **Windows** — OS emoji rasterizer (DirectWrite/D2D, Segoe UI Emoji). Segoe has
+  no ISO country-flag glyphs (regional indicators would show as `US`/`JP`), so
+  Windows packages also ship a small `NotoColorEmoji-Flags.ttf` CBDT subset
+  (~0.85 MB) used only for flag clusters.
+- **Linux / web** — CBDT/GSUB pipeline using system or bundled
+  `NotoColorEmoji.ttf` (web embeds it; Linux desktop packages it when the
+  system font is missing).
+
+Apps can still call `loadEmoji()` to register a custom CBDT font on any
+platform (that overrides the OS rasterizer).
+
+Every host also bundles Material Symbols (icons).
 
 ## Icons
 
@@ -484,14 +555,17 @@ Declare fonts in CSS; the engine loads them at runtime from your staged assets:
 - Supported formats: `truetype` / `opentype`.
 - Put the font file under your project (conventionally `rayact-assets/`) so
   release builds stage it with the referenced CSS.
-- Custom fonts are not ASCII-limited: the loader bakes the glyphs your locale
-  needs, extending the atlas on demand.
+- Custom fonts extend their glyph atlas on demand from measured text.
 
 ## Typography properties
 
-`font-family`, `font-size`, `font-weight` (100–900), `font-style`,
-`letter-spacing`, `line-height` and `text-align` are all supported from CSS and
-the `style` prop.
+`font-family`, `font-size`, `font-weight` (100–900), `font-style` (`normal` /
+`italic`), `text-decoration` / `text-decoration-line` (`underline`,
+`line-through`), `letter-spacing`, `line-height` and `text-align` are supported
+from CSS and the `style` prop. React Native’s `underline: true` is also honored.
+
+`font-size` is rasterized at the exact integer dp (no coarse size bucketing), so
+nearby sizes stay sharp instead of stretching a shared atlas.
 
 Default line-height is `max(fontSize + 4, fontSize * 1.43)` — set `lineHeight`
 explicitly when packing text tightly, or glyph ascenders/descenders may clip
@@ -503,34 +577,49 @@ explicitly when packing text tightly, or glyph ascenders/descenders may clip
 
 # Getting started
 
-Scaffold a new app from a Rayact release, run it with hot reload, then build a release for any platform. Rayact renders real React (React 19, `react-reconciler`) through a native C++ engine — QuickJS for JS, the raym3 renderer for layout/paint, and a raylib backend per platform (Metal on macOS/iOS, Vulkan on Android/Linux, WebGPU on the web).
+Scaffold a new app from a Rayact release, run it with hot reload, then build a release for any platform. Rayact renders real React (React 19, `react-reconciler`) through a native C++ engine — QuickJS for JS, the raym3 renderer for layout/paint, and a raylib backend per platform (Metal on macOS/iOS, Vulkan on Android/Linux/Windows, WebGPU on the web).
 
 ## Requirements
 
 - **Node >= 22.** Tested through Node 24; newer majors print a one-line "untested" warning and run normally (silence it with `RAYACT_SILENCE_NODE_WARNING=1`).
 - Per-platform toolchains only when you target them: Xcode + [xcodegen](https://github.com/yonaskolb/XcodeGen) for iOS, the Android SDK/NDK for Android. Desktop and web need nothing beyond Node — the native hosts come prebuilt.
 
+## What's new in 0.0.5
+
+- Windows 10/11 x64 joins Android, iOS, macOS, and Web as a Tier-1 target.
+- `TextInput` uses native OS editing, selection, keyboard, and IME behavior.
+- `@rayact/webview` embeds Android WebView, Apple WebKit, and Windows CEF as
+  native platform views.
+- New first-party modules add sensors, barcode scanning, clipboard, haptics,
+  image picking, deep linking, SVG, storage, security, and crash reporting.
+- Custom iOS/Android debug clients keep live-connect / HMR bindings; the
+  launcher About page uses your project package/bundle id and versions as
+  fallbacks. Light/dark theme changes refresh material UI in place.
+
 ## Create an app
 
-Rayact is distributed as **GitHub release tarballs**, not through the npm registry. The scaffolder vendors the release into your project so plain `npm install` never needs the registry for `@rayact/*` packages:
+Rayact packages are installed from the signed GitHub Release:
 
 ```sh
-npx https://github.com/raythings/rayact/releases/download/v0.0.4/create-rayact-app-0.0.4.tgz \
-  my-app --release-url https://github.com/raythings/rayact/releases/download/v0.0.4
+RELEASE=https://github.com/raythings/rayact/releases/download/v0.0.5
+npx "$RELEASE/create-rayact-app-0.0.5.tgz" my-app --release-url "$RELEASE"
 cd my-app
 ```
 
-Already downloaded the release (or working from a local checkout's `release1/`)? Point at the directory instead:
+The scaffolder downloads the release package set, verifies package checksums,
+vendors it into the project, and runs `npm install` without consulting the npm
+registry for Rayact packages. For an offline install, download all release
+assets and point the scaffolder at that directory:
 
 ```sh
-npx ./create-rayact-app-0.0.4.tgz my-app --release-dir ~/Downloads/rayact-v0.0.4
+npx ./create-rayact-app-0.0.5.tgz my-app --release-dir ~/Downloads/rayact-v0.0.5
 ```
 
 What this produces:
 
 - `src/App.tsx` + `src/app.css` — the app entry and a starter stylesheet wired through `className`.
 - `rayact.config.json` — app name, key, dev-server ports ([config reference](/reference/config)).
-- `vendor/rayact_pkgs/*.tgz` — the vendored release packages, referenced by `file:` dependencies **and** an `overrides` block so every transitive `@rayact/*` pin resolves locally, never from the npm registry. Commit `vendor/` — it is your project's toolchain.
+- `vendor/rayact_pkgs/*.tgz` — present in release-dir/release-url mode; the vendored packages use `file:` dependencies and an `overrides` block.
 - `--vendor-prebuilts` (optional) also vendors the native engine tarballs for fully-offline installs; otherwise `rayact prebuild` streams the right prebuilt from the GitHub release on first use.
 
 ## Develop
@@ -558,7 +647,8 @@ npm run build:web       # static web bundle + WASM host
 
 Release builds compile the bundle to QuickJS bytecode with the headless `rayact_tool` and pack native desktop releases into a single [`.rayactpack`](/reference/rayactpack) container. Each platform's guide covers running and shipping the output:
 
-- [Desktop (macOS & Linux)](/guide/desktop)
+- [Desktop (macOS, Windows & Linux)](/guide/desktop)
+- [Windows specifics](/guide/windows)
 - [Android](/guide/android)
 - [iOS](/guide/ios)
 - [Web](/guide/web)
@@ -592,22 +682,22 @@ upgrade will never brick an existing project. Set
 
 ## Distribution model
 
-Rayact ships as **GitHub release assets** — the `@rayact/*` packages are not on
-the npm registry. Each release (`https://github.com/raythings/rayact/releases`)
-attaches:
+Stable Rayact packages are distributed in exact lockstep through the matching
+GitHub release (`https://github.com/raythings/rayact/releases`), which attaches:
 
-- the npm tarball for every publishable package (`rayact-*.tgz`),
+- an npm-compatible tarball for every packaged workspace (`rayact-*.tgz`),
 - the prebuilt native engines (`rayact-prebuilt-*.tgz`),
 - the web hosts (`rayact-web-<version>.tar.gz`, plus a
   `rayact-web-pthreads-<version>.tar.gz` variant for WASM workers),
-- the dev apps (`rayact-dev-app.apk`, simulator zip, unsigned device ipa),
+- the dev apps (Android APK, iOS simulator zip, unsigned device IPA, and Windows x64 zip),
 - `release-set.json` (canonical index with per-file SHA-256) and a
   `release-set.sig` ed25519 signature, plus `SHA256SUMS`.
 
-New projects vendor the JS tarballs via `create-rayact-app --release-dir` /
+Rayact packages are not published to the npm registry. Projects vendor the
+GitHub Release tarballs through `create-rayact-app --release-dir` or
 `--release-url` — see [Getting started](/guide/getting-started). The generated
 `package.json` uses `file:` dependencies plus an `overrides` block so npm never
-consults the public registry for lockstep packages.
+consults the public registry for Rayact packages.
 
 ## Required packages {#required-packages}
 
@@ -629,7 +719,7 @@ are missing.
 
 Two binaries matter on the host machine: **`rayact_desktop`** (the runtime that
 opens a window) and **`rayact_tool`** (the headless build toolchain that
-compiles bytecode and writes `.rayactpack` containers — new in 0.0.4). Both ship
+compiles bytecode and writes `.rayactpack` containers — new in 0.0.5). Both ship
 inside the host prebuilt package.
 
 The CLI resolves them in this order:
@@ -642,7 +732,7 @@ The CLI resolves them in this order:
 
 If none are present, `rayact prebuild` downloads the matching prebuilt from the
 GitHub release for your engine version and verifies it against `SHA256SUMS`.
-Pre-0.0.4 prebuilt caches have no `rayact_tool`; builds fall back to
+Pre-0.0.5 prebuilt caches have no `rayact_tool`; builds fall back to
 `rayact_desktop --compile` with a deprecation warning.
 
 ```sh
@@ -651,6 +741,10 @@ rayact prebuild   # ensure the host binaries are available (resolve or download)
 
 Android and iOS engine libraries are pulled per-project when you target those
 platforms (kept off desktop installs — the Android engine alone is ~80 MB).
+
+Supported desktop prebuilt keys are `darwin-arm64`, `windows-x64`, and the
+preview `linux-x64`. Selecting `@rayact/webview` on Windows additionally stages
+its package-owned CEF runtime beside the module DLL.
 
 ## Environment overrides
 
@@ -716,6 +810,13 @@ npm run ios:dev-client    # rayact build --debug --ios --install
 with `xcodegen generate` after editing it), the Swift host sources, and
 `Frameworks/RayactEngine.xcframework` copied from the prebuilt. Commit it.
 
+The prebuilt XCFramework includes `rayactDevFetch` and `devCall` so Debug
+clients can bootstrap against `rayact dev`, run module-HMR, and fill the
+launcher About page (bundle id / native version / Rayact runtime). When native
+`getAppInfo` is unavailable, About falls back to `ios.bundleId` /
+`android.packageName` from `rayact.config.json` and the project /
+`@rayact/*` package versions.
+
 ## Release build
 
 ```sh
@@ -749,7 +850,7 @@ unsigned sideload builds.
 
 # Linux
 
-Linux is a **preview platform** in 0.0.4: the x64 host prebuilt is built and
+Linux is a **preview platform** in 0.0.5: the x64 host prebuilt is built and
 released, but gets less routine testing than macOS.
 
 ## Using the prebuilt
@@ -792,6 +893,12 @@ platform — if it builds there, it ships.
 on Rayact — same mental model and hooks as React Native, with Rayact-native
 navigators for stacks and tabs (screen transitions render through the native
 animation system).
+
+> [!TIP]
+> New apps should usually start with [file-based routing](/guide/router)
+> (`@rayact/router`) — an Expo-Router-style `app/` directory with zero wiring.
+> `@rayact/navigation` remains the underlying engine and stays fully supported
+> for hand-wired navigators.
 
 ```sh
 # already vendored in scaffolded projects; add the dependency like any other @rayact package
@@ -882,6 +989,154 @@ only for custom behavior (dismissing sheets, guarding unsaved state).
 
 Navigators re-layout on window resize and device rotation — scenes are not
 fixed-size. No configuration needed.
+
+
+---
+# Source: guide/router.md
+
+# File-based routing
+
+`@rayact/router` gives Rayact apps Expo-Router-style file-based routing: files in
+an `app/` directory become screens automatically — no route table, no manual
+wiring. Under the hood it layers on [`@rayact/navigation`](/guide/navigation)
+(react-navigation state) and `@react-navigation/core`'s URL machinery.
+
+## Zero wiring
+
+Create an `app/` directory and start the dev server. When `rayact.config.json`
+declares no `entry` and `app/` contains at least one route file, the entry
+defaults to `@rayact/router/entry`:
+
+```
+[rayact] Using file-based routing from app/ (@rayact/router/entry)
+```
+
+You can also make it explicit (recommended for new projects — the
+`default-router` template does this):
+
+```json
+{ "entry": "@rayact/router/entry" }
+```
+
+Scaffold a ready-made project:
+
+```bash
+npx create-rayact-app my-app --template default-router
+```
+
+Install the packages in an existing project: `@rayact/router`,
+`@rayact/navigation`, and `@rayact/linking` (all lockstep-versioned with
+`rayact`).
+
+## Route conventions
+
+| File | Route |
+|------|-------|
+| `app/index.tsx` | `/` |
+| `app/about.tsx` | `/about` |
+| `app/profile/[id].tsx` | `/profile/:id` — `useLocalSearchParams().id` |
+| `app/blog/[...slug].tsx` | `/blog/*` — `slug` is an array of segments |
+| `app/(tabs)/home.tsx` | `/home` — `(group)` adds no URL segment |
+| `app/_layout.tsx` | Layout wrapping the directory's routes |
+| `app/+not-found.tsx` | Fallback for unmatched paths |
+
+Every route file default-exports a component. Directories nest: a directory
+with its own `_layout.tsx` becomes a nested navigator; without one, its files
+hoist into the nearest ancestor layout (`profile/[id]` in the example above).
+
+Matching precedence at each level: `index` → static → `[dynamic]` →
+`[...catch-all]` → `+not-found`.
+
+## Layouts
+
+`_layout.tsx` decides how a directory's routes render:
+
+```tsx
+// app/_layout.tsx
+import { Stack } from '@rayact/router';
+
+export default function RootLayout() {
+  return (
+    <Stack screenOptions={{ animation: 'slide_from_right' }}>
+      <Stack.Screen name="index" options={{ title: 'Home' }} />
+    </Stack>
+  );
+}
+```
+
+- **`<Stack>`** — Rayact's stack navigator; screens are registered from the
+  file tree, and `<Stack.Screen name options initialParams>` elements only
+  override options. All [Rayact stack screen options](/guide/navigation)
+  (`animation`, `lazy`, `cacheByName`, `detachInactiveScreens`, …) apply.
+- **`<Tabs>`** — bottom-tabs navigator, same pattern.
+- **`<Slot />`** — renders the focused child route with no navigator chrome.
+- No `_layout.tsx` — the directory gets an implicit default `<Stack />`.
+
+A layout can export `unstable_settings = { initialRouteName: '...' }` to pick
+the initial screen.
+
+## Navigating
+
+```tsx
+import { Link, Redirect, router, useRouter } from '@rayact/router';
+
+<Link href="/profile/42">Open profile</Link>
+<Link href={{ pathname: '/profile/[id]', params: { id: 42, tab: 'posts' } }} push>
+  Push profile
+</Link>
+<Redirect href="/login" />
+
+router.navigate('/profile/42'); // re-use an existing screen with the same name
+router.push('/profile/42');     // always push a new screen
+router.replace('/login');
+router.back();
+router.setParams({ tab: 'likes' });
+```
+
+`Link` renders string children as a pressable `<Text>`; other children are
+wrapped in a `<Pressable>`. `style`/`className` pass through.
+
+## Hooks
+
+| Hook | Returns |
+|------|---------|
+| `useRouter()` | the imperative `router` object |
+| `useLocalSearchParams()` | path + query params of this screen |
+| `useGlobalSearchParams()` | params of the focused route, updates everywhere |
+| `usePathname()` | current path, e.g. `/profile/42` |
+| `useSegments()` | route segments incl. groups, e.g. `['(tabs)', 'profile', '[id]']` |
+| `useFocusEffect(cb)` | run an effect when the screen gains focus |
+
+## Deep linking and web URLs
+
+- **Native** — the initial URL and `url` events come from
+  [`@rayact/linking`](/guide/navigation#deep-links); custom schemes map
+  `myapp://profile/42` → `/profile/42`. Declare schemes under
+  `linking.schemes` in `rayact.config.json`.
+- **Web** — the address bar stays in sync: navigation pushes/replaces browser
+  history, back/forward buttons navigate, and loading `/profile/42` directly
+  restores that screen. Desktop/mobile QuickJS hosts never touch
+  `window.history`.
+
+Unmatched deep links land on the nearest `+not-found` route (a built-in
+fallback screen is used if the app doesn't define one).
+
+## Configuration
+
+```json
+{
+  "router": { "appDir": "app" }
+}
+```
+
+`router.appDir` relocates the routes directory. An explicit `entry` in
+`rayact.config.json` always wins over auto-detection.
+
+## Dev loop
+
+- Editing a route file hot-reloads it in place (React Fast Refresh).
+- Adding or deleting a route file regenerates the route manifest and triggers
+  a full reload automatically.
 
 
 ---
@@ -1165,6 +1420,68 @@ pthreads variant.
 
 
 ---
+# Source: guide/windows.md
+
+# Windows
+
+Windows support is new in Rayact 0.0.5. Windows 10/11 x64 is a Tier-1 desktop
+target with a prebuilt Vulkan host, headless `rayact_tool`, native-module DLLs,
+and a portable dev app. Applications do not need Visual Studio or a C++
+toolchain.
+
+## Develop
+
+```powershell
+npm run dev
+# In the TUI press d, or in another terminal:
+npm run desktop
+```
+
+The desktop shortcut passes the active server through both `--dev-server` and
+`RAYACT_DEV_SERVER`, so the native window opens the project directly. To launch
+the official client instead:
+
+```powershell
+$env:RAYACT_DEV_SERVER = "http://127.0.0.1:8081"
+rayact dev-app --windows
+```
+
+When the server runs on another computer, use that computer's LAN address, not
+Windows loopback.
+
+## Build and distribute
+
+```powershell
+rayact build --release --desktop --out dist
+dist\rayact_desktop.exe dist\app.rayactpack
+```
+
+Ship the entire output directory. Native modules live in `modules/`; fonts and
+icon metadata live in `resources/fonts/`. `@rayact/webview` owns a windowless
+CEF runtime, so WebView-enabled apps include its DLLs, subprocess, resources,
+and locales and are considerably larger than the generic host.
+
+## Rendering and native controls
+
+- Vulkan requires a working vendor driver and Vulkan loader.
+- `TextInput` is a true Windows-native editor with OS caret, selection,
+  keyboard input, focus, and IME composition inside Rayact's Material field.
+- `WebView` is rendered off-screen by CEF into the Rayact composition at normal
+  z-order. It supports transparency, rounded/scroll clipping, Rayact overlays,
+  forwarded pointer/keyboard input, and live resize.
+- First-party Windows modules include clipboard, linking, image picking, SVG,
+  MMKV, Secure Store, Crash Reporter, and WebView. Their DLLs autolink from
+  package manifests rather than being compiled into the generic host.
+- Layout, responsive CSS, hit testing, platform views, and swapchain dimensions
+  update continuously while resizing.
+
+## Supported architecture
+
+0.0.5 ships Windows x64 only. The arm64 cross-build remains an engineering gate
+but is not a supported release artifact.
+
+
+---
 # Source: guide/workers.md
 
 # Workers & WASM components
@@ -1255,27 +1572,38 @@ for production animation today.
 
 # Rayact
 
-Rayact is a cross-platform React renderer with a native raylib + QuickJS backend. You write React (with `react-navigation`, CSS, Material components) and it renders natively on desktop, Android, iOS, and the web — no DOM, no platform WebView.
+Rayact is a cross-platform React renderer with a native raylib + QuickJS
+backend. You write React with navigation, CSS, and Material components, and it
+renders directly on desktop, Android, iOS, and the web. Native apps do not run
+inside a WebView; WebView is an explicit native component when an app needs one.
 
 ## Highlights
 
 - **Real React 19** via a custom `react-reconciler` host config.
 - **Native rendering** through raylib / raym3 (Flexbox via Yoga, Material 3, CSS).
+- **New Windows x64 support** with a prebuilt Vulkan host and portable dev app.
+- **OS-native components** including real text editing/IME and native WebView
+  engines: Android WebView, Apple WebKit, and Windows CEF.
+- **First-party native modules** for sensors, barcode scanning, clipboard,
+  haptics, image picking, linking, SVG, storage, security, crash reporting, and
+  WebView.
 - **QuickJS** engine with ahead-of-time **bytecode** (`.qjsbc`) for instant release boot.
 - **One container** — release apps ship a single [`.rayactpack`](/reference/rayactpack) carrying bytecode + CSS + icons + images.
 - **Prebuilt native hosts** delivered per platform, so app builds need no C++ toolchain.
 
 ## Quick start
 
-Rayact ships as GitHub release tarballs (not on the npm registry) — the
-scaffolder vendors everything your project needs:
+Install the lockstep 0.0.5 packages from GitHub Releases:
 
 ```sh
-npx https://github.com/raythings/rayact/releases/download/v0.0.4/create-rayact-app-0.0.4.tgz \
-  my-app --release-url https://github.com/raythings/rayact/releases/download/v0.0.4
+RELEASE=https://github.com/raythings/rayact/releases/download/v0.0.5
+npx "$RELEASE/create-rayact-app-0.0.5.tgz" my-app --release-url "$RELEASE"
 cd my-app
 npm run dev            # dev server + TUI + QR
 ```
+
+The scaffolder verifies and vendors the release tarballs before running the
+project-local npm install.
 
 Then build and run:
 
@@ -1286,9 +1614,10 @@ rayact build --release # release bundle (bytecode + container)
 ```
 
 See [Getting started](/guide/getting-started), [Installation](/guide/install),
-the platform guides ([desktop](/guide/desktop), [Android](/guide/android),
+the platform guides ([desktop](/guide/desktop), [Windows](/guide/windows), [Android](/guide/android),
 [iOS](/guide/ios), [web](/guide/web)), and the
-[components reference](/reference/components).
+[components reference](/reference/components). See [Native modules](/native-modules)
+for the complete autolinked module set.
 
 
 ---
@@ -1346,16 +1675,29 @@ optimization, not basic Android/Web enablement.
 Native modules are optional native capabilities shipped as separate packages —
 each carries its own prebuilt binaries per platform and autolinks into your
 app. The engine's module bus loads them at startup (`dlopen` on desktop,
-packaged libraries on Android/iOS, built-in stubs on web).
+packaged libraries on Android/iOS, browser scripts on web — see
+[Web modules](#web-modules)).
 
 ## Installing
 
-Add them like any other `@rayact/*` package (vendored from the release set in
-a scaffolded project):
+Add them like any other `@rayact/*` package vendored from the release set.
+Rayact 0.0.5 includes:
 
-- `@rayact/mmkv` — fast persistent key-value storage (MMKV)
+- `@rayact/sensors` — accelerometer, gyroscope, magnetometer, device motion,
+  and orientation streams
+- `@rayact/barcode-scanner` — native barcode and QR scanning
+- `@rayact/clipboard` — platform clipboard reads and writes
+- `@rayact/haptics` — selection, impact, and notification feedback
+- `@rayact/image-picker` — platform image-library picker
+- `@rayact/linking` — external URLs, initial URLs, and deep-link events
+- `@rayact/webview` — Android WebView, Apple WebKit, Windows CEF, and Web
+- `@rayact/svg` — retained native SVG rendering
+- `@rayact/mmkv` — fast persistent key-value storage
 - `@rayact/secure-store` — Keychain/Keystore-backed secret storage
 - `@rayact/crash-reporter` — native crash capture with local reports
+
+The official dev app includes all supported first-party capabilities, while
+production apps autolink only the packages they declare.
 
 Each package owns a `rayact.module.json` manifest; autolinking follows your
 declared dependencies and verifies artifact SHA-256s. It never scans arbitrary
@@ -1393,8 +1735,9 @@ KV.has('theme');      // boolean
 KV.delete('theme');
 ```
 
-Synchronous, string-valued, persisted in the app's data directory. Backed by
-`localStorage` on web.
+Synchronous, string-valued, persisted in the app's data directory — and on web
+in `localStorage`, one entry per key under `rayact_kv:`. Values are obfuscated
+at rest on web (see [Storage on web](#storage-on-web)); keys are not.
 
 ### `@rayact/mmkv`
 
@@ -1437,6 +1780,443 @@ Study `@rayact/mmkv` in the repo as the reference implementation — the JS side
 talks to native through the byte-oriented `sys_invoke` bus, which also reaches
 WASM workers.
 
+## Web modules
+
+Web is not an exception to the rule that implementations live in their package.
+A module contributes browser code by declaring a `web` block in
+`rayact.module.json`:
+
+```json
+{
+  "platforms": ["android", "ios", "web"],
+  "architectures": ["arm64", "x86_64", "wasm32"],
+  "web": { "script": "web/register.js" }
+}
+```
+
+`rayact build --web` stages the script's **whole directory** to
+`modules/<name>/` next to the app and injects a `<script>` tag ahead of the
+engine; `rayact dev --web` serves the same directory at the same relative URLs.
+Because the directory travels as a unit, a module that instantiates a `.wasm`,
+spawns a worker, or fetches a JSON table simply refers to its own files
+relatively and they resolve identically in both flows:
+
+```js
+// packages/<pkg>/web/register.js — sibling files come along
+const wasm = await WebAssembly.instantiateStreaming(fetch(new URL('./codec.wasm', import.meta.url)));
+```
+
+(Note this is the only channel that works for such files: `app-assets.json`
+stages into the wasm filesystem, which a browser `fetch()` and a `<script>` tag
+cannot read.)
+
+### Writing a web script
+
+The script is plain JavaScript loaded with a `<script>` tag — no bundler, no
+imports. It must **never touch `Module`**: it may load before or after the wasm
+host, so registration goes through a queue the host drains.
+
+```js
+window.__rayactModuleRegistrations = window.__rayactModuleRegistrations || [];
+window.__rayactModuleRegistrations.push(function (registry) {
+  // Platform module: reached from JS via platformCall(name, method, payload, cb).
+  // Handlers are synchronous — the caller reads the result on the same tick, so
+  // anything genuinely async reports through a poll method (see @rayact/sensors).
+  registry.registerModule('mymodule', function (method, payload) {
+    if (method === 'ping') return 'pong';          // wrapped as { ok: true, value }
+    return { ok: false, error: 'unknown: ' + method };
+  });
+
+  // Platform view: a real DOM element composited inside the rayact scene, the
+  // peer of registerViewFactory on Android/iOS and register_view_factory on
+  // desktop. The host owns geometry, clipping, hit-testing and overlays.
+  registry.registerViewFactory('mykind', function (context) {
+    const el = document.createElement('div');
+    return {
+      el,
+      applyProps(props) { /* patch object; null means "prop removed" */ },
+      dispose() {}
+    };
+  });
+});
+```
+
+Views created before a factory registers are **parked and replayed** when it
+arrives, so script load order can never break a module.
+
+### What ships today
+
+| Module | Browser API |
+|---|---|
+| `@rayact/webview` | sandboxed `<iframe>` + `postMessage` bridge |
+| `@rayact/sensors` | `DeviceMotionEvent` / `DeviceOrientationEvent` |
+| `@rayact/haptics` | Vibration API (no-op where unsupported) |
+| `@rayact/linking` | `window.open`, scheme validation |
+| `@rayact/svg` | none — renders natively (see below) |
+| `@rayact/mmkv` | none — native side module over `localStorage` (see below) |
+
+A module with no browser equivalent — `@rayact/secure-store`, because the browser
+has no protected keystore — simply omits the `web` block and is rejected at build
+time for a web target, rather than failing at runtime.
+
+### Storage on web
+
+Both the built-in `KV` and `@rayact/mmkv` persist to `localStorage`, one entry
+per key (`rayact_kv:<key>` and `rayact_mmkv:<instance>:<key>`). Writes go through
+immediately rather than being batched: a tab can close without any teardown hook
+running, so a deferred write is a lost write.
+
+**Key names are stored in the clear; values are obfuscated.** You can see what an
+app stores in DevTools › Application › Local Storage, but not read the values out
+of a browser profile directly. The obfuscation is a keystream XOR seeded from a
+per-install random secret and a per-value nonce — deliberately not real
+cryptography, because the only vetted primitive available (`SubtleCrypto`) is
+Promise-only and both APIs are synchronous on every platform. It raises the cost
+of casually reading stored data; it stops nothing that can run code on the page,
+which can just call the same API. For genuine secrets use `@rayact/secure-store`
+— the same advice as on Android and iOS, where MMKV is likewise unencrypted at
+rest.
+
+### Native web modules (`web.sources`)
+
+A module whose implementation is native code does **not** ship browser JS. It ships
+a **wasm side module** the host `dlopen`s at boot — the exact peer of the desktop
+`.dylib` and the Android `.so`:
+
+```json
+{
+  "web": {
+    "sources": [
+      "packages/rayact-svg/native/web_register.cpp",
+      "packages/rayact-svg/native/svg_plugin.cpp",
+      "third_party/raysvg/src/raysvg.cpp"
+    ],
+    "defines": ["RAYACT_SVG_USE_GPU_SHIM=1"]
+  },
+  "artifacts": [
+    { "platform": "web", "architecture": "wasm32", "path": "web/wasm32/rayact_svg.wasm", "sha256": "…" }
+  ]
+}
+```
+
+`scripts/build-web-module-artifacts.sh` compiles the sources with
+`-sSIDE_MODULE=1` into `web/wasm32/rayact_<name>.wasm` — an arch subfolder holding
+only build output, mirroring `desktop/darwin-<arch>/`. The registration file is C++
+and therefore lives in `native/` with the rest of the implementation (platform
+folders hold platform-language bindings and artifacts, never C++); it exports the
+same `rayact_module_register` entry every dlopen'd rayact module exports on every
+platform. At runtime the page stages the
+artifact's bytes into MEMFS and the host `dlopen`s it during boot, before the app
+mounts (`native/web/web_plugin_loader.cpp`).
+
+`@rayact/svg` takes this path. `<Svg>` is a render node, not a DOM element: it
+lays out, clips, scrolls and z-orders like any other node, costs no composited
+layer per instance, and produces identical pixels on every platform — none of
+which a DOM `<svg>` inside a platform view could do. Its side module carries its
+**own copy of raysvg** (the host contains none) and reaches the renderer through
+the module ABI's GPU shim, so `web.defines` turns the shim on — `nativeDefines`
+belongs to the desktop dylib and is deliberately not inherited.
+
+Rules the side-module build lives by, each learned the hard way:
+
+- **Runtime imports come from the host.** A side module carries no libc/libc++ of
+  its own; everything it needs is the curated export surface in
+  `native/web/module_sdk_exports.txt`. Engine symbols are deliberately absent —
+  modules reach the engine only through the `RayactHost` function-pointer table.
+  The build script verifies every artifact against the **built host**, because a
+  listed symbol emcc dropped anyway (nothing referenced `__assert_fail`) passes
+  the paper check and fails in the browser.
+- **`-DNDEBUG` is load-bearing**, not a preference: `assert()` pulls in
+  `__assert_fail`, which the host cannot be made to export.
+- The host builds at **`-O2`** — wasm-opt at `-O3` strips the `__stack_pointer`
+  export a MAIN_MODULE must provide, and every dlopen then fails with a
+  `LinkError` about an "imported mutable global".
+
+Because the loader is ordinary `dlopen`, this path is **open to third-party
+modules**: ship the `.wasm` artifact in the package, no host relink involved. A
+module that only needs browser APIs still ships `web.script` instead — it is
+smaller, debuggable in devtools, and needs no emsdk.
+
+> Use a **platform view** when you need the platform's *behaviour* (a real browser
+> engine, native text editing and IME). Use **native code** when you only need
+> *pixels*.
+
+
+---
+# Source: platform-views-flutter-parity.md
+
+# Platform views: how Flutter does it, and what rayact must copy
+
+> Historical design study. The gaps and port plan below describe the pre-ABI-3
+> implementation that motivated the work. Rayact 0.0.5 now ships platform-view
+> factories, full prop forwarding, Android/iOS/macOS native view hosts, native
+> text input, input arbitration, and ABI-5 off-screen frame delivery. Windows
+> WebView uses CEF OSR and paints into normal renderer z-order. The Flutter
+> analysis remains useful background, but the “current state” tables are not a
+> 0.0.5 status report.
+
+Source read: `flutter/engine/src/flutter/shell/platform/{android,darwin/ios}` at the local
+checkout, plus `flutter/packages` (framework) and the `webview_flutter` federated plugin.
+
+The webview plugin itself is thin — it is a `WKWebView` / `android.webkit.WebView` handed to a
+platform-view factory. All the hard parts live in the engine's platform-view embedder. That is what
+this document is about.
+
+## 1. Flutter has four composition modes, not one
+
+| # | Mode | Platform | Pixels reach the scene by | Native view in hierarchy? |
+|---|------|----------|---------------------------|---------------------------|
+| 1 | Virtual Display | Android (legacy) | view renders into a `VirtualDisplay` → `SurfaceTexture` → GL texture | **no** (lives on a fake display) |
+| 2 | Texture Layer Hybrid Composition (TLHC) | Android (**default**) | `PlatformViewWrapper.draw()` redirects the subtree into an `ImageReader`/`SurfaceProducer` Surface → engine imports as texture | **yes** |
+| 3 | Hybrid Composition (HC) | Android (opt-in) | native view drawn by Android; Flutter content above it goes into `FlutterImageView` overlays | yes |
+| 4 | Hybrid Composition++ (HCPP) | Android 14+, `PlatformViewsController2` | native view drawn by Android; one overlay `SurfaceControl` z-ordered above with a crop rect — zero copy | yes |
+| 5 | — | **iOS** | there is no texture mode. Always real `UIView`s + Flutter overlay layers | yes |
+
+**Rayact at the time of this study used mode 1**, the one Flutter was trying to delete
+([`raym3_bridge.cpp:2758`](https://github.com/raythings/rayact/blob/main/native/desktop/raym3_bridge.cpp), Android `VirtualDisplay` +
+`AHardwareBuffer` import).
+
+The single most important finding: **iOS has no texture path at all.** `WKWebView` renders
+out-of-process; `-drawViewHierarchyInRect:afterScreenUpdates:` is slow and frequently blank for it.
+Flutter never attempts to capture it. So rayact's "ExternalView is a texture" abstraction cannot be
+extended to iOS webviews — iOS needs real-view composition with layer slicing.
+
+## 2. The four invariants Flutter maintains
+
+### (a) The native view is a real view in the real hierarchy
+
+Even in the texture mode. `PlatformViewWrapper` is a `FrameLayout` added to `FlutterView`,
+positioned at the platform view's logical rect via `layoutParams.leftMargin/topMargin`
+(`PlatformViewWrapper.setLayoutParams`). It is a real view *specifically so that* IME, focus,
+accessibility, text selection, autofill and hover work with zero extra code:
+
+> Since the view is in the Android view hierarchy, keyboard and accessibility interactions behave
+> normally. — `PlatformViewWrapper` class doc
+
+This is what buys "full support for interacting with the webview". Virtual-display mode had to
+re-implement all of it (`SingleViewPresentation`, `SingleViewWindowManager`,
+`SingleViewFakeWindowViewGroup`, `WindowManagerHandler` — ~600 lines of shim) and still got it
+wrong.
+
+### (b) Pixels are redirected, not captured
+
+`PlatformViewWrapper.draw(Canvas)` overrides drawing for the whole subtree:
+
+```java
+final Canvas targetCanvas = renderTarget.getSurface().lockHardwareCanvas();
+targetCanvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
+super.draw(targetCanvas);          // subtree renders into the offscreen Surface
+renderTarget.scheduleFrame();
+targetSurface.unlockCanvasAndPost(targetCanvas);
+```
+
+Plus `onDescendantInvalidated` / `invalidateChildInParent` → `invalidate()`, so any child repaint
+(a WebView scroll, a caret blink) drives a new frame into the render target. The render target is
+`ImageReaderPlatformViewRenderTarget` (HardwareBuffer) or `SurfaceProducerPlatformViewRenderTarget`.
+
+rayact already has the consumer half of this (`externalView: imported frame buffer for node N` in
+logcat). What it lacks is the *producer* being a real view in the hierarchy.
+
+### (c) Input arbitration belongs to the framework, and the original event is replayed
+
+This is the part rayact has no equivalent of. The round trip:
+
+1. The wrapper swallows everything the child would get:
+   ```java
+   @Override public boolean onInterceptTouchEvent(MotionEvent event) { return true; }
+   ```
+2. `onTouchEvent` forwards to `AndroidTouchProcessor.onTouchEvent(event, screenMatrix)`, which
+   registers the event in a global `MotionEventTracker` and ships the pointer packet to Dart with
+   `motionEventId = event.embedderId`.
+3. Dart hit-tests. `PlatformViewRenderBox.hitTest` honours `PlatformViewHitTestBehavior`
+   (opaque/translucent/transparent) and a gesture arena (`_UiKitViewGestureRecognizer`,
+   `_PlatformViewGestureRecognizer`). A Flutter `ListView` above the webview can therefore win the
+   gesture and the webview never sees it.
+4. If the platform view wins, Dart calls `AndroidViewController.dispatchPointerEvent` →
+   `PlatformViewsChannel.onTouch`, and Java **pops the original event back out of the tracker** and
+   replays it:
+   ```java
+   MotionEvent trackedEvent = motionEventTracker.pop(motionEventId);
+   translateMotionEvent(trackedEvent, pointerCoords);   // framework's coords
+   view.dispatchTouchEvent(event);
+   ```
+   Replaying the original object (not a synthesized one) is what keeps velocity tracking,
+   multi-touch pinch/zoom and long-press timing correct inside the WebView.
+
+On iOS the same arbitration is done with gesture recognizers instead of a channel round trip:
+`FlutterTouchInterceptingView` installs a `FlutterDelayingGestureRecognizer` that *withholds* the
+touch sequence from the embedded view until the framework calls `acceptGesture` (fail the
+recognizer → events flow up the responder chain to the `WKWebView`) or `rejectGesture` (block them
+forever). Meanwhile `ForwardingGestureRecognizer` keeps feeding the events to the `FlutterView` so
+the framework can still see them during the delay.
+
+### (d) Transform/clip/opacity are applied to the native view, not to a texture
+
+- Android: `FlutterMutatorView.dispatchDraw` does `canvas.concat(getPlatformViewMatrix())`;
+  `draw()` applies `mutatorsStack.getFinalClippingPaths()` via `canvas.clipPath` and opacity via a
+  hardware layer paint.
+- iOS: `CATransform3D` from the layer-tree matrix (`GetCATransform3DFromDlMatrix`), plus
+  `FlutterClippingMaskView` (a mask view that paints alpha=1 inside the clip and 0 outside), pooled
+  in `FlutterClippingMaskViewPool`. Rounded rects, paths and rounded superellipses all supported;
+  backdrop filters become `UIVisualEffectView`s.
+
+## 3. How iOS composites — the model rayact must adopt there
+
+`FlutterPlatformViewsController` (1228 lines) does, per frame:
+
+1. **Preroll**: `prerollCompositeEmbeddedView:` records the view id and its `EmbeddedViewParams`
+   (matrix + mutator stack) in `_compositionOrder`.
+2. **Slice**: everything the layer tree paints *after* platform view N is recorded into
+   `_slices[viewId]`, a `DisplayListEmbedderViewSlice` — a separate display list with its own dirty
+   `DlRegion`.
+3. **Overlay allocation**: for each non-empty slice, take a layer from `OverlayLayerPool`
+   (`GetNextLayer` / `CreateLayer` / `RecycleLayers` / `RemoveUnusedLayers`). Each layer is a real
+   `UIView` backed by its own `IOSSurface`+`Surface` (its own Metal drawable), sized to the slice's
+   dirty rect.
+4. **Render**: `slices[viewId]->render_into(overlayCanvas)`, each overlay encoded as its own
+   `SurfaceFrame` with `frame_boundary = false, present_with_transaction = true`; the background
+   (main) frame is submitted last.
+5. **Reorder**: `bringLayersIntoView:` walks `compositionOrder` and `addSubview:`s
+   [platform view root, its overlay, next platform view root, its overlay, …] onto `FlutterView`,
+   inside a single `CATransaction`. `addSubview` on an existing subview reorders it, so z-order is
+   just the insertion order.
+
+So "Flutter content above a webview" is literally a second Metal-backed `UIView` sitting on top of
+the `WKWebView`, containing only the ops that came after it in paint order.
+
+## 4. Port plan for rayact
+
+### Historical state before the 0.0.5 implementation
+
+| | Android | iOS |
+|---|---|---|
+| node + layout + texture import | works (`RayactPlatformViews.kt`, `jni_bridge.cpp`) | **absent** — `RayactPlatformRegistry.makeView` is never called |
+| props to the native view | **broken** — `kForwarded[] = {"value","placeholder","inputType","secure"}` at [`raym3_bridge.cpp:2869`](https://github.com/raythings/rayact/blob/main/native/desktop/raym3_bridge.cpp) drops every webview prop | absent |
+| input | single synthesized tap (`node->onPress` → `g_externalViewInputCb(id, 1 /*up*/)`) | absent |
+| transform/clip/opacity | not applied to the producer | absent |
+
+### P0 — prop channel (unblocks the existing WebView on Android)
+
+Replace the 4-key whitelist with pass-through of all string/number/bool props, and forward props at
+create time too (`JS_createExternalView` currently reads only `style` and `zIndex`). Order matters:
+`sourceUri`/`sourceHtml` must arrive after `javaScriptEnabled`/`baseUrl`.
+
+### P1 — Android: virtual display → TLHC
+
+Add a `RayactPlatformViewWrapper extends FrameLayout` holding the real view, added to the rayact
+`SurfaceView`'s parent at the node's dp rect, with `draw()` redirecting into the `ImageReader`
+Surface rayact already imports, and `onDescendantInvalidated → invalidate()` driving frames. Delete
+the `VirtualDisplay` path. Wins IME, a11y, focus, text selection for free — the same reasons Flutter
+switched.
+
+### P2 — input round trip
+
+- `onInterceptTouchEvent → true` on the wrapper; feed events into rayact's touch queue tagged with a
+  tracker id (mirror `MotionEventTracker`).
+- raym3 hit-testing decides whether the external-view node wins (needs a `hitTestBehavior` prop and
+  a way for a rayact `ScrollView` above/around it to claim the sequence).
+- If it wins, pop the original `MotionEvent` and `view.dispatchTouchEvent(it)`.
+- Replaces the current tap-only `onPress` path, which cannot express scroll, pinch or long-press.
+
+### P3 — iOS: real-view + overlay composition
+
+There is no shortcut here; it is the layer-slicing work.
+
+1. `RayactPlatformViewsHost` (Swift) owning: view factories, per-node `UIView` roots, a clipping
+   mask view pool, and a touch-intercepting view with a delaying gesture recognizer.
+2. raym3 must learn to **slice its paint list** at external-view nodes: everything painted after
+   node N goes to overlay slice N. rayact paints in tree order
+   (see `project_rayact_paint_order_absolute`), so the slice boundary is well defined.
+3. An overlay layer pool: N extra `CAMetalLayer`s sized to each slice's dirty rect, presented with
+   the background frame in one `CATransaction`. **Owned by the iOS host, not by `rlmt`** — see §5.
+4. Mutators: `CATransform3D` + mask views, per `FlutterClippingMaskView`. Applied by the host to the
+   native view; `rlmt` is never told about them.
+
+`@rayact/webview`'s iOS half (`WKWebView` + `WKScriptMessageHandler` for `postMessage`,
+`WKUserScript` for `injectedJavaScriptBeforeContentLoaded`) is trivial once 1–4 exist. The module
+manifest already claims `ios` + `WebKit`; nothing implements it.
+
+### Cost note
+
+P0 is hours. P1+P2 is the Android rewrite Flutter did over ~2 years, but rayact's version is much
+smaller because it has one view kind to support. P3 is the big one: it changes rayact's renderer
+from "one surface" to "N surfaces interleaved with native views", which touches raym3's paint loop,
+the iOS host, and (only for the zero-copy variant) `rlmt`.
+
+## 5. Layer ownership: keep `rlmt` a generic raylib backend
+
+The slicing belongs in raym3, and `rlmt` must not learn about external views, nodes or webviews.
+Flutter draws the same line: `flow/embedded_views.h` (`ExternalViewEmbedder`, `EmbedderViewSlice`)
+is renderer-agnostic, the Metal-specific piece is only `IOSSurface`/`Surface` — a generic "here is a
+drawable, encode into it" abstraction — and every platform-view decision lives in
+`FlutterPlatformViewsController`, which is embedder code, not backend code.
+
+raym3's per-frame job:
+
+```
+paint tree in order
+  ├─ commands before external view N  → slice 0        (background surface)
+  ├─ external view N                  → host: set geometry + mutators, reserve overlay
+  └─ commands after external view N   → slice 1        (overlay surface)
+host: order native views + overlay layers, commit one transaction
+```
+
+Four corrections to the naive "just call begin/end surface in the paint loop" version:
+
+**(1) `rlmt` is single-surface today.** `RLMT.layer` / `RLMT.drawable` are globals
+(`rlmt.mm:137`, `rlmt.mm:1078`), `rlmtSetMetalLayer` takes one layer, `rlmtResizeSurface` resizes
+one. Multi-surface is a genuine addition — but a *generic* one (multi-window raylib apps want it
+too), so it stays backend-appropriate:
+
+```c
+unsigned int rlmtRegisterSurface(void *caMetalLayer, int widthPx, int heightPx);
+void         rlmtUnregisterSurface(unsigned int surfaceId);
+void         rlmtSetTargetSurface(unsigned int surfaceId);   // 0 = main
+void         rlmtPresentSurfaces(void);                      // encode-all, then present together
+```
+
+`rlvk` can mirror this later for Android HCPP. Nothing in it mentions nodes, views or rayact.
+
+**(2) The missing primitive is deferred presentation, not surface binding.** Every overlay drawable
+and the background must be presented in **one** `CATransaction`, or native-view geometry and rayact
+pixels disagree for a frame. Flutter encodes overlays with
+`{.frame_boundary = false, .present_with_transaction = true}` and submits the background frame
+**last**. `rlmt`'s `rlEndFrame` currently does `presentDrawable + commit` immediately; it needs an
+"encode now, present on `rlmtPresentSurfaces`" mode.
+
+**(3) You cannot size an overlay while streaming the paint loop.** The overlay should cover the
+slice's dirty region, which is unknown until the slice is recorded. Flutter therefore runs
+preroll → record slices → allocate/resize layers → render slices. Options for rayact:
+
+- *v0 (recommended first)*: full-screen overlays with a scissor rect. No dirty-region tracking, one
+  extra full-screen RGBA drawable per external view. Fine at 1–2 webviews.
+- *v1*: record each slice into a command buffer with bounds tracking, then size the layer. Keep the
+  rect in the API from day one so this is not a signature change.
+
+**(4) Z-order does not come from GPU pass order.** The passes are independent surfaces; stacking is
+decided entirely by the host's view hierarchy insertion order (Flutter: `addSubview` walking
+`compositionOrder`, where re-adding an existing subview reorders it). raym3's output is an *ordered
+list*; it must not assume "drawn later = on top".
+
+### Bootstrap path that touches `rlmt` not at all
+
+`rlmt` already implements the rlgl FBO entry points (`rlLoadFramebuffer`, `rlFramebufferAttach`,
+`rlEnableFramebuffer` — `rlmt.mm:2281`), so `BeginTextureMode`/`EndTextureMode` work. A first
+version can render each overlay slice into a `RenderTexture2D` and let the iOS host put that
+texture's `IOSurface` into a `CALayer.contents`. Costs one blit per overlay per frame, proves the
+slicing + host ordering + input path, and can be swapped for the zero-copy multi-surface API later
+without changing raym3.
+
+### One place rayact is easier than Flutter
+
+Flutter's raster thread is separate from the platform thread, so platform views force
+`PostPrerollResult::kSkipAndRetryFrame` and raster/platform **thread merging**
+(`postPrerollActionWithThreadMerger`), and `performSubmit` asserts main thread. rayact on iOS
+already renders on the main thread from a `CADisplayLink`
+(`apps/ios/RayactRenderScheduler.swift`), so view geometry updates, the `CATransaction` and the
+draw passes are all naturally on the same thread. That entire class of Flutter complexity does not
+apply.
+
 
 ---
 # Source: recovery.md
@@ -1455,8 +2235,8 @@ engine binary with newer module artifacts. For crash recovery, inspect local
 reports with `listCrashReports()` / `exportCrashReport()` before deleting them;
 local mode never uploads.
 
-Keep the preceding signed release set available so operators can restore npm
-dist-tags and GitHub `latest` without deleting immutable artifacts.
+Keep the preceding signed release set available so operators can restore
+GitHub `latest` without deleting immutable artifacts.
 
 
 ---
@@ -1647,7 +2427,7 @@ The `rayact` command (from `@rayact/cli`) drives development, building, and runn
 | `rayact start` | Launch the packaged desktop app from the last build (`--dev` to attach to the dev server) |
 | `rayact serve <dir>` | Static server with the COOP/COEP headers web builds require (`--web-port <n>`) |
 | `rayact verify <file>` | Inspect a `.rayactpack` / validate a build artifact |
-| `rayact dev-app` | Install + launch the prebuilt dev app on a device/simulator, wired to the dev server |
+| `rayact dev-app` | Install + launch the prebuilt dev app on Android, iOS, or Windows, wired to the dev server |
 | `rayact prebuild` | Ensure the native host + plugin shells are present |
 | `rayact doctor` | Check toolchains, prebuilt integrity/ABI, module support, signing, and Web hosting requirements |
 | `rayact migrate` | Rewrite legacy config/import forms to the current ones |
@@ -1667,6 +2447,7 @@ The `rayact` command (from `@rayact/cli`) drives development, building, and runn
 | `--desktop-bin <path>` | Use a specific `rayact_desktop` host (runtime) |
 | `--tool-bin <path>` | Use a specific `rayact_tool` binary (bytecode compile + pack); env `RAYACT_TOOL_BIN` |
 | `--web-port <n>` | Port for `rayact serve` / the web dev proxy |
+| `--windows` | `dev-app`: download/extract/launch the Windows x64 app |
 
 ## Dev loop {#dev-loop}
 
@@ -1690,6 +2471,9 @@ rayact dev-app --android
 
 # Point the app at a specific dev-server URL (also honoured by `dev-app`):
 RAYACT_DEV_SERVER=http://127.0.0.1:8081 rayact dev-app --android
+
+# Windows: download the portable client and open this project directly:
+RAYACT_DEV_SERVER=http://127.0.0.1:8081 rayact dev-app --windows
 
 # Raw equivalent: launch the installed dev-client already connected, skipping
 # the manual "Connect to dev server" screen. The Android app reads the
@@ -1805,6 +2589,40 @@ the content container or on rows inside your own nested containers, they can
 be compressed to fit instead of scrolling. Opt back out with
 `flexGrow: 1, flexShrink: 0` on the offending row.
 
+### FlatList (alias `List`)
+
+Windowed, variable-height list for large data sets. It renders only the visible
+range plus an overscan window, updates measured row heights incrementally, and
+recycles mounted cells by default.
+
+```tsx
+import { FlatList, type FlatListHandle } from 'rayact/react';
+
+const ref = React.useRef<FlatListHandle>(null);
+<FlatList
+  ref={ref}
+  data={messages}
+  keyExtractor={(message) => message.id}
+  renderItem={({ item, index }) => <MessageRow message={item} index={index} />}
+  estimatedItemSize={64}
+  onEndReached={loadMore}
+/>
+
+ref.current?.scrollToIndex({ index: 25, viewOffset: 8 });
+```
+
+Important props include `windowSize`, `initialNumToRender`, `inverted`,
+`maintainVisibleContentPosition`, `ListHeaderComponent`,
+`ListFooterComponent`, `ListEmptyComponent`, `onEndReached`, `extraData`, and
+`getItemType`. `FlatListHandle` exposes `scrollToOffset`, `scrollToIndex`, and
+`scrollToEnd`.
+
+Recycled rows retain their component identity, so row-local state can survive
+when a cell is reassigned to another item. Derive row state from props, reset it
+when the item key changes, or set `recycleItems={false}` to use legacy
+unmount/remount windowing. Return stable row categories from `getItemType` when
+different items render different component trees.
+
 ### Pressable
 
 A `View` that tracks pressed state and exposes it to `style` and `children`
@@ -1871,19 +2689,34 @@ Wraps content that should slide out of the IME's way. Uses native keyboard
 insets and animates with the CSS transition engine. Pair with `useKeyboard()`
 for custom behavior.
 
+### KeyboardStickyView
+
+Absolutely positions its children immediately above the animated software
+keyboard. Set `offset` to add space between the keyboard and the sticky
+content. It uses `useKeyboard()` internally and fills the horizontal bounds of
+its positioned parent.
+
 ### ExternalView / NativeTextInput
 
-Platform-view escape hatches: `ExternalView` composites an OS-native view
-(Android `AHardwareBuffer` texture path) into the render tree;
-`NativeTextInput` is the raw platform text field the higher-level `TextInput`
-drives. Reach for these only when the built-ins can't express something.
+Platform-view escape hatches: `ExternalView` composites an OS-native view into
+the render tree; `NativeTextInput` is the raw platform text field the
+higher-level `TextInput` drives. These are real platform controls, not
+JavaScript-painted imitations. Android uses its native view/texture path,
+Apple hosts native Cocoa/UIKit controls, and Windows integrates native controls
+and off-screen platform-view frames into Vulkan composition.
+
+The same platform-view system powers `@rayact/webview`: Android WebView, Apple
+WebKit, and Windows CEF handle browser behavior while Rayact owns layout,
+clipping, z-order, and input arbitration. See [Native modules](/native-modules).
+Reach for the escape hatches only when the built-ins cannot express something.
 
 ## Forms & input
 
 ### TextInput (alias `Input`; Material-styled `TextField`)
 
-React-native `TextInput` prop surface mapped onto the native editing engine
-(Flutter-style editing model — real caret, selection, IME):
+React Native's `TextInput` prop surface mapped onto the operating system's
+editing control: real caret, selection, focus, keyboard behavior, and IME
+composition, wrapped in Rayact's cross-platform layout and Material styling:
 
 | RN prop | Behaviour |
 | --- | --- |
@@ -1900,6 +2733,13 @@ React-native `TextInput` prop surface mapped onto the native editing engine
 | `caretHidden`, `selectionColor` | Caret/selection appearance |
 
 Refs receive a `TextInputHandle`: `focus()`, `blur()`, `node`.
+
+Sizing follows react-native: a `TextInput` has no intrinsic width and fills its
+parent, exactly like any auto-width child under the default
+`align-items: stretch`. It only falls back to an intrinsic width when stretching
+cannot apply — inside a `flex-direction: row` parent, or under a parent that sets
+`align-items` to something other than `stretch` — so a field in a row is still
+visible. Give it `flex: 1` (or an explicit `width`) to control it there.
 
 `TextField` is the Material 3 outlined/filled field (label, supporting text,
 leading/trailing icons) over the same engine.
@@ -2117,6 +2957,10 @@ Add the `$schema` key for editor autocomplete:
 | `ios` | object |  |
 | `ios.projectDir` | string |  |
 | `ios.bundleId` | string | iOS product bundle identifier used by prebuild, install, and launch. |
+| `linking` | object | Application deep-link schemes generated into native platform projects. |
+| `linking.schemes` | string[] |  |
+| `router` | object | File-based routing (@rayact/router) options. |
+| `router.appDir` | string | Routes directory relative to the project root. Default "app". |
 | `nativeModules` | any[] | Installed native modules autolink automatically. Entries may disable or configure a package. Legacy name/lib/jsPackage objects are accepted with a warning through 0.0.x. |
 | `transform` | object | Per-build-mode transforms. Defaults: dev=false, debug=false, release=true. |
 | `transform.minify` | object |  |
@@ -2200,6 +3044,32 @@ fill `none`/`forwards`/`backwards`/`both`).
 Unknown properties are ignored with a parse warning — they never abort
 rendering.
 
+## Paint order and `position: absolute`
+
+Rayact paints a node's children in **tree order** — the order they appear in
+JSX — stable-sorted by an explicit `zIndex`. Unlike the web, `position:
+absolute` does **not** promote a child above its in-flow siblings: an absolute
+child written before a sibling paints *underneath* it.
+
+`z-index` is not readable from CSS or from `style`; only the top-level
+`zIndex={n}` prop reaches the node.
+
+```jsx
+// The actions layer paints UNDER the content, because it comes first.
+<View style={{ overflow: 'hidden' }}>
+  <View style={{ position: 'absolute', right: 0 }}>{actions}</View>
+  <View>{content}</View>
+</View>
+```
+
+The trap: painting underneath is not the same as being hidden. If the content
+on top is translucent — a glass card, a tint overlay, anything with an alpha
+background — whatever is parked behind it shows straight through, which reads
+as the absolute layer being "on top". A layer that must be invisible at rest
+has to actually leave the visible area: park it outside the parent's bounds and
+let `overflow: hidden` clip it (translating it in with a `SharedValue` keeps a
+drag-driven reveal smooth), or animate its `opacity` to 0.
+
 ## Values
 
 - **Lengths**: `px` (density-independent), `rem`; **`calc()`** over them.
@@ -2241,7 +3111,9 @@ native CSS animation on the same node property.
 
 # Packages and platforms
 
-Rayact uses one private npm workspace root with independently publishable packages. All first-party packages in the `0.0.4` release set use exact lockstep versions.
+Rayact uses one private workspace root with independently packaged modules. All
+first-party packages in the `0.0.5` GitHub release set use exact lockstep
+versions.
 
 ## Consumer and framework
 
@@ -2264,8 +3136,22 @@ There is no public `@rayact/core` or `@rayact/quickjs` package.
 | `@rayact/mmkv` | Optional high-performance storage module |
 | `@rayact/secure-store` | Optional Keychain/Keystore storage module |
 | `@rayact/crash-reporter` | Local-first, consent-gated crash reporting |
+| `@rayact/barcode-scanner` | Native barcode/QR scanning |
+| `@rayact/clipboard` | Clipboard reads, writes, and availability |
+| `@rayact/haptics` | Selection, impact, and notification feedback |
+| `@rayact/image-picker` | Platform image-library picker |
+| `@rayact/linking` | External URLs, initial URLs, and deep-link events |
+| `@rayact/sensors` | Motion and device sensor streams |
+| `@rayact/svg` | Retained native SVG nodes |
+| `@rayact/webview` | Android WebView, Apple WebKit, Web, and Windows CEF platform view |
+| `@rayact/router` | File-based routes, layouts, dynamic segments, and typed hrefs |
 
-Each native module owns `rayact.module.json`, native source, platform artifacts, declarations, tests, README, and changelog. Installing only one optional module does not add the other modules' binaries or registrations.
+Each native module owns `rayact.module.json`, native source, platform artifacts,
+declarations, tests, README, and changelog. `@rayact/webview` and the native
+`TextInput` path use real operating-system components; they are integrated into
+Rayact layout and composition rather than reimplemented in JavaScript.
+Installing only one optional module does not add the other modules' binaries or
+registrations.
 
 ## Tooling and distribution
 
@@ -2275,7 +3161,7 @@ Each native module owns `rayact.module.json`, native source, platform artifacts,
 | `@rayact/dev-server` | Bundler, HMR, discovery, debugger, and inspector transport |
 | `@rayact/prebuild` | Manifest-based autolinking and native project generation |
 | `@rayact/dev-client` / `@rayact/devtools` | Client launcher and developer tools |
-| `create-rayact-app` | npm-first project scaffolder |
+| `create-rayact-app` | GitHub-release project scaffolder |
 | `@rayact/template-*` | Thin Android and iOS templates |
 | `@rayact/prebuilt-*` | Platform-specific engine artifacts |
 | `@rayact/dev-app` | Publishable official client that explicitly includes supported first-party modules |
@@ -2284,12 +3170,12 @@ Each native module owns `rayact.module.json`, native source, platform artifacts,
 
 | Target | Artifact | Status |
 | --- | --- | --- |
-| Android arm64 / x86_64 | engine `.so` packages | Tier 1 |
+| Android arm64 | engine `.so` package | Tier 1 |
 | iOS device arm64; simulator arm64/x86_64 | engine XCFramework | Tier 1 |
 | macOS Apple Silicon (arm64) | desktop host package | Tier 1 |
 | Web wasm32 | WebGPU host package | Tier 1 |
 | Linux x64 | desktop host package | Preview |
-| Windows | source build | Graduation target |
+| Windows x64 | Vulkan desktop host package + portable dev app | Tier 1 |
 
 Every prebuilt carries an engine/version/ABI manifest. The CLI rejects incompatible native ABI or platform selections before linking.
 
@@ -2354,15 +3240,32 @@ call `engineLoadPackFile`.
 
 # Release process
 
-The `0.0.4` train uses three channels:
+All platform artifacts are built and tested on a maintainer macOS machine.
+GitHub Actions never rebuilds release artifacts.
 
-- Canary builds are commit-specific prereleases published under `canary`.
-- Preview publishes final immutable tarballs under `preview` and attaches those exact bits to GitHub Releases.
-- Stable verifies the signed release set, then moves `stable` and `latest` to the already-tested versions without rebuilding.
+```sh
+export RAYACT_RELEASE_PRIVATE_KEY="$(cat ~/.rayact-release/rayact-release-key.pem)"
+npm run release:prepare
+RAYACT_CONFIRM_PUBLISH_RELEASE=v0.0.5 npm run release:publish
+```
 
-`release-set.json` records every package, artifact hash, engine ABI, Tier-1 platform, and dev-app version. `rayact` is ordered last for publication. npm provenance and GitHub artifact attestations are emitted by the release workflow.
+`release:prepare` builds Android and Linux through local Docker, macOS and iOS
+with local Xcode, Web with Emscripten, and Windows through the local cross
+toolchain. It runs the package, dev-app, reproducibility, consumer, and platform
+gates before producing the signed `release1/` directory.
 
-Rollback downloads and verifies the prior release set, restores npm `stable`/`latest`, and points GitHub `latest` at that release. Artifacts are never unpublished.
+`release:publish` verifies the release set again, creates the GitHub tag and
+release, and uploads the local artifacts. A lightweight GitHub workflow
+downloads those exact assets, verifies signatures and checksums, and emits
+attestations without compiling anything.
+
+Optional npm publication code remains available for a future distribution
+change, but its workflow step only runs when the repository variable
+`RAYACT_PUBLISH_NPM` is explicitly set to `true`. It is disabled by default and
+is not part of the supported release process.
+
+Rollback only moves GitHub's `latest` marker to a preceding immutable signed
+release. Artifacts are never deleted or rebuilt.
 
 
 ---
@@ -2371,15 +3274,13 @@ Rollback downloads and verifies the prior release set, restores npm `stable`/`la
 # Release rollback
 
 Rayact does not unpublish a bad release. Choose the preceding verified
-`release-set.json`, verify its signature and checksums, then restore every npm
-package’s `stable` and `latest` dist-tags to the versions recorded in that set.
-Move GitHub’s `latest` marker to the matching immutable release.
+`release-set.json`, verify its signature and checksums, then move GitHub’s
+`latest` marker to the matching immutable release.
 
-The release workflow’s `rollback` channel performs these dist-tag changes from
-an existing GitHub Release. It does not rebuild or replace tarballs. Confirm that
-the root `rayact` package and all first-party packages now resolve to one release
-train, then run the external create → prebuild → release smoke path against a
-clean registry/cache.
+The release workflow’s `rollback` channel performs that marker change from an
+existing GitHub Release. It does not rebuild or replace tarballs. Confirm the
+release set is internally lockstep, then run the external create → prebuild →
+release smoke path against a clean cache.
 
 Applications recover by restoring the previous lockfile, running `npm install`,
 regenerating native projects, and rebuilding with the previous signed bits.
@@ -2390,7 +3291,7 @@ regenerating native projects, and rebuilding with the previous signed bits.
 
 # Security
 
-Install only published `0.0.4` tarballs represented in the signed release set.
+Install only published `0.0.5` tarballs represented in the signed release set.
 Rayact verifies native artifact SHA-256 values during prebuild; release CI also
 checks provenance, SBOM/license policy, vulnerabilities, and reproducibility.
 Never bypass an ABI or checksum failure.
@@ -2418,7 +3319,7 @@ imports; they are scheduled for removal in `0.2.0`.
 
 Bug reports should include a minimal project, platform, Rayact version, Node
 version, toolchain versions, and reproducible commands. Tier 1 is Android, iOS,
-Apple Silicon macOS, and Web. Intel macOS and Rosetta are not supported targets. Linux x64 is preview; Windows is a graduation target. Safari and
+Apple Silicon macOS, Windows x64, and Web. Intel macOS, Rosetta, and Windows arm64 are not supported targets. Linux x64 is preview. Safari and
 Firefox WebGPU remain experimental until they pass the same release matrix.
 
 Security reports follow the private process and response targets in the
@@ -2428,7 +3329,7 @@ Security reports follow the private process and response targets in the
 ---
 # Source: toolchains.md
 
-# Supported toolchains for 0.0.4
+# Supported toolchains for 0.0.5
 
 - Node.js 22 and 24 LTS.
 - Android API 26 minimum, compile/target API 36, AGP 8.9.1, JDK 17, NDK 27.3.13750724.
@@ -2468,13 +3369,14 @@ command. Redact local paths, credentials, source, and user data.
 
 # Upgrades and migration
 
-Commit the application before upgrading. Install the desired Rayact version and
-run:
+Commit the application before upgrading. Download the desired signed GitHub
+Release, replace the complete `vendor/rayact_pkgs` package set, and update every
+Rayact `file:` dependency and override to the matching tarball filename. Keep
+the entire package set on one version, then run:
 
 ```sh
-npm install rayact@0.0.4
-npx rayact migrate
 npm install
+npx rayact migrate
 npx rayact prebuild --force
 ```
 

@@ -17,7 +17,7 @@ The `rayact` command (from `@rayact/cli`) drives development, building, and runn
 | `rayact start` | Launch the packaged desktop app from the last build (`--dev` to attach to the dev server) |
 | `rayact serve <dir>` | Static server with the COOP/COEP headers web builds require (`--web-port <n>`) |
 | `rayact verify <file>` | Inspect a `.rayactpack` / validate a build artifact |
-| `rayact dev-app` | Install + launch the prebuilt dev app on a device/simulator, wired to the dev server |
+| `rayact dev-app` | Install + launch the prebuilt dev app on Android, iOS, or Windows, wired to the dev server |
 | `rayact prebuild` | Ensure the native host + plugin shells are present |
 | `rayact doctor` | Check toolchains, prebuilt integrity/ABI, module support, signing, and Web hosting requirements |
 | `rayact migrate` | Rewrite legacy config/import forms to the current ones |
@@ -37,6 +37,7 @@ The `rayact` command (from `@rayact/cli`) drives development, building, and runn
 | `--desktop-bin <path>` | Use a specific `rayact_desktop` host (runtime) |
 | `--tool-bin <path>` | Use a specific `rayact_tool` binary (bytecode compile + pack); env `RAYACT_TOOL_BIN` |
 | `--web-port <n>` | Port for `rayact serve` / the web dev proxy |
+| `--windows` | `dev-app`: download/extract/launch the Windows x64 app |
 
 ## Dev loop {#dev-loop}
 
@@ -60,6 +61,9 @@ rayact dev-app --android
 
 # Point the app at a specific dev-server URL (also honoured by `dev-app`):
 RAYACT_DEV_SERVER=http://127.0.0.1:8081 rayact dev-app --android
+
+# Windows: download the portable client and open this project directly:
+RAYACT_DEV_SERVER=http://127.0.0.1:8081 rayact dev-app --windows
 
 # Raw equivalent: launch the installed dev-client already connected, skipping
 # the manual "Connect to dev server" screen. The Android app reads the

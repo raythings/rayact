@@ -15,7 +15,7 @@ const SITE = 'https://rayact.dev';
 
 const SKIP = new Set(['.vitepress', 'scripts', 'public', 'node_modules', 'maintainer']);
 // Internal maintainer notes kept in the repo but excluded from the public site.
-const SKIP_FILES = new Set();
+const SKIP_FILES = new Set(['windows-test-harness.md']);
 
 function walk(dir, acc = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -44,7 +44,12 @@ function meta(md) {
   const paragraph = md
     .split(/\n\s*\n/)
     .map((block) => block.trim())
-    .find((block) => block && !block.startsWith('#') && !block.startsWith('<!--') && !block.startsWith('>')) ?? '';
+    .find((block) => block
+      && !block.startsWith('#')
+      && !block.startsWith('<!--')
+      && !block.startsWith('>')
+      && !block.startsWith('```')
+      && !block.startsWith('- ')) ?? '';
   const flat = paragraph.replace(/\s+/g, ' ');
   const summary = flat.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? flat;
   return { title, summary: summary.replace(/[`*]/g, '') };

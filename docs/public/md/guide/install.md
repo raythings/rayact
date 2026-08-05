@@ -15,22 +15,22 @@ upgrade will never brick an existing project. Set
 
 ## Distribution model
 
-Rayact ships as **GitHub release assets** — the `@rayact/*` packages are not on
-the npm registry. Each release (`https://github.com/raythings/rayact/releases`)
-attaches:
+Stable Rayact packages are distributed in exact lockstep through the matching
+GitHub release (`https://github.com/raythings/rayact/releases`), which attaches:
 
-- the npm tarball for every publishable package (`rayact-*.tgz`),
+- an npm-compatible tarball for every packaged workspace (`rayact-*.tgz`),
 - the prebuilt native engines (`rayact-prebuilt-*.tgz`),
 - the web hosts (`rayact-web-<version>.tar.gz`, plus a
   `rayact-web-pthreads-<version>.tar.gz` variant for WASM workers),
-- the dev apps (`rayact-dev-app.apk`, simulator zip, unsigned device ipa),
+- the dev apps (Android APK, iOS simulator zip, unsigned device IPA, and Windows x64 zip),
 - `release-set.json` (canonical index with per-file SHA-256) and a
   `release-set.sig` ed25519 signature, plus `SHA256SUMS`.
 
-New projects vendor the JS tarballs via `create-rayact-app --release-dir` /
+Rayact packages are not published to the npm registry. Projects vendor the
+GitHub Release tarballs through `create-rayact-app --release-dir` or
 `--release-url` — see [Getting started](/guide/getting-started). The generated
 `package.json` uses `file:` dependencies plus an `overrides` block so npm never
-consults the public registry for lockstep packages.
+consults the public registry for Rayact packages.
 
 ## Required packages {#required-packages}
 
@@ -52,7 +52,7 @@ are missing.
 
 Two binaries matter on the host machine: **`rayact_desktop`** (the runtime that
 opens a window) and **`rayact_tool`** (the headless build toolchain that
-compiles bytecode and writes `.rayactpack` containers — new in 0.0.4). Both ship
+compiles bytecode and writes `.rayactpack` containers — new in 0.0.5). Both ship
 inside the host prebuilt package.
 
 The CLI resolves them in this order:
@@ -65,7 +65,7 @@ The CLI resolves them in this order:
 
 If none are present, `rayact prebuild` downloads the matching prebuilt from the
 GitHub release for your engine version and verifies it against `SHA256SUMS`.
-Pre-0.0.4 prebuilt caches have no `rayact_tool`; builds fall back to
+Pre-0.0.5 prebuilt caches have no `rayact_tool`; builds fall back to
 `rayact_desktop --compile` with a deprecation warning.
 
 ```sh
@@ -74,6 +74,10 @@ rayact prebuild   # ensure the host binaries are available (resolve or download)
 
 Android and iOS engine libraries are pulled per-project when you target those
 platforms (kept off desktop installs — the Android engine alone is ~80 MB).
+
+Supported desktop prebuilt keys are `darwin-arm64`, `windows-x64`, and the
+preview `linux-x64`. Selecting `@rayact/webview` on Windows additionally stages
+its package-owned CEF runtime beside the module DLL.
 
 ## Environment overrides
 

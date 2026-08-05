@@ -13,6 +13,6 @@ your release signing key. Apple archives require the distribution certificate,
 provisioning profile, bundle identifier, and Xcode archive signing configured by
 your team.
 
-Keep `release-set.json`, its detached signature, `SHA256SUMS`, npm tarballs,
+Keep `release-set.json`, its detached signature, `SHA256SUMS`, package tarballs,
 native archives, SBOMs, and attestations together. The GitHub Release is the
-fallback source for the exact npm bits, not a separate rebuild.
+canonical source for those exact locally built bits.

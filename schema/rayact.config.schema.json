@@ -51,6 +51,32 @@
         "bundleId": { "type": "string", "description": "iOS product bundle identifier used by prebuild, install, and launch." }
       }
     },
+    "linking": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Application deep-link schemes generated into native platform projects.",
+      "properties": {
+        "schemes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9+.-]*$"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "router": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "File-based routing (@rayact/router) options.",
+      "properties": {
+        "appDir": {
+          "type": "string",
+          "description": "Routes directory relative to the project root. Default \"app\"."
+        }
+      }
+    },
     "nativeModules": {
       "type": "array",
       "description": "Installed native modules autolink automatically. Entries may disable or configure a package. Legacy name/lib/jsPackage objects are accepted with a warning through 0.0.x.",

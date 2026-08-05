@@ -8,7 +8,7 @@ Gradle project that links `librayact.so`; your machine never compiles C++.
 
 - Android SDK with platform tools (`adb` on PATH).
 - JDK 17+ for Gradle.
-- A device or emulator running **Android 8.0+ (API 26)**. 0.0.4 ships
+- A device or emulator running **Android 8.0+ (API 26)**. 0.0.5 ships
   `arm64-v8a` engine binaries — use a physical device or an arm64 emulator
   image.
 
@@ -53,7 +53,7 @@ Produces a release APK with the bundle compiled to QuickJS bytecode and staged
 into APK assets (`app.qjsbc` + your CSS under `assets/runtime/`).
 
 ::: warning Debug-signed releases
-0.0.4 release APKs are signed with the debug keystore — fine for sideloading
+0.0.5 release APKs are signed with the debug keystore — fine for sideloading
 and testing, not for Play submission. Configure your own `signingConfig` in
 `android/app/build.gradle` before shipping to a store.
 :::

@@ -7,15 +7,16 @@
 - [Accessibility](https://rayact.dev/accessibility): Rayact components accept role, label, hint, state/value, actions, focusability, tab order, live-region, and text-scaling props.
 - [Crash reporting and privacy](https://rayact.dev/crash-reporting): @rayact/crash-reporter is local-only by default.
 - [Deployment](https://rayact.dev/deployment): Create immutable release output with npx rayact build --release.
-- [Rayact Dev Platform](https://rayact.dev/dev-platform): bash npx create-rayact-app@0.0.4 my-app cd my-app && npm install npm run dev 
+- [Rayact Dev Platform](https://rayact.dev/dev-platform): Or from the monorepo:
 - [Navigation And Windowing Status](https://rayact.dev/multi-window-system): Rayact no longer exposes the early prototype createWindow / registerScreen JavaScript API that older notes described.
 - [Native modules](https://rayact.dev/native-modules): Native modules are optional native capabilities shipped as separate packages — each carries its own prebuilt binaries per platform and autolinks into your app.
+- [Platform views: how Flutter does it, and what rayact must copy](https://rayact.dev/platform-views-flutter-parity): Source read: flutter/engine/src/flutter/shell/platform/{android,darwin/ios} at the local checkout, plus flutter/packages (framework) and the webview_flutter federated plugin.
 - [Recovery](https://rayact.dev/recovery): If development reload fails, Rayact keeps the last running revision.
-- [Release process](https://rayact.dev/releasing): The 0.0.4 train uses three channels:
+- [Release process](https://rayact.dev/releasing): All platform artifacts are built and tested on a maintainer macOS machine.
 - [Release rollback](https://rayact.dev/rollback): Rayact does not unpublish a bad release.
-- [Security](https://rayact.dev/security): Install only published 0.0.4 tarballs represented in the signed release set.
+- [Security](https://rayact.dev/security): Install only published 0.0.5 tarballs represented in the signed release set.
 - [Support policy](https://rayact.dev/support): Rayact supports the latest two stable minor lines or twelve months, whichever is longer.
-- [Supported toolchains for 0.0.4](https://rayact.dev/toolchains): - Node.js 22 and 24 LTS.
+- [Supported toolchains for 0.0.5](https://rayact.dev/toolchains): Tier-1 release gates run ten controlled samples per target.
 - [Troubleshooting](https://rayact.dev/troubleshooting): Start with npx rayact doctor, then verify Node 22 or 24 and the supported platform toolchain.
 - [Upgrades and migration](https://rayact.dev/upgrades): Commit the application before upgrading.
 
@@ -23,16 +24,18 @@
 
 - [Android](https://rayact.dev/guide/android): Rayact apps run on Android as a native activity rendering through Vulkan (rlvk backend).
 - [Animation](https://rayact.dev/guide/animation): Three layers, cheapest first: CSS transitions/animations (declarative, run entirely on the native render thread), SharedValue (imperative, zero-copy into the render loop), and React-state hooks (useAnimatedValue / useSpring, re-render per frame — fine for small UI, avoid for large trees).
-- [Desktop (macOS & Linux)](https://rayact.dev/guide/desktop): The desktop host is a prebuilt native binary (rayact_desktop) — Metal-backed on macOS, Vulkan on Linux — that runs your bundle directly.
-- [Fonts & icons](https://rayact.dev/guide/fonts-and-icons): Every host bundles Roboto (text), Material Symbols (icons) and Noto Color Emoji.
+- [Desktop (macOS, Windows & Linux)](https://rayact.dev/guide/desktop): The desktop host is a prebuilt native binary (rayact_desktop) — Metal-backed on macOS and Vulkan on Windows/Linux — that runs your bundle directly.
+- [Fonts & icons](https://rayact.dev/guide/fonts-and-icons): Body text uses a glyph atlas baked at each integer font-size (device-independent dp).
 - [Getting started](https://rayact.dev/guide/getting-started): Scaffold a new app from a Rayact release, run it with hot reload, then build a release for any platform.
 - [Installation](https://rayact.dev/guide/install): Rayact splits into small @rayact/ JavaScript packages plus per-platform prebuilt native hosts.
 - [iOS](https://rayact.dev/guide/ios): Rayact renders on iOS through Metal (rlmt backend).
-- [Linux](https://rayact.dev/guide/linux): Linux is a preview platform in 0.0.4: the x64 host prebuilt is built and released, but gets less routine testing than macOS.
+- [Linux](https://rayact.dev/guide/linux): Linux is a preview platform in 0.0.5: the x64 host prebuilt is built and released, but gets less routine testing than macOS.
 - [Navigation](https://rayact.dev/guide/navigation): @rayact/navigation runs real react-navigation (@react-navigation/core) on Rayact — same mental model and hooks as React Native, with Rayact-native navigators for stacks and tabs (screen transitions render through the native animation system).
+- [File-based routing](https://rayact.dev/guide/router): @rayact/router gives Rayact apps Expo-Router-style file-based routing: files in an app/ directory become screens automatically — no route table, no manual wiring.
 - [Styling](https://rayact.dev/guide/styling): Rayact has two styling inputs that compose: the style prop (React-side, per-node) and CSS stylesheets matched via className (parsed and resolved natively by the engine).
 - [Tailwind CSS](https://rayact.dev/guide/tailwind): Tailwind v4 utilities work in Rayact: the Tailwind CLI generates plain CSS, the engine parses it natively, and className matches the generated classes.
 - [Web](https://rayact.dev/guide/web): The entire engine — QuickJS, the raym3 renderer, and the rlwg WebGPU raylib backend — compiles to a single WebAssembly module.
+- [Windows](https://rayact.dev/guide/windows): Windows support is new in Rayact 0.0.5.
 - [Workers & WASM components](https://rayact.dev/guide/workers): Rayact runs app-supplied workers off the JS thread: WASM workers (any language compiling to freestanding wasm32 — C, Rust, Zig), native C++ workers (compiled into your host), and worker views — nodes whose content a worker drives directly, bypassing React reconciliation entirely.
 
 ## Reference
@@ -42,7 +45,7 @@
 - [Components reference](https://rayact.dev/reference/components): Every component exported from rayact/react, grouped by role, with the sharp edges called out where behaviour differs from React Native.
 - [Configuration: `rayact.config.json`](https://rayact.dev/reference/config): Schema for rayact.config.json.
 - [CSS reference](https://rayact.dev/reference/css): The engine parses CSS natively (cssparser + the raym3 stylesheet engine) and resolves matches against className props.
-- [Packages and platforms](https://rayact.dev/reference/packages): Rayact uses one private npm workspace root with independently publishable packages.
+- [Packages and platforms](https://rayact.dev/reference/packages): Rayact uses one private workspace root with independently packaged modules.
 - [Container format (`.rayactpack`)](https://rayact.dev/reference/rayactpack): Release builds ship a single self-contained container instead of a loose tree of files.
 
 ## Full corpus

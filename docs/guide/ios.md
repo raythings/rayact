@@ -34,6 +34,18 @@ npm run ios:dev-client    # rayact build --debug --ios --install
 with `xcodegen generate` after editing it), the Swift host sources, and
 `Frameworks/RayactEngine.xcframework` copied from the prebuilt. Commit it.
 
+The prebuilt XCFramework includes `rayactDevFetch` and `devCall` so Debug
+clients can bootstrap against `rayact dev`, run module-HMR, and fill the
+launcher About page (bundle id / native version / Rayact runtime). When native
+`getAppInfo` is unavailable, About falls back to `ios.bundleId` /
+`android.packageName` from `rayact.config.json` and the project /
+`@rayact/*` package versions.
+
+File-based routes with brackets (`app/assets/[id].tsx`) are percent-encoded on
+the wire and decoded by the dev server. After the app backgrounds or the
+launcher switches panes, the host recreates Metal surfaces so font/icon atlases
+rebake (avoids white-square glyphs from stale GPU texture ids).
+
 ## Release build
 
 ```sh
