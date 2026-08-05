@@ -79,7 +79,7 @@
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_svg.xcframework",
-      "sha256": "4e4f3a356ab5e941da9e3502a71f5fbe371f0468450c30cd4591eed35e1cc9ee"
+      "sha256": "39b23052e322eddcffed86d5293a98eb1e61b923f527344f7700069c7ce3c4ac"
     },
     {
       "platform": "web",
