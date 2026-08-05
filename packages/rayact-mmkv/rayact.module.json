@@ -62,7 +62,7 @@
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_mmkv.xcframework",
-      "sha256": "f222bba2d6546f6c48948ca7a37339ab7a339c22d6837b8891c9ac1b1deba793"
+      "sha256": "512c391144c4d95c338b3ad3ab47af148b3b8e33be183b4475d7a6373a00efc2"
     },
     {
       "platform": "web",
