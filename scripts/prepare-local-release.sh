@@ -34,7 +34,7 @@ node scripts/verify-dev-app-modules.mjs --require-device-smoke
 npm run verify:release
 node scripts/verify-release-set.mjs release1 --require-signature
 node scripts/verify-stable-gate.mjs release1
-shasum -a 256 -c release1/SHA256SUMS
+(cd release1 && shasum -a 256 -c SHA256SUMS)
 
 if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=normal)" ]]; then
   echo "The release build changed source-controlled files. Review and commit them, then rerun." >&2

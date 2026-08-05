@@ -78,7 +78,7 @@
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_crash_reporter.xcframework",
-      "sha256": "f0a3868f194e5fdcf01d0b7383bd9f1cac55cdd729ba98b821c42e129731e619"
+      "sha256": "1c47d26910dd9b101e89d97833876fe019e9651fedefb85c7c0f25b34538a220"
     },
     {
       "platform": "windows",

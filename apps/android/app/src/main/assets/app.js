@@ -21,7 +21,7 @@
   }
   const existing = globalThis.crypto ?? null;
   if (!existing || typeof existing.getRandomValues !== "function") {
-    const crypto2 = {
+    const crypto = {
       getRandomValues(array) {
         const view2 = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
         for (let i = 0; i < view2.length; i++) {
@@ -39,7 +39,7 @@
         return hex.slice(0, 4).join("") + "-" + hex.slice(4, 6).join("") + "-" + hex.slice(6, 8).join("") + "-" + hex.slice(8, 10).join("") + "-" + hex.slice(10, 16).join("");
       }
     };
-    globalThis.crypto = crypto2;
+    globalThis.crypto = crypto;
   }
   function getDefaultExportFromCjs(x) {
     return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -24641,8 +24641,51 @@ ${stack}` : message;
     }, [target, duration, easing]);
     return value;
   }
+  function ThemeBlend(t0) {
+    const $ = compilerRuntimeExports.c(9);
+    const {
+      from,
+      to,
+      onSettled,
+      children
+    } = t0;
+    let t1;
+    if ($[0] !== onSettled) {
+      t1 = {
+        duration: 350,
+        from: 0,
+        onSettled
+      };
+      $[0] = onSettled;
+      $[1] = t1;
+    } else {
+      t1 = $[1];
+    }
+    const progress = useAnimatedValue(1, t1);
+    let t2;
+    if ($[2] !== from || $[3] !== progress || $[4] !== to) {
+      t2 = lerpTheme(from, to, progress);
+      $[2] = from;
+      $[3] = progress;
+      $[4] = to;
+      $[5] = t2;
+    } else {
+      t2 = $[5];
+    }
+    const theme = t2;
+    let t3;
+    if ($[6] !== children || $[7] !== theme) {
+      t3 = /* @__PURE__ */ jsxRuntimeExports.jsx(ThemeProvider$1, { theme, children });
+      $[6] = children;
+      $[7] = theme;
+      $[8] = t3;
+    } else {
+      t3 = $[8];
+    }
+    return t3;
+  }
   function RayactThemeProvider(t0) {
-    const $ = compilerRuntimeExports.c(18);
+    const $ = compilerRuntimeExports.c(14);
     const {
       children
     } = t0;
@@ -24658,89 +24701,62 @@ ${stack}` : message;
     const targetTheme = t1;
     const stableThemeRef = reactExports.useRef(targetTheme);
     const [blend, setBlend] = reactExports.useState(null);
-    const t2 = blend ? 350 : 0;
+    let t2;
     let t3;
-    if ($[2] !== t2) {
-      t3 = {
-        duration: t2
-      };
-      $[2] = t2;
-      $[3] = t3;
-    } else {
-      t3 = $[3];
-    }
-    const progress = useAnimatedValue(blend ? 1 : 0, t3);
-    let t4;
-    let t5;
-    if ($[4] !== targetTheme) {
-      t4 = () => {
+    if ($[2] !== targetTheme) {
+      t2 = () => {
         if (stableThemeRef.current.dark === targetTheme.dark) {
           stableThemeRef.current = targetTheme;
           return;
         }
+        const from = stableThemeRef.current;
+        stableThemeRef.current = targetTheme;
         setBlend({
-          from: stableThemeRef.current,
+          from,
           to: targetTheme
         });
       };
-      t5 = [targetTheme];
-      $[4] = targetTheme;
-      $[5] = t4;
-      $[6] = t5;
+      t3 = [targetTheme];
+      $[2] = targetTheme;
+      $[3] = t2;
+      $[4] = t3;
     } else {
-      t4 = $[5];
-      t5 = $[6];
+      t2 = $[3];
+      t3 = $[4];
     }
-    reactExports.useEffect(t4, t5);
-    let t6;
-    let t7;
-    if ($[7] !== blend || $[8] !== progress) {
-      t6 = () => {
-        if (!blend || progress < 1) {
-          return;
-        }
-        stableThemeRef.current = blend.to;
-        setBlend(null);
-      };
-      t7 = [blend, progress];
-      $[7] = blend;
-      $[8] = progress;
-      $[9] = t6;
-      $[10] = t7;
-    } else {
-      t6 = $[9];
-      t7 = $[10];
-    }
-    reactExports.useEffect(t6, t7);
-    let t8;
-    bb0: {
-      if (!blend) {
-        t8 = targetTheme;
-        break bb0;
-      }
-      let t92;
-      if ($[11] !== blend.from || $[12] !== blend.to || $[13] !== progress) {
-        t92 = lerpTheme(blend.from, blend.to, progress);
-        $[11] = blend.from;
-        $[12] = blend.to;
-        $[13] = progress;
-        $[14] = t92;
+    reactExports.useEffect(t2, t3);
+    if (blend) {
+      const t42 = blend.to.dark ? "to-dark" : "to-light";
+      let t5;
+      if ($[5] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
+        t5 = () => setBlend(null);
+        $[5] = t5;
       } else {
-        t92 = $[14];
+        t5 = $[5];
       }
-      t8 = t92;
+      let t6;
+      if ($[6] !== blend.from || $[7] !== blend.to || $[8] !== children || $[9] !== t42) {
+        t6 = /* @__PURE__ */ jsxRuntimeExports.jsx(ThemeBlend, { from: blend.from, to: blend.to, onSettled: t5, children }, t42);
+        $[6] = blend.from;
+        $[7] = blend.to;
+        $[8] = children;
+        $[9] = t42;
+        $[10] = t6;
+      } else {
+        t6 = $[10];
+      }
+      return t6;
     }
-    const displayTheme = t8;
-    let t9;
-    if ($[15] !== children || $[16] !== displayTheme) {
-      t9 = /* @__PURE__ */ jsxRuntimeExports.jsx(ThemeProvider$1, { theme: displayTheme, children });
-      $[15] = children;
-      $[16] = displayTheme;
-      $[17] = t9;
+    let t4;
+    if ($[11] !== children || $[12] !== targetTheme) {
+      t4 = /* @__PURE__ */ jsxRuntimeExports.jsx(ThemeProvider$1, { theme: targetTheme, children });
+      $[11] = children;
+      $[12] = targetTheme;
+      $[13] = t4;
     } else {
-      t9 = $[17];
+      t4 = $[13];
     }
-    return t9;
+    return t4;
   }
   function disposeExistingDevRoot$1() {
     const globalObject = globalThis;
@@ -32672,19 +32688,15 @@ ${stack}` : message;
     reset,
     setParams
   }, Symbol.toStringTag, { value: "Module" }));
-  let nanoid = (size = 21) => crypto.getRandomValues(new Uint8Array(size)).reduce((id, byte) => {
-    byte &= 63;
-    if (byte < 36) {
-      id += byte.toString(36);
-    } else if (byte < 62) {
-      id += (byte - 26).toString(36).toUpperCase();
-    } else if (byte > 62) {
-      id += "-";
-    } else {
-      id += "_";
+  let urlAlphabet = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
+  let nanoid = (size = 21) => {
+    let id = "";
+    let i = size | 0;
+    while (i-- > 0) {
+      id += urlAlphabet[Math.random() * 64 | 0];
     }
     return id;
-  }, "");
+  };
   const BaseRouter = {
     getStateForAction(state2, action) {
       switch (action.type) {
