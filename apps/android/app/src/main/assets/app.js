@@ -24515,34 +24515,6 @@ ${stack}` : message;
     const dark = fallbackDark ?? true;
     return dark ? darkTheme$1 : lightTheme;
   }
-  function lerpPackedColor(from, to, t) {
-    const clamp = (n) => Math.max(0, Math.min(255, Math.round(n)));
-    const fr = from >>> 24 & 255;
-    const fg = from >>> 16 & 255;
-    const fb = from >>> 8 & 255;
-    const fa = from & 255;
-    const tr = to >>> 24 & 255;
-    const tg = to >>> 16 & 255;
-    const tb = to >>> 8 & 255;
-    const ta = to & 255;
-    return (clamp(fr + (tr - fr) * t) << 24 | clamp(fg + (tg - fg) * t) << 16 | clamp(fb + (tb - fb) * t) << 8 | clamp(fa + (ta - fa) * t)) >>> 0;
-  }
-  function lerpTheme(from, to, t) {
-    const result = {
-      ...to,
-      dark: t >= 0.5 ? to.dark : from.dark
-    };
-    for (const role of COLOR_ROLES$1) {
-      const a = from[role];
-      const b = to[role];
-      if (typeof a === "number" && typeof b === "number") {
-        result[role] = lerpPackedColor(a, b, t);
-      } else {
-        result[role] = t >= 0.5 ? b : a;
-      }
-    }
-    return result;
-  }
   const ThemeContext$2 = React.createContext(darkTheme$1);
   function ThemeProvider$1({
     theme,
@@ -24595,97 +24567,8 @@ ${stack}` : message;
     initColorSchemeStore();
     return reactExports.useSyncExternalStore(subscribe$1, getSnapshot, getServerSnapshot);
   }
-  const easeInOutCubic$1 = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-  function useAnimatedValue(target, options = {}) {
-    const {
-      duration = 300,
-      easing = easeInOutCubic$1,
-      onSettled,
-      from
-    } = options;
-    const initial = from ?? target;
-    const [value, setValue] = React.useState(initial);
-    const valueRef = React.useRef(initial);
-    const frameRef = React.useRef(null);
-    const startRef = React.useRef(null);
-    const fromRef = React.useRef(initial);
-    const onSettledRef = React.useRef(onSettled);
-    onSettledRef.current = onSettled;
-    const settledRef = React.useRef(true);
-    React.useEffect(() => {
-      if (target === valueRef.current) {
-        return;
-      }
-      fromRef.current = valueRef.current;
-      startRef.current = null;
-      settledRef.current = false;
-      const step = (timestamp) => {
-        if (startRef.current === null) startRef.current = timestamp;
-        const elapsed = timestamp - startRef.current;
-        const t = duration <= 0 ? 1 : Math.min(1, elapsed / duration);
-        const next = fromRef.current + (target - fromRef.current) * easing(t);
-        valueRef.current = next;
-        setValue(next);
-        if (t < 1) {
-          frameRef.current = requestAnimationFrame(step);
-        } else if (!settledRef.current) {
-          settledRef.current = true;
-          const cb = onSettledRef.current;
-          if (cb) queueMicrotask(() => cb(next));
-        }
-      };
-      frameRef.current = requestAnimationFrame(step);
-      return () => {
-        if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-      };
-    }, [target, duration, easing]);
-    return value;
-  }
-  function ThemeBlend(t0) {
-    const $ = compilerRuntimeExports.c(9);
-    const {
-      from,
-      to,
-      onSettled,
-      children
-    } = t0;
-    let t1;
-    if ($[0] !== onSettled) {
-      t1 = {
-        duration: 350,
-        from: 0,
-        onSettled
-      };
-      $[0] = onSettled;
-      $[1] = t1;
-    } else {
-      t1 = $[1];
-    }
-    const progress = useAnimatedValue(1, t1);
-    let t2;
-    if ($[2] !== from || $[3] !== progress || $[4] !== to) {
-      t2 = lerpTheme(from, to, progress);
-      $[2] = from;
-      $[3] = progress;
-      $[4] = to;
-      $[5] = t2;
-    } else {
-      t2 = $[5];
-    }
-    const theme = t2;
-    let t3;
-    if ($[6] !== children || $[7] !== theme) {
-      t3 = /* @__PURE__ */ jsxRuntimeExports.jsx(ThemeProvider$1, { theme, children });
-      $[6] = children;
-      $[7] = theme;
-      $[8] = t3;
-    } else {
-      t3 = $[8];
-    }
-    return t3;
-  }
   function RayactThemeProvider(t0) {
-    const $ = compilerRuntimeExports.c(14);
+    const $ = compilerRuntimeExports.c(5);
     const {
       children
     } = t0;
@@ -24698,65 +24581,17 @@ ${stack}` : message;
     } else {
       t1 = $[1];
     }
-    const targetTheme = t1;
-    const stableThemeRef = reactExports.useRef(targetTheme);
-    const [blend, setBlend] = reactExports.useState(null);
+    const theme = t1;
     let t2;
-    let t3;
-    if ($[2] !== targetTheme) {
-      t2 = () => {
-        if (stableThemeRef.current.dark === targetTheme.dark) {
-          stableThemeRef.current = targetTheme;
-          return;
-        }
-        const from = stableThemeRef.current;
-        stableThemeRef.current = targetTheme;
-        setBlend({
-          from,
-          to: targetTheme
-        });
-      };
-      t3 = [targetTheme];
-      $[2] = targetTheme;
-      $[3] = t2;
-      $[4] = t3;
+    if ($[2] !== children || $[3] !== theme) {
+      t2 = /* @__PURE__ */ jsxRuntimeExports.jsx(ThemeProvider$1, { theme, children });
+      $[2] = children;
+      $[3] = theme;
+      $[4] = t2;
     } else {
-      t2 = $[3];
-      t3 = $[4];
+      t2 = $[4];
     }
-    reactExports.useEffect(t2, t3);
-    if (blend) {
-      const t42 = blend.to.dark ? "to-dark" : "to-light";
-      let t5;
-      if ($[5] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-        t5 = () => setBlend(null);
-        $[5] = t5;
-      } else {
-        t5 = $[5];
-      }
-      let t6;
-      if ($[6] !== blend.from || $[7] !== blend.to || $[8] !== children || $[9] !== t42) {
-        t6 = /* @__PURE__ */ jsxRuntimeExports.jsx(ThemeBlend, { from: blend.from, to: blend.to, onSettled: t5, children }, t42);
-        $[6] = blend.from;
-        $[7] = blend.to;
-        $[8] = children;
-        $[9] = t42;
-        $[10] = t6;
-      } else {
-        t6 = $[10];
-      }
-      return t6;
-    }
-    let t4;
-    if ($[11] !== children || $[12] !== targetTheme) {
-      t4 = /* @__PURE__ */ jsxRuntimeExports.jsx(ThemeProvider$1, { theme: targetTheme, children });
-      $[11] = children;
-      $[12] = targetTheme;
-      $[13] = t4;
-    } else {
-      t4 = $[13];
-    }
-    return t4;
+    return t2;
   }
   function disposeExistingDevRoot$1() {
     const globalObject = globalThis;
@@ -29212,13 +29047,21 @@ ${stack}` : message;
     };
   }
   var define_RAYACT_BUNDLED_MODULES_default = [{ name: "barcode-scanner", lib: "rayact_barcode_scanner", nativeBus: false, jsPackage: "@rayact/barcode-scanner", platforms: ["android", "ios"], architectures: ["arm64", "x86_64"], abiRange: ">=2 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "clipboard", lib: "rayact_clipboard", nativeBus: false, jsPackage: "@rayact/clipboard", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "crash-reporter", lib: "rayact_crash_reporter", jsPackage: "@rayact/crash-reporter", platforms: ["android", "ios", "darwin", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=1 <6", engineRange: ">=0.0.3 <0.1.0", permissions: ["crash-report-storage", "network-when-consented"], officialDevApp: true }, { name: "haptics", lib: "rayact_haptics", nativeBus: false, jsPackage: "@rayact/haptics", platforms: ["android", "ios", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "image-picker", lib: "rayact_image_picker", nativeBus: false, jsPackage: "@rayact/image-picker", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "linking", lib: "rayact_linking", nativeBus: false, jsPackage: "@rayact/linking", platforms: ["android", "ios", "darwin", "linux", "windows", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "mmkv", lib: "rayact_mmkv", jsPackage: "@rayact/mmkv", platforms: ["android", "ios", "darwin", "windows", "web"], architectures: ["arm64", "x86_64"], abiRange: ">=1 <6", engineRange: ">=0.0.3 <0.1.0", permissions: [], officialDevApp: true }, { name: "secure-store", lib: "rayact_secure_store", jsPackage: "@rayact/secure-store", platforms: ["android", "ios", "darwin", "windows"], architectures: ["arm64", "x86_64"], abiRange: ">=1 <6", engineRange: ">=0.0.3 <0.1.0", permissions: ["keychain", "keystore"], officialDevApp: true }, { name: "sensors", lib: "rayact_sensors", nativeBus: false, jsPackage: "@rayact/sensors", platforms: ["android", "ios", "web"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=2 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "svg", lib: "rayact_svg", jsPackage: "@rayact/svg", platforms: ["android", "ios", "darwin", "windows", "web"], architectures: ["arm64", "x86_64"], abiRange: ">=2 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }, { name: "webview", lib: "rayact_webview", nativeBus: false, jsPackage: "@rayact/webview", platforms: ["android", "ios", "web", "darwin", "windows"], architectures: ["arm64", "x86_64", "wasm32"], abiRange: ">=3 <6", engineRange: ">=0.0.4 <0.1.0", permissions: [], officialDevApp: true }];
-  var define_RAYACT_OFFICIAL_APP_default = { displayName: "Rayact Dev App", packageLabel: "Rayact Dev App", source: "official", androidPackageId: "com.rayact.app", creditTitle: "The official Rayact development client", links: [{ id: "github", icon: "github", set: "fab", label: "GitHub", url: "https://github.com/raythings/rayact" }, { id: "email", icon: "envelope", set: "fa", label: "ramnadroj@gmail.com", url: "mailto:ramnadroj@gmail.com" }] };
+  var define_RAYACT_OFFICIAL_APP_default = { displayName: "Rayact Dev App", packageLabel: "Rayact Dev App", source: "official", androidPackageId: "com.rayact.app", creditTitle: "The official Rayact development client", links: [{ id: "github", icon: "github", set: "fab", label: "GitHub", url: "https://github.com/raythings/rayact" }, { id: "email", icon: "envelope", set: "fa", label: "ramnadroj@gmail.com", url: "mailto:ramnadroj@gmail.com" }], iosBundleId: "com.rayact.app", nativeAppVersion: "0.0.5" };
   function getOfficialApp() {
     try {
       return typeof define_RAYACT_OFFICIAL_APP_default !== "undefined" && define_RAYACT_OFFICIAL_APP_default ? define_RAYACT_OFFICIAL_APP_default : {};
     } catch {
       return {};
     }
+  }
+  function getConfiguredAppId() {
+    const app = getOfficialApp();
+    const g = globalThis;
+    const platform = g.__rayactPlatform?.target || g.__rayactPlatform?.os || "";
+    if (platform === "ios" && app.iosBundleId) return app.iosBundleId;
+    if (platform === "android" && app.androidPackageId) return app.androidPackageId;
+    return app.iosBundleId || app.androidPackageId || "";
   }
   function getBundledModules() {
     try {
@@ -30140,7 +29983,6 @@ ${stack}` : message;
   function useTheme() {
     return React.useContext(ThemeContext$1);
   }
-  const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   const defaultKeyboard = {
     visible: false,
     height: 0,
@@ -31400,6 +31242,7 @@ ${stack}` : message;
   }
   const NavigationBarItem = createMaterialComponent("rayact-navigation-bar-item");
   const Switch = createMaterialComponent("rayact-switch");
+  const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   const listeners$1 = [];
   const BackHandler = {
     addEventListener(_eventName, cb) {
@@ -31931,6 +31774,15 @@ ${stack}` : message;
     gap: 12
   };
   const DEV_CLIENT_VERSION = "0.0.5";
+  function aboutFallbacks() {
+    const app = getOfficialApp();
+    const g = globalThis;
+    return {
+      bundleId: getConfiguredAppId() || "—",
+      nativeAppVersion: app.nativeAppVersion || DEV_CLIENT_VERSION,
+      rayactVersion: app.rayactVersion || g.__RAYACT_ENGINE_VERSION__ || DEV_CLIENT_VERSION
+    };
+  }
   const TABS = [{
     id: "connect",
     label: "Connect",
@@ -32208,33 +32060,67 @@ ${stack}` : message;
     });
   }
   function AboutPage() {
-    const $ = compilerRuntimeExports.c(2);
+    const $ = compilerRuntimeExports.c(3);
     const launcher = useDevLauncher();
     const colors2 = themeColors(launcher.theme);
-    const [bundleId, setBundleId] = reactExports.useState("—");
-    const [nativeVersion, setNativeVersion] = reactExports.useState("—");
-    const [rayactVersion, setRayactVersion] = reactExports.useState("—");
     let t0;
-    let t1;
     if ($[0] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
-      t0 = () => {
-        if (!devCallAvailable()) {
-          return;
-        }
-        getAppInfo().then((info) => {
-          setBundleId(info.bundleId || "—");
-          setNativeVersion(info.nativeAppVersion || "—");
-          setRayactVersion(info.rayactVersion || "—");
-        }).catch(_temp2$1);
-      };
-      t1 = [];
+      t0 = aboutFallbacks();
       $[0] = t0;
-      $[1] = t1;
     } else {
       t0 = $[0];
-      t1 = $[1];
     }
-    reactExports.useEffect(t0, t1);
+    const defaults = t0;
+    const [bundleId, setBundleId] = reactExports.useState(defaults.bundleId);
+    const [nativeVersion, setNativeVersion] = reactExports.useState(defaults.nativeAppVersion);
+    const [rayactVersion, setRayactVersion] = reactExports.useState(defaults.rayactVersion);
+    let t1;
+    let t2;
+    if ($[1] === /* @__PURE__ */ Symbol.for("react.memo_cache_sentinel")) {
+      t1 = () => {
+        let cancelled = false;
+        const fallbacks = aboutFallbacks();
+        const apply = (info) => {
+          if (cancelled) {
+            return;
+          }
+          setBundleId(info.bundleId || fallbacks.bundleId);
+          setNativeVersion(info.nativeAppVersion || fallbacks.nativeAppVersion);
+          setRayactVersion(info.rayactVersion || fallbacks.rayactVersion);
+        };
+        const load = () => {
+          if (!devCallAvailable()) {
+            return false;
+          }
+          getAppInfo().then(apply).catch(() => apply(fallbacks));
+          return true;
+        };
+        if (load()) {
+          return () => {
+            cancelled = true;
+          };
+        }
+        apply(fallbacks);
+        const id = setInterval(() => {
+          if (load()) {
+            clearInterval(id);
+          }
+        }, 250);
+        const stop = setTimeout(() => clearInterval(id), 4e3);
+        return () => {
+          cancelled = true;
+          clearInterval(id);
+          clearTimeout(stop);
+        };
+      };
+      t2 = [];
+      $[1] = t1;
+      $[2] = t2;
+    } else {
+      t1 = $[1];
+      t2 = $[2];
+    }
+    reactExports.useEffect(t1, t2);
     const cardBorder = colors2.isDark ? 452984831 : 335544320;
     const official = getOfficialApp();
     const bundledModules = getBundledModules();
@@ -32361,7 +32247,7 @@ ${stack}` : message;
                 fontWeight: 500
               }
             },
-            children: ["Version ", nativeVersion !== "—" ? nativeVersion : DEV_CLIENT_VERSION]
+            children: ["Version ", rayactVersion]
           })]
         })]
       }), jsxRuntimeExports.jsxs(View, {
@@ -32520,8 +32406,6 @@ ${stack}` : message;
         })]
       })]
     });
-  }
-  function _temp2$1() {
   }
   function DevLauncherNavBar(t0) {
     const $ = compilerRuntimeExports.c(4);
