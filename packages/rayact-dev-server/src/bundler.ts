@@ -857,7 +857,12 @@ export function createRayactViteConfig(
     root,
     mode: isDev ? 'development' : 'production',
     resolve: {
-      alias: [{ find: /^nanoid\/non-secure$/, replacement: 'nanoid' }]
+      // Point at the ESM Math.random entry. Aliasing to `nanoid` resolves the
+      // Node crypto build, which crashes QuickJS (`crypto is not defined`).
+      alias: [{
+        find: /^nanoid\/non-secure$/,
+        replacement: path.join(root, 'node_modules/nanoid/non-secure/index.js')
+      }]
     },
     plugins: [
       ...(mode === 'release' ? [] : [vendorSharePlugin()]),

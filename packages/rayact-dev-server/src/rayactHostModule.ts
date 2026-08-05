@@ -103,6 +103,19 @@ async function transformRayactModule(
     const loadedCode = typeof loaded === 'string' ? loaded : loaded?.code;
     if (!loadedCode) return null;
 
+    // Router manifests are real ESM for release bundling; module-HMR needs the
+    // synchronous __require form understood by wrapRayactModule.
+    if (viteId === '\0virtual:rayact-routes') {
+      const code = loadedCode
+        .replace(
+          /import\s+\*\s+as\s+(\w+)\s+from\s+("(?:\\.|[^"\\])+")\s*;?/g,
+          'const $1 = __require($2, __moduleUrl);'
+        )
+        .replace(/export\s+const\s+(ctx|appRoot)\s*=/g, 'const $1 =') +
+        '\nexport { ctx, appRoot };';
+      return { code };
+    }
+
     // Asset virtual modules are already complete, tiny modules. Running them
     // through Vite's transform pipeline can race dependency optimization and
     // produce "new version of the pre-bundle" 500s. Keep their runtime import
