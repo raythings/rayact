@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import {
   convertViteSsrToRayactSync,
+  rayactCssInlineModule,
   wrapRayactModule,
 } from '../../dist/dev-server/rayactHostModule.js';
 
@@ -50,6 +53,19 @@ test('wrapped modules define the ssr helpers ssrTransform emits', () => {
   const wrapped = wrapRayactModule('/rayact/m/src/App.tsx', '');
   assert.match(wrapped, /function __vite_ssr_dynamic_import__/);
   assert.match(wrapped, /var __vite_ssr_import_meta__=/);
+});
+
+test('development CSS stays ESM until the target wrapper transforms it', (t) => {
+  const cssFile = new URL('./inline-test.css', import.meta.url);
+  fs.writeFileSync(cssFile, '.title { color: red; }');
+  t.after(() => fs.rmSync(cssFile, { force: true }));
+
+  const source = rayactCssInlineModule(fileURLToPath(cssFile), './src/inline-test.css');
+  assert.match(source, /export default cssClasses;/);
+  assert.doesNotMatch(source, /exports\.default/);
+
+  const wrapped = wrapRayactModule('/rayact/m/src/inline-test.css', source);
+  assert.match(wrapped, /exports\.default = cssClasses;/);
 });
 
 test('await import() resolves through the module registry', async () => {

@@ -37,12 +37,13 @@ export function rayactCssInlineModule(cssFile: string, nativePath: string): stri
   if (!minified) return null;
   const cssText = minified.css;
   const baseDir = nativePath.slice(0, Math.max(0, nativePath.lastIndexOf('/'))) || '.';
+  // ESM so Rollup IIFE bootstrap can rewrite it; module-HMR converts via wrapRayactModule.
   return [
     `var __cssText = ${JSON.stringify(cssText)};`,
     'var cssClasses = typeof globalThis.importCSSText === "function"',
     `  ? globalThis.importCSSText(__cssText, ${JSON.stringify(baseDir)})`,
     `  : (globalThis.importCSS ? globalThis.importCSS(${JSON.stringify(nativePath)}) : {});`,
-    'exports.default = cssClasses;'
+    'export default cssClasses;'
   ].join('\n');
 }
 
@@ -56,7 +57,7 @@ async function transformRayactModule(
     if (viteId.startsWith('\0rayact-css:') && viteId.endsWith('.js')) {
       const parsed = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
       if (parsed.get('platform') === 'web') {
-        return { code: 'exports.default = {};' };
+        return { code: 'export default {};' };
       }
       const encoded = viteId.slice('\0rayact-css:'.length, -'.js'.length);
       const cssFile = decodeURIComponent(encoded);
@@ -65,7 +66,7 @@ async function transformRayactModule(
       return {
         code: inlined ?? [
           `var cssClasses = globalThis.importCSS ? globalThis.importCSS(${JSON.stringify(nativePath)}) : {};`,
-          'exports.default = cssClasses;'
+          'export default cssClasses;'
         ].join('\n')
       };
     }

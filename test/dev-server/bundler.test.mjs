@@ -130,6 +130,7 @@ test('development bundles keep React Compiler metadata', async () => {
   assert.match(output.code, /compilerRuntimeExports\.c\(/);
   assert.match(output.code, /__FUSEBOX_REACT_DEVTOOLS_DISPATCHER__/);
   assert.match(output.code, /connectWithCustomMessagingProtocol/);
+  assert.doesNotMatch(output.code, /exports\.default = cssClasses/);
 });
 
 test('static assets are returned in the build manifest', async (t) => {
