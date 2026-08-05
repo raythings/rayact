@@ -819,6 +819,19 @@ function shouldMinify(options: BundleOptions): boolean {
   return options.mode === 'release';
 }
 
+function resolveNanoidNonSecure(projectRoot: string): string | null {
+  // Prefer the ESM Math.random entry. Package exports resolve the CJS Node
+  // build under require(), and aliasing to `nanoid` pulls in crypto, which
+  // crashes QuickJS.
+  try {
+    const req = createRequire(path.join(projectRoot, 'package.json'));
+    const pkgDir = path.dirname(req.resolve('nanoid/package.json'));
+    return path.join(pkgDir, 'non-secure/index.js');
+  } catch {
+    return null;
+  }
+}
+
 export function createRayactViteConfig(
   options: BundleOptions,
   input = ENTRY_ID,
@@ -845,6 +858,7 @@ export function createRayactViteConfig(
   const devClientAppMetadata = resolveDevClientAppMetadata(root);
   const routerAppDirName = loadRayactConfig(root).router?.appDir;
   const routerAppDir = findAppDir(root, routerAppDirName);
+  const nanoidNonSecure = resolveNanoidNonSecure(root);
   const devBanner = isDev
     ? [
         `globalThis.__rayactPlatform = { os: ${JSON.stringify(options.platform)}, target: ${JSON.stringify(options.platform)}, ...(globalThis.__rayactPlatform || {}) };`,
@@ -857,12 +871,9 @@ export function createRayactViteConfig(
     root,
     mode: isDev ? 'development' : 'production',
     resolve: {
-      // Point at the ESM Math.random entry. Aliasing to `nanoid` resolves the
-      // Node crypto build, which crashes QuickJS (`crypto is not defined`).
-      alias: [{
-        find: /^nanoid\/non-secure$/,
-        replacement: path.join(root, 'node_modules/nanoid/non-secure/index.js')
-      }]
+      alias: nanoidNonSecure
+        ? [{ find: /^nanoid\/non-secure$/, replacement: nanoidNonSecure }]
+        : []
     },
     plugins: [
       ...(mode === 'release' ? [] : [vendorSharePlugin()]),
