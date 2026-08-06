@@ -62,7 +62,7 @@
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_mmkv.xcframework",
-      "sha256": "39fc2962f40d6d672d8204eda50a4bc38783351206f83912d826245c78654542"
+      "sha256": "3a8149c8f8ea6b181b2fd37a58370aaab4b4c20573896dc3c395552d27f7044a"
     },
     {
       "platform": "web",
@@ -74,7 +74,7 @@
       "platform": "windows",
       "architecture": "x86_64",
       "path": "desktop/windows-x64/librayact_mmkv.dll",
-      "sha256": "d13dcbf7f0a4501cd8eb05274eba0582aafa556c735de6d5afda8420f5f436a9"
+      "sha256": "8beb336dfe0e4f0b2b4a8c9197643a9772404acea37b680ae0b812ca0a0270e2"
     }
   ]
 }

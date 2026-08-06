@@ -59,13 +59,13 @@
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_secure_store.xcframework",
-      "sha256": "edf32153f5e41db7d1876dd916ff9f892b2a1bc2b316b7efac343beef9ff46a5"
+      "sha256": "4278e69e6391c2f687943248b35d702b33a9973e82e9a8f63fd77f21e4a11fe3"
     },
     {
       "platform": "windows",
       "architecture": "x86_64",
       "path": "desktop/windows-x64/librayact_secure_store.dll",
-      "sha256": "0363a3f06bef96928395a3a2ab9d4c3939229b1432d5ee1353e398e65fe1d58c"
+      "sha256": "90692804f49e739e2e4846f8f70ae9b67c2d0bd668419ae2f4ccfada2dd44183"
     }
   ]
 }

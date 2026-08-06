@@ -79,7 +79,7 @@
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_svg.xcframework",
-      "sha256": "d78077e2635138a767905af4dd9c5629c6441e314ad9a2474e509809d8a7a167"
+      "sha256": "84ef30548d08af14e867dc36a6657722cfd30d49e4bc12d4949a779f9537f9e7"
     },
     {
       "platform": "web",
@@ -91,7 +91,7 @@
       "platform": "windows",
       "architecture": "x86_64",
       "path": "desktop/windows-x64/librayact_svg.dll",
-      "sha256": "b78439b9bcccf8b44d8cabed444c13435d22901aed5013b29e1cd9fb1452459c"
+      "sha256": "6c45ee007b5b832611a91140f72dc67a314611722ac3f6c7e368b566afa8e364"
     }
   ],
   "web": {

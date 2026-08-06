@@ -67,7 +67,7 @@
       "platform": "windows",
       "architecture": "x86_64",
       "path": "desktop/windows-x64/librayact_webview.dll",
-      "sha256": "ecfa6308814d5f2b9bd260f24bd517f7e743fc7a528012d31d9dcbf561f476fc"
+      "sha256": "fd4f7f6dd500c8e0e1805077711996f37d2cff40b71b2d3bfd4a3fbfee55154a"
     },
     {
       "platform": "windows",

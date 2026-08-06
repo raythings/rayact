@@ -78,13 +78,13 @@
       "platform": "ios",
       "architecture": "universal",
       "path": "ios/rayact_crash_reporter.xcframework",
-      "sha256": "81710b531682e4c8432d8a33033e0f9ce78cd1a2604755b8b8ceb2167286ea18"
+      "sha256": "a45b1e8eea28c7e33017e05e7df7685102171778c8e61f34ebe4338f6ebdb615"
     },
     {
       "platform": "windows",
       "architecture": "x86_64",
       "path": "desktop/windows-x64/librayact_crash_reporter.dll",
-      "sha256": "eca70bd09f21543ee30f7598a9df5c7f50aa4daca0d3b0c772fa8b2e69edbc93"
+      "sha256": "be10e4b40b04502fceb8f8951df7419369564164f73ecba1272b635f5d595421"
     }
   ]
 }
